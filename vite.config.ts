@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type PluginOption, type UserConfig } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
 // Config propia de Vite + TanStack Start, sin envoltorios externos: monta a
@@ -11,7 +11,7 @@ import tsConfigPaths from "vite-tsconfig-paths";
 // plantilla original (TanStack Start, React, Tailwind v4, alias de rutas y
 // el build de producción para Cloudflare vía Nitro), para que el proyecto no
 // dependa de nada fuera de este repositorio.
-export default defineConfig(async ({ command, mode }) => {
+export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
   const isDevBuild = command === "build" && mode === "development";
 
   // Expone las variables de entorno con prefijo VITE_ como import.meta.env.*
@@ -22,7 +22,7 @@ export default defineConfig(async ({ command, mode }) => {
     Object.entries(env).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
   );
 
-  const plugins = [];
+  const plugins: PluginOption[] = [];
 
   if (mode === "development") {
     const { devtools } = await import("@tanstack/devtools-vite");
@@ -70,7 +70,7 @@ export default defineConfig(async ({ command, mode }) => {
           esbuild: { keepNames: true },
         }
       : {}),
-    css: { transformer: "lightningcss" },
+    css: { transformer: "lightningcss" as const },
     resolve: {
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
       dedupe: [
