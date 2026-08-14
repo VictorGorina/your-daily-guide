@@ -1,11 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { deleteAccount } from "@/lib/account.functions";
 import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
 import { applyTheme, THEMES } from "@/lib/theme";
 
@@ -93,6 +106,25 @@ function Ajustes() {
     qc.clear();
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
+  };
+
+  const callDeleteAccount = useServerFn(deleteAccount);
+  const [deleting, setDeleting] = useState(false);
+
+  const removeAccount = async () => {
+    setDeleting(true);
+    try {
+      await callDeleteAccount();
+      await qc.cancelQueries();
+      qc.clear();
+      await supabase.auth.signOut();
+      toast.success("Tu cuenta se ha eliminado");
+      navigate({ to: "/", replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No hemos podido eliminar tu cuenta");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const input =
@@ -294,6 +326,33 @@ function Ajustes() {
       >
         Cerrar sesión
       </button>
+
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button className="mt-3 w-full rounded-full border border-destructive/30 py-4 text-sm font-medium text-destructive">
+            Eliminar cuenta
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar tu cuenta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrará tu perfil, tus guías, tu plan y tu progreso. Es permanente y no se puede
+              deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={removeAccount}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Eliminando..." : "Sí, eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <BottomNav />
     </main>

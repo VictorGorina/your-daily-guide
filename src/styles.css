@@ -401,11 +401,22 @@
   animation: coach-dot 1.4s ease-in-out infinite;
 }
 
+@keyframes orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@utility animate-orbit {
+  animation: orbit-spin 7s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fab-ring,
   .animate-breathe,
   .animate-coach-pulse,
-  .animate-coach-dot {
+  .animate-coach-dot,
+  .animate-orbit {
     animation: none;
   }
 }
