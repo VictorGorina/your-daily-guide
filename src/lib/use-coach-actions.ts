@@ -2,9 +2,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback } from "react";
 
-import { monthISO, saveProfile, todayISO, updateTodayLog, type DailyLog } from "@/lib/daily";
+import { monthISO, saveProfile, todayISO, updateTodayLog, type DailyLog, type Profile } from "@/lib/daily";
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { adjustMonthlyPlan, goalImpact } from "@/lib/plan.functions";
+import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "@/lib/profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
 
@@ -90,6 +91,33 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return "Fecha no válida";
         await saveProfile({ goal_target_date: fecha });
         return `Nueva fecha objetivo guardada: ${fecha}`;
+      }
+      if (toolName === "actualizar_perfil") {
+        const patch: Partial<Profile> = {};
+        const updated: string[] = [];
+        for (const field of CHAT_EDITABLE_PROFILE_FIELDS) {
+          const raw = input[field.key];
+          if (raw === undefined || raw === null || raw === "") continue;
+          if (field.kind === "number") {
+            const n = Number(raw);
+            if (!Number.isFinite(n)) continue;
+            if (field.min !== undefined && n < field.min) continue;
+            if (field.max !== undefined && n > field.max) continue;
+            (patch as Record<string, unknown>)[field.key] = n;
+          } else if (field.kind === "time") {
+            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(raw))) continue;
+            (patch as Record<string, unknown>)[field.key] = raw;
+          } else if (field.kind === "date") {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) continue;
+            (patch as Record<string, unknown>)[field.key] = raw;
+          } else {
+            (patch as Record<string, unknown>)[field.key] = String(raw).trim();
+          }
+          updated.push(PROFILE_FIELD_LABELS[field.key] ?? field.key);
+        }
+        if (!updated.length) return "No había ningún dato válido que actualizar en el perfil";
+        await saveProfile(patch);
+        return `Perfil actualizado: ${updated.join(", ")}.`;
       }
       return "Acción desconocida";
     },
