@@ -1,0 +1,2 @@
+CREATE POLICY "delete own logs" ON public.daily_logs FOR DELETE TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "delete own messages" ON public.chat_messages FOR DELETE TO authenticated USING (auth.uid() = user_id);

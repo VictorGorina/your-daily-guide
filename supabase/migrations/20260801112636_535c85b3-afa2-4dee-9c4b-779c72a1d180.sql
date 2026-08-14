@@ -1,0 +1,15 @@
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS sex text,
+  ADD COLUMN IF NOT EXISTS medical_conditions text,
+  ADD COLUMN IF NOT EXISTS medications text,
+  ADD COLUMN IF NOT EXISTS exercise text,
+  ADD COLUMN IF NOT EXISTS work_schedule text,
+  ADD COLUMN IF NOT EXISTS wake_time text,
+  ADD COLUMN IF NOT EXISTS sleep_time text,
+  ADD COLUMN IF NOT EXISTS meals_per_day integer,
+  ADD COLUMN IF NOT EXISTS diet_pattern text,
+  ADD COLUMN IF NOT EXISTS non_negotiable_foods text,
+  ADD COLUMN IF NOT EXISTS food_relationship text,
+  ADD COLUMN IF NOT EXISTS short_term_goal text,
+  ADD COLUMN IF NOT EXISTS past_struggles text,
+  ADD COLUMN IF NOT EXISTS coach_scope text;

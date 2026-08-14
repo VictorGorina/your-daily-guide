@@ -1,0 +1,52 @@
+/** Configuración de comidas compartidas del hogar (compartido entre cliente y servidor). */
+
+export const MEAL_KEYS = ["desayuno", "comida", "cena"] as const;
+export type MealKey = (typeof MEAL_KEYS)[number];
+
+export const MEAL_LABEL: Record<MealKey, string> = {
+  desayuno: "Desayuno",
+  comida: "Comida",
+  cena: "Cena",
+};
+
+/** 0 = lunes … 6 = domingo (igual que el plan mensual). */
+export const DAY_SHORT = ["L", "M", "X", "J", "V", "S", "D"];
+export const DAY_LABEL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
+export type SharedMeals = Record<MealKey, number[]>;
+
+export const EMPTY_SHARED: SharedMeals = { desayuno: [], comida: [], cena: [] };
+
+export function cleanSharedMeals(raw: unknown): SharedMeals {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const days = (v: unknown) =>
+    [
+      ...new Set(
+        (Array.isArray(v) ? v : [])
+          .map((n) => Number(n))
+          .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
+      ),
+    ].sort((a, b) => a - b);
+  return {
+    desayuno: days(o.desayuno),
+    comida: days(o.comida),
+    cena: days(o.cena),
+  };
+}
+
+export const toggleDay = (list: number[], day: number) =>
+  list.includes(day) ? list.filter((d) => d !== day) : [...list, day].sort((a, b) => a - b);
+
+/** Días en los que dos personas comparten la misma comida. */
+export const sharedDays = (a: SharedMeals, b: SharedMeals, meal: MealKey) =>
+  a[meal].filter((d) => b[meal].includes(d));
+
+export const hasAnyShared = (a: SharedMeals, b: SharedMeals) =>
+  MEAL_KEYS.some((m) => sharedDays(a, b, m).length > 0);
+
+export function describeShared(shared: SharedMeals): string {
+  const parts = MEAL_KEYS.filter((m) => shared[m].length).map(
+    (m) => `${MEAL_LABEL[m]}: ${shared[m].map((d) => DAY_LABEL[d]).join(", ")}`,
+  );
+  return parts.length ? parts.join(" · ") : "sin comidas compartidas";
+}
