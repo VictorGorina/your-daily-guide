@@ -1,7 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertCircle, ArrowRight, Check, Info, Pencil, Send, SkipForward } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  Check,
+  Info,
+  Pencil,
+  Send,
+  SkipForward,
+  Sparkles,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -356,6 +365,10 @@ function Onboarding() {
   const [value, setValue] = useState("");
   const [selectedChips, setSelectedChips] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  // Se activa justo al confirmar la revisión final: mientras esté en true (y aún
+  // no haya terminado), sustituimos toda la pantalla por la animación de "generando
+  // tu plan" en vez del formulario de chat deshabilitado.
+  const [finishing, setFinishing] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gapValues, setGapValues] = useState<Record<string, string>>({});
@@ -460,14 +473,18 @@ function Onboarding() {
         }
         setDone(true);
         setSaving(false);
+        setFinishing(false);
         return;
       } catch {
         toast.error("He guardado tus datos, el plan del mes lo creamos en la pestaña Plan");
       }
+      setSaving(false);
+      setFinishing(false);
       navigate({ to: "/hoy", replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No hemos podido guardar");
       setSaving(false);
+      setFinishing(false);
     }
   };
 
@@ -555,6 +572,7 @@ function Onboarding() {
       }
     }
     setReview(null);
+    setFinishing(true);
     await saveAll(draft, extra);
   };
 
@@ -813,6 +831,10 @@ function Onboarding() {
     );
   }
 
+  if (finishing && !done) {
+    return <PlanGeneratingScreen />;
+  }
+
   return (
     <main className="mx-auto flex h-[100dvh] max-w-lg flex-col px-5 pb-5 pt-10">
       <OnboardingProgress
@@ -1025,5 +1047,63 @@ function OnboardingProgress({
         ))}
       </div>
     </header>
+  );
+}
+
+const GENERATING_MESSAGES = [
+  "Leyendo todo lo que me has contado...",
+  "Ajustando las cantidades a ti...",
+  "Pensando en tus gustos y tu ritmo de vida...",
+  "Encajando las comidas en tu semana...",
+  "Dando los últimos retoques a tu plan...",
+];
+
+/**
+ * Pantalla que sustituye al chat mientras se guarda el perfil y se genera el plan
+ * mensual (tras confirmar la revisión final). Sin esta pantalla, el usuario solo
+ * veía un textarea deshabilitado; aquí le damos algo vivo a lo que mirar mientras
+ * espera, con mensajes rotativos para que la espera se note más corta.
+ */
+function PlanGeneratingScreen() {
+  const [i, setI] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setI((n) => (n + 1) % GENERATING_MESSAGES.length), 2400);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <main className="mx-auto flex h-[100dvh] max-w-lg flex-col items-center justify-center gap-10 px-8 text-center">
+      <div className="relative grid h-40 w-40 place-items-center">
+        <span
+          aria-hidden
+          className="animate-orbit absolute h-40 w-40 rounded-full opacity-70 blur-md"
+          style={{
+            background:
+              "conic-gradient(from 0deg, transparent, color-mix(in oklab, var(--color-primary) 60%, transparent), transparent 65%)",
+          }}
+        />
+        <span className="animate-coach-pulse absolute h-32 w-32 rounded-full bg-primary/10" />
+        <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/15 [animation-delay:0.6s]" />
+        <span className="animate-breathe relative grid h-16 w-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg">
+          <Sparkles className="h-7 w-7" />
+        </span>
+      </div>
+
+      <div className="space-y-2.5">
+        <h1 className="font-display text-xl font-semibold tracking-tight">
+          Estoy preparando tu plan
+        </h1>
+        <p key={i} className="animate-rise min-h-[1.25rem] text-sm text-muted-foreground">
+          {GENERATING_MESSAGES[i]}
+        </p>
+      </div>
+
+      <span className="flex items-center gap-1.5" aria-hidden>
+        <span className="animate-coach-dot h-2 w-2 rounded-full bg-primary" />
+        <span className="animate-coach-dot h-2 w-2 rounded-full bg-primary/70 [animation-delay:0.15s]" />
+        <span className="animate-coach-dot h-2 w-2 rounded-full bg-primary/50 [animation-delay:0.3s]" />
+      </span>
+    </main>
   );
 }
