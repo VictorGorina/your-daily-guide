@@ -4,6 +4,20 @@ import { z } from "zod";
 
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
 import { getRequestUserId, unauthorized } from "@/lib/api-auth.server";
+import { CHAT_EDITABLE_PROFILE_FIELDS } from "@/lib/profile-fields";
+
+// Mismo catálogo de campos que la pantalla "Mis respuestas" en Ajustes, para
+// que lo que se pueda corregir por chat sea exactamente lo mismo que se
+// puede corregir a mano — un único sitio de verdad para ambos canales.
+const actualizarPerfilShape = Object.fromEntries(
+  CHAT_EDITABLE_PROFILE_FIELDS.map((f) => [
+    f.key,
+    (f.kind === "number" ? z.number() : z.string())
+      .nullable()
+      .optional()
+      .describe(f.help ? `${f.label} (${f.help})` : f.label),
+  ]),
+) as Record<string, z.ZodTypeAny>;
 
 const actionTools = {
   actualizar_peso: tool({
@@ -52,6 +66,11 @@ const actionTools = {
       "Cambia la fecha objetivo del usuario. Úsala sólo cuando la persona acepta explícitamente adelantar o retrasar el plazo.",
     inputSchema: z.object({ fecha: z.string().describe("Fecha objetivo en formato YYYY-MM-DD") }),
   }),
+  actualizar_perfil: tool({
+    description:
+      "Actualiza uno o varios datos del perfil (los mismos campos editables en Ajustes > Mis respuestas: horarios, restricciones o alergias, presupuesto mensual, tono, objetivo, nivel de actividad, etc.) cuando la persona cuenta un cambio real y explícito sobre sí misma. Incluye solo los campos que cambian; no inventes ni asumas datos que no te ha dado, y no la uses para peso de hoy ni para la fecha objetivo (esas tienen su propia herramienta).",
+    inputSchema: z.object(actualizarPerfilShape),
+  }),
 } as const;
 
 export const Route = createFileRoute("/api/chat")({
@@ -83,9 +102,11 @@ export const Route = createFileRoute("/api/chat")({
             ? `\nLo que ha pasado hoy de verdad (peso, hábitos, notas): ${JSON.stringify(body.log)}`
             : "") +
           (body.actions
-            ? "\nPuedes cambiar lo que la persona ve en pantalla con tus herramientas (peso, hábitos, guía del día, reajuste del plan mensual, recálculo del objetivo y fecha objetivo)." +
+            ? "\nPuedes cambiar lo que la persona ve en pantalla con tus herramientas (peso, hábitos, guía del día, reajuste del plan mensual, recálculo del objetivo, fecha objetivo y el resto del perfil)." +
               "\nEl plan es vivo: cada vez que la persona cuente algo que cambia su balance de energía o su ritmo (ha comido de más, se ha saltado una comida, ha salido a correr, ha entrenado, ha tenido una semana floja), haz DOS cosas: 1) llama a ajustar_plan_mensual con el motivo y una estimación de kcal_extra para recolocar sólo los días futuros con los ingredientes ya comprados; 2) llama a recalcular_objetivo para explicarle el impacto en su objetivo y ofrecerle acortar el plazo o ser algo más laxo. El plan del día de hoy ya está fijado: nunca lo cambies, compensa siempre en los días siguientes." +
-              "\nSi acepta cambiar el plazo, usa cambiar_fecha_objetivo. Después confirma en una o dos frases lo que has cambiado, sin culpar y sin presionar."
+              "\nSi acepta cambiar el plazo, usa cambiar_fecha_objetivo." +
+              "\nSi te cuenta un cambio real y explícito sobre sí misma que no es el peso de hoy ni la fecha objetivo — nuevas restricciones o alergias, presupuesto, horarios, nivel de actividad, tono que prefiere, tipo de objetivo, etc. — usa actualizar_perfil con solo esos campos. No la llames ante una duda, un comentario de pasada o algo que no ha confirmado del todo. Si el cambio afecta al plan del mes (presupuesto, restricciones, tipo de alimentación, objetivo) y el plan de este mes ya está confirmado/comprado, dile que se aplicará al generar el plan del próximo mes; si no está confirmado, ofrécele regenerarlo desde la pestaña Plan." +
+              "\nDespués de cualquier cambio, confirma en una o dos frases qué has actualizado, sin culpar y sin presionar, para que pueda corregirlo ahí mismo si no era eso."
             : "");
 
         const result = streamText({
