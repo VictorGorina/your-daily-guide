@@ -3,10 +3,10 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 
-// El dictado está desactivado temporalmente: transcribía audio a través del
-// gateway de IA de Lovable (Whisper), que ya no usamos, y Claude no ofrece
-// un modelo de voz-a-texto. El botón queda visible pero inactivo hasta que
-// se elija un proveedor de transcripción.
+// El dictado está desactivado temporalmente: transcribía audio a través de un
+// gateway de IA (Whisper) que ya no usamos, y no tenemos otro proveedor de
+// voz-a-texto conectado todavía. El botón queda visible pero inactivo hasta
+// que se elija uno nuevo.
 export function DictateButton({
   className,
   label = "Dictar",
