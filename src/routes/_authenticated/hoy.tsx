@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, ChevronDown, Flame, Sparkle, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MonthCalendar } from "@/components/month-calendar";
+import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
 import {
   ensureTodayLog,
@@ -61,6 +62,8 @@ function Hoy() {
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [nightlyOpen, setNightlyOpen] = useState(false);
+  const nightlyAutoOpenedRef = useRef(false);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -125,6 +128,26 @@ function Hoy() {
       void requestGuide();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id]);
+
+  // Abre el repaso nocturno solo (una vez por carga) si ya ha pasado la hora
+  // configurada y hoy aún no se ha cerrado. Se asume la hora local del
+  // dispositivo — la app es de uso en España, sin campo de zona horaria.
+  useEffect(() => {
+    if (nightlyAutoOpenedRef.current || !profile?.evening_time || !today) return;
+    const [h, m] = profile.evening_time.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return;
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    if (nowMinutes >= h * 60 + m && !today.evening_done) {
+      nightlyAutoOpenedRef.current = true;
+      setNightlyOpen(true);
+    }
+  }, [profile?.evening_time, today]);
+
+  const finishNightlyReview = () => {
+    save.mutate({ evening_done: true });
+    setNightlyOpen(false);
+  };
 
   const streak = streakFrom(logsQ.data ?? []);
   const habits = today?.habits ?? [];
@@ -423,6 +446,14 @@ function Hoy() {
           setGuidedIndex(null);
           navigate({ to: "/chat" });
         }}
+      />
+
+      <NightlyReviewSheet
+        open={nightlyOpen}
+        onOpenChange={setNightlyOpen}
+        habits={habits}
+        streak={streak}
+        onDone={finishNightlyReview}
       />
 
       <BottomNav />

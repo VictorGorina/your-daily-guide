@@ -22,6 +22,9 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedPerfilRouteImport } from './routes/_authenticated/perfil'
 import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/plan'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
+import { Route as ApiPushSubscribeRouteImport } from './routes/api/push/subscribe'
+import { Route as ApiPushUnsubscribeRouteImport } from './routes/api/push/unsubscribe'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -87,6 +90,21 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronDispatchRoute = ApiCronDispatchRouteImport.update({
+  id: '/api/cron/dispatch',
+  path: '/api/cron/dispatch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPushSubscribeRoute = ApiPushSubscribeRouteImport.update({
+  id: '/api/push/subscribe',
+  path: '/api/push/subscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPushUnsubscribeRoute = ApiPushUnsubscribeRouteImport.update({
+  id: '/api/push/unsubscribe',
+  path: '/api/push/unsubscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,6 +119,9 @@ export interface FileRoutesByFullPath {
   '/perfil': typeof AuthenticatedPerfilRoute
   '/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/cron/dispatch': typeof ApiCronDispatchRoute
+  '/api/push/subscribe': typeof ApiPushSubscribeRoute
+  '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -115,6 +136,9 @@ export interface FileRoutesByTo {
   '/perfil': typeof AuthenticatedPerfilRoute
   '/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/cron/dispatch': typeof ApiCronDispatchRoute
+  '/api/push/subscribe': typeof ApiPushSubscribeRoute
+  '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -131,6 +155,9 @@ export interface FileRoutesById {
   '/_authenticated/perfil': typeof AuthenticatedPerfilRoute
   '/_authenticated/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/cron/dispatch': typeof ApiCronDispatchRoute
+  '/api/push/subscribe': typeof ApiPushSubscribeRoute
+  '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -147,6 +174,9 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/plan'
     | '/api/chat'
+    | '/api/cron/dispatch'
+    | '/api/push/subscribe'
+    | '/api/push/unsubscribe'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -161,6 +191,9 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/plan'
     | '/api/chat'
+    | '/api/cron/dispatch'
+    | '/api/push/subscribe'
+    | '/api/push/unsubscribe'
   id:
     | '__root__'
     | '/'
@@ -176,6 +209,9 @@ export interface FileRouteTypes {
     | '/_authenticated/perfil'
     | '/_authenticated/plan'
     | '/api/chat'
+    | '/api/cron/dispatch'
+    | '/api/push/subscribe'
+    | '/api/push/unsubscribe'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +220,9 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ConfirmadoRoute: typeof ConfirmadoRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiCronDispatchRoute: typeof ApiCronDispatchRoute
+  ApiPushSubscribeRoute: typeof ApiPushSubscribeRoute
+  ApiPushUnsubscribeRoute: typeof ApiPushUnsubscribeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -279,6 +318,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/dispatch': {
+      id: '/api/cron/dispatch'
+      path: '/api/cron/dispatch'
+      fullPath: '/api/cron/dispatch'
+      preLoaderRoute: typeof ApiCronDispatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/push/subscribe': {
+      id: '/api/push/subscribe'
+      path: '/api/push/subscribe'
+      fullPath: '/api/push/subscribe'
+      preLoaderRoute: typeof ApiPushSubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/push/unsubscribe': {
+      id: '/api/push/unsubscribe'
+      path: '/api/push/unsubscribe'
+      fullPath: '/api/push/unsubscribe'
+      preLoaderRoute: typeof ApiPushUnsubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -313,6 +373,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ConfirmadoRoute: ConfirmadoRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiCronDispatchRoute: ApiCronDispatchRoute,
+  ApiPushSubscribeRoute: ApiPushSubscribeRoute,
+  ApiPushUnsubscribeRoute: ApiPushUnsubscribeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
