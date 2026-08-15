@@ -23,6 +23,8 @@ import {
 } from "@/lib/daily";
 
 import { generateDailyGuide } from "@/lib/guide.functions";
+import { fetchHousehold } from "@/lib/household";
+import { sharedDays, type MealKey } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import { mealsForDate, planForDate } from "@/lib/plan-shared";
 import { applyTheme } from "@/lib/theme";
@@ -52,6 +54,13 @@ const MOMENT_RANK: Record<string, number> = {
 };
 const rankOf = (label: string) => MOMENT_RANK[label] ?? 1.5;
 
+// Solo desayuno/comida/cena pueden ser comidas compartidas del hogar (el snack no).
+const MOMENT_TO_MEAL_KEY: Record<string, MealKey | undefined> = {
+  Desayuno: "desayuno",
+  Comida: "comida",
+  Cena: "cena",
+};
+
 function Hoy() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -69,9 +78,22 @@ function Hoy() {
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
+  const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
   const today0 = todayISO();
   const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0);
+  const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
+  const sharedWith = (label: string) => {
+    const mealKey = MOMENT_TO_MEAL_KEY[label];
+    const mine = householdQ.data?.me?.shared_meals;
+    if (!mealKey || !mine) return null;
+    const other = (householdQ.data?.members ?? []).find(
+      (m) =>
+        m.user_id !== householdQ.data?.me?.user_id &&
+        sharedDays(mine, m.shared_meals, mealKey).includes(todayWeekday),
+    );
+    return other?.display_name ?? (other ? "el resto del hogar" : null);
+  };
 
   const todayQ = useQuery({
     queryKey: ["today"],
@@ -238,6 +260,12 @@ function Hoy() {
             <p className="mt-1 font-display text-xl leading-snug">
               {nextIdea || "Aún no hay menú para esta comida"}
             </p>
+            {sharedWith(nextMeal.label) ? (
+              <p className="mt-1.5 text-xs text-primary-foreground/80">
+                Base común con {sharedWith(nextMeal.label)}. ¿Ración distinta? dilo en "comiste otra
+                cosa".
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => setMealStatus(nextIndex!, "plan")}
@@ -301,6 +329,12 @@ function Hoy() {
             {todayMeals.find((m) => m.moment === habits[expandedMeal].label)?.idea ? (
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {todayMeals.find((m) => m.moment === habits[expandedMeal].label)?.idea}
+              </span>
+            ) : null}
+            {sharedWith(habits[expandedMeal].label) ? (
+              <span className="mt-1.5 block text-xs text-primary">
+                Base común con {sharedWith(habits[expandedMeal].label)} · marca "Comí distinto" si
+                tu ración se sale de eso
               </span>
             ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
