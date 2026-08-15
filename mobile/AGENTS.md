@@ -31,6 +31,17 @@ La paleta de [tailwind.config.js](tailwind.config.js) es el tema "niebla" de la 
 `.npmrc` fija `legacy-peer-deps` porque el árbol de Expo 57 choca consigo mismo (expo-router
 arrastra react-dom 19.2.8 y expo fija react 19.2.3); sin eso npm no instala nada.
 
+## El directorio `ios/` no se toca a mano
+
+`expo run:ios` genera `ios/` con *prebuild* a partir de `app.json`, y está en `.gitignore` a
+propósito. Cualquier cambio de configuración nativa (permisos, capacidades, iconos, bundle id) va
+en `app.json` o en un config plugin: lo que se edite dentro de `ios/` se pierde en el siguiente
+prebuild.
+
+CocoaPods hace falta para compilar. Instálalo con `brew install cocoapods`, no con el
+`gem install` que intenta Expo por su cuenta: ese usa el Ruby del sistema y se queda pidiendo
+permisos de administrador.
+
 ## Desarrollo
 
 ```sh
