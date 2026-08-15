@@ -30,6 +30,7 @@ import {
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { addMessage, ensureTodayLog, fetchMessages, fetchProfile, todayISO } from "@/lib/daily";
+import { consumePendingChatMessage } from "@/lib/pending-chat-message";
 import { useCoachActions } from "@/lib/use-coach-actions";
 
 export const Route = createFileRoute("/_authenticated/chat")({
@@ -160,6 +161,20 @@ function ChatPage() {
     void addMessage("user", text);
     void sendMessage({ text });
   };
+
+  // Mensaje dejado desde fuera de /chat (p.ej. el registro guiado de "Comí
+  // distinto" en hoy.tsx). Se envía en cuanto el historial de hoy ha cargado,
+  // para no perderlo si setMessages(initial) llega justo después.
+  const sentPendingRef = useRef(false);
+  useEffect(() => {
+    if (!historyQ.isSuccess || sentPendingRef.current) return;
+    const pending = consumePendingChatMessage();
+    if (pending) {
+      sentPendingRef.current = true;
+      sendQuick(pending);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyQ.isSuccess]);
 
   return (
     <main className="mx-auto flex h-[100dvh] max-w-lg flex-col px-4 pb-24 pt-10">

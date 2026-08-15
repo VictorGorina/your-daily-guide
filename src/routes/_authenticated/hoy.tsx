@@ -6,6 +6,7 @@ import { ChevronDown, Flame, Sparkle } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MonthCalendar } from "@/components/month-calendar";
 import { WeekStrip } from "@/components/week-strip";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/lib/daily";
 
 import { generateDailyGuide } from "@/lib/guide.functions";
+import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import { mealsForDate, planForDate } from "@/lib/plan-shared";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
@@ -45,6 +47,7 @@ function Hoy() {
   const makeGuide = useServerFn(generateDailyGuide);
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
+  const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -124,6 +127,15 @@ function Hoy() {
     );
     save.mutate({ habits: next });
   };
+
+  const handleMealStatus = (index: number, status: MealStatus) => {
+    setMealStatus(index, status);
+    // "Comí distinto" queda registrado al instante, pero ofrecemos detallar qué
+    // ha cambiado para que el coach ajuste solo los días futuros del plan.
+    if (status === "distinto") setGuidedIndex(index);
+  };
+
+  const guidedMeal = guidedIndex != null ? habits[guidedIndex] : undefined;
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-36 pt-12">
@@ -240,7 +252,7 @@ function Hoy() {
                     <button
                       key={s}
                       type="button"
-                      onClick={() => setMealStatus(i, s)}
+                      onClick={() => handleMealStatus(i, s)}
                       className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
                         status === s
                           ? "border-habit-foreground bg-habit-foreground text-background"
@@ -261,6 +273,21 @@ function Hoy() {
         logs={logsQ.data ?? []}
         plan={planQ.data?.plan ?? null}
         planHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
+      />
+
+      <GuidedLogSheet
+        trigger={false}
+        initialMode="exceso"
+        open={guidedIndex != null}
+        onOpenChange={(v) => {
+          if (!v) setGuidedIndex(null);
+        }}
+        contextNote={guidedMeal ? `Qué has comido en vez de: ${guidedMeal.label}` : undefined}
+        onSend={(text) => {
+          setPendingChatMessage(text);
+          setGuidedIndex(null);
+          navigate({ to: "/chat" });
+        }}
       />
 
       <BottomNav />
