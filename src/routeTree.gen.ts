@@ -25,6 +25,16 @@ import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
 import { Route as ApiPushSubscribeRouteImport } from './routes/api/push/subscribe'
 import { Route as ApiPushUnsubscribeRouteImport } from './routes/api/push/unsubscribe'
+import { Route as ApiV1GuideRouteImport } from './routes/api/v1/guide'
+import { Route as ApiV1AccountDeleteRouteImport } from './routes/api/v1/account/delete'
+import { Route as ApiV1HouseholdSyncRouteImport } from './routes/api/v1/household/sync'
+import { Route as ApiV1OnboardingParseRouteImport } from './routes/api/v1/onboarding/parse'
+import { Route as ApiV1PlanAdjustRouteImport } from './routes/api/v1/plan/adjust'
+import { Route as ApiV1PlanConfirmRouteImport } from './routes/api/v1/plan/confirm'
+import { Route as ApiV1PlanGenerateRouteImport } from './routes/api/v1/plan/generate'
+import { Route as ApiV1PlanGoalImpactRouteImport } from './routes/api/v1/plan/goal-impact'
+import { Route as ApiV1PlanMealRouteImport } from './routes/api/v1/plan/meal'
+import { Route as ApiV1PlanWelcomeRouteImport } from './routes/api/v1/plan/welcome'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -105,6 +115,56 @@ const ApiPushUnsubscribeRoute = ApiPushUnsubscribeRouteImport.update({
   path: '/api/push/unsubscribe',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1GuideRoute = ApiV1GuideRouteImport.update({
+  id: '/api/v1/guide',
+  path: '/api/v1/guide',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1AccountDeleteRoute = ApiV1AccountDeleteRouteImport.update({
+  id: '/api/v1/account/delete',
+  path: '/api/v1/account/delete',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1HouseholdSyncRoute = ApiV1HouseholdSyncRouteImport.update({
+  id: '/api/v1/household/sync',
+  path: '/api/v1/household/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1OnboardingParseRoute = ApiV1OnboardingParseRouteImport.update({
+  id: '/api/v1/onboarding/parse',
+  path: '/api/v1/onboarding/parse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanAdjustRoute = ApiV1PlanAdjustRouteImport.update({
+  id: '/api/v1/plan/adjust',
+  path: '/api/v1/plan/adjust',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanConfirmRoute = ApiV1PlanConfirmRouteImport.update({
+  id: '/api/v1/plan/confirm',
+  path: '/api/v1/plan/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanGenerateRoute = ApiV1PlanGenerateRouteImport.update({
+  id: '/api/v1/plan/generate',
+  path: '/api/v1/plan/generate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanGoalImpactRoute = ApiV1PlanGoalImpactRouteImport.update({
+  id: '/api/v1/plan/goal-impact',
+  path: '/api/v1/plan/goal-impact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanMealRoute = ApiV1PlanMealRouteImport.update({
+  id: '/api/v1/plan/meal',
+  path: '/api/v1/plan/meal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanWelcomeRoute = ApiV1PlanWelcomeRouteImport.update({
+  id: '/api/v1/plan/welcome',
+  path: '/api/v1/plan/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -122,6 +182,16 @@ export interface FileRoutesByFullPath {
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
+  '/api/v1/guide': typeof ApiV1GuideRoute
+  '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
+  '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
+  '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
+  '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
+  '/api/v1/plan/confirm': typeof ApiV1PlanConfirmRoute
+  '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
+  '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
+  '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -139,6 +209,16 @@ export interface FileRoutesByTo {
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
+  '/api/v1/guide': typeof ApiV1GuideRoute
+  '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
+  '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
+  '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
+  '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
+  '/api/v1/plan/confirm': typeof ApiV1PlanConfirmRoute
+  '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
+  '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
+  '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -158,6 +238,16 @@ export interface FileRoutesById {
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
+  '/api/v1/guide': typeof ApiV1GuideRoute
+  '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
+  '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
+  '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
+  '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
+  '/api/v1/plan/confirm': typeof ApiV1PlanConfirmRoute
+  '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
+  '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
+  '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -177,6 +267,16 @@ export interface FileRouteTypes {
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
+    | '/api/v1/guide'
+    | '/api/v1/account/delete'
+    | '/api/v1/household/sync'
+    | '/api/v1/onboarding/parse'
+    | '/api/v1/plan/adjust'
+    | '/api/v1/plan/confirm'
+    | '/api/v1/plan/generate'
+    | '/api/v1/plan/goal-impact'
+    | '/api/v1/plan/meal'
+    | '/api/v1/plan/welcome'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -194,6 +294,16 @@ export interface FileRouteTypes {
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
+    | '/api/v1/guide'
+    | '/api/v1/account/delete'
+    | '/api/v1/household/sync'
+    | '/api/v1/onboarding/parse'
+    | '/api/v1/plan/adjust'
+    | '/api/v1/plan/confirm'
+    | '/api/v1/plan/generate'
+    | '/api/v1/plan/goal-impact'
+    | '/api/v1/plan/meal'
+    | '/api/v1/plan/welcome'
   id:
     | '__root__'
     | '/'
@@ -212,6 +322,16 @@ export interface FileRouteTypes {
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
+    | '/api/v1/guide'
+    | '/api/v1/account/delete'
+    | '/api/v1/household/sync'
+    | '/api/v1/onboarding/parse'
+    | '/api/v1/plan/adjust'
+    | '/api/v1/plan/confirm'
+    | '/api/v1/plan/generate'
+    | '/api/v1/plan/goal-impact'
+    | '/api/v1/plan/meal'
+    | '/api/v1/plan/welcome'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,6 +343,16 @@ export interface RootRouteChildren {
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute
   ApiPushSubscribeRoute: typeof ApiPushSubscribeRoute
   ApiPushUnsubscribeRoute: typeof ApiPushUnsubscribeRoute
+  ApiV1GuideRoute: typeof ApiV1GuideRoute
+  ApiV1AccountDeleteRoute: typeof ApiV1AccountDeleteRoute
+  ApiV1HouseholdSyncRoute: typeof ApiV1HouseholdSyncRoute
+  ApiV1OnboardingParseRoute: typeof ApiV1OnboardingParseRoute
+  ApiV1PlanAdjustRoute: typeof ApiV1PlanAdjustRoute
+  ApiV1PlanConfirmRoute: typeof ApiV1PlanConfirmRoute
+  ApiV1PlanGenerateRoute: typeof ApiV1PlanGenerateRoute
+  ApiV1PlanGoalImpactRoute: typeof ApiV1PlanGoalImpactRoute
+  ApiV1PlanMealRoute: typeof ApiV1PlanMealRoute
+  ApiV1PlanWelcomeRoute: typeof ApiV1PlanWelcomeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -339,6 +469,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPushUnsubscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/guide': {
+      id: '/api/v1/guide'
+      path: '/api/v1/guide'
+      fullPath: '/api/v1/guide'
+      preLoaderRoute: typeof ApiV1GuideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/account/delete': {
+      id: '/api/v1/account/delete'
+      path: '/api/v1/account/delete'
+      fullPath: '/api/v1/account/delete'
+      preLoaderRoute: typeof ApiV1AccountDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/household/sync': {
+      id: '/api/v1/household/sync'
+      path: '/api/v1/household/sync'
+      fullPath: '/api/v1/household/sync'
+      preLoaderRoute: typeof ApiV1HouseholdSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/onboarding/parse': {
+      id: '/api/v1/onboarding/parse'
+      path: '/api/v1/onboarding/parse'
+      fullPath: '/api/v1/onboarding/parse'
+      preLoaderRoute: typeof ApiV1OnboardingParseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/adjust': {
+      id: '/api/v1/plan/adjust'
+      path: '/api/v1/plan/adjust'
+      fullPath: '/api/v1/plan/adjust'
+      preLoaderRoute: typeof ApiV1PlanAdjustRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/confirm': {
+      id: '/api/v1/plan/confirm'
+      path: '/api/v1/plan/confirm'
+      fullPath: '/api/v1/plan/confirm'
+      preLoaderRoute: typeof ApiV1PlanConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/generate': {
+      id: '/api/v1/plan/generate'
+      path: '/api/v1/plan/generate'
+      fullPath: '/api/v1/plan/generate'
+      preLoaderRoute: typeof ApiV1PlanGenerateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/goal-impact': {
+      id: '/api/v1/plan/goal-impact'
+      path: '/api/v1/plan/goal-impact'
+      fullPath: '/api/v1/plan/goal-impact'
+      preLoaderRoute: typeof ApiV1PlanGoalImpactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/meal': {
+      id: '/api/v1/plan/meal'
+      path: '/api/v1/plan/meal'
+      fullPath: '/api/v1/plan/meal'
+      preLoaderRoute: typeof ApiV1PlanMealRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/welcome': {
+      id: '/api/v1/plan/welcome'
+      path: '/api/v1/plan/welcome'
+      fullPath: '/api/v1/plan/welcome'
+      preLoaderRoute: typeof ApiV1PlanWelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -376,6 +576,16 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiPushSubscribeRoute: ApiPushSubscribeRoute,
   ApiPushUnsubscribeRoute: ApiPushUnsubscribeRoute,
+  ApiV1GuideRoute: ApiV1GuideRoute,
+  ApiV1AccountDeleteRoute: ApiV1AccountDeleteRoute,
+  ApiV1HouseholdSyncRoute: ApiV1HouseholdSyncRoute,
+  ApiV1OnboardingParseRoute: ApiV1OnboardingParseRoute,
+  ApiV1PlanAdjustRoute: ApiV1PlanAdjustRoute,
+  ApiV1PlanConfirmRoute: ApiV1PlanConfirmRoute,
+  ApiV1PlanGenerateRoute: ApiV1PlanGenerateRoute,
+  ApiV1PlanGoalImpactRoute: ApiV1PlanGoalImpactRoute,
+  ApiV1PlanMealRoute: ApiV1PlanMealRoute,
+  ApiV1PlanWelcomeRoute: ApiV1PlanWelcomeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

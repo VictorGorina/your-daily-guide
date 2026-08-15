@@ -3,7 +3,6 @@ import { generateText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
-import type { RequestAuth } from "@/lib/request-auth.server";
 
 export type GeneratedGuide = {
   intro: string;
@@ -32,55 +31,49 @@ const fallback: GeneratedGuide = {
   ],
 };
 
-/**
- * Lógica de la guía diaria, compartida por la server function (web) y por
- * `/api/v1/guide` (app nativa). Ver `src/lib/api-route.server.ts`.
- */
-export async function generateDailyGuideCore(auth: RequestAuth): Promise<GeneratedGuide> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return fallback;
-
-  const { data: profile } = await auth.supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", auth.userId)
-    .maybeSingle();
-
-  const ai = createAiProvider(key);
-  try {
-    const { text } = await generateText({
-      model: ai(COACH_MODEL),
-      system: coachSystemPrompt(profile as never),
-      prompt:
-        "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +
-        '{"intro": string (1 frase cálida y motivadora, sin presión), "calories": string (rango orientativo, nunca una cifra rígida), "macros": string (orientación de macros en una frase), "behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Snack", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
-        "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
-    });
-    const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-    const parsed = JSON.parse(json) as GeneratedGuide;
-    if (!parsed.behaviors?.length) return fallback;
-    return {
-      intro: String(parsed.intro ?? fallback.intro),
-      calories: String(parsed.calories ?? fallback.calories),
-      macros: String(parsed.macros ?? fallback.macros),
-      behaviors: parsed.behaviors.slice(0, 3).map(String),
-      meals: Array.isArray(parsed.meals)
-        ? parsed.meals
-            .slice(0, 4)
-            .map((m) => ({ moment: String(m?.moment ?? ""), idea: String(m?.idea ?? "") }))
-            .filter((m) => m.moment && m.idea)
-        : fallback.meals,
-      tips:
-        Array.isArray(parsed.tips) && parsed.tips.length
-          ? parsed.tips.slice(0, 4).map(String)
-          : fallback.tips,
-    };
-  } catch (error) {
-    console.error("generateDailyGuide", error);
-    return fallback;
-  }
-}
-
 export const generateDailyGuide = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(({ context }) => generateDailyGuideCore(context));
+  .handler(async ({ context }): Promise<GeneratedGuide> => {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) return fallback;
+
+    const { data: profile } = await context.supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", context.userId)
+      .maybeSingle();
+
+    const ai = createAiProvider(key);
+    try {
+      const { text } = await generateText({
+        model: ai(COACH_MODEL),
+        system: coachSystemPrompt(profile as never),
+        prompt:
+          "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +
+          '{"intro": string (1 frase cálida y motivadora, sin presión), "calories": string (rango orientativo, nunca una cifra rígida), "macros": string (orientación de macros en una frase), "behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Snack", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
+          "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
+      });
+      const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+      const parsed = JSON.parse(json) as GeneratedGuide;
+      if (!parsed.behaviors?.length) return fallback;
+      return {
+        intro: String(parsed.intro ?? fallback.intro),
+        calories: String(parsed.calories ?? fallback.calories),
+        macros: String(parsed.macros ?? fallback.macros),
+        behaviors: parsed.behaviors.slice(0, 3).map(String),
+        meals: Array.isArray(parsed.meals)
+          ? parsed.meals
+              .slice(0, 4)
+              .map((m) => ({ moment: String(m?.moment ?? ""), idea: String(m?.idea ?? "") }))
+              .filter((m) => m.moment && m.idea)
+          : fallback.meals,
+        tips:
+          Array.isArray(parsed.tips) && parsed.tips.length
+            ? parsed.tips.slice(0, 4).map(String)
+            : fallback.tips,
+      };
+    } catch (error) {
+      console.error("generateDailyGuide", error);
+      return fallback;
+    }
+  });

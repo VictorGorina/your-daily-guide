@@ -1,51 +1,44 @@
-import { authFromRequest, type RequestAuth } from "@/lib/request-auth.server";
-
 /**
- * Envuelve una operación de negocio como handler HTTP POST autenticado.
+ * Expone una server function existente como handler HTTP POST.
  *
- * Las server functions de TanStack Start solo saben llamarse desde el bundle
- * web; la app nativa necesita HTTP normal. En vez de duplicar la lógica, cada
- * operación vive en una función `(auth, data) => resultado` y se expone por los
- * dos caminos: la server function existente y una ruta /api/v1/*. Este helper es
- * el lado HTTP — la validación de entrada se comparte pasando el mismo
- * `validate` que usa el `inputValidator` de la server function.
+ * React Native no sabe llamar server functions de TanStack Start (dependen del
+ * bundle web), así que la app nativa necesita HTTP normal. En vez de duplicar la
+ * lógica, la ruta invoca aquí dentro la MISMA server function que usa la web: su
+ * middleware lee la cabecera Authorization de esta petición, con lo que la
+ * sesión y las políticas RLS son idénticas por los dos caminos. Un único sitio
+ * donde vive cada operación.
+ *
+ * Lo que sí aporta este envoltorio es traducir los errores a códigos HTTP: el
+ * middleware lanza excepciones (pensadas para el canal RPC de la web) que sin
+ * esto saldrían todas como 500, incluida la falta de sesión.
  */
-export function apiHandler<TInput, TOutput>(op: {
-  validate: (input: never) => TInput;
-  run: (auth: RequestAuth, data: TInput) => Promise<TOutput>;
-}) {
-  return async ({ request }: { request: Request }): Promise<Response> => {
-    const auth = await authFromRequest(request);
-    if (!auth) return new Response("Unauthorized", { status: 401 });
+/** Firma común a las server functions, con o sin `inputValidator`. */
+type ServerFn<TOutput> = (opts: { data: never }) => Promise<TOutput>;
 
-    let input: unknown = undefined;
+export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
+  return async ({ request }: { request: Request }): Promise<Response> => {
+    let data: unknown = undefined;
     if (request.headers.get("content-type")?.includes("application/json")) {
       try {
-        input = await request.json();
+        data = await request.json();
       } catch {
-        return new Response("JSON no válido", { status: 400 });
+        return Response.json({ error: "JSON no válido" }, { status: 400 });
       }
     }
 
-    let data: TInput;
     try {
-      data = op.validate(input as never);
+      // El tipo de `data` lo fija el inputValidator de cada server function; aquí
+      // llega como JSON sin tipar y es ese validador quien lo comprueba.
+      const result = await fn({ data } as { data: never });
+      return Response.json(result);
     } catch (error) {
-      // Los validadores lanzan mensajes pensados para leerse en pantalla
-      // ("Mes no válido"), así que se devuelven tal cual como 400.
-      return jsonError(error, 400);
-    }
-
-    try {
-      return Response.json(await op.run(auth, data));
-    } catch (error) {
-      console.error("apiHandler", error);
-      return jsonError(error, 500);
+      const message = error instanceof Error ? error.message : "Error inesperado";
+      // El middleware de auth prefija sus mensajes con "Unauthorized"; sin sesión
+      // la respuesta debe ser 401 para que el cliente sepa que toca reautenticar
+      // en vez de reintentar.
+      const status = message.startsWith("Unauthorized") ? 401 : 500;
+      if (status === 500) console.error("apiPost", error);
+      return Response.json({ error: message }, { status });
     }
   };
-}
-
-function jsonError(error: unknown, status: number): Response {
-  const message = error instanceof Error ? error.message : "Error inesperado";
-  return Response.json({ error: message }, { status });
 }

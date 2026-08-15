@@ -5,6 +5,24 @@ La IA (chat del coach, guía diaria, plan mensual) usa OpenRouter (modelo `googl
 por defecto) a través de `@openrouter/ai-sdk-provider`
 (ver [src/lib/ai-provider.server.ts](src/lib/ai-provider.server.ts)); requiere `OPENROUTER_API_KEY` en `.env`.
 
+## API HTTP (`/api/v1/*`)
+
+Cada server function está expuesta además como ruta HTTP bajo
+[src/routes/api/v1/](src/routes/api/v1), porque React Native no sabe llamar server functions de
+TanStack Start (dependen del bundle web) y la app nativa necesita HTTP normal.
+
+La ruta **no** duplica la lógica: invoca la misma server function que usa la web mediante
+`apiPost` ([api-route.server.ts](src/lib/api-route.server.ts)). El middleware de auth lee la
+cabecera `Authorization` de esa petición HTTP, así que la sesión, el `inputValidator` y las
+políticas RLS son idénticos por los dos caminos — un único sitio donde vive cada operación.
+Añadir una operación nueva a la API son tres líneas; no hay que tocar la lógica.
+
+Códigos que devuelve `apiPost`: `401` si falta la sesión o el token no vale, `400` si el cuerpo no
+es JSON, `200` con el resultado, y `500` con `{"error": mensaje}` en cualquier otro fallo. Ojo con
+ese 500: los validadores y las reglas de negocio lanzan `Error` con mensajes pensados para
+enseñarse en pantalla ("Mes no válido"), indistinguibles de un fallo real, así que el cliente debe
+guiarse por el campo `error` y no por el código.
+
 ## Platos del plan: cambio a mano vs. recolocación
 
 Dos caminos distintos, deliberadamente separados:
