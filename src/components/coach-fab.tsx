@@ -2,6 +2,7 @@ import { useChat } from "@ai-sdk/react";
 
 import { authHeaders } from "@/lib/auth-headers";
 import { useQuery } from "@tanstack/react-query";
+import { useRouterState } from "@tanstack/react-router";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
@@ -87,6 +88,10 @@ export function CoachFab() {
   const [actions, setActions] = useState<ActionEntry[]>([]);
   const [flash, setFlash] = useState<ActionState | null>(null);
   const date = todayISO();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // La pantalla /chat ya es una conversación a pantalla completa: mostrar la
+  // burbuja encima sería duplicar la misma interfaz dos veces.
+  const onChatScreen = pathname.startsWith("/chat");
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const todayQ = useQuery({
@@ -208,7 +213,7 @@ export function CoachFab() {
     void sendMessage({ text });
   };
 
-  if (!profileQ.data?.onboarding_completed) return null;
+  if (!profileQ.data?.onboarding_completed || onChatScreen) return null;
 
   const working = actions.some((a) => a.state === "running");
   const lastAction = actions[actions.length - 1];
