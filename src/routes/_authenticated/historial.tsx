@@ -81,7 +81,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
             })}
           </p>
           <p className="text-xs text-muted-foreground">
-            {habits.filter((h) => h.done).length}/{habits.length} hábitos
+            {habits.filter((h) => h.done).length}/{habits.length} comidas
             {log.weight_kg ? ` · ${log.weight_kg} kg` : ""}
           </p>
         </div>

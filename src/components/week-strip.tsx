@@ -5,15 +5,18 @@ const DAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+function ratioSignal(done: number, total: number) {
+  if (!total) return "none" as const;
+  const ratio = done / total;
+  if (ratio >= 1) return "success" as const;
+  if (ratio >= 0.5) return "warning" as const;
+  if (ratio > 0) return "danger" as const;
+  return "none" as const;
+}
+
 function habitSignal(log: DailyLog | undefined, fallbackHabits: string[]) {
   const habits = log?.habits ?? (fallbackHabits ?? []).map((label) => ({ label, done: false }));
-
-  if (!habits.length) return "none" as const;
-  const done = habits.filter((h) => h.done).length;
-  if (done >= 3) return "success" as const;
-  if (done === 2) return "warning" as const;
-  if (done === 1) return "danger" as const;
-  return "none" as const;
+  return ratioSignal(habits.filter((h) => h.done).length, habits.length);
 }
 
 export function WeekStrip({
@@ -44,8 +47,7 @@ export function WeekStrip({
 
   const logByDate = new Map((logs ?? []).map((l) => [l.log_date, l]));
 
-  const todaySignal =
-    done >= 3 ? "success" : done === 2 ? "warning" : done === 1 ? "danger" : "none";
+  const todaySignal = ratioSignal(done, total);
 
   return (
     <div className="-mx-1 flex gap-2 overflow-x-auto overflow-y-visible px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
