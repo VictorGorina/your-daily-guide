@@ -69,12 +69,20 @@ export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | 
   return (data as unknown as MonthlyPlanRow | null) ?? null;
 }
 
+export type MealStatus = "plan" | "distinto" | "salteo";
+
+export const MEAL_STATUS_LABEL: Record<MealStatus, string> = {
+  plan: "Comí lo del plan",
+  distinto: "Comí distinto",
+  salteo: "Me lo salté",
+};
+
 export type DailyLog = {
   id: string;
   user_id: string;
   log_date: string;
   weight_kg: number | null;
-  habits: { label: string; done: boolean; status?: "plan" | "distinto" | "salteo" }[];
+  habits: { label: string; done: boolean; status?: MealStatus }[];
   guide: DailyGuide | null;
   mood: string | null;
   notes: string | null;
@@ -154,6 +162,33 @@ export async function updateTodayLog(patch: Partial<DailyLog>) {
     .update(patch as never)
     .eq("log_date", todayISO());
   if (error) throw error;
+}
+
+/**
+ * Corrige un día pasado (p.ej. el estado de una comida) desde Historial.
+ * Deliberadamente distinta de updateTodayLog: hoy solo se edita desde Hoy,
+ * y esta nunca toca el día de hoy ni el futuro — ver área 6 del roadmap UX
+ * ("casos límite"). Corregir aquí es solo para el propio historial: nunca
+ * reescribe la compra ya hecha de un mes confirmado (habits/status no
+ * alimenta la lista de la compra en ningún punto del código).
+ *
+ * Requiere la policy RLS "update own logs" (migración
+ * 20260815130000_daily_logs_past_edit.sql) — antes de esa migración, la
+ * policy de UPDATE solo permitía log_date = current_date, así que un intento
+ * de corregir un día pasado se quedaría sin filas afectadas sin lanzar
+ * error. Se pide explícitamente `select("id")` para poder distinguir ese
+ * caso (0 filas devueltas) de un guardado real y avisar en vez de fallar en
+ * silencio.
+ */
+export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
+  if (date >= todayISO()) throw new Error("Solo se pueden corregir días pasados");
+  const { data, error } = await supabase
+    .from("daily_logs")
+    .update(patch as never)
+    .eq("log_date", date)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error("No se ha podido guardar la corrección");
 }
 
 export async function fetchMessages(date: string): Promise<ChatMessage[]> {
