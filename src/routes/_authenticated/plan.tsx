@@ -227,11 +227,25 @@ function PlanPage() {
                     </p>
                   </div>
                   <span
-                    className={`font-display text-2xl ${overBudget ? "text-destructive" : "text-primary"}`}
+                    className={`font-display text-2xl tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
                   >
                     {eur(total)}
                   </span>
                 </div>
+                {budget > 0 ? (
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={`h-full rounded-full transition-[width] duration-500 ${
+                        overBudget
+                          ? "bg-danger"
+                          : total / budget >= 0.85
+                            ? "bg-warning"
+                            : "bg-success"
+                      }`}
+                      style={{ width: `${Math.min(100, (total / budget) * 100)}%` }}
+                    />
+                  </div>
+                ) : null}
                 {overBudget ? (
                   <p className="mt-2 text-xs text-destructive">
                     Se pasa de tu presupuesto. Puedo ajustarlo: regenera el plan o dímelo en el
