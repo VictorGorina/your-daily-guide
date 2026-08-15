@@ -90,6 +90,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700;800&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.json" },
     ],
   }),
   shellComponent: RootShell,
@@ -118,6 +119,17 @@ function RootComponent() {
 
   useEffect(() => {
     applyTheme(storedTheme());
+  }, []);
+
+  useEffect(() => {
+    // Registro temprano y global del service worker (necesario antes de poder
+    // suscribirse a push desde Ajustes). No pide permiso ni se suscribe solo
+    // — eso lo decide el usuario con el toggle de src/lib/push.ts.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch((error) => {
+        console.error("No se pudo registrar el service worker", error);
+      });
+    }
   }, []);
 
   useEffect(() => {

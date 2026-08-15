@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
-import { ChevronDown, Flame, Sparkle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, CheckCircle2, ChevronDown, Flame, Sparkle, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MonthCalendar } from "@/components/month-calendar";
+import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
 import {
   ensureTodayLog,
@@ -31,8 +32,6 @@ export const Route = createFileRoute("/_authenticated/hoy")({
   component: Hoy,
 });
 
-const HABIT_COLORS = ["bg-habit-1", "bg-habit-2", "bg-habit-3", "bg-habit-4"];
-
 type MealStatus = "plan" | "distinto" | "salteo";
 
 const MEAL_STATUS_LABEL: Record<MealStatus, string> = {
@@ -41,6 +40,18 @@ const MEAL_STATUS_LABEL: Record<MealStatus, string> = {
   salteo: "Me lo salté",
 };
 
+// Orden cronológico aproximado de cada momento, para saber cuál toca ahora.
+// Las comidas que no aparecen (nombres personalizados desde el chat) caen
+// en un rango intermedio en vez de romper el orden.
+const MOMENT_RANK: Record<string, number> = {
+  Desayuno: 0,
+  Comida: 1,
+  Merienda: 2,
+  Snack: 2,
+  Cena: 3,
+};
+const rankOf = (label: string) => MOMENT_RANK[label] ?? 1.5;
+
 function Hoy() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -48,6 +59,11 @@ function Hoy() {
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
+  const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [nightlyOpen, setNightlyOpen] = useState(false);
+  const nightlyAutoOpenedRef = useRef(false);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -113,6 +129,26 @@ function Hoy() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id]);
 
+  // Abre el repaso nocturno solo (una vez por carga) si ya ha pasado la hora
+  // configurada y hoy aún no se ha cerrado. Se asume la hora local del
+  // dispositivo — la app es de uso en España, sin campo de zona horaria.
+  useEffect(() => {
+    if (nightlyAutoOpenedRef.current || !profile?.evening_time || !today) return;
+    const [h, m] = profile.evening_time.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return;
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    if (nowMinutes >= h * 60 + m && !today.evening_done) {
+      nightlyAutoOpenedRef.current = true;
+      setNightlyOpen(true);
+    }
+  }, [profile?.evening_time, today]);
+
+  const finishNightlyReview = () => {
+    save.mutate({ evening_done: true });
+    setNightlyOpen(false);
+  };
+
   const streak = streakFrom(logsQ.data ?? []);
   const habits = today?.habits ?? [];
   const doneCount = habits.filter((h) => h.done).length;
@@ -137,6 +173,17 @@ function Hoy() {
 
   const guidedMeal = guidedIndex != null ? habits[guidedIndex] : undefined;
 
+  // La "siguiente comida" es la primera, en orden cronológico, que aún no
+  // está registrada. Si no queda ninguna, el día está completo.
+  const pending = habits
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => !h.done)
+    .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
+  const nextIndex = pending.length ? pending[0].i : null;
+  const nextMeal = nextIndex != null ? habits[nextIndex] : null;
+  const nextIdea = nextMeal ? todayMeals.find((m) => m.moment === nextMeal.label)?.idea : undefined;
+  const allDone = habits.length > 0 && nextIndex == null;
+
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-36 pt-12">
       <header className="animate-rise grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
@@ -155,7 +202,202 @@ function Hoy() {
         “{quote.text}” <span className="not-italic">— {quote.author}</span>
       </p>
 
-      <section className="animate-rise mt-5">
+      <section className="animate-rise mt-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-2xl">Comidas de hoy</h2>
+          {habits.length ? (
+            <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold tabular-nums text-secondary-foreground">
+              {doneCount}/{habits.length}
+            </span>
+          ) : null}
+        </div>
+
+        {!habits.length ? (
+          <div className="surface-card p-5">
+            <p className="animate-pulse text-sm text-muted-foreground">
+              Preparando las comidas de hoy...
+            </p>
+          </div>
+        ) : allDone ? (
+          <div className="surface-card flex items-center gap-3 p-5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-success/15 text-success">
+              <CheckCircle2 className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-lg leading-tight">Todo registrado hoy</p>
+              <p className="text-sm text-muted-foreground">
+                Has anotado las {habits.length} comidas del día.
+              </p>
+            </div>
+          </div>
+        ) : nextMeal ? (
+          <div className="rounded-3xl bg-primary p-5 text-primary-foreground shadow-[0_18px_40px_-26px_oklch(0_0_0/45%)]">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-primary-foreground/70">
+              Siguiente · {nextMeal.label}
+            </span>
+            <p className="mt-1 font-display text-xl leading-snug">
+              {nextIdea || "Aún no hay menú para esta comida"}
+            </p>
+            <button
+              type="button"
+              onClick={() => setMealStatus(nextIndex!, "plan")}
+              className="mt-4 w-full rounded-full bg-primary-foreground py-3 text-sm font-semibold text-primary transition-transform active:scale-[0.98]"
+            >
+              Comí esto
+            </button>
+            <div className="mt-2.5 flex items-center justify-center gap-5 text-xs font-medium text-primary-foreground/80">
+              <button type="button" onClick={() => handleMealStatus(nextIndex!, "distinto")}>
+                ¿comiste otra cosa?
+              </button>
+              <button type="button" onClick={() => setMealStatus(nextIndex!, "salteo")}>
+                me lo salté
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {habits.length ? (
+          <div className="mt-3 flex gap-2">
+            {habits.map((h, i) => {
+              const isNext = i === nextIndex;
+              const isDone = h.done;
+              const isSkipped = h.status === "salteo";
+              return (
+                <button
+                  key={h.label}
+                  type="button"
+                  onClick={() => setExpandedMeal((prev) => (prev === i ? null : i))}
+                  aria-expanded={expandedMeal === i}
+                  className={`flex-1 rounded-2xl border px-2 py-2.5 text-center transition-colors active:scale-95 ${
+                    isNext
+                      ? "border-primary bg-primary-soft"
+                      : isDone
+                        ? "border-success/30 bg-success/10"
+                        : isSkipped
+                          ? "border-border bg-secondary/50"
+                          : "border-border bg-surface"
+                  } ${expandedMeal === i ? "ring-2 ring-inset ring-primary" : ""}`}
+                >
+                  <span className="block truncate text-[11px] font-semibold text-foreground">
+                    {h.label}
+                  </span>
+                  <span className="mt-0.5 flex items-center justify-center gap-1 text-[10px] font-medium text-muted-foreground">
+                    {isDone ? (
+                      <Check className="h-3 w-3 text-success" />
+                    ) : isSkipped ? (
+                      <X className="h-3 w-3" />
+                    ) : null}
+                    {isNext ? "ahora" : isDone ? "hecho" : isSkipped ? "saltado" : "pendiente"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {expandedMeal != null ? (
+          <div className="surface-card animate-sheet-up mt-2 p-4">
+            <span className="block font-display text-sm">{habits[expandedMeal].label}</span>
+            {todayMeals.find((m) => m.moment === habits[expandedMeal].label)?.idea ? (
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {todayMeals.find((m) => m.moment === habits[expandedMeal].label)?.idea}
+              </span>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    handleMealStatus(expandedMeal, s);
+                    setExpandedMeal(null);
+                  }}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
+                    habits[expandedMeal].status === s
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-input text-muted-foreground"
+                  }`}
+                >
+                  {MEAL_STATUS_LABEL[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="mt-4">
+        <button
+          type="button"
+          onClick={() => setGuideOpen((o) => !o)}
+          aria-expanded={guideOpen}
+          className="flex w-full items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-left text-xs font-medium text-muted-foreground"
+        >
+          <span className="flex items-center gap-2">
+            <Sparkle className="h-3.5 w-3.5 text-primary" />
+            Guía del coach{guide?.calories ? ` · ${guide.calories}` : ""}
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform ${guideOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {guideOpen ? (
+          <div className="surface-card animate-sheet-up mt-2 p-5">
+            {generating || (!guide && todayQ.isLoading) ? (
+              <p className="animate-pulse text-sm text-muted-foreground">
+                Preparando tu guía del día...
+              </p>
+            ) : guide ? (
+              <div className="space-y-3 text-sm">
+                <p className="leading-relaxed text-foreground">{guide.intro}</p>
+                <div className="grid gap-2">
+                  <Field label="Energía" value={guide.calories} />
+                  <Field label="Macros" value={guide.macros} />
+                </div>
+                {guide.meals?.length ? (
+                  <div className="space-y-2 pt-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Platos sugeridos
+                    </span>
+                    {guide.meals.map((m) => (
+                      <div
+                        key={m.moment}
+                        className="flex gap-3 rounded-xl border border-border bg-surface p-3"
+                      >
+                        <span className="shrink-0 text-xs font-semibold text-primary">
+                          {m.moment}
+                        </span>
+                        <span className="min-w-0 text-sm text-foreground">{m.idea}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {guide.tips?.length ? (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Consejos de nutrición
+                    </span>
+                    <ul className="space-y-1.5">
+                      {guide.tips.map((t) => (
+                        <li key={t} className="flex gap-2 text-sm text-foreground">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                          <span className="min-w-0">{t}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <button onClick={requestGuide} className="text-sm font-medium text-primary">
+                Generar guía
+              </button>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="animate-rise mt-6">
         <WeekStrip
           done={doneCount}
           total={habits.length}
@@ -168,112 +410,28 @@ function Hoy() {
         <p className="mt-2 px-1 text-[11px] text-muted-foreground">Toca un día para ver su menú.</p>
       </section>
 
-      <section className="surface-card animate-rise mt-8 p-5">
-        <div className="flex items-center gap-2">
-          <Sparkle className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold">Tu guía de hoy</h2>
-        </div>
-        {generating || (!guide && todayQ.isLoading) ? (
-          <p className="mt-3 animate-pulse text-sm text-muted-foreground">
-            Preparando tu guía del día...
-          </p>
-        ) : guide ? (
-          <div className="mt-3 space-y-3 text-sm">
-            <p className="leading-relaxed text-foreground">{guide.intro}</p>
-            <div className="grid gap-2">
-              <Field label="Energía" value={guide.calories} />
-              <Field label="Macros" value={guide.macros} />
-            </div>
-            {guide.meals?.length ? (
-              <div className="space-y-2 pt-1">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Platos sugeridos
-                </span>
-                {guide.meals.map((m) => (
-                  <div
-                    key={m.moment}
-                    className="flex gap-3 rounded-xl border border-border bg-surface p-3"
-                  >
-                    <span className="shrink-0 text-xs font-semibold text-primary">{m.moment}</span>
-                    <span className="min-w-0 text-sm text-foreground">{m.idea}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {guide.tips?.length ? (
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Consejos de nutrición
-                </span>
-                <ul className="space-y-1.5">
-                  {guide.tips.map((t) => (
-                    <li key={t} className="flex gap-2 text-sm text-foreground">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                      <span className="min-w-0">{t}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <button onClick={requestGuide} className="mt-3 text-sm font-medium text-primary">
-            Generar guía
-          </button>
-        )}
+      <section className="mt-4">
+        <button
+          type="button"
+          onClick={() => setCalendarOpen((o) => !o)}
+          aria-expanded={calendarOpen}
+          className="flex w-full items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-left text-xs font-medium text-muted-foreground"
+        >
+          <span>Ver calendario del mes</span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform ${calendarOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {calendarOpen ? (
+          <MonthCalendar
+            logs={logsQ.data ?? []}
+            plan={planQ.data?.plan ?? null}
+            planHabits={
+              habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)
+            }
+          />
+        ) : null}
       </section>
-
-      <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-2xl">Comidas de hoy</h2>
-          <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-secondary-foreground">
-            {doneCount}/{habits.length}
-          </span>
-        </div>
-        <div className="grid gap-3">
-          {habits.map((h, i) => {
-            const idea = todayMeals.find((m) => m.moment === h.label)?.idea;
-            const status = h.status;
-            return (
-              <div
-                key={h.label}
-                className={`habit-tile p-5 ${HABIT_COLORS[i % HABIT_COLORS.length]}`}
-              >
-                <span className="block font-display text-lg leading-tight">{h.label}</span>
-                {idea ? (
-                  <span className="mt-0.5 block text-sm opacity-80">{idea}</span>
-                ) : (
-                  <span className="mt-0.5 block text-xs font-semibold opacity-70">
-                    {status ? MEAL_STATUS_LABEL[status] : "Pendiente hoy"}
-                  </span>
-                )}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => handleMealStatus(i, s)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
-                        status === s
-                          ? "border-habit-foreground bg-habit-foreground text-background"
-                          : "border-habit-foreground/40 text-habit-foreground/80"
-                      }`}
-                    >
-                      {MEAL_STATUS_LABEL[s]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <MonthCalendar
-        logs={logsQ.data ?? []}
-        plan={planQ.data?.plan ?? null}
-        planHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
-      />
 
       <GuidedLogSheet
         trigger={false}
@@ -288,6 +446,14 @@ function Hoy() {
           setGuidedIndex(null);
           navigate({ to: "/chat" });
         }}
+      />
+
+      <NightlyReviewSheet
+        open={nightlyOpen}
+        onOpenChange={setNightlyOpen}
+        habits={habits}
+        streak={streak}
+        onDone={finishNightlyReview}
       />
 
       <BottomNav />
