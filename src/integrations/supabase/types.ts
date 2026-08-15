@@ -227,6 +227,7 @@ export type Database = {
           date_of_birth: string | null;
           diet_pattern: string | null;
           display_name: string | null;
+          evening_push_sent_on: string | null;
           evening_time: string;
           exercise: string | null;
           family_context: string | null;
@@ -241,6 +242,7 @@ export type Database = {
           meals_per_day: number | null;
           medical_conditions: string | null;
           medications: string | null;
+          morning_push_sent_on: string | null;
           morning_time: string;
           non_negotiable_foods: string | null;
           onboarding_completed: boolean;
@@ -266,6 +268,7 @@ export type Database = {
           date_of_birth?: string | null;
           diet_pattern?: string | null;
           display_name?: string | null;
+          evening_push_sent_on?: string | null;
           evening_time?: string;
           exercise?: string | null;
           family_context?: string | null;
@@ -280,6 +283,7 @@ export type Database = {
           meals_per_day?: number | null;
           medical_conditions?: string | null;
           medications?: string | null;
+          morning_push_sent_on?: string | null;
           morning_time?: string;
           non_negotiable_foods?: string | null;
           onboarding_completed?: boolean;
@@ -305,6 +309,7 @@ export type Database = {
           date_of_birth?: string | null;
           diet_pattern?: string | null;
           display_name?: string | null;
+          evening_push_sent_on?: string | null;
           evening_time?: string;
           exercise?: string | null;
           family_context?: string | null;
@@ -319,6 +324,7 @@ export type Database = {
           meals_per_day?: number | null;
           medical_conditions?: string | null;
           medications?: string | null;
+          morning_push_sent_on?: string | null;
           morning_time?: string;
           non_negotiable_foods?: string | null;
           onboarding_completed?: boolean;
@@ -333,6 +339,33 @@ export type Database = {
           updated_at?: string;
           wake_time?: string | null;
           work_schedule?: string | null;
+        };
+        Relationships: [];
+      };
+      push_subscriptions: {
+        Row: {
+          auth: string;
+          created_at: string;
+          endpoint: string;
+          id: string;
+          p256dh: string;
+          user_id: string;
+        };
+        Insert: {
+          auth: string;
+          created_at?: string;
+          endpoint: string;
+          id?: string;
+          p256dh: string;
+          user_id: string;
+        };
+        Update: {
+          auth?: string;
+          created_at?: string;
+          endpoint?: string;
+          id?: string;
+          p256dh?: string;
+          user_id?: string;
         };
         Relationships: [];
       };

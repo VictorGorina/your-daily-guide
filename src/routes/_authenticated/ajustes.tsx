@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -17,9 +17,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAccount } from "@/lib/account.functions";
 import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
+import {
+  getPushSubscriptionState,
+  isIosNonStandalone,
+  isPushSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from "@/lib/push";
 import { applyTheme, THEMES } from "@/lib/theme";
 
 function FieldNote({ error, help }: { error?: string; help: string }) {
@@ -49,6 +57,35 @@ function Ajustes() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const pushSupported = isPushSupported();
+  const iosHint = isIosNonStandalone();
+
+  useEffect(() => {
+    if (!pushSupported) return;
+    getPushSubscriptionState().then((state) => setPushEnabled(state === "subscribed"));
+  }, [pushSupported]);
+
+  const togglePush = async (next: boolean) => {
+    setPushBusy(true);
+    try {
+      if (next) {
+        await subscribeToPush();
+        setPushEnabled(true);
+      } else {
+        await unsubscribeFromPush();
+        setPushEnabled(false);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "No hemos podido cambiar las notificaciones",
+      );
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const setError = (key: string, message?: string) =>
     setErrors((e) => {
@@ -143,36 +180,37 @@ function Ajustes() {
         </div>
       ) : null}
 
-      <Link
-        to="/hogar"
-        className="mt-6 flex items-center gap-3 rounded-2xl border border-input bg-surface px-4 py-4 text-sm"
-      >
-        <Users className="h-4 w-4 text-primary" />
-        <span className="flex-1">
-          <span className="block font-medium">Tu hogar</span>
-          <span className="block text-xs text-muted-foreground">
-            Une cuentas, elige qué comidas compartís y añade a los peques
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Cuenta
+      </span>
+      <div className="surface-card mt-2 divide-y divide-border overflow-hidden">
+        <Link to="/hogar" className="flex items-center gap-3 px-4 py-4 text-sm">
+          <Users className="h-4 w-4 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">Tu hogar</span>
+            <span className="block text-xs text-muted-foreground">
+              Une cuentas, elige qué comidas compartís y añade a los peques
+            </span>
           </span>
-        </span>
-        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-      </Link>
-
-      <Link
-        to="/perfil"
-        className="mt-6 flex items-center gap-3 rounded-2xl border border-input bg-surface px-4 py-4 text-sm"
-      >
-        <Pencil className="h-4 w-4 text-primary" />
-        <span className="flex-1">
-          <span className="block font-medium">Editar mis respuestas</span>
-          <span className="block text-xs text-muted-foreground">
-            Corrige cualquier dato del onboarding en dos toques
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
+        <Link to="/perfil" className="flex items-center gap-3 px-4 py-4 text-sm">
+          <Pencil className="h-4 w-4 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">Editar mis respuestas</span>
+            <span className="block text-xs text-muted-foreground">
+              Corrige cualquier dato del onboarding en dos toques
+            </span>
           </span>
-        </span>
-        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-      </Link>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
+      </div>
 
-      <section className="surface-card mt-6 space-y-4 p-5">
-        <h2 className="text-sm font-semibold">Tu perfil</h2>
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Perfil
+      </span>
+      <section className="surface-card mt-2 space-y-4 p-5">
+        <h2 className="text-sm font-semibold">Datos básicos</h2>
         <input
           className={input}
           defaultValue={profile?.display_name ?? ""}
@@ -246,53 +284,85 @@ function Ajustes() {
         </div>
       </section>
 
-      <section className="surface-card mt-4 p-5">
-        <h2 className="text-sm font-semibold">Tono del coach</h2>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {["relajado", "neutro", "exigente"].map((t) => (
-            <button
-              key={t}
-              onClick={() => save.mutate({ tone: t })}
-              className={`rounded-2xl border px-3 py-3 text-sm capitalize transition-colors ${
-                profile?.tone === t
-                  ? "border-primary bg-primary-soft text-primary"
-                  : "border-input bg-surface"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Coach
+      </span>
+      <section className="surface-card mt-2 divide-y divide-border p-5">
+        <div>
+          <h2 className="text-sm font-semibold">Tono</h2>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {["relajado", "neutro", "exigente"].map((t) => (
+              <button
+                key={t}
+                onClick={() => save.mutate({ tone: t })}
+                className={`rounded-2xl border px-3 py-3 text-sm capitalize transition-colors ${
+                  profile?.tone === t
+                    ? "border-primary bg-primary-soft text-primary"
+                    : "border-input bg-surface"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-4">
+          <h2 className="text-sm font-semibold">Recordatorios</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="text-xs text-muted-foreground">
+              Mañana
+              <input
+                type="time"
+                className={`${input} mt-1`}
+                defaultValue={profile?.morning_time?.slice(0, 5) ?? "08:00"}
+                onBlur={(e) => commitTime("morning_time", e.target.value)}
+              />
+              <FieldNote error={errors["morning_time"]} help="Hora del resumen matutino." />
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Noche
+              <input
+                type="time"
+                className={`${input} mt-1`}
+                defaultValue={profile?.evening_time?.slice(0, 5) ?? "21:30"}
+                onBlur={(e) => commitTime("evening_time", e.target.value)}
+              />
+              <FieldNote error={errors["evening_time"]} help="Hora del repaso nocturno." />
+            </label>
+          </div>
         </div>
       </section>
 
-      <section className="surface-card mt-4 p-5">
-        <h2 className="text-sm font-semibold">Recordatorios</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <label className="text-xs text-muted-foreground">
-            Mañana
-            <input
-              type="time"
-              className={`${input} mt-1`}
-              defaultValue={profile?.morning_time?.slice(0, 5) ?? "08:00"}
-              onBlur={(e) => commitTime("morning_time", e.target.value)}
-            />
-            <FieldNote error={errors["morning_time"]} help="Hora del resumen matutino." />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            Noche
-            <input
-              type="time"
-              className={`${input} mt-1`}
-              defaultValue={profile?.evening_time?.slice(0, 5) ?? "21:30"}
-              onBlur={(e) => commitTime("evening_time", e.target.value)}
-            />
-            <FieldNote error={errors["evening_time"]} help="Hora del repaso nocturno." />
-          </label>
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Notificaciones
+      </span>
+      <section className="surface-card mt-2 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">Avisos push</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Resumen matutino y aviso del repaso nocturno, a las horas de arriba.
+            </p>
+          </div>
+          <Switch
+            checked={pushEnabled}
+            disabled={pushBusy || !pushSupported}
+            onCheckedChange={(v) => void togglePush(v)}
+          />
         </div>
+        {!pushSupported ? (
+          <FieldNote help="Este navegador no soporta notificaciones push." />
+        ) : iosHint ? (
+          <FieldNote help="En iPhone: añade Daily Guide a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) para poder recibir avisos." />
+        ) : null}
       </section>
 
-      <section className="surface-card mt-4 p-5">
-        <h2 className="text-sm font-semibold">Apariencia</h2>
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Apariencia
+      </span>
+      <section className="surface-card mt-2 p-5">
+        <h2 className="text-sm font-semibold">Tema</h2>
         <div className="mt-3 grid grid-cols-2 gap-3">
           {THEMES.map((t) => (
             <button
@@ -320,9 +390,13 @@ function Ajustes() {
         </div>
       </section>
 
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Datos y cuenta
+      </span>
+
       <button
         onClick={signOut}
-        className="mt-6 w-full rounded-full border border-input py-4 text-sm font-medium text-muted-foreground"
+        className="mt-2 w-full rounded-full border border-input py-4 text-sm font-medium text-muted-foreground"
       >
         Cerrar sesión
       </button>

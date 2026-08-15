@@ -1,0 +1,23 @@
+name: Push dispatch
+
+# Dispara el envío de notificaciones push cada 15 minutos. Ver AGENTS.md:
+# no usamos el `scheduled` nativo de Cloudflare Workers porque este proyecto
+# sustituye el entry-point autogenerado de Nitro por src/server.ts (que solo
+# expone `fetch`), así que enganchar un Cron Trigger ahí es incierto sin
+# desplegar y probar. Este workflow es independiente del hosting.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar a /api/cron/dispatch
+        run: |
+          curl -fsS -X POST "${APP_URL%/}/api/cron/dispatch" \
+            -H "x-cron-secret: ${CRON_SECRET}"
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
