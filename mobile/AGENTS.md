@@ -1,0 +1,45 @@
+# Daily Guide — app nativa (Expo)
+
+App de iOS en React Native. Comparte backend con la web: **el mismo proyecto de Supabase**
+(mismo JWT, mismas políticas RLS) y las rutas `/api/v1/*` de la web (ver AGENTS.md de la raíz).
+
+No es un monorepo: la web sigue en `src/` en la raíz y esta app vive aparte en `mobile/`. No hay
+código compartido por ahora — cuando duela duplicar, se monta `packages/shared/`.
+
+## Cómo llama al backend
+
+- **CRUD normal** (perfil, registros del día, hogar): directo con `supabase` desde
+  [lib/supabase.ts](lib/supabase.ts), igual que hace la web desde el navegador. Las políticas RLS
+  son las que protegen los datos.
+- **Operaciones de IA y las que necesitan clave de servicio**: por HTTP con
+  [lib/api.ts](lib/api.ts) contra `/api/v1/*`, adjuntando el token de Supabase como Bearer.
+  Ojo con los errores: la API devuelve `{"error": mensaje}` con textos para enseñar tal cual, y su
+  código de estado no distingue "dato inválido" de "fallo real" — guíate por el mensaje y por el
+  401.
+
+## Versiones que no se pueden tocar a la ligera
+
+**NativeWind v4 exige Tailwind v3, no v4.** La v4 quitó la API de configuración en la que se apoya
+y la combinación **no genera ningún estilo, sin dar ningún error**. `expo install tailwindcss`
+instala la v4: hay que forzar `tailwindcss@^3.4.17` a mano. (La web sí usa Tailwind v4; son dos
+configuraciones distintas a propósito.)
+
+La paleta de [tailwind.config.js](tailwind.config.js) es el tema "niebla" de la web
+(`:root` en `src/styles.css`) convertido de `oklch()` a hex, porque React Native no entiende
+`oklch`. Si allí cambia un color, hay que reconvertirlo aquí: son dos copias.
+
+`.npmrc` fija `legacy-peer-deps` porque el árbol de Expo 57 choca consigo mismo (expo-router
+arrastra react-dom 19.2.8 y expo fija react 19.2.3); sin eso npm no instala nada.
+
+## Desarrollo
+
+```sh
+cp .env.example .env   # y rellena con los mismos valores que el .env de la raíz
+npx expo start
+```
+
+`EXPO_PUBLIC_API_URL` apunta al `bun run dev` de la web. En el simulador vale `localhost`; desde un
+iPhone real hace falta la IP de la Mac en la red local.
+
+Requiere **Xcode** para el simulador (no basta con las Command Line Tools) y **Node** (Metro no
+corre sobre Bun, a diferencia de la web).
