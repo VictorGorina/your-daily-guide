@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { todayISO, type DailyLog } from "@/lib/daily";
+import { ratioSignal, todayISO, type DailyLog } from "@/lib/daily";
 import { planForDate, type MonthlyPlan } from "@/lib/plan-shared";
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
@@ -40,19 +40,8 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
   const habitState = (date: string) => {
     const log = logByDate.get(date);
     const habits = log?.habits ?? [];
-    if (!habits.length) return { done: 0, total: 0, signal: "none" as const };
     const done = habits.filter((h) => h.done).length;
-    const ratio = done / habits.length;
-    return {
-      done,
-      total: habits.length,
-      signal:
-        ratio >= 1
-          ? ("success" as const)
-          : ratio >= 0.5
-            ? ("warning" as const)
-            : ("danger" as const),
-    };
+    return { done, total: habits.length, signal: ratioSignal(done, habits.length) };
   };
 
   const selectedLog = selected ? (logByDate.get(selected) ?? null) : null;
@@ -86,8 +75,8 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
               ? "border-transparent bg-success text-success-foreground font-semibold"
               : signal === "warning"
                 ? "border-transparent bg-warning text-warning-foreground font-semibold"
-                : signal === "danger"
-                  ? "border-transparent bg-danger text-danger-foreground font-semibold"
+                : signal === "muted"
+                  ? "border-transparent bg-muted text-muted-foreground font-semibold"
                   : weekendBase;
           return (
             <button
@@ -104,8 +93,8 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Semáforo de comidas: menos de la mitad = rojo, la mitad o más = naranja, todas = verde. Toca
-        cualquier día para ver su menú.
+        Semáforo de comidas: verde si comiste todas, naranja si comiste algo, gris si no hubo
+        registro. Toca cualquier día para ver su menú.
       </p>
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>

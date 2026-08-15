@@ -211,14 +211,80 @@ export function goalProgress(profile: Profile | null) {
   };
 }
 
-export function streakFrom(logs: DailyLog[]) {
-  const sorted = [...logs].sort((a, b) => (a.log_date < b.log_date ? 1 : -1));
-  let streak = 0;
+export type RatioSignal = "success" | "warning" | "muted" | "none";
+
+/**
+ * Semáforo de cumplimiento diario, compartido por WeekStrip, MonthCalendar y
+ * el mapa de calor de Historial. Deliberadamente sin rojo: un día flojo se
+ * marca "muted" (gris neutro), nunca como fallo — ver área 5 del roadmap UX
+ * ("motivación y retención"). "none" es solo para días sin ningún registro.
+ */
+export function ratioSignal(done: number, total: number): RatioSignal {
+  if (!total) return "none";
+  const ratio = done / total;
+  if (ratio >= 1) return "success";
+  if (ratio > 0) return "warning";
+  return "muted";
+}
+
+function dailyRatio(log: DailyLog | undefined) {
+  const habits = log?.habits ?? [];
+  return habits.length ? habits.filter((h) => h.done).length / habits.length : 0;
+}
+
+/**
+ * "Impulso": indicador de racha suave que nunca resetea a cero. Sustituye al
+ * antiguo streakFrom (racha de días consecutivos por encima de un umbral,
+ * donde un solo día flojo borraba toda la racha de golpe). En su lugar, es
+ * una media móvil exponencial (EMA) del cumplimiento diario expresada en
+ * 0-100: un día flojo la hace bajar, no la borra; unos días buenos la
+ * recuperan rápido. `days` limita cuánto histórico pesa (por defecto, las
+ * últimas 3 semanas).
+ */
+export function impulsoFrom(logs: DailyLog[], days = 21): number {
+  const sorted = [...logs].sort((a, b) => (a.log_date < b.log_date ? -1 : 1)).slice(-days);
+  if (!sorted.length) return 0;
+  const alpha = 0.25;
+  let impulso = 0;
   for (const log of sorted) {
-    const habits = log.habits ?? [];
-    const ratio = habits.length ? habits.filter((h) => h.done).length / habits.length : 0;
-    if (ratio >= 0.5) streak += 1;
-    else break;
+    impulso = alpha * (dailyRatio(log) * 100) + (1 - alpha) * impulso;
   }
-  return streak;
+  return Math.round(impulso);
+}
+
+export type WeeklyTrend = { thisWeek: number; lastWeek: number; deltaPts: number };
+
+/**
+ * Compara el cumplimiento medio de los últimos 7 días con el de los 7
+ * anteriores, para dar feedback de tendencia semanal en vez de fijarse solo
+ * en el cumplimiento de hoy. Devuelve null si no hay suficiente histórico en
+ * alguna de las dos semanas para que la comparación signifique algo.
+ */
+export function weeklyTrendFrom(logs: DailyLog[]): WeeklyTrend | null {
+  const todayStr = todayISO();
+  const byDate = new Map(logs.map((l) => [l.log_date, l]));
+  const avgRatioFor = (offsetStart: number, offsetEnd: number) => {
+    const d = new Date(`${todayStr}T00:00:00`);
+    let sum = 0;
+    let counted = 0;
+    for (let i = offsetStart; i < offsetEnd; i++) {
+      const day = new Date(d);
+      day.setDate(d.getDate() - i);
+      const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      const log = byDate.get(iso);
+      if (!log || !(log.habits ?? []).length) continue;
+      sum += dailyRatio(log);
+      counted += 1;
+    }
+    return counted >= 2 ? sum / counted : null;
+  };
+
+  const thisWeek = avgRatioFor(0, 7);
+  const lastWeek = avgRatioFor(7, 14);
+  if (thisWeek == null || lastWeek == null) return null;
+  return {
+    thisWeek: Math.round(thisWeek * 100),
+    lastWeek: Math.round(lastWeek * 100),
+    deltaPts: Math.round(thisWeek * 100) - Math.round(lastWeek * 100),
+  };
 }
