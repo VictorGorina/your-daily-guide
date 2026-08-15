@@ -1,8 +1,8 @@
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useAuth } from "../lib/auth-context";
-import { supabase } from "../lib/supabase";
+import { useAuth } from "../../lib/auth-context";
+import { supabase } from "../../lib/supabase";
 
 /**
  * Provisional: solo confirma que la sesión llega hasta aquí. La pantalla de

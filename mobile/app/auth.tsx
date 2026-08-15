@@ -1,3 +1,4 @@
+import { Redirect } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -12,14 +13,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../lib/auth-context";
 import { supabase } from "../lib/supabase";
 
 /**
  * Entrada a la app. Mismos textos y mismo orden que la pantalla /auth de la
- * web, para que las dos se sientan la misma app. El listener de sesión de
- * `AuthProvider` es quien redirige al entrar: aquí no se navega a mano.
+ * web, para que las dos se sientan la misma app. Cuando el login crea sesión,
+ * el `onAuthStateChange` de `AuthProvider` la refleja y el Redirect de abajo
+ * saca de aquí: no se navega a mano tras cada método de entrada.
  */
 export default function Auth() {
+  const { session } = useAuth();
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -77,6 +81,10 @@ export default function Auth() {
       setLoading(false);
     }
   };
+
+  // Cualquier método de entrada (correo, alta o perfil demo) acaba creando
+  // sesión; en cuanto AuthProvider la ve, salimos de la pantalla de entrada.
+  if (session) return <Redirect href="/hoy" />;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
