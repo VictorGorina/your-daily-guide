@@ -1,18 +1,9 @@
-import type { DailyLog } from "@/lib/daily";
+import { ratioSignal, type DailyLog } from "@/lib/daily";
 
 const DAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-function ratioSignal(done: number, total: number) {
-  if (!total) return "none" as const;
-  const ratio = done / total;
-  if (ratio >= 1) return "success" as const;
-  if (ratio >= 0.5) return "warning" as const;
-  if (ratio > 0) return "danger" as const;
-  return "none" as const;
-}
 
 function habitSignal(log: DailyLog | undefined, fallbackHabits: string[]) {
   const habits = log?.habits ?? (fallbackHabits ?? []).map((label) => ({ label, done: false }));
@@ -67,8 +58,8 @@ export function WeekStrip({
             ? "border-transparent bg-success text-success-foreground"
             : signal === "warning"
               ? "border-transparent bg-warning text-warning-foreground"
-              : signal === "danger"
-                ? "border-transparent bg-danger text-danger-foreground"
+              : signal === "muted"
+                ? "border-transparent bg-muted text-muted-foreground"
                 : "";
 
         const baseClass = isToday

@@ -5,6 +5,9 @@ export type DispatchSummary = {
   sent: number;
   gone: number;
   skippedNoSubscription: number;
+  // Tono "relajado" con el día ya completo: un push más sería ruido, así que
+  // se contacta menos en vez de más. Ver propagación del tono en AGENTS.md.
+  skippedLowNeed: number;
   errors: number;
 };
 
@@ -57,9 +60,58 @@ type ProfileRow = {
   evening_time: string;
   morning_push_sent_on: string | null;
   evening_push_sent_on: string | null;
+  tone: string | null;
 };
 
+type Tone = "relajado" | "neutro" | "exigente";
+const toneOf = (tone: string | null): Tone =>
+  tone === "relajado" || tone === "exigente" ? tone : "neutro";
+
 type SubscriptionRow = { user_id: string; endpoint: string; p256dh: string; auth: string };
+
+// Copys de mañana y noche adaptados al matiz elegido en el perfil (Ajustes),
+// mismo espíritu que toneLine en ai-provider.server.ts pero para texto de
+// notificación local en vez de prompt de IA.
+function morningCopy(tone: Tone, name: string | null, mealIdea?: string) {
+  const title = name ? `Buenos días, ${name}` : "Buenos días";
+  if (tone === "relajado") {
+    return {
+      title,
+      body: mealIdea
+        ? `Sin prisa: hoy toca ${mealIdea}.`
+        : "Tu guía de hoy está lista cuando quieras verla.",
+    };
+  }
+  if (tone === "exigente") {
+    return {
+      title,
+      body: mealIdea
+        ? `Hoy toca: ${mealIdea}. Empieza el día con buen pie.`
+        : "Tu guía de hoy ya está lista — no la dejes para luego.",
+    };
+  }
+  return {
+    title,
+    body: mealIdea ? `Hoy toca: ${mealIdea}` : "Tu guía de hoy ya te está esperando.",
+  };
+}
+
+function eveningCopy(tone: Tone, name: string | null, pendingCount: number) {
+  const title = name ? `¿Cómo ha ido tu día, ${name}?` : "¿Cómo ha ido tu día?";
+  if (tone === "relajado") {
+    return { title, body: "Repásalo si te apetece, sin ninguna prisa." };
+  }
+  if (tone === "exigente") {
+    const body =
+      pendingCount > 0
+        ? `Aún te ${pendingCount === 1 ? "queda" : "quedan"} ${pendingCount} comida${
+            pendingCount === 1 ? "" : "s"
+          } por registrar hoy.`
+        : "Cierra el día repasándolo en menos de un minuto.";
+    return { title, body };
+  }
+  return { title, body: "Repásalo en menos de un minuto." };
+}
 
 /**
  * Recorre los perfiles cuyo `morning_time`/`evening_time` cae en la ventana
@@ -71,7 +123,13 @@ type SubscriptionRow = { user_id: string; endpoint: string; p256dh: string; auth
  */
 export async function dispatchPush(): Promise<DispatchSummary> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const summary: DispatchSummary = { sent: 0, gone: 0, skippedNoSubscription: 0, errors: 0 };
+  const summary: DispatchSummary = {
+    sent: 0,
+    gone: 0,
+    skippedNoSubscription: 0,
+    skippedLowNeed: 0,
+    errors: 0,
+  };
 
   const nowMinutes = madridMinutesNow();
   const today = madridDateISO();
@@ -79,7 +137,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   const { data: profiles, error } = await supabaseAdmin
     .from("profiles")
     .select(
-      "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on",
+      "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on, tone",
     )
     .eq("onboarding_completed", true);
   if (error) throw error;
@@ -139,22 +197,33 @@ export async function dispatchPush(): Promise<DispatchSummary> {
       .eq("log_date", today)
       .maybeSingle();
     const firstMealIdea = (log?.guide as unknown as DailyGuide | null)?.meals?.[0]?.idea;
-    await sendTo(p.id, {
-      title: p.display_name ? `Buenos días, ${p.display_name}` : "Buenos días",
-      body: firstMealIdea ? `Hoy toca: ${firstMealIdea}` : "Tu guía de hoy ya te está esperando.",
-      url: "/hoy",
-    });
+    const { title, body } = morningCopy(toneOf(p.tone), p.display_name, firstMealIdea);
+    await sendTo(p.id, { title, body, url: "/hoy" });
     // Se marca como enviado tanto si había suscripciones como si no, para no
     // reintentar en bucle dentro del mismo día — igual para la noche debajo.
     await supabaseAdmin.from("profiles").update({ morning_push_sent_on: today }).eq("id", p.id);
   }
 
   for (const p of eveningMatches) {
-    await sendTo(p.id, {
-      title: p.display_name ? `¿Cómo ha ido tu día, ${p.display_name}?` : "¿Cómo ha ido tu día?",
-      body: "Repásalo en menos de un minuto.",
-      url: "/hoy",
-    });
+    const tone = toneOf(p.tone);
+    const { data: log } = await supabaseAdmin
+      .from("daily_logs")
+      .select("habits")
+      .eq("user_id", p.id)
+      .eq("log_date", today)
+      .maybeSingle();
+    const habits = (log?.habits as { done: boolean }[] | null) ?? [];
+    const pendingCount = Math.max(0, habits.length - habits.filter((h) => h.done).length);
+    // Tono relajado + día ya completo: se prioriza contactar menos, no un
+    // push de más que no aporta nada. Los otros tonos siempre reciben el
+    // repaso de la noche.
+    const skip = tone === "relajado" && habits.length > 0 && pendingCount === 0;
+    if (skip) {
+      summary.skippedLowNeed++;
+    } else {
+      const { title, body } = eveningCopy(tone, p.display_name, pendingCount);
+      await sendTo(p.id, { title, body, url: "/hoy" });
+    }
     await supabaseAdmin.from("profiles").update({ evening_push_sent_on: today }).eq("id", p.id);
   }
 
