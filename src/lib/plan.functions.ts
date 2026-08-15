@@ -11,10 +11,16 @@ import {
   mergeFuturePlan,
   tripsOfCadence,
   type ShoppingCadence,
+  MEAL_SLOTS,
+  MEAL_SLOT_FIELD,
+  MEAL_SLOT_LABEL,
   parseJsonLoose,
   planCursor,
+  planSlotIndex,
   shoppingTotal,
+  type MealSlot,
   type MonthlyPlan,
+  type PlanDay,
   type ShoppingList,
 } from "@/lib/plan-shared";
 
@@ -271,6 +277,135 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
         : merged.intro,
     };
   });
+
+/**
+ * Ingredientes que pide un plato y no están en la lista de la compra. Se
+ * resuelve con el modelo porque casar texto libre con la lista no funciona a
+ * ojo ("pechuga de pollo" está cubierto por "pollo", "tomates cherry" por
+ * "tomate"). Si la comprobación falla no se marca nada: preferimos no avisar
+ * antes que avisar en falso de algo que la persona sí tiene en casa.
+ */
+async function offShoppingList(dish: string, shopping: ShoppingList): Promise<string[]> {
+  const names = ingredientNames(shopping);
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!names || !key) return [];
+
+  try {
+    const ai = createAiProvider(key);
+    const { text } = await generateText({
+      model: ai(COACH_MODEL),
+      temperature: 0,
+      prompt:
+        `Lista de la compra ya hecha: ${names}\n` +
+        `Plato: "${dish}"\n\n` +
+        "¿Qué ingredientes necesarios para ese plato NO están en la lista? " +
+        "Da por disponibles la sal, el aceite, el vinagre, el agua y las especias básicas. " +
+        "Cuenta como cubierto todo ingrediente equivalente aunque el nombre no sea idéntico " +
+        "(p. ej. 'pechuga de pollo' lo cubre 'pollo'; 'tomate cherry' lo cubre 'tomate'). " +
+        'Devuelve solo JSON: {"fuera": [ingredientes que faltan, en minúsculas, máx. 5; lista vacía si no falta ninguno]}',
+    });
+    const parsed = (parseJsonLoose(text) ?? {}) as { fuera?: unknown };
+    return (Array.isArray(parsed.fuera) ? parsed.fuera : [])
+      .map((n) => String(n).trim().toLowerCase())
+      .filter(Boolean)
+      .slice(0, 5);
+  } catch (error) {
+    console.error("offShoppingList", error);
+    return [];
+  }
+}
+
+/**
+ * Cambia UN plato de UN día (hoy o futuro), sin pasar por la IA de planificación:
+ * lo que pide la persona se escribe tal cual en el plan. Complementa a
+ * `adjustMonthlyPlan`, que recoloca varios días para compensar; aquí el cambio
+ * es literal y verificable, que es lo que se espera al pedir "cámbiame el
+ * desayuno de mañana". Los días pasados no se tocan (ya están cerrados) y la
+ * lista de la compra tampoco: si el plato pide algo que no se compró, se guarda
+ * igualmente pero queda marcado para avisar en el chat y en pantalla.
+ */
+export const setPlanMeal = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { date: string; slot: string; dish: string; today?: string }) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? "")) throw new Error("Fecha no válida");
+    if (!MEAL_SLOTS.includes(input?.slot as MealSlot)) throw new Error("Comida no válida");
+    const dish = String(input?.dish ?? "")
+      .trim()
+      .slice(0, 200);
+    if (!dish) throw new Error("Falta el plato nuevo");
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
+      ? input.today!
+      : new Date().toISOString().slice(0, 10);
+    if (input.date < today) {
+      throw new Error("Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante");
+    }
+    return { date: input.date, slot: input.slot as MealSlot, dish, today };
+  })
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ plan: MonthlyPlan; label: string; dish: string; off: string[] }> => {
+      const month = data.date.slice(0, 7);
+      const { data: row } = await context.supabase
+        .from("monthly_plans")
+        .select("plan, shopping")
+        .eq("month", month)
+        .maybeSingle();
+
+      const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
+      if (!current) throw new Error(`Todavía no hay plan del mes ${month}`);
+      const at = planSlotIndex(current, data.date);
+      if (!at) throw new Error("Ese día todavía no tiene menú en el plan");
+
+      const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+      const off = await offShoppingList(data.dish, shopping);
+      const field = MEAL_SLOT_FIELD[data.slot];
+
+      const next: MonthlyPlan = {
+        ...current,
+        weeks: current.weeks.map((week, wi) =>
+          wi !== at.weekIndex
+            ? week
+            : {
+                ...week,
+                days: week.days.map((day, di) => {
+                  if (di !== at.dayIndex) return day;
+                  const extras = { ...(day.extras ?? {}) };
+                  if (off.length) extras[data.slot] = off;
+                  else delete extras[data.slot];
+                  const updated: PlanDay = { ...day, [field]: data.dish };
+                  if (Object.keys(extras).length) updated.extras = extras;
+                  else delete updated.extras;
+                  return updated;
+                }),
+              },
+        ),
+      };
+
+      const { error } = await context.supabase
+        .from("monthly_plans")
+        .update({ plan: next as never } as never)
+        .eq("month", month)
+        .eq("user_id", context.userId);
+      if (error) {
+        console.error("setPlanMeal", error);
+        throw new Error("No hemos podido guardar el cambio de plato");
+      }
+
+      const { syncSharedMeals } = await import("@/lib/household.server");
+      await syncSharedMeals({
+        supabase: context.supabase as never,
+        userId: context.userId,
+        month,
+        today: data.today,
+        plan: next,
+        shopping,
+      });
+
+      return { plan: next, label: MEAL_SLOT_LABEL[data.slot], dish: data.dish, off };
+    },
+  );
 
 /** Calcula cómo afecta lo ocurrido al objetivo y propone acortar el plazo o ser más laxo. */
 export const goalImpact = createServerFn({ method: "POST" })

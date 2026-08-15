@@ -1,3 +1,39 @@
+/** Las cuatro comidas que se pueden cambiar una a una desde el chat. */
+export const MEAL_SLOTS = ["desayuno", "comida", "cena", "snack"] as const;
+export type MealSlot = (typeof MEAL_SLOTS)[number];
+
+export const MEAL_SLOT_LABEL: Record<MealSlot, string> = {
+  desayuno: "Desayuno",
+  comida: "Comida",
+  cena: "Cena",
+  snack: "Snack",
+};
+
+/** Campo del día donde vive cada comida cuando se cambia a mano. */
+export const MEAL_SLOT_FIELD = {
+  desayuno: "breakfast",
+  comida: "lunch",
+  cena: "dinner",
+  snack: "snack",
+} as const satisfies Record<MealSlot, keyof PlanDay>;
+
+/**
+ * Un día del plan. `lunch`/`dinner` vienen siempre del plan generado; el plan
+ * base deja el desayuno y el snack a nivel de semana (una lista que rota por
+ * día), así que `breakfast`/`snack` sólo aparecen cuando se ha pedido un plato
+ * concreto para ESE día — un cambio a mano manda sobre la rotación semanal.
+ * `extras` guarda, por comida, los ingredientes de ese plato que no salen de la
+ * lista de la compra, para poder avisar en pantalla.
+ */
+export type PlanDay = {
+  day: string;
+  lunch: string;
+  dinner: string;
+  breakfast?: string;
+  snack?: string;
+  extras?: Partial<Record<MealSlot, string[]>>;
+};
+
 export type MonthlyPlan = {
   intro: string;
   focus: string[];
@@ -6,7 +42,7 @@ export type MonthlyPlan = {
     focus: string;
     breakfasts: string[];
     snacks: string[];
-    days: { day: string; lunch: string; dinner: string }[];
+    days: PlanDay[];
   }[];
 };
 
@@ -89,6 +125,37 @@ export const cleanShopping = (raw: unknown): ShoppingList =>
     })
     .filter((g) => g.category && g.items.length);
 
+const cleanExtras = (raw: unknown): PlanDay["extras"] => {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const entries = MEAL_SLOTS.map(
+    (slot) =>
+      [
+        slot,
+        (Array.isArray(o[slot]) ? (o[slot] as unknown[]) : [])
+          .map((n) => String(n).trim())
+          .filter(Boolean)
+          .slice(0, 6),
+      ] as const,
+  ).filter(([, list]) => list.length);
+  return entries.length ? Object.fromEntries(entries) : undefined;
+};
+
+const cleanDay = (raw: unknown): PlanDay => {
+  const d = (raw ?? {}) as Record<string, unknown>;
+  const day: PlanDay = {
+    day: String(d.day ?? ""),
+    lunch: String(d.lunch ?? ""),
+    dinner: String(d.dinner ?? ""),
+  };
+  const breakfast = String(d.breakfast ?? "").trim();
+  const snack = String(d.snack ?? "").trim();
+  const extras = cleanExtras(d.extras);
+  if (breakfast) day.breakfast = breakfast;
+  if (snack) day.snack = snack;
+  if (extras) day.extras = extras;
+  return day;
+};
+
 export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
   const plan = (raw ?? {}) as Partial<MonthlyPlan>;
   if (!plan.weeks?.length) return null;
@@ -100,11 +167,7 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
       focus: String(w?.focus ?? ""),
       breakfasts: (w?.breakfasts ?? []).slice(0, 3).map(String),
       snacks: (w?.snacks ?? []).slice(0, 3).map(String),
-      days: (w?.days ?? []).slice(0, 7).map((d) => ({
-        day: String(d?.day ?? ""),
-        lunch: String(d?.lunch ?? ""),
-        dinner: String(d?.dinner ?? ""),
-      })),
+      days: (w?.days ?? []).slice(0, 7).map(cleanDay),
     })),
   };
 };
@@ -193,10 +256,11 @@ export const completePlan = (plan: MonthlyPlan | null): MonthlyPlan | null => {
     const days = DAY_NAMES.map((name, di) => {
       const existing = base.days[di];
       if (existing && existing.lunch && existing.dinner) {
-        return { day: existing.day || name, lunch: existing.lunch, dinner: existing.dinner };
+        return { ...existing, day: existing.day || name };
       }
       const fill = pick(cursor++);
       return {
+        ...(existing ?? {}),
         day: existing?.day || name,
         lunch: existing?.lunch || fill.lunch || fill.dinner,
         dinner: existing?.dinner || fill.dinner || fill.lunch,
@@ -263,8 +327,11 @@ export const mergeFuturePlan = (
         const freshDay =
           fresh.days.find((d) => normDay(d.day) === normDay(day.day)) ?? fresh.days[di];
         if (!freshDay?.lunch && !freshDay?.dinner) return day;
+        // El spread conserva breakfast/snack/extras: un plato pedido a mano
+        // manda sobre la recolocación automática hasta que se cambie a mano
+        // otra vez (la IA sólo devuelve lunch/dinner por día).
         return {
-          day: day.day,
+          ...day,
           lunch: freshDay.lunch || day.lunch,
           dinner: freshDay.dinner || day.dinner,
         };
@@ -275,43 +342,123 @@ export const mergeFuturePlan = (
 
 const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
-/** Platos del plan mensual para una fecha concreta (YYYY-MM-DD). */
-export function planForDate(plan: MonthlyPlan | null, date: string) {
+/** Nombre del día de la semana de una fecha, sin depender del locale del entorno. */
+export const weekdayName = (date: string) =>
+  DIA_NOMBRES[new Date(`${date}T00:00:00`).getDay()] ?? "";
+
+/**
+ * Posición exacta (semana, día) que ocupa una fecha dentro del plan. Es la que
+ * usan tanto la lectura (`planForDate`) como la escritura de un plato suelto,
+ * para que lo que se cambia sea siempre lo que se ve en pantalla.
+ */
+export function planSlotIndex(
+  plan: MonthlyPlan | null,
+  date: string,
+): { weekIndex: number; dayIndex: number } | null {
   if (!plan?.weeks?.length) return null;
-  const day = Number(date.slice(8, 10));
-  const weekIndex = Math.min(Math.floor((day - 1) / 7), plan.weeks.length - 1);
+  const dayOfMonth = Number(date.slice(8, 10));
+  const weekIndex = Math.min(Math.floor((dayOfMonth - 1) / 7), plan.weeks.length - 1);
   const week = plan.weeks[weekIndex];
   if (!week) return null;
-  const jsDay = new Date(`${date}T00:00:00`).getDay();
-  const weekdayName = normDay(DIA_NOMBRES[jsDay] ?? "");
-  const match =
-    week.days.find((d) => normDay(d.day).includes(weekdayName)) ??
-    week.days[(jsDay + 6) % 7] ??
-    null;
-  return { week, day: match };
+  const target = normDay(weekdayName(date));
+  const byName = week.days.findIndex((d) => normDay(d.day).includes(target));
+  const dayIndex = byName >= 0 ? byName : (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+  return week.days[dayIndex] ? { weekIndex, dayIndex } : null;
 }
+
+/** Platos del plan mensual para una fecha concreta (YYYY-MM-DD). */
+export function planForDate(plan: MonthlyPlan | null, date: string) {
+  const at = planSlotIndex(plan, date);
+  const week = at ? plan!.weeks[at.weekIndex] : null;
+  if (!at || !week) return null;
+  return { week, day: week.days[at.dayIndex] ?? null };
+}
+
+export type PlanMeal = {
+  moment: string;
+  slot: MealSlot;
+  idea: string;
+  /** Ingredientes de ese plato que no están en la lista de la compra. */
+  off: string[];
+};
 
 /**
  * Comidas de una fecha concreta, listas para tarjetas de seguimiento diario.
- * Comida y cena salen del día exacto del plan; desayuno y snack rotan entre las
- * opciones de la semana según el día para dar variedad sin depender de más IA.
+ * Comida y cena salen del día exacto del plan; desayuno y snack usan el plato
+ * pedido para ese día si lo hay y, si no, rotan entre las opciones de la semana
+ * según el día para dar variedad sin depender de más IA.
  */
-export function mealsForDate(
-  plan: MonthlyPlan | null,
-  date: string,
-): { moment: string; idea: string }[] {
+export function mealsForDate(plan: MonthlyPlan | null, date: string): PlanMeal[] {
   const found = planForDate(plan, date);
   const { dayIndex } = planCursor(date);
   const rotate = (options: string[]) => (options.length ? options[dayIndex % options.length]! : "");
+  const day = found?.day ?? null;
+  const off = (slot: MealSlot) => day?.extras?.[slot] ?? [];
 
-  const snack = rotate(found?.week.snacks ?? []);
-  const moments = [
-    { moment: "Desayuno", idea: rotate(found?.week.breakfasts ?? []) },
-    { moment: "Comida", idea: found?.day?.lunch ?? "" },
-    { moment: "Cena", idea: found?.day?.dinner ?? "" },
+  const moments: PlanMeal[] = [
+    {
+      moment: MEAL_SLOT_LABEL.desayuno,
+      slot: "desayuno",
+      idea: day?.breakfast || rotate(found?.week.breakfasts ?? []),
+      off: off("desayuno"),
+    },
+    { moment: MEAL_SLOT_LABEL.comida, slot: "comida", idea: day?.lunch ?? "", off: off("comida") },
+    { moment: MEAL_SLOT_LABEL.cena, slot: "cena", idea: day?.dinner ?? "", off: off("cena") },
   ];
-  if (snack) moments.push({ moment: "Snack", idea: snack });
+  const snack = day?.snack || rotate(found?.week.snacks ?? []);
+  if (snack) {
+    moments.push({ moment: MEAL_SLOT_LABEL.snack, slot: "snack", idea: snack, off: off("snack") });
+  }
   return moments;
+}
+
+/** Aviso corto para pantalla cuando un plato lleva algo que no se compró. */
+export const offListNote = (names: string[] | undefined) =>
+  names?.length ? `Fuera de tu compra: ${names.join(", ")}` : null;
+
+export const addDays = (date: string, days: number) => {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** Menú de los próximos días, para que el coach sepa qué está cambiando. */
+export function upcomingMeals(plan: MonthlyPlan | null, today: string, days = 7) {
+  if (!plan) return [];
+  const month = today.slice(0, 7);
+  const out: Record<string, string>[] = [];
+  for (let i = 0; i < days; i++) {
+    const date = addDays(today, i);
+    if (date.slice(0, 7) !== month) break;
+    out.push({
+      fecha: date,
+      dia: weekdayName(date),
+      ...Object.fromEntries(mealsForDate(plan, date).map((m) => [m.slot, m.idea])),
+    });
+  }
+  return out;
+}
+
+/**
+ * Lo que el coach necesita saber del plan en cada mensaje: qué hay comprado
+ * (para proponer platos con eso) y qué menú tienen los próximos días (para
+ * saber qué está sustituyendo cuando le piden cambiar un plato).
+ */
+export function coachPlanContext(
+  row:
+    | { plan: MonthlyPlan | null; shopping: ShoppingList | null; confirmed_at: string | null }
+    | null
+    | undefined,
+  today: string,
+) {
+  if (!row?.plan) return { compra: null, proximos: [] };
+  return {
+    compra: {
+      confirmada: Boolean(row.confirmed_at),
+      ingredientes: (row.shopping ?? []).flatMap((g) => g.items.map((i) => i.name)),
+    },
+    proximos: upcomingMeals(row.plan, today),
+  };
 }
 
 /** Texto plano de la lista de la compra, listo para compartir o descargar. */

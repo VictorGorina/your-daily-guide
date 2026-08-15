@@ -29,8 +29,17 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
-import { addMessage, ensureTodayLog, fetchMessages, fetchProfile, todayISO } from "@/lib/daily";
+import {
+  addMessage,
+  ensureTodayLog,
+  fetchMessages,
+  fetchMonthlyPlan,
+  fetchProfile,
+  monthISO,
+  todayISO,
+} from "@/lib/daily";
 import { consumePendingChatMessage } from "@/lib/pending-chat-message";
+import { coachPlanContext } from "@/lib/plan-shared";
 import { useCoachActions } from "@/lib/use-coach-actions";
 
 export const Route = createFileRoute("/_authenticated/chat")({
@@ -45,6 +54,7 @@ const QUICK_PROMPTS = [
   "Hoy tengo mucha hambre",
   "Me siento sin energía",
   "Ajusta el plan de mañana",
+  "Cámbiame el desayuno de mañana",
   "¿Qué ceno hoy?",
 ];
 
@@ -53,9 +63,21 @@ function ChatPage() {
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const todayQ = useQuery({ queryKey: ["today"], queryFn: () => ensureTodayLog([]) });
   const historyQ = useQuery({ queryKey: ["messages", date], queryFn: () => fetchMessages(date) });
+  const month = monthISO();
+  const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
 
-  const ctx = useRef({ profile: profileQ.data, guide: todayQ.data?.guide, log: todayQ.data });
-  ctx.current = { profile: profileQ.data, guide: todayQ.data?.guide, log: todayQ.data };
+  const ctx = useRef({
+    profile: profileQ.data,
+    guide: todayQ.data?.guide,
+    log: todayQ.data,
+    plan: planQ.data,
+  });
+  ctx.current = {
+    profile: profileQ.data,
+    guide: todayQ.data?.guide,
+    log: todayQ.data,
+    plan: planQ.data,
+  };
   const { runTool, refresh } = useCoachActions(() => ctx.current.log);
 
   const initial = useMemo<UIMessage[]>(
@@ -79,6 +101,8 @@ function ChatPage() {
             profile: ctx.current.profile,
             guide: ctx.current.guide,
             actions: true,
+            today: todayISO(),
+            ...coachPlanContext(ctx.current.plan, todayISO()),
             log: ctx.current.log
               ? {
                   fecha: ctx.current.log.log_date,
@@ -107,11 +131,13 @@ function ChatPage() {
         const output = await runTool(toolName, (input ?? {}) as Record<string, unknown>);
         refresh();
         addToolResult({ tool: toolName as never, toolCallId, output });
-      } catch {
+      } catch (e) {
+        // El motivo real (día pasado, mes sin plan...) le sirve al coach para
+        // explicarlo en su respuesta en vez de decir sólo que no ha podido.
         addToolResult({
           tool: toolName as never,
           toolCallId,
-          output: "No se ha podido aplicar el cambio",
+          output: e instanceof Error && e.message ? e.message : "No se ha podido aplicar el cambio",
         });
       }
     },

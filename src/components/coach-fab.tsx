@@ -18,6 +18,7 @@ import {
   CalendarRange,
   ListChecks,
   Target,
+  UtensilsCrossed,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -37,7 +38,17 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { DictateButton } from "@/components/dictate-button";
-import { addMessage, ensureTodayLog, fetchProfile, todayISO, type DailyLog } from "@/lib/daily";
+import {
+  addMessage,
+  ensureTodayLog,
+  fetchMonthlyPlan,
+  fetchProfile,
+  monthISO,
+  todayISO,
+  type DailyLog,
+  type MonthlyPlanRow,
+} from "@/lib/daily";
+import { coachPlanContext } from "@/lib/plan-shared";
 import { useCoachActions } from "@/lib/use-coach-actions";
 
 type ToolCall = { toolCallId: string; toolName: string; input: unknown };
@@ -51,6 +62,7 @@ const ACTION_META: Record<string, { icon: typeof Scale; running: string }> = {
   anadir_habito: { icon: ListChecks, running: "Añadiendo el hábito..." },
   quitar_habito: { icon: ListChecks, running: "Quitando el hábito..." },
   regenerar_guia: { icon: Sparkles, running: "Regenerando tu guía de hoy..." },
+  cambiar_plato: { icon: UtensilsCrossed, running: "Cambiando el plato en tu plan..." },
   ajustar_plan_mensual: { icon: CalendarRange, running: "Reajustando los días que quedan..." },
   recalcular_objetivo: { icon: Target, running: "Recalculando tu objetivo..." },
   cambiar_fecha_objetivo: { icon: Target, running: "Actualizando tu fecha objetivo..." },
@@ -99,16 +111,29 @@ export function CoachFab() {
     queryFn: () => ensureTodayLog([]),
     enabled: open,
   });
+  const month = monthISO();
+  const planQ = useQuery({
+    queryKey: ["plan", month],
+    queryFn: () => fetchMonthlyPlan(month),
+    enabled: open,
+  });
 
-  const ctx = useRef<{ profile: unknown; guide: unknown; log: DailyLog | undefined }>({
+  const ctx = useRef<{
+    profile: unknown;
+    guide: unknown;
+    log: DailyLog | undefined;
+    plan: MonthlyPlanRow | null | undefined;
+  }>({
     profile: undefined,
     guide: undefined,
     log: undefined,
+    plan: undefined,
   });
   ctx.current = {
     profile: profileQ.data,
     guide: todayQ.data?.guide,
     log: todayQ.data,
+    plan: planQ.data,
   };
   const { runTool, refresh } = useCoachActions(() => ctx.current.log);
 
@@ -122,6 +147,8 @@ export function CoachFab() {
             messages,
             profile: ctx.current.profile,
             guide: ctx.current.guide,
+            today: todayISO(),
+            ...coachPlanContext(ctx.current.plan, todayISO()),
             log: ctx.current.log
               ? {
                   fecha: ctx.current.log.log_date,
@@ -167,13 +194,13 @@ export function CoachFab() {
         refresh();
         settle(toolCallId, "done", output);
         addToolResult({ tool: toolName as never, toolCallId, output });
-      } catch {
-        settle(toolCallId, "error", "No se ha podido aplicar el cambio");
-        addToolResult({
-          tool: toolName as never,
-          toolCallId,
-          output: "No se ha podido aplicar el cambio",
-        });
+      } catch (e) {
+        // Mismo criterio que en /chat: el motivo real llega al coach (y a la
+        // fila de acción) para que pueda explicarlo con sus palabras.
+        const reason =
+          e instanceof Error && e.message ? e.message : "No se ha podido aplicar el cambio";
+        settle(toolCallId, "error", reason);
+        addToolResult({ tool: toolName as never, toolCallId, output: reason });
       }
     },
 

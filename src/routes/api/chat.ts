@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
 import { getRequestUserId, unauthorized } from "@/lib/api-auth.server";
+import { addDays, weekdayName } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS } from "@/lib/profile-fields";
 
 // Mismo catálogo de campos que la pantalla "Mis respuestas" en Ajustes, para
@@ -40,6 +41,17 @@ const actionTools = {
     description:
       "Vuelve a generar la guía de hoy (platos sugeridos y consejos) teniendo en cuenta la conversación.",
     inputSchema: z.object({}),
+  }),
+  cambiar_plato: tool({
+    description:
+      "Cambia un plato concreto del plan (desayuno, comida, cena o snack) de un día concreto, de hoy en adelante. Úsala SIEMPRE que la persona pida cambiar, sustituir o elegir otro plato para un día: decir que sí en el chat no cambia nada, el plan solo se actualiza si llamas a esta herramienta. Úsala también cuando el plato lleve ingredientes que no están en la lista de la compra — se guarda igual y te devuelve cuáles faltan para que puedas avisar. Para un solo plato usa esta, no ajustar_plan_mensual.",
+    inputSchema: z.object({
+      fecha: z.string().describe("Día que se cambia, en formato YYYY-MM-DD. Hoy o posterior"),
+      comida: z
+        .enum(["desayuno", "comida", "cena", "snack"])
+        .describe("Qué comida de ese día se cambia"),
+      plato: z.string().describe("El plato nuevo, concreto y corto, sin gramajes"),
+    }),
   }),
   ajustar_plan_mensual: tool({
     description:
@@ -87,6 +99,9 @@ export const Route = createFileRoute("/api/chat")({
           guide?: unknown;
           log?: unknown;
           actions?: boolean;
+          today?: string;
+          compra?: { confirmada: boolean; ingredientes: string[] } | null;
+          proximos?: Record<string, string>[];
         };
         if (!Array.isArray(body.messages)) {
           return new Response("Faltan mensajes", { status: 400 });
@@ -95,15 +110,35 @@ export const Route = createFileRoute("/api/chat")({
         if (!key) return new Response("Falta OPENROUTER_API_KEY", { status: 500 });
 
         const ai = createAiProvider(key);
+        // La fecha se dice explícita (y con el día de la semana) porque el
+        // modelo no la sabe: sin esto, "el desayuno de mañana" no se puede
+        // convertir en la fecha que necesita cambiar_plato.
+        const today = /^\d{4}-\d{2}-\d{2}$/.test(body.today ?? "")
+          ? body.today!
+          : new Date().toISOString().slice(0, 10);
+        const tomorrow = addDays(today, 1);
+
         const system =
           coachSystemPrompt(body.profile as never) +
+          `\nHoy es ${today} (${weekdayName(today)}). Mañana es ${tomorrow} (${weekdayName(tomorrow)}).` +
+          (body.compra
+            ? `\nIngredientes que ya tiene comprados este mes: ${body.compra.ingredientes.join(", ") || "sin lista"}.` +
+              (body.compra.confirmada
+                ? " La compra está confirmada: no se puede añadir nada a la lista."
+                : " La compra aún no está confirmada.")
+            : "") +
+          (body.proximos?.length
+            ? `\nMenú de los próximos días: ${JSON.stringify(body.proximos)}`
+            : "") +
           (body.guide ? `\nGuía de hoy ya enviada: ${JSON.stringify(body.guide)}` : "") +
           (body.log
             ? `\nLo que ha pasado hoy de verdad (peso, hábitos, notas): ${JSON.stringify(body.log)}`
             : "") +
           (body.actions
-            ? "\nPuedes cambiar lo que la persona ve en pantalla con tus herramientas (peso, hábitos, guía del día, reajuste del plan mensual, recálculo del objetivo, fecha objetivo y el resto del perfil)." +
-              "\nEl plan es vivo: cada vez que la persona cuente algo que cambia su balance de energía o su ritmo (ha comido de más, se ha saltado una comida, ha salido a correr, ha entrenado, ha tenido una semana floja), haz DOS cosas: 1) llama a ajustar_plan_mensual con el motivo y una estimación de kcal_extra para recolocar sólo los días futuros con los ingredientes ya comprados; 2) llama a recalcular_objetivo para explicarle el impacto en su objetivo y ofrecerle acortar el plazo o ser algo más laxo. El plan del día de hoy ya está fijado: nunca lo cambies, compensa siempre en los días siguientes." +
+            ? "\nPuedes cambiar lo que la persona ve en pantalla con tus herramientas (peso, hábitos, guía del día, platos sueltos del plan, reajuste del plan mensual, recálculo del objetivo, fecha objetivo y el resto del perfil)." +
+              "\nCambiar un plato: en cuanto sepas qué quiere comer y qué día (hoy o futuro), llama a cambiar_plato con la fecha exacta antes de contestarle. Decirlo en el chat no cambia nada: si no llamas a la herramienta, el plan se queda igual y la persona se encuentra el plato viejo en la app. No pidas una confirmación de más cuando ya te ha dicho el plato que quiere. Solo pregunta antes si NO te ha dicho qué le apetece: entonces propón 1 o 2 platos y aplica el que elija. Los días ya pasados no se pueden cambiar: dilo sin darle importancia." +
+              "\nIngredientes fuera de la compra: cuando propongas tú, usa solo lo que ya tiene comprado — es la gracia de haber hecho la compra. Pero que un plato lleve algo que no está en la lista NO es motivo para no cambiarlo: llama igualmente a cambiar_plato y luego dile en una frase qué tendría que comprar aparte (la herramienta te devuelve exactamente qué falta). Cambiar el plato y avisar van juntos, nunca avises sin cambiar. No añadas nada a la lista de la compra." +
+              "\nEl plan es vivo: cada vez que la persona cuente algo que cambia su balance de energía o su ritmo (ha comido de más, se ha saltado una comida, ha salido a correr, ha entrenado, ha tenido una semana floja), haz DOS cosas: 1) llama a ajustar_plan_mensual con el motivo y una estimación de kcal_extra para recolocar sólo los días futuros con los ingredientes ya comprados; 2) llama a recalcular_objetivo para explicarle el impacto en su objetivo y ofrecerle acortar el plazo o ser algo más laxo. Para esa recolocación automática el día de hoy está fijado: compensa siempre en los días siguientes. (Distinto es que te pida a mano otro plato para hoy: eso sí se cambia, con cambiar_plato.)" +
               "\nSi acepta cambiar el plazo, usa cambiar_fecha_objetivo." +
               "\nSi te cuenta un cambio real y explícito sobre sí misma que no es el peso de hoy ni la fecha objetivo — nuevas restricciones o alergias, presupuesto, horarios, nivel de actividad, tono que prefiere, tipo de objetivo, etc. — usa actualizar_perfil con solo esos campos. No la llames ante una duda, un comentario de pasada o algo que no ha confirmado del todo. Si el cambio afecta al plan del mes (presupuesto, restricciones, tipo de alimentación, objetivo) y el plan de este mes ya está confirmado/comprado, dile que se aplicará al generar el plan del próximo mes; si no está confirmado, ofrécele regenerarlo desde la pestaña Plan." +
               "\nDespués de cualquier cambio, confirma en una o dos frases qué has actualizado, sin culpar y sin presionar, para que pueda corregirlo ahí mismo si no era eso."

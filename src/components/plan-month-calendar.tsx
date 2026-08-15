@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { todayISO } from "@/lib/daily";
-import { planForDate, type MonthlyPlan } from "@/lib/plan-shared";
+import { mealsForDate, offListNote, planForDate, type MonthlyPlan } from "@/lib/plan-shared";
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 
@@ -23,6 +23,9 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
   ];
 
   const detail = selected ? planForDate(plan, selected) : null;
+  // Las comidas reales de ese día (incluidos los platos cambiados desde el
+  // chat), en vez de la lista de desayunos y snacks de toda la semana.
+  const meals = selected ? mealsForDate(plan, selected).filter((m) => m.idea) : [];
 
   return (
     <div className="surface-card p-5">
@@ -76,21 +79,17 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
                 {detail.week.label} · {detail.week.focus}
               </p>
               <div className="space-y-2">
-                {(
-                  [
-                    ["Desayuno", detail.week.breakfasts?.join(" · ")],
-                    ["Comida", detail.day?.lunch],
-                    ["Cena", detail.day?.dinner],
-                    ["Snacks", detail.week.snacks?.join(" · ")],
-                  ] as const
-                )
-                  .filter(([, value]) => Boolean(value))
-                  .map(([label, value]) => (
-                    <div key={label} className="rounded-xl border border-border bg-surface p-3">
-                      <span className="text-xs font-semibold text-primary">{label}</span>
-                      <p className="mt-1 text-sm text-foreground">{value}</p>
-                    </div>
-                  ))}
+                {meals.map((meal) => (
+                  <div key={meal.slot} className="rounded-xl border border-border bg-surface p-3">
+                    <span className="text-xs font-semibold text-primary">{meal.moment}</span>
+                    <p className="mt-1 text-sm text-foreground">{meal.idea}</p>
+                    {offListNote(meal.off) ? (
+                      <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                        {offListNote(meal.off)}
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             </div>
           ) : (

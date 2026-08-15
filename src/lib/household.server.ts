@@ -157,11 +157,27 @@ export async function syncSharedMeals(opts: {
             if (!futureWeek && di <= cursor.dayIndex) return day;
             const sourceDay = source.days[di];
             if (!sourceDay) return day;
-            return {
-              day: day.day,
-              lunch: commons.comida?.includes(di) ? sourceDay.lunch || day.lunch : day.lunch,
-              dinner: commons.cena?.includes(di) ? sourceDay.dinner || day.dinner : day.dinner,
+            // El spread conserva lo propio del otro miembro (desayuno o snack
+            // que haya pedido para ese día); sólo se pisan las comidas que de
+            // verdad comparten, arrastrando su aviso de "fuera de la compra".
+            const copied = MEAL_KEYS.filter((m) => commons[m]?.includes(di));
+            const extras = { ...(day.extras ?? {}) };
+            for (const meal of copied) {
+              const mark = sourceDay.extras?.[meal];
+              if (mark?.length) extras[meal] = mark;
+              else delete extras[meal];
+            }
+            const next = {
+              ...day,
+              lunch: copied.includes("comida") ? sourceDay.lunch || day.lunch : day.lunch,
+              dinner: copied.includes("cena") ? sourceDay.dinner || day.dinner : day.dinner,
+              ...(copied.includes("desayuno") && sourceDay.breakfast
+                ? { breakfast: sourceDay.breakfast }
+                : {}),
             };
+            if (Object.keys(extras).length) next.extras = extras;
+            else delete next.extras;
+            return next;
           }),
         };
       }),

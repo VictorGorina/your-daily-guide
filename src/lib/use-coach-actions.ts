@@ -2,9 +2,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback } from "react";
 
-import { monthISO, saveProfile, todayISO, updateTodayLog, type DailyLog, type Profile } from "@/lib/daily";
+import {
+  monthISO,
+  saveProfile,
+  todayISO,
+  updateTodayLog,
+  type DailyLog,
+  type Profile,
+} from "@/lib/daily";
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { adjustMonthlyPlan, goalImpact } from "@/lib/plan.functions";
+import { adjustMonthlyPlan, goalImpact, setPlanMeal } from "@/lib/plan.functions";
 import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "@/lib/profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
@@ -17,6 +24,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
   const qc = useQueryClient();
   const makeGuide = useServerFn(generateDailyGuide);
   const adjustPlan = useServerFn(adjustMonthlyPlan);
+  const changeMeal = useServerFn(setPlanMeal);
   const checkGoal = useServerFn(goalImpact);
   const date = todayISO();
 
@@ -24,7 +32,8 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
     qc.invalidateQueries({ queryKey: ["today"] });
     qc.invalidateQueries({ queryKey: ["logs"] });
     qc.invalidateQueries({ queryKey: ["profile"] });
-    qc.invalidateQueries({ queryKey: ["plan", monthISO()] });
+    // Por prefijo: un plato cambiado puede caer en otro mes distinto al actual.
+    qc.invalidateQueries({ queryKey: ["plan"] });
   }, [qc]);
 
   const runTool = useCallback(
@@ -65,6 +74,29 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
         const guide = await makeGuide({ data: undefined } as never);
         await updateTodayLog({ guide });
         return "Guía de hoy regenerada";
+      }
+      if (toolName === "cambiar_plato") {
+        const fecha = String(input.fecha ?? "");
+        const plato = String(input.plato ?? "").trim();
+        const { label, off } = await changeMeal({
+          data: {
+            date: fecha,
+            slot: String(input.comida ?? ""),
+            dish: plato,
+            today: date,
+          },
+        });
+        const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha)
+          ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-ES", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })
+          : fecha;
+        const base = `${label} del ${dia}: ${plato}`;
+        return off.length
+          ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
+          : `${base} (con lo que ya tienes comprado)`;
       }
       if (toolName === "ajustar_plan_mensual") {
         const kcal = Number(input.kcal_extra);
@@ -121,7 +153,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       }
       return "Acción desconocida";
     },
-    [adjustPlan, checkGoal, date, getLog, makeGuide],
+    [adjustPlan, changeMeal, checkGoal, date, getLog, makeGuide],
   );
 
   return { runTool, refresh };

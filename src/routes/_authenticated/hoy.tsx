@@ -29,7 +29,7 @@ import { generateDailyGuide } from "@/lib/guide.functions";
 import { fetchHousehold } from "@/lib/household";
 import { sharedDays, type MealKey } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
-import { mealsForDate, planForDate } from "@/lib/plan-shared";
+import { mealsForDate, offListNote, type MonthlyPlan } from "@/lib/plan-shared";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
 
@@ -212,7 +212,12 @@ function Hoy() {
     .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
   const nextIndex = pending.length ? pending[0].i : null;
   const nextMeal = nextIndex != null ? habits[nextIndex] : null;
-  const nextIdea = nextMeal ? todayMeals.find((m) => m.moment === nextMeal.label)?.idea : undefined;
+  const nextPlanned = nextMeal ? todayMeals.find((m) => m.moment === nextMeal.label) : undefined;
+  const expandedPlanned =
+    expandedMeal != null
+      ? todayMeals.find((m) => m.moment === habits[expandedMeal]?.label)
+      : undefined;
+  const nextIdea = nextPlanned?.idea;
   const allDone = habits.length > 0 && nextIndex == null;
 
   return (
@@ -272,6 +277,11 @@ function Hoy() {
             <p className="mt-1 font-display text-xl leading-snug">
               {nextIdea || "Aún no hay menú para esta comida"}
             </p>
+            {offListNote(nextPlanned?.off) ? (
+              <p className="mt-1.5 text-xs text-primary-foreground/80">
+                {offListNote(nextPlanned?.off)}
+              </p>
+            ) : null}
             {sharedWith(nextMeal.label) ? (
               <p className="mt-1.5 text-xs text-primary-foreground/80">
                 Base común con {sharedWith(nextMeal.label)}. ¿Ración distinta? dilo en "comiste otra
@@ -338,9 +348,14 @@ function Hoy() {
         {expandedMeal != null ? (
           <div className="surface-card animate-sheet-up mt-2 p-4">
             <span className="block font-display text-sm">{habits[expandedMeal].label}</span>
-            {todayMeals.find((m) => m.moment === habits[expandedMeal].label)?.idea ? (
+            {expandedPlanned?.idea ? (
               <span className="mt-0.5 block text-xs text-muted-foreground">
-                {todayMeals.find((m) => m.moment === habits[expandedMeal].label)?.idea}
+                {expandedPlanned.idea}
+              </span>
+            ) : null}
+            {offListNote(expandedPlanned?.off) ? (
+              <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                {offListNote(expandedPlanned?.off)}
               </span>
             ) : null}
             {sharedWith(habits[expandedMeal].label) ? (
@@ -510,8 +525,10 @@ function Hoy() {
   );
 }
 
-function DayMenu({ date, plan }: { date: string; plan: Parameters<typeof planForDate>[0] }) {
-  const found = planForDate(plan, date);
+function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
+  // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
+  // para ese día), no la lista entera de desayunos de la semana.
+  const meals = mealsForDate(plan, date).filter((m) => m.idea);
   const label = new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
     weekday: "long",
     day: "numeric",
@@ -524,16 +541,11 @@ function DayMenu({ date, plan }: { date: string; plan: Parameters<typeof planFor
         <ChevronDown className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold capitalize">{label}</h3>
       </div>
-      {found?.day ? (
+      {meals.length ? (
         <div className="mt-3 space-y-2">
-          {found.week.breakfasts.length ? (
-            <Field label="Desayuno" value={found.week.breakfasts.join(" · ")} />
-          ) : null}
-          <Field label="Comida" value={found.day.lunch} />
-          <Field label="Cena" value={found.day.dinner} />
-          {found.week.snacks.length ? (
-            <Field label="Snacks" value={found.week.snacks.join(" · ")} />
-          ) : null}
+          {meals.map((m) => (
+            <Field key={m.slot} label={m.moment} value={m.idea} note={offListNote(m.off)} />
+          ))}
         </div>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">
@@ -544,13 +556,18 @@ function DayMenu({ date, plan }: { date: string; plan: Parameters<typeof planFor
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, note }: { label: string; value: string; note?: string | null }) {
   return (
     <div className="rounded-xl bg-secondary/60 p-3">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <p className="mt-0.5 text-sm text-foreground">{value}</p>
+      {note ? (
+        <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
+          {note}
+        </span>
+      ) : null}
     </div>
   );
 }
