@@ -4,7 +4,14 @@ import { useState } from "react";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { ProgressBar } from "@/components/progress-bar";
-import { fetchLogs, fetchMessages, fetchProfile, goalProgress, type DailyLog } from "@/lib/daily";
+import {
+  fetchLogs,
+  fetchMessages,
+  fetchProfile,
+  goalProgress,
+  ratioSignal,
+  type DailyLog,
+} from "@/lib/daily";
 
 export const Route = createFileRoute("/_authenticated/historial")({
   component: Historial,
@@ -12,15 +19,6 @@ export const Route = createFileRoute("/_authenticated/historial")({
 
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-function ratioSignal(done: number, total: number) {
-  if (!total) return "none" as const;
-  const ratio = done / total;
-  if (ratio >= 1) return "success" as const;
-  if (ratio >= 0.5) return "warning" as const;
-  if (ratio > 0) return "danger" as const;
-  return "none" as const;
-}
 
 function Historial() {
   const [open, setOpen] = useState<string | null>(null);
@@ -159,8 +157,8 @@ function AdherenceHeatmap({ logs }: { logs: DailyLog[] }) {
               ? "bg-success"
               : signal === "warning"
                 ? "bg-warning"
-                : signal === "danger"
-                  ? "bg-danger"
+                : signal === "muted"
+                  ? "bg-muted"
                   : "bg-secondary";
           return (
             <span key={date} title={date} className={`aspect-square rounded-md ${cellClass}`} />
@@ -168,8 +166,8 @@ function AdherenceHeatmap({ logs }: { logs: DailyLog[] }) {
         })}
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        Verde: todas las comidas. Naranja: la mitad o más. Rojo: menos de la mitad. Gris: sin
-        registro.
+        Verde: todas las comidas. Naranja: comiste algo. Gris claro: sin comidas ese día. Gris
+        oscuro: sin registro.
       </p>
     </section>
   );

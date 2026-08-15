@@ -22,3 +22,12 @@ probar. En su lugar, un workflow de GitHub Actions
 [src/lib/push-dispatch.server.ts](src/lib/push-dispatch.server.ts) para mirar qué perfiles caen en
 la ventana de su `morning_time`/`evening_time` (asumiendo `Europe/Madrid`) y enviar el push.
 Necesita los secrets de repo `APP_URL` y `CRON_SECRET` en GitHub una vez desplegada la app.
+
+El copy de mañana/noche y la frecuencia de contacto varían según `profiles.tone`
+(relajado/neutro/exigente, ver `morningCopy`/`eveningCopy` en
+[push-dispatch.server.ts](src/lib/push-dispatch.server.ts)): tono relajado se salta el push de la
+noche si el día ya está completo (menos ruido cuando no hace falta), exigente siempre lo recibe y
+nombra cuántas comidas quedan por registrar. Mismo tono, aplicado también en el repaso nocturno
+(`NightlyReviewSheet`) y en el prompt del coach (`toneLine` en
+[ai-provider.server.ts](src/lib/ai-provider.server.ts)) — tres superficies distintas, un solo campo
+de perfil.

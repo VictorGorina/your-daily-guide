@@ -15,10 +15,11 @@ import {
   fetchLogs,
   fetchMonthlyPlan,
   fetchProfile,
+  impulsoFrom,
   monthISO,
-  streakFrom,
   todayISO,
   updateTodayLog,
+  weeklyTrendFrom,
   type DailyLog,
 } from "@/lib/daily";
 
@@ -171,7 +172,8 @@ function Hoy() {
     setNightlyOpen(false);
   };
 
-  const streak = streakFrom(logsQ.data ?? []);
+  const impulso = impulsoFrom(logsQ.data ?? []);
+  const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
   const habits = today?.habits ?? [];
   const doneCount = habits.filter((h) => h.done).length;
 
@@ -215,8 +217,11 @@ function Hoy() {
             {profile?.display_name || "Vamos allá"}
           </h1>
         </div>
-        <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-bold text-background">
-          <Flame className="h-3.5 w-3.5" /> {streak}
+        <span
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-bold text-background"
+          title="Impulso: sube con los días buenos, baja con los flojos, nunca vuelve a cero"
+        >
+          <Flame className="h-3.5 w-3.5" /> {impulso}%
         </span>
       </header>
 
@@ -486,7 +491,9 @@ function Hoy() {
         open={nightlyOpen}
         onOpenChange={setNightlyOpen}
         habits={habits}
-        streak={streak}
+        impulso={impulso}
+        weeklyTrend={weeklyTrend}
+        tone={profile?.tone}
         onDone={finishNightlyReview}
       />
 
