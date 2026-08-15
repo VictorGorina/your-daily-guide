@@ -1,7 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
 import { cleanSharedMeals, type SharedMeals } from "@/lib/household-shared";
 
-export type Household = { id: string; name: string; invite_code: string; created_by: string };
+export type HouseholdGoalType = "comportamiento" | "presupuesto";
+
+export type Household = {
+  id: string;
+  name: string;
+  invite_code: string;
+  created_by: string;
+  goal_type: HouseholdGoalType | null;
+  goal_text: string | null;
+  goal_budget_eur: number | null;
+};
 
 export type HouseholdMember = {
   user_id: string;
@@ -120,6 +130,29 @@ export async function renameHousehold(id: string, name: string) {
   const { error } = await supabase
     .from("households")
     .update({ name: name.trim() || "Mi casa" } as never)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function saveHouseholdGoal(
+  id: string,
+  goal: { goal_type: HouseholdGoalType; goal_text: string | null; goal_budget_eur: number | null },
+) {
+  const { error } = await supabase
+    .from("households")
+    .update({
+      goal_type: goal.goal_type,
+      goal_text: goal.goal_type === "comportamiento" ? goal.goal_text?.trim() || null : null,
+      goal_budget_eur: goal.goal_type === "presupuesto" ? goal.goal_budget_eur : null,
+    } as never)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function clearHouseholdGoal(id: string) {
+  const { error } = await supabase
+    .from("households")
+    .update({ goal_type: null, goal_text: null, goal_budget_eur: null } as never)
     .eq("id", id);
   if (error) throw error;
 }
