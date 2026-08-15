@@ -16,11 +16,13 @@ import {
   fetchMonthlyPlan,
   fetchProfile,
   impulsoFrom,
+  MEAL_STATUS_LABEL,
   monthISO,
   todayISO,
   updateTodayLog,
   weeklyTrendFrom,
   type DailyLog,
+  type MealStatus,
 } from "@/lib/daily";
 
 import { generateDailyGuide } from "@/lib/guide.functions";
@@ -34,14 +36,6 @@ import { quoteOfTheDay } from "@/lib/quotes";
 export const Route = createFileRoute("/_authenticated/hoy")({
   component: Hoy,
 });
-
-type MealStatus = "plan" | "distinto" | "salteo";
-
-const MEAL_STATUS_LABEL: Record<MealStatus, string> = {
-  plan: "Comí lo del plan",
-  distinto: "Comí distinto",
-  salteo: "Me lo salté",
-};
 
 // Orden cronológico aproximado de cada momento, para saber cuál toca ahora.
 // Las comidas que no aparecen (nombres personalizados desde el chat) caen
@@ -172,6 +166,15 @@ function Hoy() {
     setNightlyOpen(false);
   };
 
+  // "Hoy paso de estas": cierra en bloque, como saltadas, las comidas que se
+  // quedaron sin marcar del todo (ni plan, ni distinto, ni salteo explícito)
+  // para que no queden en limbo indefinidamente en el historial. Es un cierre
+  // neutro, no un fallo — mismo tono que el resto del repaso nocturno.
+  const skipPendingMeals = () => {
+    const next = habits.map((h) => (h.status ? h : { ...h, status: "salteo" as const }));
+    save.mutate({ habits: next });
+  };
+
   const impulso = impulsoFrom(logsQ.data ?? []);
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
   const habits = today?.habits ?? [];
@@ -198,10 +201,14 @@ function Hoy() {
   const guidedMeal = guidedIndex != null ? habits[guidedIndex] : undefined;
 
   // La "siguiente comida" es la primera, en orden cronológico, que aún no
-  // está registrada. Si no queda ninguna, el día está completo.
+  // tiene un estado explícito. Importante: se filtra por `status`, no por
+  // `done` — "me lo salté" deja done:false a propósito (no cuenta como
+  // hecho), pero sí queda resuelto, así que no debe seguir apareciendo como
+  // "siguiente" ni bloquear para siempre el estado de "día completo" (ver
+  // área 6 del roadmap UX, "casos límite").
   const pending = habits
     .map((h, i) => ({ h, i }))
-    .filter(({ h }) => !h.done)
+    .filter(({ h }) => h.status == null)
     .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
   const nextIndex = pending.length ? pending[0].i : null;
   const nextMeal = nextIndex != null ? habits[nextIndex] : null;
@@ -495,6 +502,7 @@ function Hoy() {
         weeklyTrend={weeklyTrend}
         tone={profile?.tone}
         onDone={finishNightlyReview}
+        onSkipPending={skipPendingMeals}
       />
 
       <BottomNav />

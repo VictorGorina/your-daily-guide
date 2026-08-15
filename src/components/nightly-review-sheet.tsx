@@ -8,7 +8,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { WeeklyTrend } from "@/lib/daily";
+import type { MealStatus, WeeklyTrend } from "@/lib/daily";
 
 // Frases de cierre del día, cortas y sin presión — rotan por día del año,
 // igual que quoteOfTheDay en src/lib/quotes.ts, pero sin depender de ella
@@ -84,7 +84,7 @@ function weeklyTrendLine(tone: Tone, trend: WeeklyTrend | null): string | null {
   }[tone];
 }
 
-type Meal = { label: string; done: boolean; status?: "plan" | "distinto" | "salteo" };
+type Meal = { label: string; done: boolean; status?: MealStatus };
 
 export function NightlyReviewSheet({
   open,
@@ -94,6 +94,7 @@ export function NightlyReviewSheet({
   weeklyTrend,
   tone,
   onDone,
+  onSkipPending,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -102,11 +103,14 @@ export function NightlyReviewSheet({
   weeklyTrend: WeeklyTrend | null;
   tone?: string | null;
   onDone: () => void;
+  /** Cierra en bloque, como saltadas, las comidas que se quedaron sin marcar. */
+  onSkipPending?: () => void;
 }) {
   const total = habits.length;
   const doneCount = habits.filter((h) => h.status === "plan").length;
   const distintoCount = habits.filter((h) => h.status === "distinto").length;
   const skippedCount = habits.filter((h) => h.status === "salteo").length;
+  const pending = habits.filter((h) => h.status == null);
   const ratio = total ? habits.filter((h) => h.done).length / total : 0;
   const t = toneOf(tone);
   const trendLine = weeklyTrendLine(t, weeklyTrend);
@@ -122,6 +126,21 @@ export function NightlyReviewSheet({
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-8">
+          {pending.length > 0 && onSkipPending ? (
+            <div className="surface-card border border-dashed border-primary/40 p-4">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Sin marcar todavía
+              </span>
+              <p className="mt-1 text-sm text-foreground">
+                {pending.map((h) => h.label).join(", ")} — si ya no vas a más hoy, puedes cerrarlas
+                sin más, no cuentan como un fallo.
+              </p>
+              <Button variant="secondary" className="mt-3 w-full" onClick={onSkipPending}>
+                Hoy paso de estas
+              </Button>
+            </div>
+          ) : null}
+
           <div className="surface-card p-4">
             <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Comidas de hoy
