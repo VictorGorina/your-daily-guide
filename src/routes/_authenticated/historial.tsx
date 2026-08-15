@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { ProgressBar } from "@/components/progress-bar";
@@ -9,8 +10,12 @@ import {
   fetchMessages,
   fetchProfile,
   goalProgress,
+  MEAL_STATUS_LABEL,
   ratioSignal,
+  todayISO,
+  updateLogByDate,
   type DailyLog,
+  type MealStatus,
 } from "@/lib/daily";
 
 export const Route = createFileRoute("/_authenticated/historial")({
@@ -174,13 +179,33 @@ function AdherenceHeatmap({ logs }: { logs: DailyLog[] }) {
 }
 
 function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggle: () => void }) {
+  const qc = useQueryClient();
   const habits = log.habits ?? [];
   const ratio = habits.length ? habits.filter((h) => h.done).length / habits.length : 0;
+  const isToday = log.log_date === todayISO();
+  const [editingMeal, setEditingMeal] = useState<number | null>(null);
   const messagesQ = useQuery({
     queryKey: ["messages", log.log_date],
     queryFn: () => fetchMessages(log.log_date),
     enabled: open,
   });
+
+  // Corrección retroactiva de un día pasado — mismo patrón de "tocar para
+  // editar en línea" que perfil.tsx, aplicado aquí a la comida de un día ya
+  // cerrado (ver área 6 del roadmap UX, "casos límite"). Solo cambia el
+  // registro personal: nunca reescribe la compra ya confirmada de ese mes.
+  const correctLog = useMutation({
+    mutationFn: (patch: Partial<DailyLog>) => updateLogByDate(log.log_date, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["logs"] }),
+    onError: () => toast.error("No hemos podido guardar la corrección"),
+  });
+  const correctMeal = (index: number, status: MealStatus) => {
+    const next = habits.map((h, i) =>
+      i === index ? { ...h, status, done: status === "plan" || status === "distinto" } : h,
+    );
+    correctLog.mutate({ habits: next });
+    setEditingMeal(null);
+  };
 
   return (
     <div className="surface-card overflow-hidden">
@@ -211,6 +236,53 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
           {log.guide?.intro ? (
             <p className="mb-3 text-sm text-muted-foreground">{log.guide.intro}</p>
           ) : null}
+
+          {habits.length ? (
+            <div className="mb-4 space-y-1.5">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Comidas
+              </span>
+              {habits.map((h, i) => (
+                <div key={h.label}>
+                  <button
+                    type="button"
+                    disabled={isToday}
+                    onClick={() => setEditingMeal((prev) => (prev === i ? null : i))}
+                    className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm disabled:opacity-60"
+                  >
+                    <span className="text-foreground">{h.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {h.status ? MEAL_STATUS_LABEL[h.status] : "Sin marcar"}
+                    </span>
+                  </button>
+                  {editingMeal === i ? (
+                    <div className="mt-1.5 flex flex-wrap gap-2 rounded-xl bg-secondary/40 p-2.5">
+                      {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => correctMeal(i, s)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
+                            h.status === s
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-input text-muted-foreground"
+                          }`}
+                        >
+                          {MEAL_STATUS_LABEL[s]}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              <p className="pt-1 text-[11px] text-muted-foreground">
+                {isToday
+                  ? "Es el día de hoy: corrígelo desde la pestaña Hoy."
+                  : "Corregir aquí es solo para tu historial: la compra ya hecha de ese mes no cambia."}
+              </p>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             {(messagesQ.data ?? []).map((m) => (
               <div
@@ -228,9 +300,6 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
               <p className="text-xs text-muted-foreground">Sin conversación este día.</p>
             ) : null}
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Solo lectura: los días pasados no se pueden editar.
-          </p>
         </div>
       )}
     </div>
