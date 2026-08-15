@@ -9,7 +9,7 @@ import tsConfigPaths from "vite-tsconfig-paths";
 // Config propia de Vite + TanStack Start, sin envoltorios externos: monta a
 // mano lo mismo que antes montaba el paquete de configuración de la
 // plantilla original (TanStack Start, React, Tailwind v4, alias de rutas y
-// el build de producción para Cloudflare vía Nitro), para que el proyecto no
+// el build de producción para Vercel vía Nitro), para que el proyecto no
 // dependa de nada fuera de este repositorio.
 export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
   const isDevBuild = command === "build" && mode === "development";
@@ -57,7 +57,7 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
   // Nitro solo hace falta al construir para producción/preview, no en `vite dev`.
   if (command === "build") {
     const { nitro } = await import("nitro/vite");
-    plugins.push(nitro({ defaultPreset: "cloudflare-module" }));
+    plugins.push(nitro({ defaultPreset: "vercel" }));
   }
 
   plugins.push(viteReact());
