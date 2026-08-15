@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -17,9 +17,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAccount } from "@/lib/account.functions";
 import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
+import {
+  getPushSubscriptionState,
+  isIosNonStandalone,
+  isPushSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from "@/lib/push";
 import { applyTheme, THEMES } from "@/lib/theme";
 
 function FieldNote({ error, help }: { error?: string; help: string }) {
@@ -49,6 +57,35 @@ function Ajustes() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const pushSupported = isPushSupported();
+  const iosHint = isIosNonStandalone();
+
+  useEffect(() => {
+    if (!pushSupported) return;
+    getPushSubscriptionState().then((state) => setPushEnabled(state === "subscribed"));
+  }, [pushSupported]);
+
+  const togglePush = async (next: boolean) => {
+    setPushBusy(true);
+    try {
+      if (next) {
+        await subscribeToPush();
+        setPushEnabled(true);
+      } else {
+        await unsubscribeFromPush();
+        setPushEnabled(false);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "No hemos podido cambiar las notificaciones",
+      );
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const setError = (key: string, message?: string) =>
     setErrors((e) => {
@@ -295,6 +332,30 @@ function Ajustes() {
             </label>
           </div>
         </div>
+      </section>
+
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Notificaciones
+      </span>
+      <section className="surface-card mt-2 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">Avisos push</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Resumen matutino y aviso del repaso nocturno, a las horas de arriba.
+            </p>
+          </div>
+          <Switch
+            checked={pushEnabled}
+            disabled={pushBusy || !pushSupported}
+            onCheckedChange={(v) => void togglePush(v)}
+          />
+        </div>
+        {!pushSupported ? (
+          <FieldNote help="Este navegador no soporta notificaciones push." />
+        ) : iosHint ? (
+          <FieldNote help="En iPhone: añade Daily Guide a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) para poder recibir avisos." />
+        ) : null}
       </section>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

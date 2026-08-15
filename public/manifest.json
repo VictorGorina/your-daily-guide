@@ -1,0 +1,10 @@
+{
+  "name": "Daily Guide",
+  "short_name": "Daily Guide",
+  "description": "Tu coach diario de salud y alimentación",
+  "start_url": "/hoy",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [{ "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }]
+}
