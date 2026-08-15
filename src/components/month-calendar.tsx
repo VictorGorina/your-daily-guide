@@ -42,11 +42,16 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
     const habits = log?.habits ?? [];
     if (!habits.length) return { done: 0, total: 0, signal: "none" as const };
     const done = habits.filter((h) => h.done).length;
+    const ratio = done / habits.length;
     return {
       done,
       total: habits.length,
       signal:
-        done >= 3 ? ("success" as const) : done === 2 ? ("warning" as const) : ("danger" as const),
+        ratio >= 1
+          ? ("success" as const)
+          : ratio >= 0.5
+            ? ("warning" as const)
+            : ("danger" as const),
     };
   };
 
@@ -99,8 +104,8 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Semáforo de hábitos: 1 completado = rojo, 2 = naranja, 3 o más = verde. Toca cualquier día
-        para ver su menú.
+        Semáforo de comidas: menos de la mitad = rojo, la mitad o más = naranja, todas = verde. Toca
+        cualquier día para ver su menú.
       </p>
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
@@ -155,7 +160,7 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
             {!isFuture ? (
               <div className="space-y-2">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Hábitos del plan
+                  Comidas del día
                 </span>
                 {(selectedHabits.length
                   ? selectedHabits
@@ -184,7 +189,7 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
             ) : (
               <div className="space-y-2">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Hábitos previstos
+                  Comidas previstas
                 </span>
                 {planHabits.map((label) => (
                   <div

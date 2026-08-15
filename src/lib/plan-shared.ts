@@ -291,6 +291,29 @@ export function planForDate(plan: MonthlyPlan | null, date: string) {
   return { week, day: match };
 }
 
+/**
+ * Comidas de una fecha concreta, listas para tarjetas de seguimiento diario.
+ * Comida y cena salen del día exacto del plan; desayuno y snack rotan entre las
+ * opciones de la semana según el día para dar variedad sin depender de más IA.
+ */
+export function mealsForDate(
+  plan: MonthlyPlan | null,
+  date: string,
+): { moment: string; idea: string }[] {
+  const found = planForDate(plan, date);
+  const { dayIndex } = planCursor(date);
+  const rotate = (options: string[]) => (options.length ? options[dayIndex % options.length]! : "");
+
+  const snack = rotate(found?.week.snacks ?? []);
+  const moments = [
+    { moment: "Desayuno", idea: rotate(found?.week.breakfasts ?? []) },
+    { moment: "Comida", idea: found?.day?.lunch ?? "" },
+    { moment: "Cena", idea: found?.day?.dinner ?? "" },
+  ];
+  if (snack) moments.push({ moment: "Snack", idea: snack });
+  return moments;
+}
+
 /** Texto plano de la lista de la compra, listo para compartir o descargar. */
 export const shoppingToText = (
   shopping: ShoppingList | null | undefined,

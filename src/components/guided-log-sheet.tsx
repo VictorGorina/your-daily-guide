@@ -1,5 +1,5 @@
 import { Activity, ClipboardList, UtensilsCrossed } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DictateButton } from "@/components/dictate-button";
 import { Button } from "@/components/ui/button";
@@ -51,12 +51,31 @@ function chipClass(active: boolean) {
 export function GuidedLogSheet({
   onSend,
   disabled,
+  open: openProp,
+  onOpenChange,
+  trigger = true,
+  initialMode = "actividad",
+  contextNote,
 }: {
   onSend: (text: string) => void;
   disabled?: boolean;
+  /** Apertura controlada desde fuera (p.ej. hoy.tsx). Si se omite, el sheet gestiona su propio estado. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Oculta el botón "Registro guiado" propio cuando se controla desde fuera. */
+  trigger?: boolean;
+  initialMode?: Mode;
+  /** Línea de contexto opcional (p.ej. qué comida se está detallando). */
+  contextNote?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>("actividad");
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
+  const [mode, setMode] = useState<Mode>(initialMode);
+
+  useEffect(() => {
+    if (open) setMode(initialMode);
+  }, [open, initialMode]);
 
   // Actividad
   const [activity, setActivity] = useState(ACTIVITIES[0]!.label);
@@ -128,17 +147,19 @@ export function GuidedLogSheet({
         if (!v) reset();
       }}
     >
-      <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          className="gap-1.5 text-muted-foreground"
-        >
-          <ClipboardList className="size-4" aria-hidden />
-          Registro guiado
-        </Button>
-      </SheetTrigger>
+      {trigger ? (
+        <SheetTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            className="gap-1.5 text-muted-foreground"
+          >
+            <ClipboardList className="size-4" aria-hidden />
+            Registro guiado
+          </Button>
+        </SheetTrigger>
+      ) : null}
 
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
@@ -146,6 +167,7 @@ export function GuidedLogSheet({
           <SheetDescription>
             Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan.
           </SheetDescription>
+          {contextNote ? <p className="text-xs font-medium text-primary">{contextNote}</p> : null}
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-8">
