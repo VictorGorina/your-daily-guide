@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Flame, Sparkle } from "lucide-react";
+import { ChevronDown, Flame, Sparkle } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -15,12 +15,13 @@ import {
   fetchProfile,
   monthISO,
   streakFrom,
+  todayISO,
   updateTodayLog,
   type DailyLog,
 } from "@/lib/daily";
 
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { planForDate } from "@/lib/plan-shared";
+import { mealsForDate, planForDate } from "@/lib/plan-shared";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
 
@@ -28,9 +29,15 @@ export const Route = createFileRoute("/_authenticated/hoy")({
   component: Hoy,
 });
 
-const DEFAULT_HABITS = ["Beber 2L de agua", "Comer verdura en 2 comidas", "Moverme 20 minutos"];
-
 const HABIT_COLORS = ["bg-habit-1", "bg-habit-2", "bg-habit-3", "bg-habit-4"];
+
+type MealStatus = "plan" | "distinto" | "salteo";
+
+const MEAL_STATUS_LABEL: Record<MealStatus, string> = {
+  plan: "Comí lo del plan",
+  distinto: "Comí distinto",
+  salteo: "Me lo salté",
+};
 
 function Hoy() {
   const navigate = useNavigate();
@@ -44,10 +51,15 @@ function Hoy() {
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
 
+  const today0 = todayISO();
+  const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0);
+
   const todayQ = useQuery({
     queryKey: ["today"],
-    queryFn: () => ensureTodayLog(DEFAULT_HABITS),
-    enabled: !!profileQ.data?.onboarding_completed,
+    queryFn: () => ensureTodayLog(todayMeals.map((m) => m.moment)),
+    // Espera a que el plan mensual haya terminado de cargar (con o sin datos)
+    // para crear el registro de hoy con las comidas reales del día.
+    enabled: !!profileQ.data?.onboarding_completed && planQ.isFetched,
   });
 
   const profile = profileQ.data;
@@ -106,8 +118,10 @@ function Hoy() {
   const greeting = hour < 12 ? "Buenos días" : hour < 20 ? "Buenas tardes" : "Buenas noches";
   const quote = quoteOfTheDay();
 
-  const toggleHabit = (index: number) => {
-    const next = habits.map((h, i) => (i === index ? { ...h, done: !h.done } : h));
+  const setMealStatus = (index: number, status: MealStatus) => {
+    const next = habits.map((h, i) =>
+      i === index ? { ...h, status, done: status === "plan" || status === "distinto" } : h,
+    );
     save.mutate({ habits: next });
   };
 
@@ -136,7 +150,7 @@ function Hoy() {
           selected={openDay}
           onSelect={(d) => setOpenDay((prev) => (prev === d ? null : d))}
           logs={logsQ.data ?? []}
-          todayHabits={habits.length ? habits.map((h) => h.label) : DEFAULT_HABITS}
+          todayHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
         />
         {openDay ? <DayMenu date={openDay} plan={planQ.data?.plan ?? null} /> : null}
         <p className="mt-2 px-1 text-[11px] text-muted-foreground">Toca un día para ver su menú.</p>
@@ -199,44 +213,54 @@ function Hoy() {
 
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-2xl">Hábitos de hoy</h2>
+          <h2 className="font-display text-2xl">Comidas de hoy</h2>
           <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-secondary-foreground">
             {doneCount}/{habits.length}
           </span>
         </div>
         <div className="grid gap-3">
-          {habits.map((h, i) => (
-            <button
-              key={h.label}
-              onClick={() => toggleHabit(i)}
-              className={`habit-tile flex w-full items-center gap-3 p-5 text-left active:scale-[0.985] ${
-                HABIT_COLORS[i % HABIT_COLORS.length]
-              } ${h.done ? "opacity-60" : ""}`}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block font-display text-lg leading-tight">{h.label}</span>
-                <span className="mt-0.5 block text-xs font-semibold opacity-70">
-                  {h.done ? "Completado" : "Pendiente hoy"}
-                </span>
-              </span>
-              <span
-                className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 transition-colors ${
-                  h.done
-                    ? "border-habit-foreground bg-habit-foreground text-background"
-                    : "border-habit-foreground/40"
-                }`}
+          {habits.map((h, i) => {
+            const idea = todayMeals.find((m) => m.moment === h.label)?.idea;
+            const status = h.status;
+            return (
+              <div
+                key={h.label}
+                className={`habit-tile p-5 ${HABIT_COLORS[i % HABIT_COLORS.length]}`}
               >
-                {h.done ? <Check className="h-4 w-4" /> : null}
-              </span>
-            </button>
-          ))}
+                <span className="block font-display text-lg leading-tight">{h.label}</span>
+                {idea ? (
+                  <span className="mt-0.5 block text-sm opacity-80">{idea}</span>
+                ) : (
+                  <span className="mt-0.5 block text-xs font-semibold opacity-70">
+                    {status ? MEAL_STATUS_LABEL[status] : "Pendiente hoy"}
+                  </span>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setMealStatus(i, s)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
+                        status === s
+                          ? "border-habit-foreground bg-habit-foreground text-background"
+                          : "border-habit-foreground/40 text-habit-foreground/80"
+                      }`}
+                    >
+                      {MEAL_STATUS_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
       <MonthCalendar
         logs={logsQ.data ?? []}
         plan={planQ.data?.plan ?? null}
-        planHabits={habits.length ? habits.map((h) => h.label) : DEFAULT_HABITS}
+        planHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
       />
 
       <BottomNav />

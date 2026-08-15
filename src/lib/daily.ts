@@ -74,7 +74,7 @@ export type DailyLog = {
   user_id: string;
   log_date: string;
   weight_kg: number | null;
-  habits: { label: string; done: boolean }[];
+  habits: { label: string; done: boolean; status?: "plan" | "distinto" | "salteo" }[];
   guide: DailyGuide | null;
   mood: string | null;
   notes: string | null;
