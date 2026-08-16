@@ -7,9 +7,14 @@ import {
   cleanPlan,
   cleanShopping,
   completePlan,
+  coverageRatio,
   ingredientNames,
   mergeFuturePlan,
+  monthCoverage,
+  repartitionTrips,
+  tripDayRange,
   tripsOfCadence,
+  type PlanCoverage,
   type ShoppingCadence,
   MEAL_SLOTS,
   MEAL_SLOT_FIELD,
@@ -59,6 +64,55 @@ async function askForJson<T>(
   throw new Error("No hemos podido crear el plan ahora mismo. Inténtalo otra vez en un momento.");
 }
 
+/**
+ * Garantiza que la lista no supere el presupuesto. Primero pide al modelo que la
+ * recorte con números concretos; si aun así se pasa, escala los precios de forma
+ * proporcional como último recurso para que el total mostrado nunca exceda el
+ * tope. Es best-effort: si el recorte por IA falla, no rompe la generación.
+ */
+async function enforceBudget(
+  key: string,
+  system: string,
+  shopping: ShoppingList,
+  target: number,
+): Promise<ShoppingList> {
+  if (!(target > 0) || shoppingTotal(shopping) <= target * 1.02) return shopping;
+
+  let result = shopping;
+  try {
+    const ai = createAiProvider(key);
+    const { text } = await generateText({
+      model: ai(COACH_MODEL),
+      system,
+      temperature: 0.2,
+      prompt:
+        `Lista de la compra actual (JSON): ${JSON.stringify(shopping)}\n` +
+        `Suma ${shoppingTotal(shopping)} € y el tope es ${target} €.\n` +
+        `Recórtala hasta NO superar ${target} €: baja cantidades y precios, elige alternativas más baratas y quita lo prescindible, manteniendo una compra equilibrada. ` +
+        "Conserva EXACTAMENTE la misma estructura (mismas claves category/items/name/qty/price_eur/trip/perishable) y no cambies el valor de 'trip' de cada ítem. " +
+        'Devuelve solo JSON: {"shopping": [...]}',
+    });
+    const parsed = (parseJsonLoose(text) ?? {}) as { shopping?: unknown };
+    const cleaned = cleanShopping(parsed.shopping ?? parsed);
+    if (cleaned.length) result = cleaned;
+  } catch (e) {
+    console.error("enforceBudget", e);
+  }
+
+  const total = shoppingTotal(result);
+  if (total > target && total > 0) {
+    const factor = target / total;
+    result = result.map((g) => ({
+      ...g,
+      items: g.items.map((i) => ({
+        ...i,
+        price_eur: Math.round(i.price_eur * factor * 100) / 100,
+      })),
+    }));
+  }
+  return result;
+}
+
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { month: string; cadence?: ShoppingCadence }) => {
@@ -89,23 +143,39 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
 
-    const budget = Number(
+    const today = new Date().toISOString().slice(0, 10);
+    const coverage = monthCoverage(data.month, today);
+    const coveredDays = coverage.toDay - coverage.fromDay + 1;
+    const ratio = coverageRatio(coverage, data.month);
+
+    const rawBudget = Number(
       (profile as { budget_month_eur?: number | null } | null)?.budget_month_eur,
     );
+    const budget = Number.isFinite(rawBudget) && rawBudget > 0 ? rawBudget : 0;
+    // Presupuesto prorrateado a los días que cubre el plan: un plan que empieza a
+    // media de mes solo puede gastar la parte proporcional del mes que le queda.
+    const proratedBudget = budget > 0 ? Math.round(budget * ratio) : 0;
     const budgetLine =
-      Number.isFinite(budget) && budget > 0
-        ? `El coste total de la lista de la compra NO puede superar ${budget} € para todo el mes. Ajusta cantidades y elige alimentos económicos hasta encajar en ese presupuesto.`
+      proratedBudget > 0
+        ? `El coste total de la lista de la compra NO puede superar ${proratedBudget} € para el periodo que cubre el plan. Ajusta cantidades y elige alimentos económicos hasta encajar en ese presupuesto.`
         : "Ajusta la lista a un presupuesto contenido y realista de supermercado en España.";
 
+    const coverageLine =
+      coverage.fromDay > 1
+        ? `IMPORTANTE: este plan empieza a media de mes. Cubre SOLO del día ${coverage.fromDay} al ${coverage.toDay} de este mes (${coveredDays} días). La lista de la compra y todas las comidas son únicamente para esos días; no planifiques ni compres para días anteriores al ${coverage.fromDay}.`
+        : `El plan cubre el mes completo (días 1 al ${coverage.toDay}).`;
+
     const trips = tripsOfCadence(data.cadence);
+    const tripRanges = Array.from({ length: trips }, (_, t) => {
+      const { from, to } = tripDayRange(coverage, trips, t);
+      return `trip ${t} = días ${from}-${to}`;
+    });
     const cadenceLine =
       trips === 1
-        ? "La compra es MENSUAL: una sola compra al principio del mes (trip siempre 0). Por frescura, prioriza alimentos que aguanten (congelados, conservas, legumbre seca, huevos, tubérculos, fruta y verdura resistente) y reserva la verdura y el pescado muy perecederos para los primeros días del mes."
-        : trips === 2
-          ? "La compra es CADA 2 SEMANAS: exactamente 2 compras. trip 0 = días 1-14, trip 1 = días 15-28+. Los alimentos frescos y perecederos deben repartirse entre las dos compras para que no se echen a perder; la despensa y los congelados pueden ir en la primera."
-          : "La compra es SEMANAL: exactamente 4 compras. trip 0 = días 1-7, trip 1 = 8-14, trip 2 = 15-21, trip 3 = 22-28+. Cada compra lleva los frescos de esa semana (verdura de hoja, pescado, carne fresca, fruta madura, lácteos abiertos) y la despensa se compra sobre todo en trip 0.";
+        ? `La compra es MENSUAL: una sola compra al principio (trip siempre 0, ${tripRanges[0]}). Por frescura, prioriza alimentos que aguanten (congelados, conservas, legumbre seca, huevos, tubérculos, fruta y verdura resistente) y reserva la verdura y el pescado muy perecederos para los primeros días.`
+        : `La compra se divide en ${trips} compras: ${tripRanges.join(", ")}. Cada compra lleva los frescos de sus días (verdura de hoja, pescado, carne fresca, fruta madura, lácteos abiertos) y la despensa y congelados van sobre todo en la primera. Reparte los perecederos entre compras para que no se echen a perder.`;
 
-    const { plan, shopping } = await askForJson(
+    const { plan: rawPlan, shopping: rawShopping } = await askForJson(
       {
         key,
         system: coachSystemPrompt(profile as never, home.text),
@@ -119,6 +189,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
           '"weeks": [4 objetos {"label": "Semana 1".."Semana 4", "focus": string corto, "breakfasts": [2 ideas de desayuno], "snacks": [2 ideas de snack], ' +
           '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato}]}]}}\n' +
           "REGLA CLAVE: todos los platos, desayunos y snacks del plan deben poder prepararse ÚNICAMENTE con los ingredientes de la lista de la compra (más sal, aceite, agua y especias básicas). No menciones ningún alimento que no esté en la lista. " +
+          `${coverageLine} ` +
           `${budgetLine} ` +
           `${cadenceLine} ` +
           "FRESCURA: cada ingrediente debe consumirse en los días que cubre su compra; no planifiques platos con alimentos frescos comprados muchos días antes. Marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
@@ -134,6 +205,16 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
         return { plan, shopping };
       },
     );
+
+    // Deja la lista dentro del presupuesto prorrateado y fija la cadencia/cobertura
+    // del plan como fuente de verdad para las etiquetas de días y compras.
+    const shopping = await enforceBudget(
+      key,
+      coachSystemPrompt(profile as never, home.text),
+      rawShopping,
+      proratedBudget,
+    );
+    const plan: MonthlyPlan = { ...rawPlan, coverage, cadence: data.cadence };
 
     const { error } = await context.supabase.from("monthly_plans").upsert(
       {
@@ -154,10 +235,57 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       supabase: context.supabase as never,
       userId: context.userId,
       month: data.month,
-      today: new Date().toISOString().slice(0, 10),
+      today,
       plan,
       shopping,
     });
+
+    return { plan, shopping };
+  });
+
+/**
+ * Cambia solo la cadencia de compra (semanal/bisemanal/mensual) sin volver a
+ * llamar a la IA: reparte los mismos ingredientes entre más o menos compras. Es
+ * instantáneo y no puede fallar por la IA, que es lo que rompía antes. No se
+ * puede cambiar si la compra ya está confirmada.
+ */
+export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { month: string; cadence?: ShoppingCadence }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    const cadence: ShoppingCadence =
+      input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
+    return { month: input.month, cadence };
+  })
+  .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
+    const { data: row } = await context.supabase
+      .from("monthly_plans")
+      .select("plan, shopping, confirmed_at")
+      .eq("month", data.month)
+      .maybeSingle();
+    const typed = row as {
+      plan?: unknown;
+      shopping?: unknown;
+      confirmed_at?: string | null;
+    } | null;
+    if (typed?.confirmed_at) {
+      throw new Error("La compra ya está confirmada: la frecuencia no puede cambiar este mes");
+    }
+
+    const current = cleanPlan(typed?.plan);
+    if (!current) throw new Error("Todavía no hay plan de este mes");
+    const shopping = repartitionTrips(cleanShopping(typed?.shopping), data.cadence);
+    const plan: MonthlyPlan = { ...current, cadence: data.cadence };
+
+    const { error } = await context.supabase
+      .from("monthly_plans")
+      .update({ plan: plan as never, shopping: shopping as never } as never)
+      .eq("month", data.month)
+      .eq("user_id", context.userId);
+    if (error) {
+      console.error("recadenceMonthlyPlan", error);
+      throw new Error("No hemos podido cambiar la frecuencia de la compra");
+    }
 
     return { plan, shopping };
   });
@@ -221,7 +349,9 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
 
     const p = (profile ?? {}) as Record<string, unknown>;
     const cursor = planCursor(data.today);
-    const goalLine = `Objetivo: ${String(p.goal_type ?? "sin definir")} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`;
+    const goalLine = p.goal_type
+      ? `Objetivo: ${String(p.goal_type)} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
+      : "La persona no tiene un objetivo de peso definido: no asumas uno ni recoloques el plan para adelgazar; céntrate en comidas equilibradas y hábitos.";
     const kcalLine = data.kcalDelta
       ? data.kcalDelta > 0
         ? `Hoy hay un EXCESO estimado de ${data.kcalDelta} kcal: compénsalo de forma suave repartida entre los días siguientes (nunca todo en un día, nunca con platos de castigo).`
@@ -494,4 +624,61 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
     });
 
     return { text: text.trim() };
+  });
+
+export type DishRecipe = { ingredients: string[]; steps: string[] };
+
+/**
+ * Receta simplificada de un plato, a demanda: se pide solo cuando la persona
+ * expande un plato del plan, para no inflar el JSON del plan ni encarecer cada
+ * regeneración. Se apoya en los ingredientes ya comprados del mes si los hay.
+ */
+export const dishRecipe = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { dish: string; month?: string }) => {
+    const dish = String(input?.dish ?? "")
+      .trim()
+      .slice(0, 200);
+    if (!dish) throw new Error("Falta el plato");
+    const month = /^\d{4}-\d{2}$/.test(input?.month ?? "") ? input!.month! : "";
+    return { dish, month };
+  })
+  .handler(async ({ data, context }): Promise<DishRecipe> => {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) throw new Error("Falta la clave de IA");
+
+    let pantry = "";
+    if (data.month) {
+      const { data: row } = await context.supabase
+        .from("monthly_plans")
+        .select("shopping")
+        .eq("month", data.month)
+        .maybeSingle();
+      pantry = ingredientNames(cleanShopping((row as { shopping?: unknown } | null)?.shopping));
+    }
+
+    return askForJson(
+      {
+        key,
+        system:
+          "Eres un cocinero que explica recetas caseras muy simples, en español, con frases cortas y claras.",
+        prompt:
+          `Plato: "${data.dish}"\n` +
+          (pantry ? `Ingredientes disponibles en casa: ${pantry}\n` : "") +
+          "Da una receta simplificada y realista para cocinar en casa. Usa sobre todo los ingredientes disponibles (más sal, aceite, agua y especias básicas). " +
+          'Devuelve solo JSON: {"ingredients": [máx. 8 ingredientes con cantidad orientativa, strings cortos], "steps": [3 a 5 pasos cortos y claros]}',
+      },
+      (parsed) => {
+        const o = (parsed ?? {}) as { ingredients?: unknown; steps?: unknown };
+        const ingredients = (Array.isArray(o.ingredients) ? o.ingredients : [])
+          .map((x) => String(x).trim())
+          .filter(Boolean)
+          .slice(0, 8);
+        const steps = (Array.isArray(o.steps) ? o.steps : [])
+          .map((x) => String(x).trim())
+          .filter(Boolean)
+          .slice(0, 6);
+        return steps.length ? { ingredients, steps } : null;
+      },
+    );
   });

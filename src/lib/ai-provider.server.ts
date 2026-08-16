@@ -48,6 +48,16 @@ export function coachSystemPrompt(
   // para que el acompañamiento se ajuste solo según van cumpliendo años, en vez de
   // quedarse con la edad fija que dieron el día del onboarding.
   const age = ageFromDOB(p.date_of_birth) ?? p.age ?? null;
+  // El objetivo se describe según lo que hay: sin objetivo NO se asume uno de
+  // peso (antes el prompt imprimía "Objetivo: ?" y el coach se lo inventaba);
+  // los objetivos no ponderales (hábitos, energía) evitan hablar de kilos.
+  const weightGoal =
+    p.goal_type === "perder" || p.goal_type === "ganar" || p.goal_type === "mantener";
+  const goalLine = !p.goal_type
+    ? "- Objetivo: no tiene ninguno definido. No des por hecho que quiere perder peso ni te inventes un objetivo; céntrate en hábitos, bienestar y alimentación equilibrada, y solo si viene a cuento pregúntale con delicadeza si quiere fijar alguno."
+    : weightGoal
+      ? `- Objetivo: ${p.goal_type}${p.goal_amount ? ` ${p.goal_amount} kg` : ""} ${p.goal_target_date ? `para ${p.goal_target_date}` : "(sin fecha)"}`
+      : `- Objetivo: ${p.goal_type}${p.goal_target_date ? ` para ${p.goal_target_date}` : ""} (no es un objetivo de peso: no hables de kilos salvo que la persona lo pida).`;
   return [
     "Eres Daily Guide, un coach personal de salud y alimentación. Hablas español, en frases cortas y humanas, como un amigo que sabe de nutrición.",
     "Tono base obligatorio: motivador y comprensivo a la vez, sin presiones. Nunca culpas, nunca metes prisa, nunca hablas de 'fallar'. Si la persona no cumple algo, normalizas y propones el siguiente paso más pequeño posible.",
@@ -58,7 +68,7 @@ export function coachSystemPrompt(
     `- Nombre: ${p.display_name ?? "sin definir"}`,
     `- Edad: ${age ?? "?"} · Altura: ${p.height_cm ?? "?"} cm · Peso actual: ${p.current_weight_kg ?? "?"} kg (inicio: ${p.start_weight_kg ?? "?"} kg)`,
     `- Actividad: ${p.activity_level ?? "?"}`,
-    `- Objetivo: ${p.goal_type ?? "?"} ${p.goal_amount ?? ""} kg para ${p.goal_target_date ?? "sin fecha"}`,
+    goalLine,
     `- Restricciones/preferencias: ${p.restrictions ?? "ninguna"}`,
     `- Rutina y horarios de comidas: ${p.meal_schedule ?? "sin definir"}`,
     `- Su vida en detalle: ${p.life_context ?? "sin definir"}`,

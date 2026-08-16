@@ -6,6 +6,7 @@ import { Check, CheckCircle2, ChevronDown, Flame, Sparkle, X } from "lucide-reac
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { DishRecipe } from "@/components/dish-recipe";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MonthCalendar } from "@/components/month-calendar";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
@@ -364,6 +365,9 @@ function Hoy() {
                 tu ración se sale de eso
               </span>
             ) : null}
+            {expandedPlanned?.idea ? (
+              <DishRecipe dish={expandedPlanned.idea} month={month} />
+            ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
                 <button
@@ -410,7 +414,9 @@ function Hoy() {
               </p>
             ) : guide ? (
               <div className="space-y-3 text-sm">
-                <p className="leading-relaxed text-foreground">{guide.intro}</p>
+                <p className="hyphens-auto text-justify leading-relaxed text-foreground">
+                  {guide.intro}
+                </p>
                 <div className="grid gap-2">
                   <Field label="Energía" value={guide.calories} />
                   <Field label="Macros" value={guide.macros} />
@@ -544,7 +550,13 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
       {meals.length ? (
         <div className="mt-3 space-y-2">
           {meals.map((m) => (
-            <Field key={m.slot} label={m.moment} value={m.idea} note={offListNote(m.off)} />
+            <Field
+              key={m.slot}
+              label={m.moment}
+              value={m.idea}
+              note={offListNote(m.off)}
+              recipeMonth={date.slice(0, 7)}
+            />
           ))}
         </div>
       ) : (
@@ -556,7 +568,18 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   );
 }
 
-function Field({ label, value, note }: { label: string; value: string; note?: string | null }) {
+function Field({
+  label,
+  value,
+  note,
+  recipeMonth,
+}: {
+  label: string;
+  value: string;
+  note?: string | null;
+  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes. */
+  recipeMonth?: string;
+}) {
   return (
     <div className="rounded-xl bg-secondary/60 p-3">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -568,6 +591,7 @@ function Field({ label, value, note }: { label: string; value: string; note?: st
           {note}
         </span>
       ) : null}
+      {recipeMonth ? <DishRecipe dish={value} month={recipeMonth} /> : null}
     </div>
   );
 }

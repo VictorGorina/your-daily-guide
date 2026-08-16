@@ -66,7 +66,9 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
     define: envDefine,
     ...(isDevBuild
       ? {
-          environments: { client: { define: { "process.env.NODE_ENV": JSON.stringify("development") } } },
+          environments: {
+            client: { define: { "process.env.NODE_ENV": JSON.stringify("development") } },
+          },
           esbuild: { keepNames: true },
         }
       : {}),

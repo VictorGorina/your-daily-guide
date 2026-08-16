@@ -66,11 +66,18 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "up") {
+        // El enlace del correo debe apuntar a una URL pública y estable, no a
+        // localhost ni al esquema de la app nativa (un correo se abre en otro
+        // sitio). Se toma de VITE_PUBLIC_URL si está definida; sólo cae al origin
+        // actual como último recurso en desarrollo. Esa URL + /confirmado tiene
+        // que estar en la allowlist de Redirect URLs del panel de Supabase.
+        const base =
+          (import.meta.env.VITE_PUBLIC_URL as string | undefined) || window.location.origin;
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/confirmado${next ? `?next=${encodeURIComponent(next)}` : ""}`,
+            emailRedirectTo: `${base}/confirmado${next ? `?next=${encodeURIComponent(next)}` : ""}`,
           },
         });
         if (error) throw error;

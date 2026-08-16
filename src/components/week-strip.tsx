@@ -41,7 +41,7 @@ export function WeekStrip({
   const todaySignal = ratioSignal(done, total);
 
   return (
-    <div className="-mx-1 flex gap-2 overflow-x-auto overflow-y-visible px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="grid grid-cols-7 gap-1.5">
       {days.map((d) => {
         const isToday = d.toDateString() === today.toDateString();
         const date = iso(d);
@@ -74,22 +74,17 @@ export function WeekStrip({
             type="button"
             onClick={() => onSelect?.(date)}
             aria-expanded={isOpen}
-            className={`flex min-w-[56px] flex-1 flex-col items-center gap-0.5 rounded-2xl border px-2 py-2.5 text-center transition-transform active:scale-95 ${baseClass} ${
+            className={`flex flex-col items-center gap-0.5 rounded-2xl border px-1 py-2.5 text-center transition-transform active:scale-95 ${baseClass} ${
               isOpen ? "ring-2 ring-inset ring-primary" : ""
             }`}
           >
             <span className="font-display text-lg leading-none">{d.getDate()}</span>
-            <span className="text-[11px] font-semibold opacity-80">
+            <span className="text-[10px] font-semibold opacity-80">
               {DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}
             </span>
           </button>
         );
       })}
-      <div className="grid min-w-[56px] flex-1 place-items-center rounded-2xl border border-border bg-surface px-2 text-center">
-        <span className="text-[11px] font-semibold leading-tight text-muted-foreground">
-          {done}/{total}
-        </span>
-      </div>
     </div>
   );
 }

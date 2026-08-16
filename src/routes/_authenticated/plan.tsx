@@ -21,14 +21,20 @@ import { fetchMonthlyPlan, fetchProfile, monthISO } from "@/lib/daily";
 import {
   cadenceOf,
   CADENCES,
+  coverageRatio,
   eur,
   groupByTrip,
   shoppingToText,
+  tripCount,
   tripLabel,
   shoppingTotal,
   type ShoppingCadence,
 } from "@/lib/plan-shared";
-import { confirmMonthlyPlan, generateMonthlyPlan } from "@/lib/plan.functions";
+import {
+  confirmMonthlyPlan,
+  generateMonthlyPlan,
+  recadenceMonthlyPlan,
+} from "@/lib/plan.functions";
 
 export const Route = createFileRoute("/_authenticated/plan")({
   head: () => ({
@@ -56,6 +62,7 @@ function PlanPage() {
   const month = monthISO();
   const make = useServerFn(generateMonthlyPlan);
   const confirm = useServerFn(confirmMonthlyPlan);
+  const recad = useServerFn(recadenceMonthlyPlan);
   const [tab, setTab] = useState<"plan" | "compra">("plan");
   const [cadence, setCadence] = useState<ShoppingCadence | null>(null);
 
@@ -68,6 +75,21 @@ function PlanPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
     onError: (e) =>
       toast.error(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
+  });
+
+  // Cambiar la cadencia solo reparte la misma compra en más o menos viajes, sin
+  // regenerar el plan por IA: instantáneo y sin poder fallar por el modelo.
+  const recadence = useMutation({
+    mutationFn: (nextCadence: ShoppingCadence) => recad({ data: { month, cadence: nextCadence } }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, plan: res.plan, shopping: res.shopping } : prev,
+      );
+    },
+    onError: (e) => {
+      setCadence(null);
+      toast.error(e instanceof Error ? e.message : "No hemos podido cambiar la frecuencia");
+    },
   });
 
   const lock = useMutation({
@@ -83,10 +105,12 @@ function PlanPage() {
   const shopping = planQ.data?.shopping ?? null;
   const confirmed = Boolean(planQ.data?.confirmed_at);
   const total = shoppingTotal(shopping);
-  const activeCadence: ShoppingCadence = cadence ?? cadenceOf(shopping);
+  const coverage = plan?.coverage;
+  const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
   const trips = groupByTrip(shopping);
+  const tripsTotal = tripCount(shopping);
 
-  const listText = () => shoppingToText(shopping, activeCadence, month);
+  const listText = () => shoppingToText(shopping, activeCadence, month, coverage);
 
   const shareList = async () => {
     const text = listText();
@@ -124,7 +148,12 @@ function PlanPage() {
     URL.revokeObjectURL(url);
   };
   const budget = Number(profileQ.data?.budget_month_eur ?? 0);
-  const overBudget = budget > 0 && total > budget;
+  // Si el plan empieza a media de mes, el presupuesto que aplica es la parte
+  // proporcional del mes que cubre, no el mes entero.
+  const partialMonth = Boolean(coverage && coverage.fromDay > 1);
+  const periodBudget =
+    budget > 0 && coverage ? Math.round(budget * coverageRatio(coverage, month)) : budget;
+  const overBudget = periodBudget > 0 && total > periodBudget;
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "long",
     year: "numeric",
@@ -195,7 +224,9 @@ function PlanPage() {
                   <Sparkle className="h-4 w-4 text-primary" />
                   <h2 className="text-sm font-semibold">Cómo enfocamos el mes</h2>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed">{plan.intro}</p>
+                <p className="hyphens-auto mt-2 text-justify text-sm leading-relaxed">
+                  {plan.intro}
+                </p>
                 {plan.focus.length ? (
                   <ul className="mt-3 space-y-1.5">
                     {plan.focus.map((f) => (
@@ -206,7 +237,7 @@ function PlanPage() {
                     ))}
                   </ul>
                 ) : null}
-                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                <p className="hyphens-auto mt-3 text-justify text-xs leading-relaxed text-muted-foreground">
                   Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
                   recoloco los siguientes.
                 </p>
@@ -218,33 +249,43 @@ function PlanPage() {
             <section className="mt-5 space-y-4">
               <div className="surface-card p-5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-semibold">Total orientativo del mes</h3>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold">
+                      {partialMonth ? "Total orientativo del periodo" : "Total orientativo del mes"}
+                    </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {budget > 0
-                        ? `Tu presupuesto: ${eur(budget)}`
+                      {periodBudget > 0
+                        ? partialMonth
+                          ? `Presupuesto para estos días: ${eur(periodBudget)}`
+                          : `Tu presupuesto: ${eur(periodBudget)}`
                         : "Sin presupuesto definido en tu perfil"}
                     </p>
                   </div>
                   <span
-                    className={`font-display text-2xl tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
+                    className={`shrink-0 font-display text-2xl tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
                   >
                     {eur(total)}
                   </span>
                 </div>
-                {budget > 0 ? (
+                {periodBudget > 0 ? (
                   <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary">
                     <div
                       className={`h-full rounded-full transition-[width] duration-500 ${
                         overBudget
                           ? "bg-danger"
-                          : total / budget >= 0.85
+                          : total / periodBudget >= 0.85
                             ? "bg-warning"
                             : "bg-success"
                       }`}
-                      style={{ width: `${Math.min(100, (total / budget) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (total / periodBudget) * 100)}%` }}
                     />
                   </div>
+                ) : null}
+                {partialMonth && coverage ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Este plan cubre del día {coverage.fromDay} al {coverage.toDay}, la parte que
+                    queda de mes.
+                  </p>
                 ) : null}
                 {overBudget ? (
                   <p className="mt-2 text-xs text-destructive">
@@ -302,11 +343,11 @@ function PlanPage() {
                     <button
                       key={c.key}
                       onClick={() => {
-                        if (confirmed || generate.isPending) return;
+                        if (confirmed || recadence.isPending) return;
                         setCadence(c.key);
-                        if (c.key !== activeCadence) generate.mutate(c.key);
+                        if (c.key !== activeCadence) recadence.mutate(c.key);
                       }}
-                      disabled={confirmed || generate.isPending}
+                      disabled={confirmed || recadence.isPending}
                       className={`rounded-2xl border px-2 py-2.5 text-xs font-semibold transition-colors disabled:opacity-60 ${
                         activeCadence === c.key
                           ? "border-transparent bg-primary text-primary-foreground"
@@ -321,10 +362,8 @@ function PlanPage() {
                   <p className="mt-2 text-xs text-muted-foreground">
                     La compra está confirmada: la frecuencia ya no se puede cambiar este mes.
                   </p>
-                ) : generate.isPending ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Recolocando la compra y los platos...
-                  </p>
+                ) : recadence.isPending ? (
+                  <p className="mt-2 text-xs text-muted-foreground">Repartiendo la compra...</p>
                 ) : null}
               </div>
 
@@ -336,7 +375,9 @@ function PlanPage() {
                 return (
                   <div key={t.trip} className="surface-card p-5">
                     <div className="flex items-baseline justify-between gap-3">
-                      <h3 className="text-sm font-semibold">{tripLabel(activeCadence, t.trip)}</h3>
+                      <h3 className="text-sm font-semibold">
+                        {tripLabel(activeCadence, t.trip, coverage, tripsTotal)}
+                      </h3>
                       <span className="shrink-0 text-xs font-semibold text-primary">
                         {eur(tripTotal)}
                       </span>

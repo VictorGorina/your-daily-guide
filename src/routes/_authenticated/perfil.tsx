@@ -34,7 +34,8 @@ function validate(field: Field, raw: string): { error?: string; value?: unknown 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return { error: "Indica una fecha válida" };
     if (field.key === "date_of_birth") {
       const age = ageFromDOB(text);
-      if (age === null || age < 12 || age > 110) return { error: "Indica una fecha de nacimiento real" };
+      if (age === null || age < 12 || age > 110)
+        return { error: "Indica una fecha de nacimiento real" };
     }
     return { value: text };
   }

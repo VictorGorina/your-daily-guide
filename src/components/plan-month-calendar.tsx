@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { DishRecipe } from "@/components/dish-recipe";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { todayISO } from "@/lib/daily";
 import { mealsForDate, offListNote, planForDate, type MonthlyPlan } from "@/lib/plan-shared";
@@ -16,6 +17,9 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
   const daysInMonth = new Date(y, monthIdx + 1, 0).getDate();
   const firstOffset = (new Date(y, monthIdx, 1).getDay() + 6) % 7;
   const iso = (d: number) => `${month}-${String(d).padStart(2, "0")}`;
+  // Un plan creado a media de mes no cubre los días previos: se muestran
+  // apagados y no se pueden abrir (no tienen menú).
+  const fromDay = plan.coverage?.fromDay ?? 1;
 
   const cells: (string | null)[] = [
     ...Array.from({ length: firstOffset }, () => null),
@@ -41,6 +45,18 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
         {cells.map((date, i) => {
           if (!date) return <span key={`empty-${i}`} />;
           const isWeekend = i % 7 === 5 || i % 7 === 6;
+          const beforeStart = Number(date.slice(8, 10)) < fromDay;
+          if (beforeStart) {
+            return (
+              <span
+                key={date}
+                aria-hidden
+                className="grid aspect-square place-items-center rounded-xl border border-dashed border-border/60 text-sm text-muted-foreground/40"
+              >
+                {Number(date.slice(8, 10))}
+              </span>
+            );
+          }
           return (
             <button
               key={date}
@@ -88,6 +104,7 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
                         {offListNote(meal.off)}
                       </span>
                     ) : null}
+                    <DishRecipe dish={meal.idea} month={month} />
                   </div>
                 ))}
               </div>

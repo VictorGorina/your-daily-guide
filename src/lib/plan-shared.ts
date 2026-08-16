@@ -34,6 +34,13 @@ export type PlanDay = {
   extras?: Partial<Record<MealSlot, string[]>>;
 };
 
+/**
+ * Días del mes que cubre el plan. Un plan creado a media de mes solo cubre de
+ * hoy a fin de mes (ver `monthCoverage`), y de ahí salen tanto la prorrata del
+ * presupuesto como los rangos de días de cada compra.
+ */
+export type PlanCoverage = { fromDay: number; toDay: number };
+
 export type MonthlyPlan = {
   intro: string;
   focus: string[];
@@ -44,6 +51,10 @@ export type MonthlyPlan = {
     snacks: string[];
     days: PlanDay[];
   }[];
+  /** Rango de días del mes que cubre este plan (ausente en planes antiguos = mes completo). */
+  coverage?: PlanCoverage;
+  /** Cada cuánto se compra. Fuente de verdad de la cadencia; el reparto de `trip` la refleja. */
+  cadence?: ShoppingCadence;
 };
 
 export type ShoppingCadence = "semanal" | "bisemanal" | "mensual";
@@ -76,13 +87,77 @@ export const cadenceOf = (shopping: ShoppingList | null | undefined): ShoppingCa
 export const tripsOfCadence = (cadence: ShoppingCadence) =>
   CADENCES.find((c) => c.key === cadence)?.trips ?? 1;
 
-/** Etiqueta legible de cada compra según la cadencia (ej. "Compra 2 · días 8-14"). */
-export const tripLabel = (cadence: ShoppingCadence, trip: number) => {
-  if (cadence === "mensual") return "Compra del mes";
-  const span = cadence === "semanal" ? 7 : 14;
-  const from = trip * span + 1;
-  const to = trip * span + span;
-  return `Compra ${trip + 1} · días ${from}-${to}`;
+/** Número de días de un mes "YYYY-MM". */
+export const daysInMonth = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y ?? 1970, m ?? 1, 0).getDate();
+};
+
+/**
+ * Días del mes que cubre un plan según cuándo se crea: de hoy a fin de mes si
+ * es el mes en curso, y el mes entero si es un mes futuro.
+ */
+export const monthCoverage = (month: string, today: string): PlanCoverage => {
+  const toDay = daysInMonth(month);
+  const fromDay =
+    today.slice(0, 7) === month ? Math.min(Math.max(Number(today.slice(8, 10)) || 1, 1), toDay) : 1;
+  return { fromDay, toDay };
+};
+
+/** Proporción del mes que cubre el plan (para prorratear el presupuesto). */
+export const coverageRatio = (coverage: PlanCoverage, month: string) => {
+  const covered = Math.max(1, coverage.toDay - coverage.fromDay + 1);
+  return Math.min(1, covered / daysInMonth(month));
+};
+
+const FULL_MONTH_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
+
+/** Rango de días [from, to] del mes que cubre una compra dentro de la cobertura del plan. */
+export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number) => {
+  const total = Math.max(1, coverage.toDay - coverage.fromDay + 1);
+  const per = Math.ceil(total / Math.max(1, trips));
+  const from = coverage.fromDay + trip * per;
+  const to = Math.min(coverage.toDay, from + per - 1);
+  return { from, to };
+};
+
+/**
+ * Etiqueta legible de cada compra con los días que comprende (ej. "Compra 2 ·
+ * días 8-14"), calculada a partir de la cobertura real del plan para que un
+ * plan creado a media de mes muestre los días correctos.
+ */
+export const tripLabel = (
+  cadence: ShoppingCadence,
+  trip: number,
+  coverage: PlanCoverage = FULL_MONTH_COVERAGE,
+  trips = tripsOfCadence(cadence),
+) => {
+  const { from, to } = tripDayRange(coverage, trips, trip);
+  const prefix = cadence === "mensual" ? "Compra del mes" : `Compra ${trip + 1}`;
+  return `${prefix} · días ${from}-${to}`;
+};
+
+/**
+ * Reparte el `trip` de una lista ya hecha según la cadencia, sin volver a llamar
+ * a la IA: la despensa (no perecedero) va a la primera compra y los frescos se
+ * reparten por igual entre las compras para que nada se eche a perder. Es lo que
+ * permite cambiar de cadencia al instante y sin errores.
+ */
+export const repartitionTrips = (
+  shopping: ShoppingList | null | undefined,
+  cadence: ShoppingCadence,
+): ShoppingList => {
+  const trips = tripsOfCadence(cadence);
+  let freshIndex = 0;
+  return (shopping ?? []).map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => {
+      if (trips === 1 || !item.perishable) return { ...item, trip: 0 };
+      const trip = freshIndex % trips;
+      freshIndex += 1;
+      return { ...item, trip };
+    }),
+  }));
 };
 
 /** Agrupa la lista por compra, conservando categorías. */
@@ -156,9 +231,24 @@ const cleanDay = (raw: unknown): PlanDay => {
   return day;
 };
 
+const cleanCoverage = (raw: unknown): PlanCoverage | undefined => {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const fromDay = Number(o.fromDay);
+  const toDay = Number(o.toDay);
+  if (!Number.isFinite(fromDay) || !Number.isFinite(toDay)) return undefined;
+  const from = Math.min(Math.max(Math.round(fromDay), 1), 31);
+  const to = Math.min(Math.max(Math.round(toDay), from), 31);
+  return { fromDay: from, toDay: to };
+};
+
+const cleanCadence = (raw: unknown): ShoppingCadence | undefined =>
+  raw === "semanal" || raw === "bisemanal" || raw === "mensual" ? raw : undefined;
+
 export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
   const plan = (raw ?? {}) as Partial<MonthlyPlan>;
   if (!plan.weeks?.length) return null;
+  const coverage = cleanCoverage(plan.coverage);
+  const cadence = cleanCadence(plan.cadence);
   return {
     intro: String(plan.intro ?? ""),
     focus: (plan.focus ?? []).slice(0, 4).map(String),
@@ -169,6 +259,8 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
       snacks: (w?.snacks ?? []).slice(0, 3).map(String),
       days: (w?.days ?? []).slice(0, 7).map(cleanDay),
     })),
+    ...(coverage ? { coverage } : {}),
+    ...(cadence ? { cadence } : {}),
   };
 };
 
@@ -283,6 +375,8 @@ export const completePlan = (plan: MonthlyPlan | null): MonthlyPlan | null => {
       ? plan.focus
       : ["Comidas sencillas", "Verdura a diario", "Moverte cada día"],
     weeks,
+    ...(plan.coverage ? { coverage: plan.coverage } : {}),
+    ...(plan.cadence ? { cadence: plan.cadence } : {}),
   };
 };
 
@@ -311,6 +405,8 @@ export const mergeFuturePlan = (
   next: MonthlyPlan,
   cursor: { weekIndex: number; dayIndex: number },
 ): MonthlyPlan => ({
+  ...(current.coverage ? { coverage: current.coverage } : {}),
+  ...(current.cadence ? { cadence: current.cadence } : {}),
   intro: next.intro || current.intro,
   focus: next.focus.length ? next.focus : current.focus,
   weeks: current.weeks.map((week, wi) => {
@@ -466,14 +562,18 @@ export const shoppingToText = (
   shopping: ShoppingList | null | undefined,
   cadence: ShoppingCadence,
   month: string,
+  coverage?: PlanCoverage,
 ) => {
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "long",
     year: "numeric",
   });
   const lines = [`Lista de la compra · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
+  const trips = tripCount(shopping);
   for (const trip of groupByTrip(shopping)) {
-    lines.push(`${tripLabel(cadence, trip.trip)} — ${eur(shoppingTotal(trip.groups))}`);
+    lines.push(
+      `${tripLabel(cadence, trip.trip, coverage, trips)} — ${eur(shoppingTotal(trip.groups))}`,
+    );
     for (const group of trip.groups) {
       lines.push(`  ${group.category}`);
       for (const item of group.items) {

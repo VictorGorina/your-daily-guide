@@ -76,24 +76,24 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
         return "Guía de hoy regenerada";
       }
       if (toolName === "cambiar_plato") {
-        const fecha = String(input.fecha ?? "");
-        const plato = String(input.plato ?? "").trim();
+        const targetDate = String(input.fecha ?? "");
+        const dish = String(input.plato ?? "").trim();
         const { label, off } = await changeMeal({
           data: {
-            date: fecha,
+            date: targetDate,
             slot: String(input.comida ?? ""),
-            dish: plato,
+            dish,
             today: date,
           },
         });
-        const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha)
-          ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-ES", {
+        const dayLabel = /^\d{4}-\d{2}-\d{2}$/.test(targetDate)
+          ? new Date(`${targetDate}T00:00:00`).toLocaleDateString("es-ES", {
               weekday: "long",
               day: "numeric",
               month: "long",
             })
-          : fecha;
-        const base = `${label} del ${dia}: ${plato}`;
+          : targetDate;
+        const base = `${label} del ${dayLabel}: ${dish}`;
         return off.length
           ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
           : `${base} (con lo que ya tienes comprado)`;
@@ -119,10 +119,10 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
           : text;
       }
       if (toolName === "cambiar_fecha_objetivo") {
-        const fecha = String(input.fecha ?? "");
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return "Fecha no válida";
-        await saveProfile({ goal_target_date: fecha });
-        return `Nueva fecha objetivo guardada: ${fecha}`;
+        const targetDate = String(input.fecha ?? "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return "Fecha no válida";
+        await saveProfile({ goal_target_date: targetDate });
+        return `Nueva fecha objetivo guardada: ${targetDate}`;
       }
       if (toolName === "actualizar_perfil") {
         const patch: Partial<Profile> = {};
