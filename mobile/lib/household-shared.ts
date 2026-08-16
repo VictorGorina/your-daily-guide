@@ -7,6 +7,16 @@
 export const MEAL_KEYS = ["desayuno", "comida", "cena"] as const;
 export type MealKey = (typeof MEAL_KEYS)[number];
 
+export const MEAL_LABEL: Record<MealKey, string> = {
+  desayuno: "Desayuno",
+  comida: "Comida",
+  cena: "Cena",
+};
+
+/** 0 = lunes … 6 = domingo (igual que el plan mensual). */
+export const DAY_SHORT = ["L", "M", "X", "J", "V", "S", "D"];
+export const DAY_LABEL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
 export type SharedMeals = Record<MealKey, number[]>;
 
 export const EMPTY_SHARED: SharedMeals = { desayuno: [], comida: [], cena: [] };
@@ -27,6 +37,9 @@ export function cleanSharedMeals(raw: unknown): SharedMeals {
     cena: days(o.cena),
   };
 }
+
+export const toggleDay = (list: number[], day: number) =>
+  list.includes(day) ? list.filter((d) => d !== day) : [...list, day].sort((a, b) => a - b);
 
 /** Días en los que dos personas comparten la misma comida. */
 export const sharedDays = (a: SharedMeals, b: SharedMeals, meal: MealKey) =>

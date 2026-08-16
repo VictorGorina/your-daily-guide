@@ -47,12 +47,7 @@ export type MonthlyPlan = {
 const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
-const normDay = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim();
+const normDay = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
 /** Posición de una fecha dentro del plan (semana 0-3, día 0-6 lunes→domingo). */
 export const planCursor = (date: string) => {
@@ -144,8 +139,94 @@ export const addDays = (date: string, days: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+// --- Lista de la compra y cadencias (pantalla Plan) ---
+
+export type ShoppingCadence = "semanal" | "bisemanal" | "mensual";
+
+export const CADENCES: { key: ShoppingCadence; label: string; trips: number }[] = [
+  { key: "semanal", label: "Semanal", trips: 4 },
+  { key: "bisemanal", label: "Cada 2 semanas", trips: 2 },
+  { key: "mensual", label: "Mensual", trips: 1 },
+];
+
+export type ShoppingItem = {
+  name: string;
+  qty: string;
+  price_eur: number;
+  /** Compra a la que pertenece (0 = primera). */
+  trip: number;
+  /** Alimento fresco (poca vida útil). */
+  perishable: boolean;
+};
+
 /** Lista de la compra tal como la guarda el plan mensual. */
-export type ShoppingList = { category: string; items: { name: string }[] }[];
+export type ShoppingList = { category: string; items: ShoppingItem[] }[];
+
+export const tripCount = (shopping: ShoppingList | null | undefined) =>
+  Math.max(1, ...((shopping ?? []).flatMap((g) => g.items.map((i) => i.trip + 1)) || [1]));
+
+export const cadenceOf = (shopping: ShoppingList | null | undefined): ShoppingCadence => {
+  const trips = tripCount(shopping);
+  return trips >= 4 ? "semanal" : trips >= 2 ? "bisemanal" : "mensual";
+};
+
+/** Etiqueta legible de cada compra según la cadencia (ej. "Compra 2 · días 8-14"). */
+export const tripLabel = (cadence: ShoppingCadence, trip: number) => {
+  if (cadence === "mensual") return "Compra del mes";
+  const span = cadence === "semanal" ? 7 : 14;
+  const from = trip * span + 1;
+  const to = trip * span + span;
+  return `Compra ${trip + 1} · días ${from}-${to}`;
+};
+
+/** Agrupa la lista por compra, conservando categorías. */
+export const groupByTrip = (shopping: ShoppingList | null | undefined) => {
+  const trips = tripCount(shopping);
+  return Array.from({ length: trips }, (_, t) => ({
+    trip: t,
+    groups: (shopping ?? [])
+      .map((g) => ({ category: g.category, items: g.items.filter((i) => i.trip === t) }))
+      .filter((g) => g.items.length),
+  })).filter((t) => t.groups.length);
+};
+
+export const shoppingTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round(
+    (shopping ?? []).reduce(
+      (sum, g) => sum + g.items.reduce((s, i) => s + (Number(i.price_eur) || 0), 0),
+      0,
+    ) * 100,
+  ) / 100;
+
+export const eur = (n: number) =>
+  new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(n);
+
+/** La lista de la compra como texto plano, para compartir/copiar/exportar. */
+export const shoppingToText = (
+  shopping: ShoppingList | null | undefined,
+  cadence: ShoppingCadence,
+  month: string,
+) => {
+  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
+    month: "long",
+    year: "numeric",
+  });
+  const lines = [`Lista de la compra · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
+  for (const trip of groupByTrip(shopping)) {
+    lines.push(`${tripLabel(cadence, trip.trip)} — ${eur(shoppingTotal(trip.groups))}`);
+    for (const group of trip.groups) {
+      lines.push(`  ${group.category}`);
+      for (const item of group.items) {
+        const qty = item.qty ? ` (${item.qty})` : "";
+        const fresh = item.perishable ? " · fresco" : "";
+        lines.push(`   - ${item.name}${qty}${fresh} — ${eur(item.price_eur)}`);
+      }
+    }
+    lines.push("");
+  }
+  lines.push(`Total del mes: ${eur(shoppingTotal(shopping))}`);
+  return lines.join("\n");
+};
 
 /** Menú de los próximos días, para que el coach sepa qué está cambiando. */
 export function upcomingMeals(plan: MonthlyPlan | null, today: string, days = 7) {

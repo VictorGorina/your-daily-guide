@@ -2,10 +2,11 @@ import { supabase } from "./supabase";
 import { cleanSharedMeals, type SharedMeals } from "./household-shared";
 
 /**
- * Acceso al hogar, equivalente móvil de `src/lib/household.ts` (solo lectura por
- * ahora, que es lo que Hoy necesita para las comidas compartidas). Consultas
- * normales a Supabase protegidas por RLS, igual que la web. Copia, no código
- * compartido (ver AGENTS.md).
+ * Acceso al hogar, equivalente móvil de `src/lib/household.ts`. Consultas
+ * normales a Supabase protegidas por RLS, igual que la web (el CRUD del hogar no
+ * necesita clave de servicio). La única operación que pasa por `/api/v1/*` es la
+ * sincronización del plan compartido, porque toca el plan del otro miembro con la
+ * clave de servicio. Copia, no código compartido (ver AGENTS.md).
  */
 
 export type HouseholdGoalType = "comportamiento" | "presupuesto";
@@ -87,4 +88,101 @@ export async function fetchHousehold(): Promise<HouseholdState> {
     children: (children ?? []) as HouseholdChild[],
     me: members.find((m) => m.user_id === userId) ?? null,
   };
+}
+
+const randomCode = () => {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from(
+    { length: 6 },
+    () => alphabet[Math.floor(Math.random() * alphabet.length)]!,
+  ).join("");
+};
+
+export async function createHousehold(name: string): Promise<string> {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Sin sesión");
+
+  const { data, error } = await supabase
+    .from("households")
+    .insert({
+      name: name.trim() || "Mi casa",
+      invite_code: randomCode(),
+      created_by: userId,
+    } as never)
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  const householdId = (data as { id: string }).id;
+  const { error: memberError } = await supabase
+    .from("household_members")
+    .insert({ household_id: householdId, user_id: userId, role: "adulto" } as never);
+  if (memberError) throw memberError;
+  return householdId;
+}
+
+export async function joinHousehold(code: string) {
+  const { error } = await supabase.rpc("join_household", { _invite_code: code.trim() });
+  if (error) throw new Error(error.message.includes("Código") ? "Código no válido" : error.message);
+}
+
+export async function leaveHousehold() {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Sin sesión");
+  const { error } = await supabase.from("household_members").delete().eq("user_id", auth.user.id);
+  if (error) throw error;
+}
+
+export async function renameHousehold(id: string, name: string) {
+  const { error } = await supabase
+    .from("households")
+    .update({ name: name.trim() || "Mi casa" } as never)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function saveHouseholdGoal(
+  id: string,
+  goal: { goal_type: HouseholdGoalType; goal_text: string | null; goal_budget_eur: number | null },
+) {
+  const { error } = await supabase
+    .from("households")
+    .update({
+      goal_type: goal.goal_type,
+      goal_text: goal.goal_type === "comportamiento" ? goal.goal_text?.trim() || null : null,
+      goal_budget_eur: goal.goal_type === "presupuesto" ? goal.goal_budget_eur : null,
+    } as never)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function clearHouseholdGoal(id: string) {
+  const { error } = await supabase
+    .from("households")
+    .update({ goal_type: null, goal_text: null, goal_budget_eur: null } as never)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function saveSharedMeals(shared: SharedMeals) {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Sin sesión");
+  const { error } = await supabase
+    .from("household_members")
+    .update({ shared_meals: shared as never } as never)
+    .eq("user_id", auth.user.id);
+  if (error) throw error;
+}
+
+export async function addChild(householdId: string, child: Omit<HouseholdChild, "id">) {
+  const { error } = await supabase
+    .from("household_children")
+    .insert({ household_id: householdId, ...child } as never);
+  if (error) throw error;
+}
+
+export async function removeChild(id: string) {
+  const { error } = await supabase.from("household_children").delete().eq("id", id);
+  if (error) throw error;
 }

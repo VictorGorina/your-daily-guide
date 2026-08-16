@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { MonthlyPlan } from "./plan-shared";
+import type { MonthlyPlan, ShoppingList } from "./plan-shared";
 
 /**
  * Acceso a los datos del día, equivalente móvil de `src/lib/daily.ts` de la web.
@@ -184,8 +184,7 @@ export type MonthlyPlanRow = {
   id: string;
   month: string;
   plan: MonthlyPlan | null;
-  // La lista de la compra no se usa en Hoy; se tipa cuando se porte la pantalla Plan.
-  shopping: unknown;
+  shopping: ShoppingList | null;
   confirmed_at: string | null;
 };
 

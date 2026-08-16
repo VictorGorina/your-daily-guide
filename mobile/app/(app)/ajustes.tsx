@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { AlertCircle, ChevronRight, Info, Pencil } from "lucide-react-native";
+import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react-native";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,7 +16,6 @@ import { supabase } from "../../lib/supabase";
 //    diferido en el plan; se añadirá al enganchar una pantalla autenticada.
 //  - "Apariencia / Tema": la app nativa usa una paleta fija (no hay theming en
 //    runtime como en la web). El campo `theme` del perfil se deja intacto.
-// El enlace "Tu hogar" también se omite hasta portar esa pantalla (va al final).
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -116,7 +115,8 @@ export default function Ajustes() {
       ],
     );
 
-  const inputClass = "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground";
+  const inputClass =
+    "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground";
   // `key` fuerza a remontar los inputs no controlados cuando llega el perfil,
   // para que `defaultValue` refleje el dato guardado y no quede en blanco.
   const seed = profile?.id ?? "loading";
@@ -143,6 +143,19 @@ export default function Ajustes() {
           Cuenta
         </Text>
         <View className="mt-2 overflow-hidden rounded-3xl border border-border bg-surface">
+          <Pressable
+            onPress={() => router.navigate("/hogar")}
+            className="flex-row items-center gap-3 border-b border-border px-4 py-4 active:opacity-70"
+          >
+            <Users size={16} color="#4f8ac6" />
+            <View className="min-w-0 flex-1">
+              <Text className="text-sm font-medium text-foreground">Tu hogar</Text>
+              <Text className="text-xs text-muted-foreground">
+                Une cuentas, elige qué comidas compartís y añade a los peques
+              </Text>
+            </View>
+            <ChevronRight size={16} color="#677380" />
+          </Pressable>
           <Pressable
             onPress={() => router.navigate("/perfil")}
             className="flex-row items-center gap-3 px-4 py-4 active:opacity-70"
@@ -235,7 +248,10 @@ export default function Ajustes() {
               }
               className={inputClass}
             />
-            <FieldNote error={errors["goal_amount"]} help="Opcional: kg que quieres perder o ganar." />
+            <FieldNote
+              error={errors["goal_amount"]}
+              help="Opcional: kg que quieres perder o ganar."
+            />
           </View>
         </View>
 
