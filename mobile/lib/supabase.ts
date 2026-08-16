@@ -28,5 +28,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     autoRefreshToken: true,
     // En móvil no hay redirect de navegador que dejar la sesión en la URL.
     detectSessionInUrl: false,
+    // Flujo PKCE: al abrir el OAuth de Google, supabase-js guarda el code
+    // verifier en AsyncStorage y luego lo canjea con exchangeCodeForSession
+    // desde la URL de vuelta (ver el handler de Google en app/auth.tsx).
+    flowType: "pkce",
   },
 });

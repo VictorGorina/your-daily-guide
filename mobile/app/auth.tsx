@@ -1,4 +1,7 @@
+import { makeRedirectUri } from "expo-auth-session";
+import * as Linking from "expo-linking";
 import { Redirect } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +19,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../lib/auth-context";
 import { supabase } from "../lib/supabase";
 
+// Cierra la pestaña de auth que quedara abierta de un intento anterior.
+WebBrowser.maybeCompleteAuthSession();
+
+// A dónde vuelve Google/Supabase tras autenticar. Con el scheme "dailyguide"
+// del app.json, esto es dailyguide://. Debe estar dado de alta en el dashboard
+// de Supabase (Authentication → URL Configuration → Redirect URLs).
+const redirectTo = makeRedirectUri({ scheme: "dailyguide" });
+
 /**
  * Entrada a la app. Mismos textos y mismo orden que la pantalla /auth de la
  * web, para que las dos se sientan la misma app. Cuando el login crea sesión,
@@ -29,6 +40,7 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
   // Sesión anónima, igual que el "perfil aleatorio" de la web: sirve para
@@ -45,6 +57,40 @@ export default function Auth() {
       );
     } finally {
       setDemoLoading(false);
+    }
+  };
+
+  // Entra con Google. En nativo no hay redirect del navegador que Supabase
+  // pueda leer solo, así que pedimos la URL de OAuth (skipBrowserRedirect),
+  // la abrimos en una pestaña segura del sistema y, al volver por el scheme
+  // dailyguide://, canjeamos el ?code= por sesión (flujo PKCE, ver supabase.ts).
+  // Cuando setSession crea la sesión, el onAuthStateChange de AuthProvider la
+  // refleja y el Redirect de abajo saca de esta pantalla.
+  const google = async () => {
+    setGoogleLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error) throw error;
+      if (!data.url) throw new Error("Supabase no devolvió la URL de Google.");
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== "success") return; // cancelado o cerrado por la persona
+
+      const code = Linking.parse(result.url).queryParams?.code;
+      if (typeof code !== "string") throw new Error("La respuesta de Google no traía código.");
+
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) throw exchangeError;
+    } catch (error) {
+      Alert.alert(
+        "No hemos podido conectar con Google",
+        error instanceof Error ? error.message : "Inténtalo otra vez.",
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -154,6 +200,24 @@ export default function Auth() {
                     ? "No tengo cuenta todavía, quiero crearla"
                     : "Ya tengo cuenta, quiero entrar"}
                 </Text>
+              </Pressable>
+
+              <View className="my-3 flex-row items-center gap-3">
+                <View className="h-px flex-1 bg-border" />
+                <Text className="text-xs text-muted-foreground">o</Text>
+                <View className="h-px flex-1 bg-border" />
+              </View>
+
+              <Pressable
+                onPress={google}
+                disabled={googleLoading}
+                className="w-full flex-row items-center justify-center rounded-full border border-input bg-surface py-4 active:opacity-90 disabled:opacity-60"
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color="#677380" />
+                ) : (
+                  <Text className="text-sm font-medium text-foreground">Continuar con Google</Text>
+                )}
               </Pressable>
 
               <Pressable
