@@ -14,6 +14,15 @@ if (!API_URL) {
 
 const BASE_URL = API_URL.replace(/\/$/, "");
 
+/** Origen del backend (sin barra final), p. ej. para el streaming de `/api/chat`. */
+export const API_BASE_URL = BASE_URL;
+
+/** Token de la sesión de Supabase, o null si no hay sesión. */
+export async function getAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,

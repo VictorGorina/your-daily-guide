@@ -167,6 +167,17 @@ export async function addMessage(role: "user" | "assistant", content: string) {
   if (error) throw error;
 }
 
+/** Historial de chat de un día concreto, en orden cronológico. */
+export async function fetchMessages(date: string): Promise<ChatMessage[]> {
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .select("*")
+    .eq("log_date", date)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as unknown as ChatMessage[];
+}
+
 // --- Plan mensual (solo lectura, lo que Hoy necesita) ---
 
 export type MonthlyPlanRow = {
@@ -265,4 +276,42 @@ export function weeklyTrendFrom(logs: DailyLog[]): WeeklyTrend | null {
     lastWeek: Math.round(lastWeek * 100),
     deltaPts: Math.round(thisWeek * 100) - Math.round(lastWeek * 100),
   };
+}
+
+/**
+ * Progreso hacia el objetivo de peso, en 0-1 y en kg. "Mantener" mide la
+ * estabilidad (cuánto te has alejado del peso inicial, hasta 3 kg de margen).
+ */
+export function goalProgress(profile: Profile | null) {
+  if (!profile || !profile.goal_type) return { pct: 0, done: 0, total: 0, unit: "kg" };
+  const start = Number(profile.start_weight_kg ?? 0);
+  const current = Number(profile.current_weight_kg ?? start);
+  const total = Number(profile.goal_amount ?? 0);
+  if (profile.goal_type === "mantener" || total <= 0) {
+    const drift = Math.abs(current - start);
+    return { pct: Math.max(0, Math.min(1, 1 - drift / 3)), done: drift, total: 0, unit: "kg" };
+  }
+  const done = profile.goal_type === "perder" ? start - current : current - start;
+  return {
+    pct: Math.max(0, Math.min(1, done / total)),
+    done: Math.max(0, done),
+    total,
+    unit: "kg",
+  };
+}
+
+/**
+ * Corrección retroactiva de un día pasado (historial). Solo toca el registro
+ * personal; nunca reescribe la compra ya confirmada de ese mes. El día de hoy
+ * se corrige desde la pestaña Hoy, no aquí.
+ */
+export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
+  if (date >= todayISO()) throw new Error("Solo se pueden corregir días pasados");
+  const { data, error } = await supabase
+    .from("daily_logs")
+    .update(patch as never)
+    .eq("log_date", date)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error("No se ha podido guardar la corrección");
 }

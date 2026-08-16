@@ -136,3 +136,52 @@ export function mealsForDate(plan: MonthlyPlan | null, date: string): PlanMeal[]
 /** Aviso corto para pantalla cuando un plato lleva algo que no se compró. */
 export const offListNote = (names: string[] | undefined) =>
   names?.length ? `Fuera de tu compra: ${names.join(", ")}` : null;
+
+/** Suma días a una fecha YYYY-MM-DD y devuelve otra fecha YYYY-MM-DD. */
+export const addDays = (date: string, days: number) => {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** Lista de la compra tal como la guarda el plan mensual. */
+export type ShoppingList = { category: string; items: { name: string }[] }[];
+
+/** Menú de los próximos días, para que el coach sepa qué está cambiando. */
+export function upcomingMeals(plan: MonthlyPlan | null, today: string, days = 7) {
+  if (!plan) return [];
+  const month = today.slice(0, 7);
+  const out: Record<string, string>[] = [];
+  for (let i = 0; i < days; i++) {
+    const date = addDays(today, i);
+    if (date.slice(0, 7) !== month) break;
+    out.push({
+      fecha: date,
+      dia: weekdayName(date),
+      ...Object.fromEntries(mealsForDate(plan, date).map((m) => [m.slot, m.idea])),
+    });
+  }
+  return out;
+}
+
+/**
+ * Contexto del plan que se manda al coach en cada mensaje: qué hay comprado y
+ * los próximos días de menú, para que sus respuestas y cambios encajen con el
+ * plan real. Copia de `src/lib/plan-shared.ts` de la web.
+ */
+export function coachPlanContext(
+  row:
+    | { plan: MonthlyPlan | null; shopping: ShoppingList | null; confirmed_at: string | null }
+    | null
+    | undefined,
+  today: string,
+) {
+  if (!row?.plan) return { compra: null, proximos: [] };
+  return {
+    compra: {
+      confirmada: Boolean(row.confirmed_at),
+      ingredientes: (row.shopping ?? []).flatMap((g) => g.items.map((i) => i.name)),
+    },
+    proximos: upcomingMeals(row.plan, today),
+  };
+}
