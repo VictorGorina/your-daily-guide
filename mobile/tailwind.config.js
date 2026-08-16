@@ -29,6 +29,12 @@ module.exports = {
         "danger-foreground": "#f9fcff",
         warning: "#e19600",
         "warning-foreground": "#2b1f11",
+        // Semáforo de hábitos (verde), compartido por WeekStrip y MonthCalendar.
+        success: "#4aa969",
+        "success-foreground": "#f7fef8",
+        "success-soft": "#c8f1d1",
+        destructive: "#d24c49",
+        "destructive-foreground": "#f9fcff",
         border: "#dce4ec",
         input: "#dce4ec",
       },

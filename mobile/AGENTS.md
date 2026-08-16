@@ -42,6 +42,15 @@ CocoaPods hace falta para compilar. Instálalo con `brew install cocoapods`, no 
 `gem install` que intenta Expo por su cuenta: ese usa el Ruby del sistema y se queda pidiendo
 permisos de administrador.
 
+**Compila siempre con locale UTF-8:** `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo run:ios
+--device <udid>`. Sin locale UTF-8, `pod install` bajo el Ruby de Homebrew muere con
+`Unicode Normalization not appropriate for ASCII-8BIT (Encoding::CompatibilityError)`; es un
+fallo duro, no un aviso.
+
+**Tras añadir un módulo nativo** (p. ej. `react-native-svg`), Metro sirve caché rancia y lanza
+`Unable to resolve module <x>` aunque el módulo esté instalado y el pod compilado. Reinicia
+Metro con `npx expo start --clear` (mata antes el Metro que deja `expo run:ios` en el 8081).
+
 ## Desarrollo
 
 ```sh

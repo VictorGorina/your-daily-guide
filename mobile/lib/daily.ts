@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import type { MonthlyPlan } from "./plan-shared";
 
 /**
  * Acceso a los datos del día, equivalente móvil de `src/lib/daily.ts` de la web.
@@ -146,4 +147,122 @@ export async function updateTodayLog(patch: Partial<DailyLog>) {
     .update(patch as never)
     .eq("log_date", todayISO());
   if (error) throw error;
+}
+
+export type ChatMessage = {
+  id: string;
+  log_date: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+/** Guarda un mensaje en el historial de chat del día de hoy (mismo backend que la web). */
+export async function addMessage(role: "user" | "assistant", content: string) {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Sin sesión");
+  const { error } = await supabase
+    .from("chat_messages")
+    .insert({ user_id: auth.user.id, role, content, log_date: todayISO() } as never);
+  if (error) throw error;
+}
+
+// --- Plan mensual (solo lectura, lo que Hoy necesita) ---
+
+export type MonthlyPlanRow = {
+  id: string;
+  month: string;
+  plan: MonthlyPlan | null;
+  // La lista de la compra no se usa en Hoy; se tipa cuando se porte la pantalla Plan.
+  shopping: unknown;
+  confirmed_at: string | null;
+};
+
+/** Mes actual en formato YYYY-MM, para la clave del plan mensual. */
+export const monthISO = () => todayISO().slice(0, 7);
+
+export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
+  const { data, error } = await supabase
+    .from("monthly_plans")
+    .select("id, month, plan, shopping, confirmed_at")
+    .eq("month", month)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data as unknown as MonthlyPlanRow | null) ?? null;
+}
+
+// --- Señales de progreso (impulso, tendencia semanal, semáforo) ---
+
+export type RatioSignal = "success" | "warning" | "muted" | "none";
+
+/**
+ * Semáforo de cumplimiento diario, compartido por WeekStrip y MonthCalendar.
+ * Deliberadamente sin rojo: un día flojo se marca "muted" (gris neutro), nunca
+ * como fallo. "none" es solo para días sin ningún registro.
+ */
+export function ratioSignal(done: number, total: number): RatioSignal {
+  if (!total) return "none";
+  const ratio = done / total;
+  if (ratio >= 1) return "success";
+  if (ratio > 0) return "warning";
+  return "muted";
+}
+
+function dailyRatio(log: DailyLog | undefined) {
+  const habits = log?.habits ?? [];
+  return habits.length ? habits.filter((h) => h.done).length / habits.length : 0;
+}
+
+/**
+ * "Impulso": indicador de racha suave que nunca resetea a cero. Es una media
+ * móvil exponencial (EMA) del cumplimiento diario expresada en 0-100: un día
+ * flojo la hace bajar, no la borra; unos días buenos la recuperan rápido.
+ * `days` limita cuánto histórico pesa (por defecto, las últimas 3 semanas).
+ */
+export function impulsoFrom(logs: DailyLog[], days = 21): number {
+  const sorted = [...logs].sort((a, b) => (a.log_date < b.log_date ? -1 : 1)).slice(-days);
+  if (!sorted.length) return 0;
+  const alpha = 0.25;
+  let impulso = 0;
+  for (const log of sorted) {
+    impulso = alpha * (dailyRatio(log) * 100) + (1 - alpha) * impulso;
+  }
+  return Math.round(impulso);
+}
+
+export type WeeklyTrend = { thisWeek: number; lastWeek: number; deltaPts: number };
+
+/**
+ * Compara el cumplimiento medio de los últimos 7 días con el de los 7
+ * anteriores. Devuelve null si no hay al menos 2 días registrados en cada una
+ * de las dos semanas para que la comparación signifique algo.
+ */
+export function weeklyTrendFrom(logs: DailyLog[]): WeeklyTrend | null {
+  const todayStr = todayISO();
+  const byDate = new Map(logs.map((l) => [l.log_date, l]));
+  const avgRatioFor = (offsetStart: number, offsetEnd: number) => {
+    const d = new Date(`${todayStr}T00:00:00`);
+    let sum = 0;
+    let counted = 0;
+    for (let i = offsetStart; i < offsetEnd; i++) {
+      const day = new Date(d);
+      day.setDate(d.getDate() - i);
+      const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      const log = byDate.get(iso);
+      if (!log || !(log.habits ?? []).length) continue;
+      sum += dailyRatio(log);
+      counted += 1;
+    }
+    return counted >= 2 ? sum / counted : null;
+  };
+
+  const thisWeek = avgRatioFor(0, 7);
+  const lastWeek = avgRatioFor(7, 14);
+  if (thisWeek == null || lastWeek == null) return null;
+  return {
+    thisWeek: Math.round(thisWeek * 100),
+    lastWeek: Math.round(lastWeek * 100),
+    deltaPts: Math.round(thisWeek * 100) - Math.round(lastWeek * 100),
+  };
 }
