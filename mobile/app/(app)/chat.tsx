@@ -154,7 +154,14 @@ export default function Chat() {
         });
       }
     },
-    onFinish: ({ message }) => {
+    onFinish: ({ message, finishReason, isAbort, isError }) => {
+      // Un turno con herramientas emite VARIOS mensajes de asistente: el que
+      // invoca la tool termina con finishReason "tool-calls" y se auto-continúa;
+      // el TERMINAL (la respuesta final) con "stop". Ojo: el terminal también
+      // incluye el tool part, así que NO vale filtrar por isToolUIPart —
+      // finishReason es el único discriminador fiable. Antes onFinish persistía
+      // cada mensaje → filas duplicadas en la BD.
+      if (isAbort || isError || finishReason === "tool-calls") return;
       const text = message.parts
         .map((p) => (p.type === "text" ? p.text : ""))
         .join("")
