@@ -1,3 +1,4 @@
+import { currentUserId } from "@/lib/auth-headers";
 import { supabase } from "@/integrations/supabase/client";
 import { cleanSharedMeals, type SharedMeals } from "@/lib/household-shared";
 
@@ -45,8 +46,7 @@ const randomCode = () => {
 };
 
 export async function fetchHousehold(): Promise<HouseholdState> {
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id;
+  const userId = await currentUserId();
   if (!userId) return { household: null, members: [], children: [], me: null };
 
   const { data: membership } = await supabase
@@ -91,8 +91,7 @@ export async function fetchHousehold(): Promise<HouseholdState> {
 }
 
 export async function createHousehold(name: string): Promise<string> {
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id;
+  const userId = await currentUserId();
   if (!userId) throw new Error("Sin sesión");
 
   const { data, error } = await supabase
@@ -120,9 +119,9 @@ export async function joinHousehold(code: string) {
 }
 
 export async function leaveHousehold() {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
-  const { error } = await supabase.from("household_members").delete().eq("user_id", auth.user.id);
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
+  const { error } = await supabase.from("household_members").delete().eq("user_id", userId);
   if (error) throw error;
 }
 
@@ -158,12 +157,12 @@ export async function clearHouseholdGoal(id: string) {
 }
 
 export async function saveSharedMeals(shared: SharedMeals) {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   const { error } = await supabase
     .from("household_members")
     .update({ shared_meals: shared as never } as never)
-    .eq("user_id", auth.user.id);
+    .eq("user_id", userId);
   if (error) throw error;
 }
 

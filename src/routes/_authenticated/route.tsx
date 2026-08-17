@@ -6,9 +6,14 @@ import { supabase } from "@/integrations/supabase/client";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
-    return { user: data.user };
+    // Sesión LOCAL, sin llamada de red: getUser() revalidaba el token contra el
+    // servidor de Auth en cada navegación, y en el arranque en frío justo tras
+    // el registro (token aún no adjunto) esa carrera dejaba la pantalla en
+    // blanco. getSession() lee el JWT ya almacenado; RLS sigue protegiendo cada
+    // consulta en el servidor.
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) throw redirect({ to: "/auth" });
+    return { user: data.session.user };
   },
   component: () => (
     <>

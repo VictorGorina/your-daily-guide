@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { currentUserId } from "@/lib/auth-headers";
 
 export type Profile = {
   id: string;
@@ -103,23 +104,23 @@ export const todayISO = () => {
 };
 
 export async function fetchProfile(): Promise<Profile | null> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const userId = await currentUserId();
+  if (!userId) return null;
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", auth.user.id)
+    .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
   return (data as Profile | null) ?? null;
 }
 
 export async function saveProfile(patch: Partial<Profile>) {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   const { error } = await supabase
     .from("profiles")
-    .upsert({ id: auth.user.id, ...patch } as never, { onConflict: "id" });
+    .upsert({ id: userId, ...patch } as never, { onConflict: "id" });
   if (error) throw error;
 }
 
@@ -134,8 +135,8 @@ export async function fetchLogs(): Promise<DailyLog[]> {
 }
 
 export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   const date = todayISO();
   const { data: existing } = await supabase
     .from("daily_logs")
@@ -146,7 +147,7 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
   const { data, error } = await supabase
     .from("daily_logs")
     .insert({
-      user_id: auth.user.id,
+      user_id: userId,
       log_date: date,
       habits: habits.map((label) => ({ label, done: false })),
     } as never)
@@ -220,11 +221,11 @@ export async function fetchChatDays(): Promise<{ date: string; count: number }[]
 }
 
 export async function addMessage(role: "user" | "assistant", content: string) {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   const { error } = await supabase
     .from("chat_messages")
-    .insert({ user_id: auth.user.id, role, content, log_date: todayISO() } as never);
+    .insert({ user_id: userId, role, content, log_date: todayISO() } as never);
   if (error) throw error;
 }
 
