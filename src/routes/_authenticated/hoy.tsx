@@ -9,7 +9,6 @@ import { BottomNav } from "@/components/bottom-nav";
 import { DishRecipe } from "@/components/dish-recipe";
 import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
-import { MonthCalendar } from "@/components/month-calendar";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
 import {
@@ -67,7 +66,6 @@ function Hoy() {
   const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
 
@@ -272,20 +270,18 @@ function Hoy() {
             </div>
           </div>
         ) : nextMeal ? (
-          <div className="rounded-3xl bg-primary p-5 text-primary-foreground">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-primary-foreground/70">
+          <div className="rounded-3xl bg-primary p-5 text-neutral-200">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-200/70">
               Siguiente · {nextMeal.label}
             </span>
             <p className="mt-1 font-display text-xl leading-snug">
               {nextIdea || "Aún no hay menú para esta comida"}
             </p>
             {offListNote(nextPlanned?.off) ? (
-              <p className="mt-1.5 text-xs text-primary-foreground/80">
-                {offListNote(nextPlanned?.off)}
-              </p>
+              <p className="mt-1.5 text-xs text-neutral-200/80">{offListNote(nextPlanned?.off)}</p>
             ) : null}
             {sharedWith(nextMeal.label) ? (
-              <p className="mt-1.5 text-xs text-primary-foreground/80">
+              <p className="mt-1.5 text-xs text-neutral-200/80">
                 Base común con {sharedWith(nextMeal.label)}. ¿Ración distinta? dilo en "comiste otra
                 cosa".
               </p>
@@ -297,7 +293,7 @@ function Hoy() {
             >
               Comí esto
             </button>
-            <div className="mt-2.5 flex items-center justify-center gap-5 text-xs font-medium text-primary-foreground/80">
+            <div className="mt-2.5 flex items-center justify-center gap-5 text-xs font-medium text-neutral-200/80">
               <button type="button" onClick={() => handleMealStatus(nextIndex!, "distinto")}>
                 ¿comiste otra cosa?
               </button>
@@ -488,29 +484,6 @@ function Hoy() {
         />
         {openDay ? <DayMenu date={openDay} plan={planQ.data?.plan ?? null} /> : null}
         <p className="mt-2 px-1 text-[11px] text-muted-foreground">Toca un día para ver su menú.</p>
-      </section>
-
-      <section className="mt-4">
-        <button
-          type="button"
-          onClick={() => setCalendarOpen((o) => !o)}
-          aria-expanded={calendarOpen}
-          className="flex w-full items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-left text-xs font-medium text-muted-foreground"
-        >
-          <span>Ver calendario del mes</span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform ${calendarOpen ? "rotate-180" : ""}`}
-          />
-        </button>
-        {calendarOpen ? (
-          <MonthCalendar
-            logs={logsQ.data ?? []}
-            plan={planQ.data?.plan ?? null}
-            planHabits={
-              habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)
-            }
-          />
-        ) : null}
       </section>
 
       <GuidedLogSheet
