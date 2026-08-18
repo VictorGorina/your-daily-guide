@@ -59,12 +59,12 @@ export const Route = createFileRoute("/_authenticated/perfil")({
   component: Perfil,
   head: () => ({
     meta: [
-      { title: "Mis respuestas · Daily Guide" },
+      { title: "Mis respuestas · Peppers" },
       {
         name: "description",
-        content: "Revisa y corrige en dos toques cualquier respuesta de tu perfil de Daily Guide.",
+        content: "Revisa y corrige en dos toques cualquier respuesta de tu perfil de Peppers.",
       },
-      { property: "og:title", content: "Mis respuestas · Daily Guide" },
+      { property: "og:title", content: "Mis respuestas · Peppers" },
       {
         property: "og:description",
         content: "Edita tus datos de salud, rutina y objetivos sin repetir el onboarding.",

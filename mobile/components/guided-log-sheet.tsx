@@ -139,7 +139,7 @@ export function GuidedLogSheet({
       description="Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan."
     >
       <View className="gap-5 pb-8 pt-4">
-        {contextNote ? <Text className="text-xs font-medium text-primary">{contextNote}</Text> : null}
+        {contextNote ? <Text className="text-xs font-sans-medium text-primary">{contextNote}</Text> : null}
 
         <View className="flex-row gap-2">
           <Pressable
@@ -148,7 +148,7 @@ export function GuidedLogSheet({
               mode === "actividad" ? "border-primary bg-primary-soft" : "border-border"
             }`}
           >
-            <Activity size={16} color={mode === "actividad" ? "#1d2a37" : "#677380"} />
+            <Activity size={16} color={mode === "actividad" ? "#3e3d39" : "#83796c"} />
             <Text className={mode === "actividad" ? "text-sm text-foreground" : "text-sm text-muted-foreground"}>
               Actividad
             </Text>
@@ -159,7 +159,7 @@ export function GuidedLogSheet({
               mode === "exceso" ? "border-primary bg-primary-soft" : "border-border"
             }`}
           >
-            <UtensilsCrossed size={16} color={mode === "exceso" ? "#1d2a37" : "#677380"} />
+            <UtensilsCrossed size={16} color={mode === "exceso" ? "#3e3d39" : "#83796c"} />
             <Text className={mode === "exceso" ? "text-sm text-foreground" : "text-sm text-muted-foreground"}>
               Exceso o ajuste
             </Text>
@@ -190,7 +190,7 @@ export function GuidedLogSheet({
                 value={minutes}
                 onChangeText={setMinutes}
                 placeholder="30"
-                placeholderTextColor="#677380"
+                placeholderTextColor="#83796c"
               />
             </View>
 
@@ -224,7 +224,7 @@ export function GuidedLogSheet({
                 value={what}
                 onChangeText={setWhat}
                 placeholder="Por ejemplo: he comido pizza y postre en una comida familiar"
-                placeholderTextColor="#677380"
+                placeholderTextColor="#83796c"
               />
             </View>
 
@@ -238,7 +238,7 @@ export function GuidedLogSheet({
                 value={kcal}
                 onChangeText={setKcal}
                 placeholder="Si no lo sabes, déjalo vacío"
-                placeholderTextColor="#677380"
+                placeholderTextColor="#83796c"
               />
             </View>
           </>
@@ -251,7 +251,7 @@ export function GuidedLogSheet({
           disabled={disabled}
           className="w-full items-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
         >
-          <Text className="text-sm font-semibold text-primary-foreground">
+          <Text className="text-sm font-sans-semibold text-primary-foreground">
             Enviar al coach y ajustar plan
           </Text>
         </Pressable>

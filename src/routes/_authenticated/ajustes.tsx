@@ -354,7 +354,7 @@ function Ajustes() {
         {!pushSupported ? (
           <FieldNote help="Este navegador no soporta notificaciones push." />
         ) : iosHint ? (
-          <FieldNote help="En iPhone: añade Daily Guide a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) para poder recibir avisos." />
+          <FieldNote help="En iPhone: añade Peppers a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) para poder recibir avisos." />
         ) : null}
       </section>
 

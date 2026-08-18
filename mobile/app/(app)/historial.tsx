@@ -32,7 +32,7 @@ export default function Historial() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6">
-        <Text className="text-3xl font-semibold text-foreground">Historial</Text>
+        <Text className="text-3xl font-display text-foreground">Historial</Text>
         <Text className="mt-1 text-sm text-muted-foreground">
           Cada día cuenta. Toca un día para ver su conversación.
         </Text>
@@ -40,12 +40,12 @@ export default function Historial() {
         {/* Progreso hacia el objetivo */}
         <View className="mt-6 rounded-3xl border border-border bg-surface p-5">
           <View className="flex-row items-center justify-between">
-            <Text className="text-sm font-semibold text-foreground">
+            <Text className="text-sm font-sans-semibold text-foreground">
               {profile?.goal_type === "mantener"
                 ? "Estabilidad"
                 : `${progress.done.toFixed(1)} de ${progress.total} kg`}
             </Text>
-            <Text className="text-sm font-bold tabular-nums text-primary">
+            <Text className="text-sm font-sans-bold tabular-nums text-primary">
               {Math.round(progress.pct * 100)}%
             </Text>
           </View>
@@ -65,7 +65,7 @@ export default function Historial() {
 
         <AdherenceHeatmap logs={logs} />
 
-        <Text className="mt-6 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <Text className="mt-6 px-1 text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
           Conversación por día
         </Text>
         <View className="mt-2 gap-2">
@@ -123,14 +123,14 @@ function WeightTrend({ logs }: { logs: DailyLog[] }) {
         <Polyline
           points={coords}
           fill="none"
-          stroke="#4f8ac6"
+          stroke="#6dbe7b"
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       </Svg>
       <View className="min-w-0 flex-1">
-        <Text className="text-sm font-semibold tabular-nums text-foreground">{last} kg</Text>
+        <Text className="text-sm font-sans-semibold tabular-nums text-foreground">{last} kg</Text>
         <Text className="text-[11px] text-muted-foreground">
           {delta === 0 ? "Sin cambios" : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} kg`} en tus
           últimos {points.length} pesajes
@@ -166,7 +166,7 @@ function AdherenceHeatmap({ logs }: { logs: DailyLog[] }) {
 
   return (
     <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
-      <Text className="text-sm font-semibold text-foreground">Adherencia · últimos 14 días</Text>
+      <Text className="text-sm font-sans-semibold text-foreground">Adherencia · últimos 14 días</Text>
       <View className="mt-3 gap-1.5">
         {rows.map((row, r) => (
           <View key={r} className="flex-row gap-1.5">
@@ -224,7 +224,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
         className="flex-row items-center justify-between gap-3 p-4 active:opacity-80"
       >
         <View className="min-w-0 flex-1">
-          <Text className="text-sm font-medium capitalize text-foreground" numberOfLines={1}>
+          <Text className="text-sm font-sans-medium capitalize text-foreground" numberOfLines={1}>
             {dayLabel}
           </Text>
           <Text className="text-xs text-muted-foreground">
@@ -233,7 +233,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
           </Text>
         </View>
         <View className="h-10 w-10 items-center justify-center rounded-full bg-secondary">
-          <Text className="text-xs font-semibold text-foreground">{Math.round(ratio * 100)}%</Text>
+          <Text className="text-xs font-sans-semibold text-foreground">{Math.round(ratio * 100)}%</Text>
         </View>
       </Pressable>
 
@@ -245,7 +245,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
 
           {habits.length ? (
             <View className="mb-4 gap-1.5">
-              <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
                 Comidas
               </Text>
               {habits.map((h, i) => (
@@ -274,7 +274,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
                             }`}
                           >
                             <Text
-                              className={`text-xs font-semibold ${
+                              className={`text-xs font-sans-semibold ${
                                 active ? "text-background" : "text-muted-foreground"
                               }`}
                             >

@@ -127,11 +127,11 @@ export default function Ajustes() {
         contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6"
         keyboardShouldPersistTaps="handled"
       >
-        <Text className="text-3xl font-semibold text-foreground">Ajustes</Text>
+        <Text className="text-3xl font-display text-foreground">Ajustes</Text>
 
         {missing.length ? (
           <View className="mt-4 flex-row items-start gap-2 rounded-2xl border border-primary/30 bg-primary-soft px-4 py-3">
-            <Info size={16} color="#4f8ac6" style={{ marginTop: 1 }} />
+            <Info size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
             <Text className="flex-1 text-xs text-foreground">
               Para que el progreso y los avisos funcionen bien, completa: {missing.join(", ")}.
             </Text>
@@ -139,7 +139,7 @@ export default function Ajustes() {
         ) : null}
 
         {/* Cuenta */}
-        <Text className="mt-6 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Cuenta
         </Text>
         <View className="mt-2 overflow-hidden rounded-3xl border border-border bg-surface">
@@ -147,41 +147,41 @@ export default function Ajustes() {
             onPress={() => router.navigate("/hogar")}
             className="flex-row items-center gap-3 border-b border-border px-4 py-4 active:opacity-70"
           >
-            <Users size={16} color="#4f8ac6" />
+            <Users size={16} color="#6dbe7b" />
             <View className="min-w-0 flex-1">
-              <Text className="text-sm font-medium text-foreground">Tu hogar</Text>
+              <Text className="text-sm font-sans-medium text-foreground">Tu hogar</Text>
               <Text className="text-xs text-muted-foreground">
                 Une cuentas, elige qué comidas compartís y añade a los peques
               </Text>
             </View>
-            <ChevronRight size={16} color="#677380" />
+            <ChevronRight size={16} color="#83796c" />
           </Pressable>
           <Pressable
             onPress={() => router.navigate("/perfil")}
             className="flex-row items-center gap-3 px-4 py-4 active:opacity-70"
           >
-            <Pencil size={16} color="#4f8ac6" />
+            <Pencil size={16} color="#6dbe7b" />
             <View className="min-w-0 flex-1">
-              <Text className="text-sm font-medium text-foreground">Editar mis respuestas</Text>
+              <Text className="text-sm font-sans-medium text-foreground">Editar mis respuestas</Text>
               <Text className="text-xs text-muted-foreground">
                 Corrige cualquier dato del onboarding en dos toques
               </Text>
             </View>
-            <ChevronRight size={16} color="#677380" />
+            <ChevronRight size={16} color="#83796c" />
           </Pressable>
         </View>
 
         {/* Perfil — datos básicos */}
-        <Text className="mt-6 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Perfil
         </Text>
         <View className="mt-2 gap-4 rounded-3xl border border-border bg-surface p-5">
-          <Text className="text-sm font-semibold text-foreground">Datos básicos</Text>
+          <Text className="text-sm font-sans-semibold text-foreground">Datos básicos</Text>
           <TextInput
             key={`name-${seed}`}
             defaultValue={profile?.display_name ?? ""}
             placeholder="Nombre"
-            placeholderTextColor="#9aa5b1"
+            placeholderTextColor="#a69d8f"
             onEndEditing={(e) => save.mutate({ display_name: e.nativeEvent.text || null })}
             className={inputClass}
           />
@@ -191,7 +191,7 @@ export default function Ajustes() {
                 key={`weight-${seed}`}
                 defaultValue={profile?.current_weight_kg?.toString() ?? ""}
                 placeholder="Peso (kg)"
-                placeholderTextColor="#9aa5b1"
+                placeholderTextColor="#a69d8f"
                 keyboardType="decimal-pad"
                 onEndEditing={(e) =>
                   commitNumber(
@@ -212,7 +212,7 @@ export default function Ajustes() {
                 key={`height-${seed}`}
                 defaultValue={profile?.height_cm?.toString() ?? ""}
                 placeholder="Altura (cm)"
-                placeholderTextColor="#9aa5b1"
+                placeholderTextColor="#a69d8f"
                 keyboardType="decimal-pad"
                 onEndEditing={(e) =>
                   commitNumber(
@@ -234,7 +234,7 @@ export default function Ajustes() {
               key={`goal-${seed}`}
               defaultValue={profile?.goal_amount?.toString() ?? ""}
               placeholder="Objetivo (kg)"
-              placeholderTextColor="#9aa5b1"
+              placeholderTextColor="#a69d8f"
               keyboardType="decimal-pad"
               onEndEditing={(e) =>
                 commitNumber(
@@ -256,12 +256,12 @@ export default function Ajustes() {
         </View>
 
         {/* Coach */}
-        <Text className="mt-6 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Coach
         </Text>
         <View className="mt-2 gap-4 rounded-3xl border border-border bg-surface p-5">
           <View>
-            <Text className="text-sm font-semibold text-foreground">Tono</Text>
+            <Text className="text-sm font-sans-semibold text-foreground">Tono</Text>
             <View className="mt-3 flex-row gap-2">
               {["relajado", "neutro", "exigente"].map((t) => {
                 const active = profile?.tone === t;
@@ -285,7 +285,7 @@ export default function Ajustes() {
           </View>
 
           <View className="border-t border-border pt-4">
-            <Text className="text-sm font-semibold text-foreground">Recordatorios</Text>
+            <Text className="text-sm font-sans-semibold text-foreground">Recordatorios</Text>
             <View className="mt-3 flex-row gap-3">
               <View className="flex-1">
                 <Text className="text-xs text-muted-foreground">Mañana</Text>
@@ -293,7 +293,7 @@ export default function Ajustes() {
                   key={`morning-${seed}`}
                   defaultValue={profile?.morning_time?.slice(0, 5) ?? "08:00"}
                   placeholder="HH:MM"
-                  placeholderTextColor="#9aa5b1"
+                  placeholderTextColor="#a69d8f"
                   keyboardType="numbers-and-punctuation"
                   onEndEditing={(e) => commitTime("morning_time", e.nativeEvent.text)}
                   className={`${inputClass} mt-1`}
@@ -306,7 +306,7 @@ export default function Ajustes() {
                   key={`evening-${seed}`}
                   defaultValue={profile?.evening_time?.slice(0, 5) ?? "21:30"}
                   placeholder="HH:MM"
-                  placeholderTextColor="#9aa5b1"
+                  placeholderTextColor="#a69d8f"
                   keyboardType="numbers-and-punctuation"
                   onEndEditing={(e) => commitTime("evening_time", e.nativeEvent.text)}
                   className={`${inputClass} mt-1`}
@@ -318,21 +318,21 @@ export default function Ajustes() {
         </View>
 
         {/* Datos y cuenta */}
-        <Text className="mt-6 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Datos y cuenta
         </Text>
         <Pressable
           onPress={() => void signOut()}
           className="mt-2 w-full items-center rounded-full border border-input py-4 active:opacity-80"
         >
-          <Text className="text-sm font-medium text-muted-foreground">Cerrar sesión</Text>
+          <Text className="text-sm font-sans-medium text-muted-foreground">Cerrar sesión</Text>
         </Pressable>
         <Pressable
           onPress={confirmDelete}
           disabled={deleting}
           className="mt-3 w-full items-center rounded-full border border-destructive/30 py-4 active:opacity-80"
         >
-          <Text className="text-sm font-medium text-destructive">
+          <Text className="text-sm font-sans-medium text-destructive">
             {deleting ? "Eliminando..." : "Eliminar cuenta"}
           </Text>
         </Pressable>
@@ -347,7 +347,7 @@ function FieldNote({ error, help }: { error?: string; help: string }) {
   if (error)
     return (
       <View className="mt-1 flex-row items-start gap-1">
-        <AlertCircle size={12} color="#d24c49" style={{ marginTop: 2 }} />
+        <AlertCircle size={12} color="#e2685f" style={{ marginTop: 2 }} />
         <Text className="flex-1 text-[11px] text-destructive">{error}</Text>
       </View>
     );

@@ -108,8 +108,8 @@ export function NightlyReviewSheet({
       onOpenChange={onOpenChange}
       title={
         <View className="flex-row items-center gap-2">
-          <Moon size={16} color="#4f8ac6" />
-          <Text className="text-lg font-semibold text-foreground">Repaso de hoy</Text>
+          <Moon size={16} color="#6dbe7b" />
+          <Text className="text-lg font-sans-semibold text-foreground">Repaso de hoy</Text>
         </View>
       }
       description="Menos de un minuto, sin nota ni examen."
@@ -117,7 +117,7 @@ export function NightlyReviewSheet({
       <View className="gap-4 pb-8 pt-4">
         {pending.length > 0 && onSkipPending ? (
           <View className="rounded-3xl border border-dashed border-primary/40 bg-surface p-4">
-            <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
               Sin marcar todavía
             </Text>
             <Text className="mt-1 text-sm text-foreground">
@@ -128,13 +128,13 @@ export function NightlyReviewSheet({
               onPress={onSkipPending}
               className="mt-3 w-full items-center rounded-full bg-secondary py-3 active:opacity-90"
             >
-              <Text className="text-sm font-medium text-secondary-foreground">Hoy paso de estas</Text>
+              <Text className="text-sm font-sans-medium text-secondary-foreground">Hoy paso de estas</Text>
             </Pressable>
           </View>
         ) : null}
 
         <View className="rounded-3xl border border-border bg-surface p-4">
-          <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
             Comidas de hoy
           </Text>
           <Text className="mt-1 text-sm text-foreground">
@@ -150,7 +150,7 @@ export function NightlyReviewSheet({
 
         {trendLine ? (
           <View className="rounded-3xl border border-border bg-surface p-4">
-            <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
               Esta semana
             </Text>
             <Text className="mt-1 text-sm text-foreground">{trendLine}</Text>
@@ -165,7 +165,7 @@ export function NightlyReviewSheet({
           onPress={onDone}
           className="w-full items-center rounded-full bg-primary py-4 active:opacity-90"
         >
-          <Text className="text-sm font-semibold text-primary-foreground">Listo, hasta mañana</Text>
+          <Text className="text-sm font-sans-semibold text-primary-foreground">Listo, hasta mañana</Text>
         </Pressable>
       </View>
     </Sheet>

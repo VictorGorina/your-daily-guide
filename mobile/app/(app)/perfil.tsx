@@ -109,18 +109,18 @@ export default function Perfil() {
           className="flex-row items-center gap-1 self-start active:opacity-70"
           hitSlop={8}
         >
-          <ChevronLeft size={16} color="#677380" />
-          <Text className="text-xs font-medium text-muted-foreground">Ajustes</Text>
+          <ChevronLeft size={16} color="#83796c" />
+          <Text className="text-xs font-sans-medium text-muted-foreground">Ajustes</Text>
         </Pressable>
 
-        <Text className="mt-3 text-3xl font-semibold text-foreground">Mis respuestas</Text>
+        <Text className="mt-3 text-3xl font-display text-foreground">Mis respuestas</Text>
         <Text className="mt-1 text-sm text-muted-foreground">
           Toca cualquier respuesta para corregirla. No hace falta repetir el onboarding.
         </Text>
 
         {PROFILE_SECTIONS.map((section) => (
           <View key={section.title} className="mt-5 rounded-3xl border border-border bg-surface p-4">
-            <Text className="px-1 text-sm font-semibold text-foreground">{section.title}</Text>
+            <Text className="px-1 text-sm font-sans-semibold text-foreground">{section.title}</Text>
             <View className="mt-2">
               {section.fields.map((field, idx) => {
                 const isEditing = editing === String(field.key);
@@ -132,7 +132,7 @@ export default function Perfil() {
                   >
                     {isEditing ? (
                       <View className="rounded-2xl bg-primary-soft/40 p-3">
-                        <Text className="text-xs font-medium text-foreground">{field.label}</Text>
+                        <Text className="text-xs font-sans-medium text-foreground">{field.label}</Text>
                         {field.kind === "chips" ? (
                           <View className="mt-2 flex-row flex-wrap gap-2">
                             {field.options?.map((opt) => {
@@ -163,7 +163,7 @@ export default function Perfil() {
                             numberOfLines={3}
                             value={draft}
                             onChangeText={setDraft}
-                            placeholderTextColor="#9aa5b1"
+                            placeholderTextColor="#a69d8f"
                             className="mt-2 min-h-24 w-full rounded-2xl border border-input bg-surface px-4 py-3 text-sm text-foreground"
                           />
                         ) : (
@@ -186,14 +186,14 @@ export default function Perfil() {
                                   ? "AAAA-MM-DD"
                                   : ""
                             }
-                            placeholderTextColor="#9aa5b1"
+                            placeholderTextColor="#a69d8f"
                             className={inputClass}
                           />
                         )}
 
                         {error ? (
                           <View className="mt-2 flex-row items-start gap-1">
-                            <AlertCircle size={12} color="#d24c49" style={{ marginTop: 2 }} />
+                            <AlertCircle size={12} color="#e2685f" style={{ marginTop: 2 }} />
                             <Text className="flex-1 text-[11px] text-destructive">{error}</Text>
                           </View>
                         ) : null}
@@ -204,8 +204,8 @@ export default function Perfil() {
                               onPress={() => commit(field)}
                               className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 active:opacity-90"
                             >
-                              <Check size={14} color="#f9fcff" />
-                              <Text className="text-xs font-semibold text-primary-foreground">
+                              <Check size={14} color="#3e3d39" />
+                              <Text className="text-xs font-sans-semibold text-primary-foreground">
                                 Guardar
                               </Text>
                             </Pressable>
@@ -213,15 +213,15 @@ export default function Perfil() {
                               onPress={() => setEditing(null)}
                               className="flex-row items-center justify-center gap-1.5 rounded-full border border-input px-4 py-2.5 active:opacity-80"
                             >
-                              <X size={14} color="#677380" />
-                              <Text className="text-xs font-medium text-muted-foreground">
+                              <X size={14} color="#83796c" />
+                              <Text className="text-xs font-sans-medium text-muted-foreground">
                                 Cancelar
                               </Text>
                             </Pressable>
                           </View>
                         ) : (
                           <Pressable onPress={() => setEditing(null)} className="mt-3">
-                            <Text className="text-[11px] font-medium text-muted-foreground">
+                            <Text className="text-[11px] font-sans-medium text-muted-foreground">
                               Cancelar
                             </Text>
                           </Pressable>
@@ -242,7 +242,7 @@ export default function Perfil() {
                             {shown ?? "Sin responder — toca para añadir"}
                           </Text>
                         </View>
-                        <Pencil size={14} color="#677380" style={{ marginTop: 4 }} />
+                        <Pencil size={14} color="#83796c" style={{ marginTop: 4 }} />
                       </Pressable>
                     )}
                   </View>

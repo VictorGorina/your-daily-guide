@@ -31,10 +31,10 @@ export function BottomNav() {
                   active ? "bg-primary" : ""
                 }`}
               >
-                <Icon size={18} color={active ? "#f9fcff" : "#677380"} />
+                <Icon size={18} color={active ? "#3e3d39" : "#83796c"} />
               </View>
               <Text
-                className={`text-[10px] font-semibold ${
+                className={`text-[10px] font-sans-semibold ${
                   active ? "text-foreground" : "text-muted-foreground"
                 }`}
               >

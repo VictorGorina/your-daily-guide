@@ -74,7 +74,7 @@ struct Provider: TimelineProvider {
     }
 }
 
-// MARK: - Paleta (tema "niebla" de la app)
+// MARK: - Paleta (Peppers — ver mobile/tailwind.config.js)
 
 private extension Color {
     init(hex: UInt) {
@@ -86,12 +86,14 @@ private extension Color {
             opacity: 1
         )
     }
-    static let dgForeground = Color(hex: 0x1d2a37)
-    static let dgPrimary = Color(hex: 0x4f8ac6)
-    static let dgMuted = Color(hex: 0x677380)
-    static let dgSuccess = Color(hex: 0x4aa969)
-    static let dgFlame = Color(hex: 0xe19600)
-    static let dgBackground = Color(hex: 0xf6fafd)
+    static let dgForeground = Color(hex: 0x3e3d39)
+    // Verde ligeramente más profundo que el primario de la app (0x6dbe7b): a este
+    // tamaño de texto necesita algo más de contraste sobre el fondo crema.
+    static let dgPrimary = Color(hex: 0x4cae64)
+    static let dgMuted = Color(hex: 0x83796c)
+    static let dgSuccess = Color(hex: 0x3f9a54)
+    static let dgFlame = Color(hex: 0xff8a3d)
+    static let dgBackground = Color(hex: 0xf3f1ed)
 }
 
 // MARK: - Vistas

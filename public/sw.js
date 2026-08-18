@@ -2,7 +2,7 @@
 // Registrado desde src/routes/__root.tsx.
 
 self.addEventListener("push", (event) => {
-  let data = { title: "Daily Guide", body: "", url: "/hoy" };
+  let data = { title: "Peppers", body: "", url: "/hoy" };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {

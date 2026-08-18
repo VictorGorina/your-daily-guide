@@ -168,7 +168,7 @@ const BUDGET_Q: Question = {
  * o, si la pareja no va a usar la app para sincronizar, el total de la casa.
  */
 const PARTNER_APP_Q: Question = {
-  q: "¿Tu pareja también va a usar Daily Guide? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
+  q: "¿Tu pareja también va a usar Peppers? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
   hint: "Así sé si el presupuesto que me des luego es solo tuyo o el de los dos",
   chips: ["Sí, también la usará", "No, de momento no"],
 };
@@ -179,7 +179,7 @@ const SCREENS: Screen[] = [
     subtitle: "Datos biométricos y de salud",
     questions: [
       {
-        q: "Hola, soy tu Daily Guide. Te acompañaré cada día con ideas flexibles, nunca con dietas rígidas ni prisas. Para empezar, ¿cómo te llamo?",
+        q: "Hola, soy Peppers, tu asistente de alimentación con IA. Te acompañaré cada día con ideas flexibles, nunca con dietas rígidas ni prisas. Para empezar, ¿cómo te llamo?",
         hint: "Tu nombre",
       },
       BIRTHDATE_Q,
@@ -1085,7 +1085,7 @@ function PlanGeneratingScreen() {
         />
         <span className="animate-coach-pulse absolute h-32 w-32 rounded-full bg-primary/10" />
         <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/15 [animation-delay:0.6s]" />
-        <span className="animate-breathe relative grid h-16 w-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg">
+        <span className="animate-breathe relative grid h-16 w-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
           <Sparkles className="h-7 w-7" />
         </span>
       </div>

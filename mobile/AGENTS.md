@@ -1,4 +1,4 @@
-# Daily Guide — app nativa (Expo)
+# Peppers — app nativa (Expo)
 
 App de iOS en React Native. Comparte backend con la web: **el mismo proyecto de Supabase**
 (mismo JWT, mismas políticas RLS) y las rutas `/api/v1/*` de la web (ver AGENTS.md de la raíz).

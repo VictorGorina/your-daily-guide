@@ -22,7 +22,7 @@ export function Dialog({
         <Pressable className="absolute inset-0 bg-black/40" onPress={() => onOpenChange(false)} />
         <View className="max-h-[80%] w-full max-w-md rounded-3xl border border-border bg-background p-5">
           {title ? (
-            <Text className="mb-3 text-lg font-semibold capitalize text-foreground">{title}</Text>
+            <Text className="mb-3 text-lg font-sans-semibold capitalize text-foreground">{title}</Text>
           ) : null}
           <ScrollView contentContainerClassName="gap-4">{children}</ScrollView>
         </View>

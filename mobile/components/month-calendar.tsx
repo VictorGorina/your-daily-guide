@@ -66,12 +66,12 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
 
   return (
     <View className="mt-6 rounded-3xl border border-border bg-surface p-5">
-      <Text className="text-sm font-semibold capitalize text-foreground">{monthLabel}</Text>
+      <Text className="text-sm font-sans-semibold capitalize text-foreground">{monthLabel}</Text>
 
       <View className="mt-4 flex-row flex-wrap">
         {WEEKDAYS.map((d, i) => (
           <View key={`${d}-${i}`} className="w-[14.28%] items-center pb-1">
-            <Text className="text-[11px] font-medium text-muted-foreground">{d}</Text>
+            <Text className="text-[11px] font-sans-medium text-muted-foreground">{d}</Text>
           </View>
         ))}
         {cells.map((date, i) => {
@@ -123,7 +123,7 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
         </Text>
 
         <View className="gap-2">
-          <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
             Menú del día
           </Text>
           {!isFuture && selectedLog?.guide?.meals?.length ? (
@@ -148,7 +148,7 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
 
         {!isFuture ? (
           <View className="gap-2">
-            <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
               Comidas del día
             </Text>
             {(selectedHabits.length
@@ -165,9 +165,9 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
                   }`}
                 >
                   {h.done ? (
-                    <Check size={14} color="#f7fef8" />
+                    <Check size={14} color="#fbfaf7" />
                   ) : (
-                    <X size={14} color="#677380" />
+                    <X size={14} color="#83796c" />
                   )}
                 </View>
                 <Text className="flex-1 text-sm text-foreground">{h.label}</Text>
@@ -179,7 +179,7 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
           </View>
         ) : (
           <View className="gap-2">
-            <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
               Comidas previstas
             </Text>
             {planHabits.map((label) => (
@@ -197,7 +197,7 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row gap-3 rounded-xl border border-border bg-surface p-3">
-      <Text className="text-xs font-semibold text-primary">{label}</Text>
+      <Text className="text-xs font-sans-semibold text-primary">{label}</Text>
       <Text className="flex-1 text-sm text-foreground">{value}</Text>
     </View>
   );

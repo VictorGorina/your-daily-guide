@@ -19,7 +19,7 @@ export const Route = createFileRoute("/confirmado")({
       typeof search.error_description === "string" ? search.error_description : undefined,
   }),
   head: () => ({
-    meta: [{ title: "Cuenta confirmada — Daily Guide" }],
+    meta: [{ title: "Cuenta confirmada — Peppers" }],
   }),
   component: ConfirmadoPage,
 });
@@ -78,7 +78,7 @@ function ConfirmadoPage() {
           <>
             <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
             <h1 className="mt-6 font-display text-3xl">¡Cuenta confirmada!</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Entrando en Daily Guide…</p>
+            <p className="mt-2 text-sm text-muted-foreground">Entrando en Peppers…</p>
           </>
         )}
 

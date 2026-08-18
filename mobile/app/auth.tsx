@@ -142,7 +142,7 @@ export default function Auth() {
           contentContainerClassName="flex-grow justify-center px-6 py-14"
           keyboardShouldPersistTaps="handled"
         >
-          <Text className="text-4xl font-semibold text-foreground">
+          <Text className="text-4xl font-display text-foreground">
             {mode === "in" ? "Bienvenido de vuelta" : "Empecemos"}
           </Text>
           <Text className="mt-2 text-sm text-muted-foreground">
@@ -167,7 +167,7 @@ export default function Auth() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="tu@correo.com"
-                placeholderTextColor="#677380"
+                placeholderTextColor="#83796c"
               />
               <TextInput
                 className="h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
@@ -177,7 +177,7 @@ export default function Auth() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Contraseña"
-                placeholderTextColor="#677380"
+                placeholderTextColor="#83796c"
               />
 
               <Pressable
@@ -186,9 +186,9 @@ export default function Auth() {
                 className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
               >
                 {loading ? (
-                  <ActivityIndicator color="#f9fcff" />
+                  <ActivityIndicator color="#3e3d39" />
                 ) : (
-                  <Text className="text-sm font-semibold text-primary-foreground">
+                  <Text className="text-sm font-sans-semibold text-primary-foreground">
                     {mode === "in" ? "Entrar" : "Crear cuenta"}
                   </Text>
                 )}
@@ -214,9 +214,9 @@ export default function Auth() {
                 className="w-full flex-row items-center justify-center rounded-full border border-input bg-surface py-4 active:opacity-90 disabled:opacity-60"
               >
                 {googleLoading ? (
-                  <ActivityIndicator color="#677380" />
+                  <ActivityIndicator color="#83796c" />
                 ) : (
-                  <Text className="text-sm font-medium text-foreground">Continuar con Google</Text>
+                  <Text className="text-sm font-sans-medium text-foreground">Continuar con Google</Text>
                 )}
               </Pressable>
 
@@ -225,7 +225,7 @@ export default function Auth() {
                 disabled={demoLoading}
                 className="mt-3 w-full items-center rounded-full border border-dashed border-input bg-surface py-3.5 active:opacity-90 disabled:opacity-60"
               >
-                <Text className="text-sm font-medium text-muted-foreground">
+                <Text className="text-sm font-sans-medium text-muted-foreground">
                   {demoLoading ? "Creando perfil..." : "Probar con un perfil aleatorio"}
                 </Text>
               </Pressable>

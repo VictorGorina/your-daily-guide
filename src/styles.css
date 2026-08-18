@@ -5,9 +5,11 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Daily Guide design system.
- * Calm, minimal, mobile-first. Themes are switched with data-theme on <html>.
- * All colors are oklch semantic tokens — never hardcode colors in components.
+ * Peppers design system.
+ * Editorial, warm, calm. Cards over dashboards, ilustración over icons-as-data.
+ * Themes are switched with data-theme on <html>; only the accent hue changes
+ * between light themes — background/text/surface stay the same warm neutral
+ * per section 3 of the design system ("usa pocos colores").
  */
 
 @theme inline {
@@ -16,10 +18,10 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 6px);
   --radius-2xl: calc(var(--radius) + 12px);
-  --radius-3xl: calc(var(--radius) + 20px);
-  --radius-4xl: calc(var(--radius) + 28px);
-  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Bricolage Grotesque", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --radius-3xl: calc(var(--radius) + 18px);
+  --radius-4xl: calc(var(--radius) + 26px);
+  --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
   --color-habit-1: var(--habit-1);
   --color-habit-2: var(--habit-2);
   --color-habit-3: var(--habit-3);
@@ -70,152 +72,147 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-:root,
-[data-theme="niebla"] {
-  --radius: 1.25rem;
-  --background: oklch(0.982 0.006 240);
-  --foreground: oklch(0.28 0.03 250);
-  --surface: oklch(1 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.28 0.03 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.28 0.03 250);
-  --primary: oklch(0.62 0.11 250);
-  --primary-foreground: oklch(0.99 0.005 240);
-  --primary-soft: oklch(0.93 0.03 245);
-  --secondary: oklch(0.95 0.014 245);
-  --secondary-foreground: oklch(0.34 0.035 250);
-  --muted: oklch(0.958 0.01 245);
-  --muted-foreground: oklch(0.55 0.025 250);
-  --accent: oklch(0.93 0.035 210);
-  --accent-foreground: oklch(0.3 0.04 250);
-  --destructive: oklch(0.6 0.17 25);
-  --destructive-foreground: oklch(0.99 0.005 240);
-  --danger: oklch(0.62 0.19 25);
-  --danger-foreground: oklch(0.99 0.005 240);
-  --warning: oklch(0.73 0.16 75);
-  --warning-foreground: oklch(0.25 0.03 70);
-  --border: oklch(0.915 0.014 245);
-  --input: oklch(0.915 0.014 245);
-  --ring: oklch(0.62 0.11 250);
-  --chart-1: oklch(0.62 0.11 250);
-  --chart-2: oklch(0.72 0.09 200);
-  --chart-3: oklch(0.78 0.08 150);
-  --chart-4: oklch(0.8 0.09 80);
-  --chart-5: oklch(0.68 0.1 300);
-  --sidebar: oklch(0.99 0.005 240);
-  --sidebar-foreground: oklch(0.28 0.03 250);
-  --sidebar-primary: oklch(0.62 0.11 250);
-  --sidebar-primary-foreground: oklch(0.99 0.005 240);
-  --sidebar-accent: oklch(0.95 0.014 245);
-  --sidebar-accent-foreground: oklch(0.3 0.04 250);
-  --sidebar-border: oklch(0.915 0.014 245);
-  --sidebar-ring: oklch(0.62 0.11 250);
-}
-
-[data-theme="salvia"] {
-  --background: oklch(0.982 0.008 140);
-  --foreground: oklch(0.27 0.03 155);
-  --surface: oklch(1 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.27 0.03 155);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.27 0.03 155);
-  --primary: oklch(0.6 0.08 155);
-  --primary-foreground: oklch(0.99 0.005 140);
-  --primary-soft: oklch(0.93 0.03 150);
-  --secondary: oklch(0.95 0.016 145);
-  --secondary-foreground: oklch(0.33 0.035 155);
-  --muted: oklch(0.957 0.012 145);
-  --muted-foreground: oklch(0.53 0.025 155);
-  --accent: oklch(0.93 0.035 160);
-  --accent-foreground: oklch(0.3 0.04 155);
-  --border: oklch(0.915 0.016 145);
-  --input: oklch(0.915 0.016 145);
-  --ring: oklch(0.6 0.08 155);
-  --chart-1: oklch(0.6 0.08 155);
-  --chart-2: oklch(0.72 0.09 130);
-  --chart-3: oklch(0.75 0.08 190);
-}
-
-[data-theme="arena"] {
-  --background: oklch(0.984 0.01 80);
-  --foreground: oklch(0.29 0.03 60);
-  --surface: oklch(1 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.29 0.03 60);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.29 0.03 60);
-  --primary: oklch(0.66 0.1 55);
-  --primary-foreground: oklch(0.99 0.006 80);
-  --primary-soft: oklch(0.94 0.035 70);
-  --secondary: oklch(0.955 0.018 75);
-  --secondary-foreground: oklch(0.34 0.035 60);
-  --muted: oklch(0.96 0.014 75);
-  --muted-foreground: oklch(0.55 0.03 60);
-  --accent: oklch(0.93 0.04 60);
-  --accent-foreground: oklch(0.32 0.04 60);
-  --border: oklch(0.92 0.018 75);
-  --input: oklch(0.92 0.018 75);
-  --ring: oklch(0.66 0.1 55);
-  --chart-1: oklch(0.66 0.1 55);
-  --chart-2: oklch(0.75 0.09 90);
-  --chart-3: oklch(0.72 0.08 30);
-}
-
-[data-theme="noche"] {
-  --background: oklch(0.19 0.02 250);
-  --foreground: oklch(0.95 0.01 245);
-  --surface: oklch(0.24 0.025 250);
-  --card: oklch(0.24 0.025 250);
-  --card-foreground: oklch(0.95 0.01 245);
-  --popover: oklch(0.24 0.025 250);
-  --popover-foreground: oklch(0.95 0.01 245);
-  --primary: oklch(0.74 0.1 245);
-  --primary-foreground: oklch(0.2 0.02 250);
-  --primary-soft: oklch(0.32 0.05 250);
-  --secondary: oklch(0.29 0.03 250);
-  --secondary-foreground: oklch(0.95 0.01 245);
-  --muted: oklch(0.28 0.025 250);
-  --muted-foreground: oklch(0.72 0.02 245);
-  --accent: oklch(0.32 0.04 230);
-  --accent-foreground: oklch(0.95 0.01 245);
-  --destructive: oklch(0.68 0.16 25);
-  --destructive-foreground: oklch(0.98 0.005 240);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.74 0.1 245);
-  --chart-1: oklch(0.74 0.1 245);
-  --chart-2: oklch(0.78 0.09 190);
-  --chart-3: oklch(0.8 0.08 150);
-}
-
-/* Semáforo de hábitos, compartido por todos los temas */
+/*
+ * Shared warm-neutral base for every light theme: background, text, surface,
+ * borders and muted tones never change — only --primary (and the handful of
+ * tokens derived from it) shift per theme. Keeps the app to a small, deliberate
+ * palette instead of a different grey for every accent.
+ */
 :root,
 [data-theme] {
-  --success: oklch(0.66 0.13 152);
-  --success-foreground: oklch(0.99 0.01 150);
-  --success-soft: oklch(0.92 0.06 152);
-  --danger: oklch(0.62 0.19 25);
-  --danger-foreground: oklch(0.99 0.005 240);
-  --warning: oklch(0.73 0.16 75);
-  --warning-foreground: oklch(0.25 0.03 70);
-  /* Paleta viva de tarjetas de hábitos (estilo habit tracker) */
-  --habit-1: oklch(0.87 0.15 92);
-  --habit-2: oklch(0.87 0.2 132);
-  --habit-3: oklch(0.83 0.09 250);
-  --habit-4: oklch(0.79 0.15 350);
-  --habit-foreground: oklch(0.2 0.02 250);
+  --radius: 0.75rem;
+
+  --background: #f3f1ed;
+  --foreground: #3e3d39;
+  --surface: #fbfaf7;
+  --card: #fbfaf7;
+  --card-foreground: #3e3d39;
+  --popover: #fbfaf7;
+  --popover-foreground: #3e3d39;
+  --secondary: #eae6dd;
+  --secondary-foreground: #3e3d39;
+  --muted: #eeeae2;
+  --muted-foreground: #83796c;
+  --accent: #efe7da;
+  --accent-foreground: #3e3d39;
+  --border: #e2dcd0;
+  --input: #e2dcd0;
+
+  /* Carne — usado también como color semántico de error/peligro */
+  --destructive: #e2685f;
+  --destructive-foreground: #fbfaf7;
+  --danger: #e2685f;
+  --danger-foreground: #fbfaf7;
+  /* Mostaza — avisos */
+  --warning: #f2c14e;
+  --warning-foreground: #3e2f12;
+  /* Verde fresco, algo más saturado que el primario para que un número
+     pequeño (calendario, racha) siga leyéndose sobre él */
+  --success: #4cae64;
+  --success-foreground: #fbfaf7;
+  --success-soft: #e1f2e4;
+
+  --chart-1: #6dbe7b;
+  --chart-2: #ff8a3d;
+  --chart-3: #f2c14e;
+  --chart-4: #4c9bd6;
+  --chart-5: #e57373;
+
+  --sidebar: #f3f1ed;
+  --sidebar-foreground: #3e3d39;
+  --sidebar-accent: #eae6dd;
+  --sidebar-accent-foreground: #3e3d39;
+  --sidebar-border: #e2dcd0;
+
+  /* Semáforo de hábitos (sin uso actual en la UI, se deja neutro/coherente) */
+  --habit-1: #f2c14e;
+  --habit-2: #6dbe7b;
+  --habit-3: #4c9bd6;
+  --habit-4: #e57373;
+  --habit-foreground: #3e3d39;
 }
 
+/* Peppers — verde fresco. Tema por defecto. */
+:root,
+[data-theme="peppers"] {
+  --primary: #6dbe7b;
+  --primary-foreground: #3e3d39;
+  --primary-soft: #e4f3e7;
+  --ring: #6dbe7b;
+  --sidebar-primary: #6dbe7b;
+  --sidebar-primary-foreground: #3e3d39;
+  --sidebar-ring: #6dbe7b;
+}
+
+/* Mostaza — dorado/ámbar */
+[data-theme="mostaza"] {
+  --primary: #f2c14e;
+  --primary-foreground: #3e3d39;
+  --primary-soft: #fbedc9;
+  --ring: #f2c14e;
+  --sidebar-primary: #f2c14e;
+  --sidebar-primary-foreground: #3e3d39;
+  --sidebar-ring: #f2c14e;
+}
+
+/* Naranja — cálido */
+[data-theme="naranja"] {
+  --primary: #ff8a3d;
+  --primary-foreground: #3e3d39;
+  --primary-soft: #ffe7d3;
+  --ring: #ff8a3d;
+  --sidebar-primary: #ff8a3d;
+  --sidebar-primary-foreground: #3e3d39;
+  --sidebar-ring: #ff8a3d;
+}
+
+/* Noche — gris carbón cálido, nunca negro puro */
 [data-theme="noche"] {
-  --success: oklch(0.7 0.12 152);
-  --success-foreground: oklch(0.2 0.03 150);
-  --success-soft: oklch(0.34 0.05 152);
-  --danger: oklch(0.68 0.16 25);
-  --danger-foreground: oklch(0.98 0.005 240);
-  --warning: oklch(0.76 0.14 75);
-  --warning-foreground: oklch(0.25 0.03 70);
+  --background: #24221f;
+  --foreground: #f3f1ed;
+  --surface: #2c2a26;
+  --card: #2c2a26;
+  --card-foreground: #f3f1ed;
+  --popover: #2c2a26;
+  --popover-foreground: #f3f1ed;
+  --secondary: #34322d;
+  --secondary-foreground: #f3f1ed;
+  --muted: #302e2a;
+  --muted-foreground: #b0aa9c;
+  --accent: #3a362f;
+  --accent-foreground: #f3f1ed;
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+
+  --primary: #7fcb8d;
+  --primary-foreground: #1e2b20;
+  --primary-soft: #2e3b2c;
+  --ring: #7fcb8d;
+
+  --destructive: #e8776f;
+  --destructive-foreground: #241a18;
+  --danger: #e8776f;
+  --danger-foreground: #241a18;
+  --warning: #f0c766;
+  --warning-foreground: #2b2110;
+  --success: #6bc17e;
+  --success-foreground: #16231a;
+  --success-soft: #2c3a2b;
+
+  --chart-1: #7fcb8d;
+  --chart-2: #ffa35e;
+  --chart-3: #f0c766;
+  --chart-4: #6fb3e0;
+  --chart-5: #e8776f;
+
+  --sidebar: #24221f;
+  --sidebar-foreground: #f3f1ed;
+  --sidebar-primary: #7fcb8d;
+  --sidebar-primary-foreground: #1e2b20;
+  --sidebar-accent: #34322d;
+  --sidebar-accent-foreground: #f3f1ed;
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: #7fcb8d;
 }
 
 @layer base {
@@ -238,25 +235,26 @@
   h2,
   .font-display {
     font-family: var(--font-display);
-    font-weight: 700;
-    letter-spacing: -0.035em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
+}
+
+/* Tarjeta editorial estándar: fondo cálido, borde fino, casi sin sombra.
+   Radio fijo a 16px (spec: "cards 12–16px") con independencia de la escala
+   general, que en 3xl/4xl sigue sirviendo a hojas y modales más grandes. */
+@utility surface-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 3%);
 }
 
 @utility habit-tile {
   border-radius: var(--radius-3xl);
   color: var(--color-habit-foreground);
-  box-shadow: 0 10px 24px -18px oklch(0 0 0 / 45%);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 4%);
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@utility surface-card {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-2xl);
-  box-shadow:
-    0 1px 2px oklch(0 0 0 / 4%),
-    0 12px 32px -24px oklch(0 0 0 / 30%);
 }
 
 @utility text-gradient-primary {

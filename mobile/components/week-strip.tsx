@@ -106,15 +106,15 @@ export function WeekStrip({
               isOpen ? "border-primary" : ""
             }`}
           >
-            <Text className={`text-lg font-semibold leading-none ${textBase}`}>{d.getDate()}</Text>
-            <Text className={`text-[11px] font-semibold ${textBase}`}>
+            <Text className={`text-lg font-sans-semibold leading-none ${textBase}`}>{d.getDate()}</Text>
+            <Text className={`text-[11px] font-sans-semibold ${textBase}`}>
               {DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}
             </Text>
           </Pressable>
         );
       })}
       <View className="min-w-[56px] items-center justify-center rounded-2xl border border-border bg-surface px-2">
-        <Text className="text-[11px] font-semibold text-muted-foreground">
+        <Text className="text-[11px] font-sans-semibold text-muted-foreground">
           {done}/{total}
         </Text>
       </View>

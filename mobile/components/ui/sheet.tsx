@@ -32,7 +32,7 @@ export function Sheet({
             </View>
             {title != null ? (
               <View className="gap-1 px-4 pt-4">
-                <Text className="text-lg font-semibold text-foreground">{title}</Text>
+                <Text className="text-lg font-sans-semibold text-foreground">{title}</Text>
                 {description ? (
                   <Text className="text-sm text-muted-foreground">{description}</Text>
                 ) : null}

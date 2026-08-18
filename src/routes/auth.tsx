@@ -13,10 +13,10 @@ export const Route = createFileRoute("/auth")({
     typeof search.next === "string" && search.next.startsWith("/") ? { next: search.next } : {},
   head: () => ({
     meta: [
-      { title: "Entrar en Daily Guide" },
-      { name: "description", content: "Accede a tu coach diario de salud y alimentación." },
-      { property: "og:title", content: "Entrar en Daily Guide" },
-      { property: "og:description", content: "Accede a tu coach diario de bienestar." },
+      { title: "Entrar en Peppers" },
+      { name: "description", content: "Accede a tu asistente de alimentación con IA." },
+      { property: "og:title", content: "Entrar en Peppers" },
+      { property: "og:description", content: "Accede a tu asistente de alimentación con IA." },
     ],
   }),
   component: AuthPage,

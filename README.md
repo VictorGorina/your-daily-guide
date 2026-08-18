@@ -1,4 +1,4 @@
-# Daily Guide
+# Senda
 
 Tu coach diario de salud y alimentación: guía por la mañana, repaso por la noche y progreso
 visual hacia tu objetivo.

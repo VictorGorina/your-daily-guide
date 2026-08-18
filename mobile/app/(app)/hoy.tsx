@@ -207,14 +207,14 @@ export default function Hoy() {
       <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6">
         <View className="flex-row items-center gap-4">
           <View className="min-w-0 flex-1">
-            <Text className="text-sm font-semibold text-muted-foreground">{greeting},</Text>
-            <Text className="text-4xl font-semibold leading-tight text-foreground" numberOfLines={1}>
+            <Text className="text-sm font-sans-semibold text-muted-foreground">{greeting},</Text>
+            <Text className="text-4xl font-display leading-tight text-foreground" numberOfLines={1}>
               {profile?.display_name || "Vamos allá"}
             </Text>
           </View>
           <View className="flex-row items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5">
-            <Flame size={14} color="#f6fafd" />
-            <Text className="text-xs font-bold text-background">{impulso}%</Text>
+            <Flame size={14} color="#f3f1ed" />
+            <Text className="text-xs font-sans-bold text-background">{impulso}%</Text>
           </View>
         </View>
 
@@ -225,10 +225,10 @@ export default function Hoy() {
         {/* Comidas de hoy */}
         <View className="mt-6">
           <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-2xl font-semibold text-foreground">Comidas de hoy</Text>
+            <Text className="text-2xl font-display text-foreground">Comidas de hoy</Text>
             {habits.length ? (
               <View className="rounded-full bg-secondary px-2.5 py-1">
-                <Text className="text-xs font-bold text-secondary-foreground">
+                <Text className="text-xs font-sans-bold text-secondary-foreground">
                   {doneCount}/{habits.length}
                 </Text>
               </View>
@@ -242,10 +242,10 @@ export default function Hoy() {
           ) : allDone ? (
             <View className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-5">
               <View className="h-10 w-10 items-center justify-center rounded-full bg-success-soft">
-                <CheckCircle2 size={20} color="#4aa969" />
+                <CheckCircle2 size={20} color="#4cae64" />
               </View>
               <View className="flex-1">
-                <Text className="text-lg font-semibold leading-tight text-foreground">
+                <Text className="text-lg font-sans-semibold leading-tight text-foreground">
                   Todo registrado hoy
                 </Text>
                 <Text className="text-sm text-muted-foreground">
@@ -255,10 +255,10 @@ export default function Hoy() {
             </View>
           ) : nextMeal ? (
             <View className="rounded-3xl bg-primary p-5">
-              <Text className="text-[11px] font-semibold uppercase tracking-wide text-primary-foreground/70">
+              <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-primary-foreground/70">
                 Siguiente · {nextMeal.label}
               </Text>
-              <Text className="mt-1 text-xl font-semibold leading-snug text-primary-foreground">
+              <Text className="mt-1 text-xl font-sans-semibold leading-snug text-primary-foreground">
                 {nextIdea || "Aún no hay menú para esta comida"}
               </Text>
               {offListNote(nextPlanned?.off) ? (
@@ -276,16 +276,16 @@ export default function Hoy() {
                 onPress={() => setMealStatus(nextIndex!, "plan")}
                 className="mt-4 w-full items-center rounded-full bg-primary-foreground py-3 active:opacity-90"
               >
-                <Text className="text-sm font-semibold text-primary">Comí esto</Text>
+                <Text className="text-sm font-sans-semibold text-primary">Comí esto</Text>
               </Pressable>
               <View className="mt-2.5 flex-row items-center justify-center gap-5">
                 <Pressable onPress={() => handleMealStatus(nextIndex!, "distinto")}>
-                  <Text className="text-xs font-medium text-primary-foreground/80">
+                  <Text className="text-xs font-sans-medium text-primary-foreground/80">
                     ¿comiste otra cosa?
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => setMealStatus(nextIndex!, "salteo")}>
-                  <Text className="text-xs font-medium text-primary-foreground/80">me lo salté</Text>
+                  <Text className="text-xs font-sans-medium text-primary-foreground/80">me lo salté</Text>
                 </Pressable>
               </View>
             </View>
@@ -313,18 +313,18 @@ export default function Hoy() {
                     }`}
                   >
                     <Text
-                      className="text-[11px] font-semibold text-foreground"
+                      className="text-[11px] font-sans-semibold text-foreground"
                       numberOfLines={1}
                     >
                       {h.label}
                     </Text>
                     <View className="mt-0.5 flex-row items-center gap-1">
                       {isDone ? (
-                        <Check size={12} color="#4aa969" />
+                        <Check size={12} color="#4cae64" />
                       ) : isSkipped ? (
-                        <X size={12} color="#677380" />
+                        <X size={12} color="#83796c" />
                       ) : null}
-                      <Text className="text-[10px] font-medium text-muted-foreground">
+                      <Text className="text-[10px] font-sans-medium text-muted-foreground">
                         {isNext ? "ahora" : isDone ? "hecho" : isSkipped ? "saltado" : "pendiente"}
                       </Text>
                     </View>
@@ -336,7 +336,7 @@ export default function Hoy() {
 
           {expandedMeal != null ? (
             <View className="mt-2 rounded-3xl border border-border bg-surface p-4">
-              <Text className="text-sm font-semibold text-foreground">
+              <Text className="text-sm font-sans-semibold text-foreground">
                 {habits[expandedMeal]!.label}
               </Text>
               {expandedPlanned?.idea ? (
@@ -344,7 +344,7 @@ export default function Hoy() {
               ) : null}
               {offListNote(expandedPlanned?.off) ? (
                 <View className="mt-1.5 self-start rounded-full bg-warning/20 px-2 py-0.5">
-                  <Text className="text-[11px] font-medium text-foreground">
+                  <Text className="text-[11px] font-sans-medium text-foreground">
                     {offListNote(expandedPlanned?.off)}
                   </Text>
                 </View>
@@ -370,7 +370,7 @@ export default function Hoy() {
                       }`}
                     >
                       <Text
-                        className={`text-xs font-semibold ${
+                        className={`text-xs font-sans-semibold ${
                           active ? "text-background" : "text-muted-foreground"
                         }`}
                       >
@@ -391,13 +391,13 @@ export default function Hoy() {
             className="flex-row items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3"
           >
             <View className="flex-row items-center gap-2">
-              <Sparkle size={14} color="#4f8ac6" />
-              <Text className="text-xs font-medium text-muted-foreground">
+              <Sparkle size={14} color="#6dbe7b" />
+              <Text className="text-xs font-sans-medium text-muted-foreground">
                 Guía del coach{guide?.calories ? ` · ${guide.calories}` : ""}
               </Text>
             </View>
             <View style={{ transform: [{ rotate: guideOpen ? "180deg" : "0deg" }] }}>
-              <ChevronDown size={16} color="#677380" />
+              <ChevronDown size={16} color="#83796c" />
             </View>
           </Pressable>
           {guideOpen ? (
@@ -413,7 +413,7 @@ export default function Hoy() {
                   </View>
                   {guide.meals?.length ? (
                     <View className="gap-2 pt-1">
-                      <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
                         Platos sugeridos
                       </Text>
                       {guide.meals.map((m) => (
@@ -421,7 +421,7 @@ export default function Hoy() {
                           key={m.moment}
                           className="flex-row gap-3 rounded-xl border border-border bg-surface p-3"
                         >
-                          <Text className="text-xs font-semibold text-primary">{m.moment}</Text>
+                          <Text className="text-xs font-sans-semibold text-primary">{m.moment}</Text>
                           <Text className="flex-1 text-sm text-foreground">{m.idea}</Text>
                         </View>
                       ))}
@@ -429,7 +429,7 @@ export default function Hoy() {
                   ) : null}
                   {guide.tips?.length ? (
                     <View className="gap-1.5 pt-1">
-                      <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
                         Consejos de nutrición
                       </Text>
                       {guide.tips.map((t) => (
@@ -443,7 +443,7 @@ export default function Hoy() {
                 </View>
               ) : (
                 <Pressable onPress={requestGuide}>
-                  <Text className="text-sm font-medium text-primary">Generar guía</Text>
+                  <Text className="text-sm font-sans-medium text-primary">Generar guía</Text>
                 </Pressable>
               )}
             </View>
@@ -476,9 +476,9 @@ export default function Hoy() {
             onPress={() => setCalendarOpen((o) => !o)}
             className="flex-row items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3"
           >
-            <Text className="text-xs font-medium text-muted-foreground">Ver calendario del mes</Text>
+            <Text className="text-xs font-sans-medium text-muted-foreground">Ver calendario del mes</Text>
             <View style={{ transform: [{ rotate: calendarOpen ? "180deg" : "0deg" }] }}>
-              <ChevronDown size={16} color="#677380" />
+              <ChevronDown size={16} color="#83796c" />
             </View>
           </Pressable>
           {calendarOpen ? (
@@ -534,8 +534,8 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   return (
     <View className="mt-3 rounded-3xl border border-border bg-surface p-4">
       <View className="flex-row items-center gap-2">
-        <ChevronDown size={16} color="#4f8ac6" />
-        <Text className="text-sm font-semibold capitalize text-foreground">{label}</Text>
+        <ChevronDown size={16} color="#6dbe7b" />
+        <Text className="text-sm font-sans-semibold capitalize text-foreground">{label}</Text>
       </View>
       {meals.length ? (
         <View className="mt-3 gap-2">
@@ -555,13 +555,13 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
 function Field({ label, value, note }: { label: string; value: string; note?: string | null }) {
   return (
     <View className="rounded-xl bg-secondary/60 p-3">
-      <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </Text>
       <Text className="mt-0.5 text-sm text-foreground">{value}</Text>
       {note ? (
         <View className="mt-1.5 self-start rounded-full bg-warning/20 px-2 py-0.5">
-          <Text className="text-[11px] font-medium text-foreground">{note}</Text>
+          <Text className="text-[11px] font-sans-medium text-foreground">{note}</Text>
         </View>
       ) : null}
     </View>

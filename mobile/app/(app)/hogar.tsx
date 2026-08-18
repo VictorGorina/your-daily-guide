@@ -206,7 +206,7 @@ export default function Hogar() {
 
   const shareCode = (inviteCode: string) =>
     void Share.share({
-      message: `Únete a mi hogar en Daily Guide con el código ${inviteCode}`,
+      message: `Únete a mi hogar en Peppers con el código ${inviteCode}`,
     }).catch(() => {
       /* el usuario canceló el diálogo */
     });
@@ -228,18 +228,18 @@ export default function Hogar() {
           className="flex-row items-center gap-1 self-start active:opacity-70"
           hitSlop={8}
         >
-          <ChevronLeft size={16} color="#677380" />
-          <Text className="text-xs font-medium text-muted-foreground">Ajustes</Text>
+          <ChevronLeft size={16} color="#83796c" />
+          <Text className="text-xs font-sans-medium text-muted-foreground">Ajustes</Text>
         </Pressable>
 
-        <Text className="mt-3 text-3xl font-semibold text-foreground">Tu hogar</Text>
+        <Text className="mt-3 text-3xl font-display text-foreground">Tu hogar</Text>
         <Text className="mt-2 text-sm text-muted-foreground">
           Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder tu
           propio plan.
         </Text>
 
         <View className="mt-4 flex-row items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3">
-          <ShieldCheck size={16} color="#4f8ac6" style={{ marginTop: 1 }} />
+          <ShieldCheck size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
           <Text className="flex-1 text-xs text-muted-foreground">
             Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
             del hogar. Solo compartís lo que marquéis aquí como comidas comunes y el objetivo del
@@ -251,15 +251,15 @@ export default function Hogar() {
           <>
             <View className="mt-6 gap-3 rounded-3xl border border-border bg-surface p-5">
               <View className="flex-row items-center gap-2">
-                <Users size={16} color="#4f8ac6" />
-                <Text className="text-sm font-semibold text-foreground">Crear un hogar</Text>
+                <Users size={16} color="#6dbe7b" />
+                <Text className="text-sm font-sans-semibold text-foreground">Crear un hogar</Text>
               </View>
               <TextInput
                 className={INPUT}
                 value={name}
                 onChangeText={setName}
                 placeholder="Nombre del hogar"
-                placeholderTextColor="#9aa5b1"
+                placeholderTextColor="#a69d8f"
               />
               <Pressable
                 onPress={() => create.mutate()}
@@ -267,20 +267,20 @@ export default function Hogar() {
                 className="items-center rounded-full bg-primary py-3.5 active:opacity-90"
                 style={create.isPending ? { opacity: 0.6 } : undefined}
               >
-                <Text className="text-sm font-semibold text-primary-foreground">
+                <Text className="text-sm font-sans-semibold text-primary-foreground">
                   {create.isPending ? "Creando..." : "Crear hogar"}
                 </Text>
               </Pressable>
             </View>
 
             <View className="mt-4 gap-3 rounded-3xl border border-border bg-surface p-5">
-              <Text className="text-sm font-semibold text-foreground">Unirme con un código</Text>
+              <Text className="text-sm font-sans-semibold text-foreground">Unirme con un código</Text>
               <TextInput
                 className={`${INPUT} tracking-widest`}
                 value={code}
                 onChangeText={(t) => setCode(t.toUpperCase())}
                 placeholder="ABC123"
-                placeholderTextColor="#9aa5b1"
+                placeholderTextColor="#a69d8f"
                 autoCapitalize="characters"
                 autoCorrect={false}
               />
@@ -290,7 +290,7 @@ export default function Hogar() {
                 className="items-center rounded-full border border-input bg-surface py-3.5 active:opacity-80"
                 style={join.isPending || code.trim().length < 4 ? { opacity: 0.6 } : undefined}
               >
-                <Text className="text-sm font-medium text-foreground">
+                <Text className="text-sm font-sans-medium text-foreground">
                   {join.isPending ? "Uniéndome..." : "Unirme al hogar"}
                 </Text>
               </Pressable>
@@ -299,12 +299,12 @@ export default function Hogar() {
         ) : (
           <>
             <View className="mt-6 gap-3 rounded-3xl border border-border bg-surface p-5">
-              <Text className="text-sm font-semibold text-foreground">{household.name}</Text>
+              <Text className="text-sm font-sans-semibold text-foreground">{household.name}</Text>
               <TextInput
                 key={`name-${household.id}`}
                 className={INPUT}
                 defaultValue={household.name}
-                placeholderTextColor="#9aa5b1"
+                placeholderTextColor="#a69d8f"
                 onEndEditing={(e) =>
                   void renameHousehold(household.id, e.nativeEvent.text).then(refresh)
                 }
@@ -318,7 +318,7 @@ export default function Hogar() {
                   <Text className="font-mono text-base tracking-widest text-foreground">
                     {household.invite_code}
                   </Text>
-                  <Copy size={16} color="#677380" />
+                  <Copy size={16} color="#83796c" />
                 </View>
               </Pressable>
               <Text className="text-xs text-muted-foreground">
@@ -330,7 +330,7 @@ export default function Hogar() {
             </View>
 
             <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
-              <Text className="text-sm font-semibold text-foreground">¿Qué comidas compartís?</Text>
+              <Text className="text-sm font-sans-semibold text-foreground">¿Qué comidas compartís?</Text>
               <Text className="mt-1 text-xs text-muted-foreground">
                 Marca los días que coméis lo mismo en casa. Solo se sincroniza cuando la otra
                 persona también lo marca: los dos partís de un plato base común, salido de la misma
@@ -341,7 +341,7 @@ export default function Hogar() {
               <View className="mt-4 gap-4">
                 {MEAL_KEYS.map((meal) => (
                   <View key={meal}>
-                    <Text className="text-xs font-medium text-foreground">{MEAL_LABEL[meal]}</Text>
+                    <Text className="text-xs font-sans-medium text-foreground">{MEAL_LABEL[meal]}</Text>
                     <View className="mt-2 flex-row gap-1.5">
                       {DAY_SHORT.map((label, day) => {
                         const active = shared?.[meal].includes(day) ?? false;
@@ -359,7 +359,7 @@ export default function Hogar() {
                             }`}
                           >
                             <Text
-                              className={`text-xs font-medium ${active ? "text-primary" : "text-muted-foreground"}`}
+                              className={`text-xs font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
                             >
                               {label}
                             </Text>
@@ -376,7 +376,7 @@ export default function Hogar() {
                 className="mt-4 items-center rounded-full bg-primary py-3.5 active:opacity-90"
                 style={!shared || persistShared.isPending ? { opacity: 0.6 } : undefined}
               >
-                <Text className="text-sm font-semibold text-primary-foreground">
+                <Text className="text-sm font-sans-semibold text-primary-foreground">
                   {persistShared.isPending
                     ? "Guardando y ajustando..."
                     : "Guardar y ajustar planes"}
@@ -389,11 +389,11 @@ export default function Hogar() {
                 style={syncNow.isPending ? { opacity: 0.6 } : undefined}
               >
                 {syncNow.isPending ? (
-                  <ActivityIndicator size="small" color="#677380" />
+                  <ActivityIndicator size="small" color="#83796c" />
                 ) : (
-                  <RefreshCw size={16} color="#677380" />
+                  <RefreshCw size={16} color="#83796c" />
                 )}
-                <Text className="text-sm font-medium text-foreground">
+                <Text className="text-sm font-sans-medium text-foreground">
                   Sincronizar el plan del mes
                 </Text>
               </Pressable>
@@ -401,8 +401,8 @@ export default function Hogar() {
 
             <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
               <View className="flex-row items-center gap-2">
-                <Target size={16} color="#4f8ac6" />
-                <Text className="text-sm font-semibold text-foreground">Objetivo del hogar</Text>
+                <Target size={16} color="#6dbe7b" />
+                <Text className="text-sm font-sans-semibold text-foreground">Objetivo del hogar</Text>
               </View>
               <Text className="mt-1 text-xs text-muted-foreground">
                 Un objetivo compartido, visible para todos en casa. Vuestro progreso individual
@@ -424,7 +424,7 @@ export default function Hogar() {
                       className={`flex-1 items-center rounded-full py-2 active:opacity-80 ${active ? "bg-surface" : ""}`}
                     >
                       <Text
-                        className={`text-xs font-medium ${active ? "text-primary" : "text-muted-foreground"}`}
+                        className={`text-xs font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
                       >
                         {label}
                       </Text>
@@ -439,7 +439,7 @@ export default function Hogar() {
                   value={goalText}
                   onChangeText={setGoalText}
                   placeholder="Ej. cenar juntos entre semana"
-                  placeholderTextColor="#9aa5b1"
+                  placeholderTextColor="#a69d8f"
                   maxLength={140}
                 />
               ) : (
@@ -448,7 +448,7 @@ export default function Hogar() {
                   value={goalBudget}
                   onChangeText={setGoalBudget}
                   placeholder="Presupuesto compartido del mes (€)"
-                  placeholderTextColor="#9aa5b1"
+                  placeholderTextColor="#a69d8f"
                   keyboardType="decimal-pad"
                 />
               )}
@@ -459,14 +459,14 @@ export default function Hogar() {
                 className="mt-3 items-center rounded-full bg-primary py-3.5 active:opacity-90"
                 style={goalDisabled ? { opacity: 0.6 } : undefined}
               >
-                <Text className="text-sm font-semibold text-primary-foreground">
+                <Text className="text-sm font-sans-semibold text-primary-foreground">
                   {saveGoal.isPending ? "Guardando..." : "Guardar objetivo"}
                 </Text>
               </Pressable>
 
               {household.goal_type === "comportamiento" && household.goal_text ? (
                 <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3">
-                  <Target size={16} color="#4f8ac6" style={{ marginTop: 1 }} />
+                  <Target size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
                   <Text className="flex-1 text-sm text-primary">{household.goal_text}</Text>
                 </View>
               ) : null}
@@ -478,7 +478,7 @@ export default function Hogar() {
                       Compra de este mes vs. objetivo del hogar
                     </Text>
                     <Text
-                      className={`text-lg font-bold tabular-nums ${
+                      className={`text-lg font-sans-bold tabular-nums ${
                         monthSpend > household.goal_budget_eur ? "text-destructive" : "text-primary"
                       }`}
                     >
@@ -512,7 +512,7 @@ export default function Hogar() {
                   disabled={dropGoal.isPending}
                   className="mt-3 self-start active:opacity-70"
                 >
-                  <Text className="text-xs font-medium text-muted-foreground underline">
+                  <Text className="text-xs font-sans-medium text-muted-foreground underline">
                     Quitar objetivo
                   </Text>
                 </Pressable>
@@ -521,8 +521,8 @@ export default function Hogar() {
 
             <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
               <View className="flex-row items-center gap-2">
-                <Baby size={16} color="#4f8ac6" />
-                <Text className="text-sm font-semibold text-foreground">Peques en casa</Text>
+                <Baby size={16} color="#6dbe7b" />
+                <Text className="text-sm font-sans-semibold text-foreground">Peques en casa</Text>
               </View>
               <View className="mt-3 gap-2">
                 {state.data?.children.map((c) => (
@@ -531,7 +531,7 @@ export default function Hogar() {
                     className="flex-row items-start gap-3 rounded-2xl border border-input bg-surface px-4 py-3"
                   >
                     <View className="flex-1">
-                      <Text className="text-sm font-medium text-foreground">
+                      <Text className="text-sm font-sans-medium text-foreground">
                         {c.name}
                         {c.age ? ` · ${c.age} años` : ""}
                       </Text>
@@ -545,7 +545,7 @@ export default function Hogar() {
                       hitSlop={8}
                       className="active:opacity-70"
                     >
-                      <Trash2 size={16} color="#677380" />
+                      <Trash2 size={16} color="#83796c" />
                     </Pressable>
                   </View>
                 ))}
@@ -562,7 +562,7 @@ export default function Hogar() {
                   value={child.name}
                   onChangeText={(t) => setChild({ ...child, name: t })}
                   placeholder="Nombre"
-                  placeholderTextColor="#9aa5b1"
+                  placeholderTextColor="#a69d8f"
                 />
                 <View className="flex-row gap-2">
                   <TextInput
@@ -570,7 +570,7 @@ export default function Hogar() {
                     value={child.age}
                     onChangeText={(t) => setChild({ ...child, age: t })}
                     placeholder="Edad"
-                    placeholderTextColor="#9aa5b1"
+                    placeholderTextColor="#a69d8f"
                     keyboardType="number-pad"
                   />
                   <TextInput
@@ -578,7 +578,7 @@ export default function Hogar() {
                     value={child.appetite}
                     onChangeText={(t) => setChild({ ...child, appetite: t })}
                     placeholder="Apetito (poco, normal...)"
-                    placeholderTextColor="#9aa5b1"
+                    placeholderTextColor="#a69d8f"
                   />
                 </View>
                 <TextInput
@@ -586,7 +586,7 @@ export default function Hogar() {
                   value={child.allergies}
                   onChangeText={(t) => setChild({ ...child, allergies: t })}
                   placeholder="Alergias o intolerancias"
-                  placeholderTextColor="#9aa5b1"
+                  placeholderTextColor="#a69d8f"
                 />
                 <Pressable
                   onPress={() => newChild.mutate()}
@@ -594,8 +594,8 @@ export default function Hogar() {
                   className="flex-row items-center justify-center gap-2 rounded-full border border-input bg-surface py-3 active:opacity-80"
                   style={newChild.isPending || !child.name.trim() ? { opacity: 0.6 } : undefined}
                 >
-                  <Plus size={16} color="#1d2a37" />
-                  <Text className="text-sm font-medium text-foreground">Añadir peque</Text>
+                  <Plus size={16} color="#3e3d39" />
+                  <Text className="text-sm font-sans-medium text-foreground">Añadir peque</Text>
                 </Pressable>
               </View>
             </View>
@@ -604,8 +604,8 @@ export default function Hogar() {
               onPress={confirmLeave}
               className="mt-6 flex-row items-center justify-center gap-2 rounded-full border border-input py-4 active:opacity-80"
             >
-              <LogOut size={16} color="#677380" />
-              <Text className="text-sm font-medium text-muted-foreground">Salir del hogar</Text>
+              <LogOut size={16} color="#83796c" />
+              <Text className="text-sm font-sans-medium text-muted-foreground">Salir del hogar</Text>
             </Pressable>
           </>
         )}

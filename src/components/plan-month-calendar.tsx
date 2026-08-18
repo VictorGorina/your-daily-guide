@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { DishRecipe } from "@/components/dish-recipe";
+import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { todayISO } from "@/lib/daily";
 import { mealsForDate, offListNote, planForDate, type MonthlyPlan } from "@/lib/plan-shared";
@@ -96,8 +97,15 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
               </p>
               <div className="space-y-2">
                 {meals.map((meal) => (
-                  <div key={meal.slot} className="rounded-xl border border-border bg-surface p-3">
-                    <span className="text-xs font-semibold text-primary">{meal.moment}</span>
+                  <div
+                    key={meal.slot}
+                    className="rounded-xl border border-border p-3"
+                    style={foodBgStyle(meal.idea)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-primary">{meal.moment}</span>
+                      <FoodCategoryBadge dish={meal.idea} />
+                    </div>
                     <p className="mt-1 text-sm text-foreground">{meal.idea}</p>
                     {offListNote(meal.off) ? (
                       <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">

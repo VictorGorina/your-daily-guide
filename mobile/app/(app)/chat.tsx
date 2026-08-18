@@ -231,10 +231,10 @@ export default function Chat() {
                 hitSlop={8}
                 className="-ml-1 h-9 w-9 items-center justify-center rounded-full active:opacity-70"
               >
-                <ChevronLeft size={22} color="#677380" />
+                <ChevronLeft size={22} color="#83796c" />
               </Pressable>
               <View>
-                <Text className="text-2xl font-semibold text-foreground">Tu coach</Text>
+                <Text className="text-2xl font-display text-foreground">Tu coach</Text>
                 <Text className="text-xs text-muted-foreground">Conversación de hoy · {dateLabel}</Text>
               </View>
             </View>
@@ -243,7 +243,7 @@ export default function Chat() {
               hitSlop={8}
               className="h-9 w-9 items-center justify-center rounded-full border border-border active:opacity-70"
             >
-              <ClipboardList size={18} color="#677380" />
+              <ClipboardList size={18} color="#83796c" />
             </Pressable>
           </View>
 
@@ -256,7 +256,7 @@ export default function Chat() {
           >
             {messages.length === 0 ? (
               <View className="mt-10 items-center gap-1 px-6">
-                <Text className="text-center text-lg font-semibold text-foreground">
+                <Text className="text-center text-lg font-sans-semibold text-foreground">
                   Cuéntame cómo va tu día
                 </Text>
                 <Text className="text-center text-sm text-muted-foreground">
@@ -284,7 +284,7 @@ export default function Chat() {
             )}
             {status === "submitted" ? (
               <View className="flex-row items-center gap-2 self-start rounded-3xl border border-border bg-surface px-4 py-3">
-                <ActivityIndicator size="small" color="#4f8ac6" />
+                <ActivityIndicator size="small" color="#6dbe7b" />
                 <Text className="text-sm text-muted-foreground">El coach está pensando...</Text>
               </View>
             ) : null}
@@ -322,7 +322,7 @@ export default function Chat() {
               value={input}
               onChangeText={setInput}
               placeholder="Escribe a tu coach..."
-              placeholderTextColor="#9aa5b1"
+              placeholderTextColor="#a69d8f"
               multiline
               editable={!busy}
               onSubmitEditing={handleSubmit}
@@ -335,9 +335,9 @@ export default function Chat() {
               style={busy || !input.trim() ? { opacity: 0.4 } : undefined}
             >
               {busy ? (
-                <ActivityIndicator size="small" color="#f9fcff" />
+                <ActivityIndicator size="small" color="#3e3d39" />
               ) : (
-                <ArrowUp size={22} color="#f9fcff" />
+                <ArrowUp size={22} color="#3e3d39" />
               )}
             </Pressable>
           </View>

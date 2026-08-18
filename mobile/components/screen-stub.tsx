@@ -25,14 +25,14 @@ export function ScreenStub({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <View className="flex-1 justify-center gap-3 px-6">
-        <Text className="text-4xl font-semibold text-foreground">{title}</Text>
+        <Text className="text-4xl font-sans-semibold text-foreground">{title}</Text>
         <Text className="text-sm text-muted-foreground">
           {note ?? "Esta pantalla aún no está portada a la app. Llegará en una próxima versión."}
         </Text>
         {back ? (
           <Text
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/hoy"))}
-            className="mt-2 text-sm font-medium text-primary"
+            className="mt-2 text-sm font-sans-medium text-primary"
           >
             ← Volver
           </Text>

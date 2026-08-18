@@ -30,7 +30,7 @@ export async function sendPushNotification(
     subscription,
     message: {
       payload,
-      adminContact: "mailto:soporte@dailyguide.app",
+      adminContact: "mailto:vgorinam@gmail.com",
       options: { ttl: 3600, urgency: "normal" },
     },
   });

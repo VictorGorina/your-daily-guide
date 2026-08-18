@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { DishRecipe } from "@/components/dish-recipe";
+import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MonthCalendar } from "@/components/month-calendar";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
@@ -271,7 +272,7 @@ function Hoy() {
             </div>
           </div>
         ) : nextMeal ? (
-          <div className="rounded-3xl bg-primary p-5 text-primary-foreground shadow-[0_18px_40px_-26px_oklch(0_0_0/45%)]">
+          <div className="rounded-3xl bg-primary p-5 text-primary-foreground">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-primary-foreground/70">
               Siguiente · {nextMeal.label}
             </span>
@@ -347,8 +348,14 @@ function Hoy() {
         ) : null}
 
         {expandedMeal != null ? (
-          <div className="surface-card animate-sheet-up mt-2 p-4">
-            <span className="block font-display text-sm">{habits[expandedMeal].label}</span>
+          <div
+            className="surface-card animate-sheet-up mt-2 p-4"
+            style={expandedPlanned?.idea ? foodBgStyle(expandedPlanned.idea) : {}}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="block font-display text-sm">{habits[expandedMeal].label}</span>
+              {expandedPlanned?.idea ? <FoodCategoryBadge dish={expandedPlanned.idea} /> : null}
+            </div>
             {expandedPlanned?.idea ? (
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {expandedPlanned.idea}
@@ -429,12 +436,18 @@ function Hoy() {
                     {guide.meals.map((m) => (
                       <div
                         key={m.moment}
-                        className="flex gap-3 rounded-xl border border-border bg-surface p-3"
+                        className="flex gap-3 rounded-xl border border-border p-3"
+                        style={foodBgStyle(m.idea)}
                       >
                         <span className="shrink-0 text-xs font-semibold text-primary">
                           {m.moment}
                         </span>
-                        <span className="min-w-0 text-sm text-foreground">{m.idea}</span>
+                        <div className="min-w-0">
+                          <span className="text-sm text-foreground">{m.idea}</span>
+                          <div className="mt-1">
+                            <FoodCategoryBadge dish={m.idea} />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -580,11 +593,15 @@ function Field({
   /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes. */
   recipeMonth?: string;
 }) {
+  const bgStyle = recipeMonth ? foodBgStyle(value) : {};
   return (
-    <div className="rounded-xl bg-secondary/60 p-3">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
+    <div className="rounded-xl bg-secondary/60 p-3" style={bgStyle}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        {recipeMonth ? <FoodCategoryBadge dish={value} /> : null}
+      </div>
       <p className="mt-0.5 text-sm text-foreground">{value}</p>
       {note ? (
         <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">

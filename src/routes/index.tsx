@@ -7,13 +7,13 @@ import { supabase } from "@/integrations/supabase/client";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Daily Guide — Tu coach diario de salud y alimentación" },
+      { title: "Peppers — Tu asistente de alimentación con IA" },
       {
         name: "description",
         content:
-          "Habla cada día con tu coach de salud: guía matutina, repaso nocturno y un objetivo medible con progreso visual. Sin dietas rígidas.",
+          "Come mejor cada día, sin complicaciones: guía matutina, repaso nocturno y un objetivo medible con progreso visual. Sin dietas rígidas.",
       },
-      { property: "og:title", content: "Daily Guide — Tu coach diario de salud" },
+      { property: "og:title", content: "Peppers — Tu asistente de alimentación con IA" },
       {
         property: "og:description",
         content: "Hábitos, no restricciones. Un asistente que te acompaña cada día.",
@@ -44,14 +44,14 @@ function Landing() {
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-between px-6 pb-10 pt-16">
       <div className="animate-rise">
         <span className="inline-flex items-center gap-2 rounded-full bg-primary-soft px-3 py-1 text-xs font-medium text-primary">
-          <Sparkle className="h-3.5 w-3.5" /> Tu coach de bolsillo
+          <Sparkle className="h-3.5 w-3.5" /> Tu asistente de alimentación con IA
         </span>
         <h1 className="mt-6 font-display text-5xl leading-[1.05] text-foreground">
-          Daily <span className="text-gradient-primary">Guide</span>
+          <span className="text-gradient-primary">Peppers</span>
         </h1>
         <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-          Un asistente de salud y alimentación con el que hablas cada día. Te da una guía flexible
-          por la mañana, repasa contigo la noche y convierte tu objetivo en progreso que puedes ver.
+          Para comer mejor cada día, sin complicaciones. Te da una guía flexible por la mañana,
+          repasa contigo la noche y convierte tu objetivo en progreso que puedes ver.
         </p>
 
         <ul className="mt-10 space-y-3">

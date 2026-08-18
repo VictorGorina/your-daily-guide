@@ -44,13 +44,13 @@ import { eur, shoppingTotal } from "@/lib/plan-shared";
 export const Route = createFileRoute("/_authenticated/hogar")({
   head: () => ({
     meta: [
-      { title: "Tu hogar · Daily Guide" },
+      { title: "Tu hogar · Peppers" },
       {
         name: "description",
         content:
           "Une tu cuenta con quien vive contigo, decide qué comidas compartís y añade a los peques de casa.",
       },
-      { property: "og:title", content: "Tu hogar · Daily Guide" },
+      { property: "og:title", content: "Tu hogar · Peppers" },
       {
         property: "og:description",
         content: "Comidas compartidas, lista de la compra común y perfiles de los niños.",

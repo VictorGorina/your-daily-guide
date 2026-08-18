@@ -97,10 +97,10 @@ export default function Plan() {
       <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6">
         <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
-            <Text className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
               Plan mensual
             </Text>
-            <Text className="text-3xl font-semibold capitalize text-foreground" numberOfLines={1}>
+            <Text className="text-3xl font-display capitalize text-foreground" numberOfLines={1}>
               {monthLabel}
             </Text>
           </View>
@@ -112,9 +112,9 @@ export default function Plan() {
               style={generate.isPending ? { opacity: 0.6 } : undefined}
             >
               {generate.isPending ? (
-                <ActivityIndicator size="small" color="#677380" />
+                <ActivityIndicator size="small" color="#83796c" />
               ) : (
-                <RefreshCw size={18} color="#677380" />
+                <RefreshCw size={18} color="#83796c" />
               )}
             </Pressable>
           ) : null}
@@ -122,8 +122,8 @@ export default function Plan() {
 
         {!plan ? (
           <View className="mt-8 items-center rounded-3xl border border-border bg-surface p-6">
-            <CalendarRange size={28} color="#4f8ac6" />
-            <Text className="mt-3 text-sm font-semibold text-foreground">
+            <CalendarRange size={28} color="#6dbe7b" />
+            <Text className="mt-3 text-sm font-sans-semibold text-foreground">
               Todavía no tienes plan de este mes
             </Text>
             <Text className="mt-1.5 text-center text-sm text-muted-foreground">
@@ -136,7 +136,7 @@ export default function Plan() {
               className="mt-5 w-full items-center rounded-full bg-primary py-4 active:opacity-90"
               style={generate.isPending || planQ.isLoading ? { opacity: 0.6 } : undefined}
             >
-              <Text className="text-sm font-semibold text-primary-foreground">
+              <Text className="text-sm font-sans-semibold text-primary-foreground">
                 {generate.isPending ? "Preparando tu mes..." : "Crear plan del mes"}
               </Text>
             </Pressable>
@@ -159,9 +159,9 @@ export default function Plan() {
                       active ? "bg-surface" : ""
                     }`}
                   >
-                    <Icon size={16} color={active ? "#4f8ac6" : "#677380"} />
+                    <Icon size={16} color={active ? "#6dbe7b" : "#83796c"} />
                     <Text
-                      className={`text-sm font-medium ${active ? "text-primary" : "text-muted-foreground"}`}
+                      className={`text-sm font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
                     >
                       {label}
                     </Text>
@@ -174,8 +174,8 @@ export default function Plan() {
               <View className="mt-5 gap-5">
                 <View className="rounded-3xl border border-border bg-surface p-5">
                   <View className="flex-row items-center gap-2">
-                    <Sparkles size={16} color="#4f8ac6" />
-                    <Text className="text-sm font-semibold text-foreground">
+                    <Sparkles size={16} color="#6dbe7b" />
+                    <Text className="text-sm font-sans-semibold text-foreground">
                       Cómo enfocamos el mes
                     </Text>
                   </View>
@@ -203,7 +203,7 @@ export default function Plan() {
                 <View className="rounded-3xl border border-border bg-surface p-5">
                   <View className="flex-row items-baseline justify-between gap-3">
                     <View className="min-w-0 flex-1">
-                      <Text className="text-sm font-semibold text-foreground">
+                      <Text className="text-sm font-sans-semibold text-foreground">
                         Total orientativo del mes
                       </Text>
                       <Text className="mt-1 text-xs text-muted-foreground">
@@ -213,7 +213,7 @@ export default function Plan() {
                       </Text>
                     </View>
                     <Text
-                      className={`text-2xl font-bold tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
+                      className={`text-2xl font-display tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
                     >
                       {eur(total)}
                     </Text>
@@ -241,7 +241,7 @@ export default function Plan() {
 
                   {confirmed ? (
                     <View className="mt-4 flex-row items-center gap-2 rounded-xl bg-secondary/60 px-3 py-2.5">
-                      <Lock size={14} color="#677380" />
+                      <Lock size={14} color="#83796c" />
                       <Text className="flex-1 text-xs text-muted-foreground">
                         Compra confirmada: los ingredientes del mes ya no cambian. Los platos sí
                         puedo recolocarlos.
@@ -254,8 +254,8 @@ export default function Plan() {
                       className="mt-4 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
                       style={lock.isPending ? { opacity: 0.6 } : undefined}
                     >
-                      <CheckCircle2 size={16} color="#f9fcff" />
-                      <Text className="text-sm font-semibold text-primary-foreground">
+                      <CheckCircle2 size={16} color="#3e3d39" />
+                      <Text className="text-sm font-sans-semibold text-primary-foreground">
                         {lock.isPending ? "Confirmando..." : "Ya he comprado esto"}
                       </Text>
                     </Pressable>
@@ -267,15 +267,15 @@ export default function Plan() {
                     onPress={() => void shareList()}
                     className="flex-row items-center justify-center gap-2 rounded-2xl border border-input bg-surface py-3.5 active:opacity-80"
                   >
-                    <Share2 size={16} color="#4f8ac6" />
-                    <Text className="text-sm font-semibold text-foreground">
+                    <Share2 size={16} color="#6dbe7b" />
+                    <Text className="text-sm font-sans-semibold text-foreground">
                       Compartir la lista
                     </Text>
                   </Pressable>
                 ) : null}
 
                 <View className="rounded-3xl border border-border bg-surface p-5">
-                  <Text className="text-sm font-semibold text-foreground">Cada cuánto compras</Text>
+                  <Text className="text-sm font-sans-semibold text-foreground">Cada cuánto compras</Text>
                   <Text className="mt-1 text-xs text-muted-foreground">
                     Reparto los frescos entre compras para que nada se eche a perder.
                   </Text>
@@ -298,7 +298,7 @@ export default function Plan() {
                           style={disabled ? { opacity: 0.6 } : undefined}
                         >
                           <Text
-                            className={`text-xs font-semibold ${
+                            className={`text-xs font-sans-semibold ${
                               active ? "text-primary-foreground" : "text-muted-foreground"
                             }`}
                           >
@@ -328,14 +328,14 @@ export default function Plan() {
                   return (
                     <View key={t.trip} className="rounded-3xl border border-border bg-surface p-5">
                       <View className="flex-row items-baseline justify-between gap-3">
-                        <Text className="flex-1 text-sm font-semibold text-foreground">
+                        <Text className="flex-1 text-sm font-sans-semibold text-foreground">
                           {tripLabel(activeCadence, t.trip)}
                         </Text>
-                        <Text className="text-xs font-semibold text-primary">{eur(tripTotal)}</Text>
+                        <Text className="text-xs font-sans-semibold text-primary">{eur(tripTotal)}</Text>
                       </View>
                       {t.groups.map((group) => (
                         <View key={group.category} className="mt-3">
-                          <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
                             {group.category}
                           </Text>
                           <View className="mt-1.5 gap-1.5">
@@ -348,7 +348,7 @@ export default function Plan() {
                                     <Text className="text-muted-foreground"> · {item.qty}</Text>
                                   ) : null}
                                   {item.perishable ? (
-                                    <Text className="text-[11px] font-semibold text-secondary-foreground">
+                                    <Text className="text-[11px] font-sans-semibold text-secondary-foreground">
                                       {"  fresco"}
                                     </Text>
                                   ) : null}
@@ -405,7 +405,7 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
 
   return (
     <View className="rounded-3xl border border-border bg-surface p-5">
-      <Text className="text-sm font-semibold text-foreground">Calendario del mes</Text>
+      <Text className="text-sm font-sans-semibold text-foreground">Calendario del mes</Text>
       <Text className="mt-1 text-xs text-muted-foreground">
         Toca un día para ver su menú completo.
       </Text>
@@ -413,7 +413,7 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
       <View className="mt-4 flex-row flex-wrap">
         {WEEKDAYS.map((d, i) => (
           <View key={`${d}-${i}`} className="items-center py-1" style={{ width: `${100 / 7}%` }}>
-            <Text className="text-[11px] font-medium text-muted-foreground">{d}</Text>
+            <Text className="text-[11px] font-sans-medium text-muted-foreground">{d}</Text>
           </View>
         ))}
         {cells.map((date, i) => {
@@ -466,11 +466,11 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
                 const note = offListNote(meal.off);
                 return (
                   <View key={meal.slot} className="rounded-xl border border-border bg-surface p-3">
-                    <Text className="text-xs font-semibold text-primary">{meal.moment}</Text>
+                    <Text className="text-xs font-sans-semibold text-primary">{meal.moment}</Text>
                     <Text className="mt-1 text-sm text-foreground">{meal.idea}</Text>
                     {note ? (
                       <View className="mt-1.5 self-start rounded-full bg-warning/20 px-2 py-0.5">
-                        <Text className="text-[11px] font-medium text-foreground">{note}</Text>
+                        <Text className="text-[11px] font-sans-medium text-foreground">{note}</Text>
                       </View>
                     ) : null}
                   </View>

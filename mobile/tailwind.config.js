@@ -2,46 +2,72 @@
 // NativeWind v4 va con Tailwind v3 (no v4): la v4 quitó la API de configuración
 // en la que se apoya y la combinación no genera ningún estilo, sin avisar.
 //
-// La paleta es el tema "niebla" de la web (:root en src/styles.css), convertido
-// de oklch() a hex porque React Native no sabe leer oklch. Si allí se retoca un
-// color, hay que reconvertirlo aquí: son dos copias, no una fuente compartida.
+// La paleta es el tema "peppers" (por defecto) de la web (:root en
+// src/styles.css). React Native no entiende oklch/color-mix, así que aquí son
+// los mismos hex ya calculados a mano: si se retoca uno allí, hay que
+// reconvertirlo aquí — son dos copias, no una fuente compartida.
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
   theme: {
     extend: {
       colors: {
-        background: "#f6fafd",
-        foreground: "#1d2a37",
-        surface: "#ffffff",
-        card: "#ffffff",
-        "card-foreground": "#1d2a37",
-        primary: "#4f8ac6",
-        "primary-foreground": "#f9fcff",
-        "primary-soft": "#d8ebfb",
-        secondary: "#e7f0f7",
-        "secondary-foreground": "#2a394a",
-        muted: "#ecf2f8",
-        "muted-foreground": "#677380",
-        accent: "#ceeff5",
-        "accent-foreground": "#1e2f41",
-        danger: "#e24947",
-        "danger-foreground": "#f9fcff",
-        warning: "#e19600",
-        "warning-foreground": "#2b1f11",
-        // Semáforo de hábitos (verde), compartido por WeekStrip y MonthCalendar.
-        success: "#4aa969",
-        "success-foreground": "#f7fef8",
-        "success-soft": "#c8f1d1",
-        destructive: "#d24c49",
-        "destructive-foreground": "#f9fcff",
-        border: "#dce4ec",
-        input: "#dce4ec",
+        background: "#f3f1ed",
+        foreground: "#3e3d39",
+        surface: "#fbfaf7",
+        card: "#fbfaf7",
+        "card-foreground": "#3e3d39",
+        primary: "#6dbe7b",
+        "primary-foreground": "#3e3d39",
+        "primary-soft": "#e4f3e7",
+        secondary: "#eae6dd",
+        "secondary-foreground": "#3e3d39",
+        muted: "#eeeae2",
+        "muted-foreground": "#83796c",
+        accent: "#efe7da",
+        "accent-foreground": "#3e3d39",
+        danger: "#e2685f",
+        "danger-foreground": "#fbfaf7",
+        warning: "#f2c14e",
+        "warning-foreground": "#3e2f12",
+        success: "#4cae64",
+        "success-foreground": "#fbfaf7",
+        "success-soft": "#e1f2e4",
+        destructive: "#e2685f",
+        "destructive-foreground": "#fbfaf7",
+        border: "#e2dcd0",
+        input: "#e2dcd0",
+        // Colores de categoría de alimento (spec §4) — usar siempre a baja
+        // opacidad como fondo de tarjeta (ej. bg-category-verdura/15).
+        "category-verdura": "#6dbe7b",
+        "category-pescado": "#4c9bd6",
+        "category-carne": "#e57373",
+        "category-aves": "#f2c14e",
+        "category-cereales": "#d7b58a",
+        "category-fruta": "#ff8a3d",
+        "category-lacteos": "#f5e6c8",
+        "category-legumbres": "#9a7655",
+      },
+      fontFamily: {
+        // Cuerpo/UI — alternativa a Suisse Int'l. Los pesos van con nombres
+        // propios porque React Native no sintetiza negrita sobre una fuente
+        // cargada: cada peso es un archivo/familia distinta (ver app/_layout.tsx).
+        sans: ["WorkSans_400Regular"],
+        "sans-medium": ["WorkSans_500Medium"],
+        "sans-semibold": ["WorkSans_600SemiBold"],
+        "sans-bold": ["WorkSans_700Bold"],
+        // Títulos — alternativa a Recoleta: serif cálida con carácter editorial.
+        display: ["Fraunces_600SemiBold"],
       },
       borderRadius: {
-        // --radius: 1.25rem en la web
-        xl: 20,
-        "2xl": 28,
+        // Botones 10–12px, cards 12–16px, elementos destacados hasta ~18px
+        // (spec §7) — más moderado que las cápsulas de antes.
+        sm: 6,
+        md: 9,
+        lg: 12,
+        xl: 16,
+        "2xl": 22,
+        "3xl": 30,
       },
     },
   },

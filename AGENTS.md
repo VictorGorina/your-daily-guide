@@ -1,4 +1,4 @@
-# Daily Guide
+# Senda
 
 App de coach de salud y alimentación. TanStack Start + React + TypeScript + Tailwind + Supabase.
 La IA (chat del coach, guía diaria, plan mensual) usa OpenRouter (modelo `google/gemini-2.5-flash`

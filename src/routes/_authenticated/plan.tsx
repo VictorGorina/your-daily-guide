@@ -39,13 +39,13 @@ import {
 export const Route = createFileRoute("/_authenticated/plan")({
   head: () => ({
     meta: [
-      { title: "Plan del mes · Daily Guide" },
+      { title: "Plan del mes · Peppers" },
       {
         name: "description",
         content:
           "Tu plan mensual de comidas con la lista de la compra y su precio orientativo, ajustada a tu presupuesto.",
       },
-      { property: "og:title", content: "Plan del mes · Daily Guide" },
+      { property: "og:title", content: "Plan del mes · Peppers" },
       {
         property: "og:description",
         content: "Plan mensual de comidas y lista de la compra con precios.",

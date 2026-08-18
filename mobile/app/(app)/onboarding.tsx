@@ -169,7 +169,7 @@ const BUDGET_Q: Question = {
 };
 
 const PARTNER_APP_Q: Question = {
-  q: "¿Tu pareja también va a usar Daily Guide? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
+  q: "¿Tu pareja también va a usar Peppers? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
   hint: "Así sé si el presupuesto que me des luego es solo tuyo o el de los dos",
   chips: ["Sí, también la usará", "No, de momento no"],
 };
@@ -180,7 +180,7 @@ const SCREENS: Screen[] = [
     subtitle: "Datos biométricos y de salud",
     questions: [
       {
-        q: "Hola, soy tu Daily Guide. Te acompañaré cada día con ideas flexibles, nunca con dietas rígidas ni prisas. Para empezar, ¿cómo te llamo?",
+        q: "Hola, soy Peppers, tu asistente de alimentación con IA. Te acompañaré cada día con ideas flexibles, nunca con dietas rígidas ni prisas. Para empezar, ¿cómo te llamo?",
         hint: "Tu nombre",
       },
       BIRTHDATE_Q,
@@ -701,14 +701,14 @@ export default function Onboarding() {
 
             <ScrollView className="mt-5 flex-1" contentContainerClassName="gap-5 pb-4">
               <View className="gap-3 rounded-3xl border border-border bg-surface p-4">
-                <Text className="text-sm font-medium text-foreground">Datos clave</Text>
+                <Text className="text-sm font-sans-medium text-foreground">Datos clave</Text>
                 {KEY_FIELDS.map((key) => (
                   <View key={key}>
                     <View className="flex-row items-center gap-1.5">
                       <Text className="text-xs text-muted-foreground">{GAP_LABEL[key].label}</Text>
                       {review.missing.includes(key) ? (
                         <View className="rounded-full bg-primary-soft px-2 py-0.5">
-                          <Text className="text-[10px] font-medium text-primary">falta</Text>
+                          <Text className="text-[10px] font-sans-medium text-primary">falta</Text>
                         </View>
                       ) : null}
                     </View>
@@ -717,7 +717,7 @@ export default function Onboarding() {
                       onChangeText={(t) => setGapValues((v) => ({ ...v, [key]: t }))}
                       keyboardType={GAP_LABEL[key].type === "number" ? "decimal-pad" : "default"}
                       placeholder={GAP_LABEL[key].type === "time" ? "HH:MM" : ""}
-                      placeholderTextColor="#677380"
+                      placeholderTextColor="#83796c"
                       className="mt-1 h-12 rounded-2xl border border-input bg-background px-4 text-sm text-foreground"
                     />
                     <Text className="mt-1 text-[11px] text-muted-foreground">{GAP_LABEL[key].help}</Text>
@@ -727,7 +727,7 @@ export default function Onboarding() {
 
               {sections.map((s) => (
                 <View key={s.title} className="gap-2">
-                  <Text className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Text className="px-1 text-xs font-sans-semibold uppercase tracking-wide text-muted-foreground">
                     {s.title}
                   </Text>
                   {s.items.map((a) => (
@@ -750,7 +750,7 @@ export default function Onboarding() {
                             onPress={() => setEditing(null)}
                             className="self-end rounded-full bg-secondary px-3.5 py-1.5"
                           >
-                            <Text className="text-xs font-medium text-secondary-foreground">Listo</Text>
+                            <Text className="text-xs font-sans-medium text-secondary-foreground">Listo</Text>
                           </Pressable>
                         </View>
                       ) : (
@@ -759,7 +759,7 @@ export default function Onboarding() {
                           className="mt-1.5 flex-row items-start justify-between gap-3"
                         >
                           <Text className="flex-1 text-sm text-foreground">{a.a}</Text>
-                          <Pencil size={14} color="#677380" />
+                          <Pencil size={14} color="#83796c" />
                         </Pressable>
                       )}
                     </View>
@@ -770,13 +770,13 @@ export default function Onboarding() {
 
             {error ? (
               <View className="mb-2 flex-row items-start gap-1.5">
-                <AlertCircle size={14} color="#d24c49" />
+                <AlertCircle size={14} color="#e2685f" />
                 <Text className="flex-1 text-xs text-destructive">{error}</Text>
               </View>
             ) : null}
             {dirty ? (
               <View className="mb-2 flex-row items-start gap-1.5">
-                <Info size={14} color="#4f8ac6" />
+                <Info size={14} color="#6dbe7b" />
                 <Text className="flex-1 text-xs text-muted-foreground">
                   He anotado tus cambios, los releo al confirmar.
                 </Text>
@@ -788,10 +788,10 @@ export default function Onboarding() {
               onPress={() => void confirmReview()}
               className="mb-2 flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-50"
             >
-              <Text className="text-sm font-semibold text-primary-foreground">
+              <Text className="text-sm font-sans-semibold text-primary-foreground">
                 {saving ? "Guardando..." : "Confirmar y guardar mi perfil"}
               </Text>
-              {saving ? null : <Check size={16} color="#f9fcff" />}
+              {saving ? null : <Check size={16} color="#3e3d39" />}
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -859,7 +859,7 @@ export default function Onboarding() {
                     }`}
                   >
                     <Text
-                      className={`text-xs font-medium ${
+                      className={`text-xs font-sans-medium ${
                         active ? "text-primary-foreground" : "text-foreground"
                       }`}
                     >
@@ -873,7 +873,7 @@ export default function Onboarding() {
 
           {error && !done ? (
             <View className="mb-2 flex-row items-start gap-2 rounded-2xl border border-primary/30 bg-primary-soft px-3.5 py-2.5">
-              <Info size={14} color="#4f8ac6" />
+              <Info size={14} color="#6dbe7b" />
               <Text className="flex-1 text-xs text-foreground">{error}</Text>
             </View>
           ) : null}
@@ -883,7 +883,7 @@ export default function Onboarding() {
               onPress={() => router.replace("/hoy")}
               className="mb-2 w-full items-center rounded-full bg-primary py-4 active:opacity-90"
             >
-              <Text className="text-sm font-semibold text-primary-foreground">
+              <Text className="text-sm font-sans-semibold text-primary-foreground">
                 Empezar mi primer día
               </Text>
             </Pressable>
@@ -891,7 +891,7 @@ export default function Onboarding() {
             <View className="mb-2 gap-3 rounded-3xl border border-border bg-surface p-4">
               <Text className="text-sm text-muted-foreground">
                 Perfecto, ya tengo {SCREENS[screen]!.subtitle.toLowerCase()}. Seguimos con{" "}
-                <Text className="font-medium text-foreground">
+                <Text className="font-sans-medium text-foreground">
                   {SCREENS[screen + 1]!.subtitle.toLowerCase()}
                 </Text>
                 .
@@ -900,8 +900,8 @@ export default function Onboarding() {
                 onPress={nextScreen}
                 className="flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
               >
-                <Text className="text-sm font-semibold text-primary-foreground">Continuar</Text>
-                <ArrowRight size={16} color="#f9fcff" />
+                <Text className="text-sm font-sans-semibold text-primary-foreground">Continuar</Text>
+                <ArrowRight size={16} color="#3e3d39" />
               </Pressable>
             </View>
           ) : (
@@ -920,7 +920,7 @@ export default function Onboarding() {
                       ? "DD/MM/AAAA"
                       : (current?.hint ?? "Escribe aquí...")
                 }
-                placeholderTextColor="#677380"
+                placeholderTextColor="#83796c"
                 className="min-h-[44px] px-2 py-2 text-sm text-foreground"
                 textAlignVertical="top"
               />
@@ -932,8 +932,8 @@ export default function Onboarding() {
                       disabled={saving}
                       className="flex-row items-center gap-1.5 rounded-full px-2.5 py-1.5"
                     >
-                      <SkipForward size={14} color="#677380" />
-                      <Text className="text-xs font-medium text-muted-foreground">Saltar</Text>
+                      <SkipForward size={14} color="#83796c" />
+                      <Text className="text-xs font-sans-medium text-muted-foreground">Saltar</Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -944,7 +944,7 @@ export default function Onboarding() {
                     saving || !value.trim() ? "opacity-40" : ""
                   }`}
                 >
-                  <Send size={16} color="#f9fcff" />
+                  <Send size={16} color="#3e3d39" />
                 </Pressable>
               </View>
             </View>
@@ -975,15 +975,15 @@ function OnboardingProgress({
     <View>
       <View className="flex-row items-end justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="text-xs font-medium text-muted-foreground">
+          <Text className="text-xs font-sans-medium text-muted-foreground">
             Etapa {stage + 1} de {STAGES.length} · {subtitle}
           </Text>
-          <Text className="text-lg font-semibold text-foreground" numberOfLines={1}>
+          <Text className="text-lg font-sans-semibold text-foreground" numberOfLines={1}>
             {title}
           </Text>
         </View>
         <View className="items-end">
-          <Text className="text-xs font-medium text-foreground">{pct}%</Text>
+          <Text className="text-xs font-sans-medium text-foreground">{pct}%</Text>
           <Text className="text-[11px] text-muted-foreground">
             {left > 0 ? `Quedan ${left} ${left === 1 ? "etapa" : "etapas"}` : "Última etapa"}
           </Text>
@@ -1018,18 +1018,18 @@ function PlanGeneratingScreen() {
         <View className="absolute h-32 w-32 rounded-full bg-primary/10" />
         <View className="absolute h-24 w-24 rounded-full bg-primary/15" />
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary">
-          <Sparkles size={28} color="#f9fcff" />
+          <Sparkles size={28} color="#3e3d39" />
         </View>
       </View>
 
       <View className="items-center gap-2.5">
-        <Text className="text-xl font-semibold text-foreground">Estoy preparando tu plan</Text>
+        <Text className="text-xl font-display text-foreground">Estoy preparando tu plan</Text>
         <Text className="min-h-[20px] text-center text-sm text-muted-foreground">
           {GENERATING_MESSAGES[i]}
         </Text>
       </View>
 
-      <ActivityIndicator color="#4f8ac6" />
+      <ActivityIndicator color="#6dbe7b" />
     </SafeAreaView>
   );
 }

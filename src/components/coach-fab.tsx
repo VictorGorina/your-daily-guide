@@ -257,12 +257,12 @@ export function CoachFab() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Hablar con el coach"
-        className={`fixed bottom-24 right-4 z-50 relative grid h-14 w-14 place-items-center rounded-full shadow-lg transition-all duration-300 active:scale-90 ${
+        className={`fixed bottom-24 right-4 z-50 relative grid h-14 w-14 place-items-center rounded-full shadow-[0_4px_14px_-6px_oklch(0_0_0/25%)] transition-all duration-300 active:scale-90 ${
           flash === "done"
-            ? "bg-primary text-primary-foreground shadow-primary/50 scale-105"
+            ? "bg-primary text-primary-foreground scale-105"
             : flash === "error"
-              ? "bg-destructive text-destructive-foreground shadow-destructive/40"
-              : "bg-primary text-primary-foreground shadow-primary/30 hover:scale-105"
+              ? "bg-destructive text-destructive-foreground"
+              : "bg-primary text-primary-foreground hover:scale-105"
         }`}
       >
         {!open && !working && !flash ? (
