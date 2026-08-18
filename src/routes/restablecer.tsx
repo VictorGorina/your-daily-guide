@@ -32,12 +32,31 @@ function RestablecerPage() {
   const [status, setStatus] = useState<"waiting" | "ready" | "done" | "error">(
     error_description ? "error" : "waiting",
   );
+  const [errorMessage, setErrorMessage] = useState<string | undefined>(
+    error_description ? decodeURIComponent(error_description.replace(/\+/g, " ")) : undefined,
+  );
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (error_description) return;
+    // Cuando el enlace ha caducado o ya se ha usado, Supabase añade el
+    // motivo a la URL — pero según el caso lo pone en la query string
+    // (?error_description=...) o en el fragmento (#error=...&error_description=...,
+    // el mismo sitio donde van los tokens del flujo implícito). El router
+    // sólo nos da la query string, así que miramos también el hash antes de
+    // quedarnos esperando un evento que ya no va a llegar.
+    // (URLSearchParams ya decodifica %XX y "+" al leerlo, a diferencia del
+    // error_description de la query string, que llega crudo.)
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const hashError = hashParams.get("error_description") || hashParams.get("error");
+    const initialError =
+      (error_description && decodeURIComponent(error_description.replace(/\+/g, " "))) || hashError;
+    if (initialError) {
+      setErrorMessage(initialError);
+      setStatus("error");
+      return;
+    }
 
     let cancelled = false;
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
@@ -141,9 +160,8 @@ function RestablecerPage() {
             <TriangleAlert className="mx-auto h-10 w-10 text-destructive" />
             <h1 className="mt-6 font-display text-3xl">Este enlace ya no funciona</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {error_description
-                ? decodeURIComponent(error_description.replace(/\+/g, " "))
-                : "Puede haber caducado o usarse ya. Pide un enlace nuevo desde la pantalla de entrar."}
+              {errorMessage ||
+                "Puede haber caducado o usarse ya. Pide un enlace nuevo desde la pantalla de entrar."}
             </p>
             <button
               onClick={() => navigate({ to: "/auth" })}
