@@ -11,6 +11,13 @@ import { supabase } from "@/integrations/supabase/client";
 // evento PASSWORD_RECOVERY con una sesión ya activa; aquí esperamos ese
 // evento y mostramos el formulario para fijar la contraseña nueva. Si el
 // enlace ha caducado o ya se usó, Supabase añade `error_description` en la URL.
+//
+// Igual que en "/" y en confirmado.tsx: el procesado del token de la URL es
+// asíncrono (un setTimeout(…, 0) interno de supabase-js), así que en una
+// carga dura de página (clic desde el correo) el evento PASSWORD_RECOVERY
+// puede disparase antes de que este efecto llegue a suscribirse — se
+// perdería sin más señal. Por eso también comprobamos getSession() como
+// respaldo: si el token ya se procesó, la sesión de recuperación ya está ahí.
 export const Route = createFileRoute("/restablecer")({
   ssr: false,
   validateSearch: (
@@ -59,6 +66,10 @@ function RestablecerPage() {
     }
 
     let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && data.session)
+        setStatus((current) => (current === "waiting" ? "ready" : current));
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY" && !cancelled) setStatus("ready");
     });
