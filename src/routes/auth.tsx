@@ -33,7 +33,7 @@ function AuthPage() {
     return false;
   };
 
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up" | "forgot">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,6 +57,30 @@ function AuthPage() {
     return () => sub.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, next]);
+
+  const forgotPassword = async () => {
+    if (!email.trim()) {
+      toast.error("Necesito tu correo para enviarte el enlace");
+      return;
+    }
+    setLoading(true);
+    try {
+      // Mismo criterio que emailRedirectTo en signUp: hay que apuntar a una URL
+      // pública y estable. Esta también debe estar en la allowlist de Redirect
+      // URLs del panel de Supabase (Authentication → URL Configuration).
+      const base =
+        (import.meta.env.VITE_PUBLIC_URL as string | undefined) || window.location.origin;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${base}/restablecer${next ? `?next=${encodeURIComponent(next)}` : ""}`,
+      });
+      if (error) throw error;
+      setSent(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No hemos podido enviar el enlace");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
@@ -139,17 +163,62 @@ function AuthPage() {
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-14">
       <div className="animate-rise">
         <h1 className="font-display text-4xl">
-          {mode === "in" ? "Bienvenido de vuelta" : "Empecemos"}
+          {mode === "in"
+            ? "Bienvenido de vuelta"
+            : mode === "up"
+              ? "Empecemos"
+              : "Recupera tu acceso"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {mode === "in"
             ? "Entra con tu correo y sigue donde lo dejaste."
-            : "Crea tu cuenta y tu coach te acompaña desde hoy."}
+            : mode === "up"
+              ? "Crea tu cuenta y tu coach te acompaña desde hoy."
+              : "Te enviamos un enlace a tu correo para crear una contraseña nueva."}
         </p>
 
         {sent ? (
-          <div className="mt-8 rounded-2xl border border-primary/30 bg-primary-soft px-4 py-4 text-sm">
-            Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar.
+          <div className="mt-8 space-y-3">
+            <div className="rounded-2xl border border-primary/30 bg-primary-soft px-4 py-4 text-sm">
+              {mode === "forgot"
+                ? "Te hemos enviado un correo con un enlace para restablecer tu contraseña. Ábrelo y crea una nueva."
+                : "Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar."}
+            </div>
+            {mode === "forgot" && (
+              <button
+                onClick={() => {
+                  setSent(false);
+                  setMode("in");
+                }}
+                className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Volver a entrar
+              </button>
+            )}
+          </div>
+        ) : mode === "forgot" ? (
+          <div className="mt-8 space-y-3">
+            <input
+              className={field}
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@correo.com"
+            />
+            <button
+              onClick={forgotPassword}
+              disabled={loading}
+              className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+            >
+              {loading ? "Enviando..." : "Enviar enlace"}
+            </button>
+            <button
+              onClick={() => setMode("in")}
+              className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Ya me acuerdo, quiero entrar
+            </button>
           </div>
         ) : (
           <div className="mt-8 space-y-3">
@@ -169,6 +238,14 @@ function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Contraseña"
             />
+            {mode === "in" && (
+              <button
+                onClick={() => setMode("forgot")}
+                className="w-full text-right text-xs text-muted-foreground underline-offset-4 hover:underline"
+              >
+                ¿Has olvidado tu contraseña?
+              </button>
+            )}
             <button
               onClick={submit}
               disabled={loading}

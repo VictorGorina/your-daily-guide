@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ConfirmadoRouteImport } from './routes/confirmado'
+import { Route as RestablecerRouteImport } from './routes/restablecer'
 import { Route as AuthenticatedAjustesRouteImport } from './routes/_authenticated/ajustes'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedHistorialRouteImport } from './routes/_authenticated/historial'
@@ -53,6 +54,11 @@ const AuthRoute = AuthRouteImport.update({
 const ConfirmadoRoute = ConfirmadoRouteImport.update({
   id: '/confirmado',
   path: '/confirmado',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RestablecerRoute = RestablecerRouteImport.update({
+  id: '/restablecer',
+  path: '/restablecer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAjustesRoute = AuthenticatedAjustesRouteImport.update({
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/confirmado': typeof ConfirmadoRoute
+  '/restablecer': typeof RestablecerRoute
   '/ajustes': typeof AuthenticatedAjustesRoute
   '/chat': typeof AuthenticatedChatRoute
   '/historial': typeof AuthenticatedHistorialRoute
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/confirmado': typeof ConfirmadoRoute
+  '/restablecer': typeof RestablecerRoute
   '/ajustes': typeof AuthenticatedAjustesRoute
   '/chat': typeof AuthenticatedChatRoute
   '/historial': typeof AuthenticatedHistorialRoute
@@ -226,6 +234,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/confirmado': typeof ConfirmadoRoute
+  '/restablecer': typeof RestablecerRoute
   '/_authenticated/ajustes': typeof AuthenticatedAjustesRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/historial': typeof AuthenticatedHistorialRoute
@@ -255,6 +264,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/confirmado'
+    | '/restablecer'
     | '/ajustes'
     | '/chat'
     | '/historial'
@@ -282,6 +292,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/confirmado'
+    | '/restablecer'
     | '/ajustes'
     | '/chat'
     | '/historial'
@@ -310,6 +321,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/confirmado'
+    | '/restablecer'
     | '/_authenticated/ajustes'
     | '/_authenticated/chat'
     | '/_authenticated/historial'
@@ -339,6 +351,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ConfirmadoRoute: typeof ConfirmadoRoute
+  RestablecerRoute: typeof RestablecerRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute
   ApiPushSubscribeRoute: typeof ApiPushSubscribeRoute
@@ -383,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/confirmado'
       fullPath: '/confirmado'
       preLoaderRoute: typeof ConfirmadoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/restablecer': {
+      id: '/restablecer'
+      path: '/restablecer'
+      fullPath: '/restablecer'
+      preLoaderRoute: typeof RestablecerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/ajustes': {
@@ -572,6 +592,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ConfirmadoRoute: ConfirmadoRoute,
+  RestablecerRoute: RestablecerRoute,
   ApiChatRoute: ApiChatRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiPushSubscribeRoute: ApiPushSubscribeRoute,
