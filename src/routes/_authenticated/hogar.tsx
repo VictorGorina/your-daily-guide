@@ -207,7 +207,6 @@ function Hogar() {
 
   const household = state.data?.household;
   const members = state.data?.members ?? [];
-  const others = members.filter((m) => m.user_id !== state.data?.me?.user_id);
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
@@ -266,33 +265,45 @@ function Hogar() {
         </Fragment>
       ) : (
         <Fragment key="household">
-          <section className="surface-card mt-6 space-y-3 p-5">
-            <h2 className="text-sm font-semibold">{household.name}</h2>
+          <section className="surface-card mt-6 p-5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Tu familia
+            </span>
             <input
-              className={input}
+              className="mt-1 w-full border-b border-dashed border-input bg-transparent pb-2 font-display text-3xl outline-none focus:border-primary"
               defaultValue={household.name}
               onBlur={(e) => {
                 void renameHousehold(household.id, e.target.value).then(refresh);
               }}
             />
-            <button
-              onClick={() => {
-                void navigator.clipboard?.writeText(household.invite_code);
-                toast.success("Código copiado");
-              }}
-              className="flex w-full items-center justify-between rounded-2xl border border-dashed border-input bg-surface px-4 py-3 text-sm"
-            >
-              <span className="text-muted-foreground">Código de invitación</span>
-              <span className="flex items-center gap-2 font-mono text-base tracking-widest">
-                {household.invite_code} <Copy className="h-4 w-4 text-muted-foreground" />
-              </span>
-            </button>
-            <p className="text-xs text-muted-foreground">
-              {members.length} adulto(s) en casa
-              {others.length
-                ? `: ${others.map((m) => m.display_name ?? "otra persona").join(", ")} y tú`
-                : ". Comparte el código para que alguien se una."}
-            </p>
+
+            <h3 className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Users className="h-3.5 w-3.5" /> Miembros
+            </h3>
+            <div className="mt-2 space-y-2">
+              {members.map((m) => {
+                const isMe = m.user_id === state.data?.me?.user_id;
+                const initial = (m.display_name?.trim()?.[0] ?? "?").toUpperCase();
+                return (
+                  <div
+                    key={m.user_id}
+                    className="flex items-center gap-3 rounded-2xl border border-input bg-surface px-4 py-3 text-sm"
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-display text-sm text-primary">
+                      {initial}
+                    </span>
+                    <span className="flex-1 font-medium">
+                      {m.display_name ?? "Sin nombre todavía"}
+                    </span>
+                    {isMe ? (
+                      <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                        Tú
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </section>
 
           <section className="surface-card mt-4 p-5">
@@ -529,6 +540,25 @@ function Hogar() {
                 <Plus className="h-4 w-4" /> Añadir peque
               </button>
             </div>
+          </section>
+
+          <section className="surface-card mt-4 space-y-3 p-5">
+            <h2 className="text-sm font-semibold">Invitar a la familia</h2>
+            <button
+              onClick={() => {
+                void navigator.clipboard?.writeText(household.invite_code);
+                toast.success("Código copiado");
+              }}
+              className="flex w-full items-center justify-between rounded-2xl border border-dashed border-input bg-surface px-4 py-3 text-sm"
+            >
+              <span className="text-muted-foreground">Código de invitación</span>
+              <span className="flex items-center gap-2 font-mono text-base tracking-widest">
+                {household.invite_code} <Copy className="h-4 w-4 text-muted-foreground" />
+              </span>
+            </button>
+            <p className="text-xs text-muted-foreground">
+              Comparte este código para que alguien se una a la familia.
+            </p>
           </section>
 
           <button
