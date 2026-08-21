@@ -233,6 +233,13 @@ function Hoy() {
     save.mutate({ habits: next });
   };
 
+  const clearMealStatus = (index: number) => {
+    const next = habits.map((h, i) =>
+      i === index ? { ...h, status: undefined, done: false } : h,
+    );
+    save.mutate({ habits: next });
+  };
+
   const handleMealStatus = (index: number, status: MealStatus) => {
     setMealStatus(index, status);
     // "Comí distinto" queda registrado al instante, pero ofrecemos detallar qué
@@ -413,16 +420,26 @@ function Hoy() {
                           </button>
                         </>
                       ) : h.done ? (
-                        <span
-                          className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full"
+                        <button
+                          type="button"
+                          title="Deshacer"
+                          aria-label={`${h.label}: deshacer`}
+                          onClick={() => clearMealStatus(i)}
+                          className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full transition-transform active:scale-95"
                           style={{ backgroundColor: cat.accent, color: onAccent(cat.accent) }}
                         >
                           <Check className="h-[17px] w-[17px]" strokeWidth={2.6} />
-                        </span>
+                        </button>
                       ) : (
-                        <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-secondary text-muted-foreground">
+                        <button
+                          type="button"
+                          title="Deshacer"
+                          aria-label={`${h.label}: deshacer`}
+                          onClick={() => clearMealStatus(i)}
+                          className="grid h-[34px] w-[34px] place-items-center rounded-full bg-secondary text-muted-foreground transition-transform active:scale-95"
+                        >
                           <X className="h-[15px] w-[15px]" />
-                        </span>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -466,6 +483,13 @@ function Hoy() {
                               {MEAL_STATUS_LABEL[s]}
                             </button>
                           ))}
+                          <button
+                            type="button"
+                            onClick={() => clearMealStatus(i)}
+                            className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-destructive bg-destructive/10 transition-colors active:scale-95"
+                          >
+                            Deshacer
+                          </button>
                         </div>
                       ) : null}
                     </div>
