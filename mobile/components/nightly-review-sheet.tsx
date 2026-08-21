@@ -121,14 +121,16 @@ export function NightlyReviewSheet({
               Sin marcar todavía
             </Text>
             <Text className="mt-1 text-sm text-foreground">
-              {pending.map((h) => h.label).join(", ")} — si ya no vas a más hoy, puedes cerrarlas sin
-              más, no cuentan como un fallo.
+              {pending.map((h) => h.label).join(", ")} — si ya no vas a más hoy, puedes cerrarlas
+              sin más, no cuentan como un fallo.
             </Text>
             <Pressable
               onPress={onSkipPending}
               className="mt-3 w-full items-center rounded-full bg-secondary py-3 active:opacity-90"
             >
-              <Text className="text-sm font-sans-medium text-secondary-foreground">Hoy paso de estas</Text>
+              <Text className="text-sm font-sans-medium text-secondary-foreground">
+                Hoy paso de estas
+              </Text>
             </Pressable>
           </View>
         ) : null}
@@ -165,7 +167,9 @@ export function NightlyReviewSheet({
           onPress={onDone}
           className="w-full items-center rounded-full bg-primary py-4 active:opacity-90"
         >
-          <Text className="text-sm font-sans-semibold text-primary-foreground">Listo, hasta mañana</Text>
+          <Text className="text-sm font-sans-semibold text-primary-foreground">
+            Listo, hasta mañana
+          </Text>
         </Pressable>
       </View>
     </Sheet>

@@ -274,7 +274,9 @@ export default function Hogar() {
             </View>
 
             <View className="mt-4 gap-3 rounded-3xl border border-border bg-surface p-5">
-              <Text className="text-sm font-sans-semibold text-foreground">Unirme con un código</Text>
+              <Text className="text-sm font-sans-semibold text-foreground">
+                Unirme con un código
+              </Text>
               <TextInput
                 className={`${INPUT} tracking-widest`}
                 value={code}
@@ -330,7 +332,9 @@ export default function Hogar() {
             </View>
 
             <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
-              <Text className="text-sm font-sans-semibold text-foreground">¿Qué comidas compartís?</Text>
+              <Text className="text-sm font-sans-semibold text-foreground">
+                ¿Qué comidas compartís?
+              </Text>
               <Text className="mt-1 text-xs text-muted-foreground">
                 Marca los días que coméis lo mismo en casa. Solo se sincroniza cuando la otra
                 persona también lo marca: los dos partís de un plato base común, salido de la misma
@@ -341,7 +345,9 @@ export default function Hogar() {
               <View className="mt-4 gap-4">
                 {MEAL_KEYS.map((meal) => (
                   <View key={meal}>
-                    <Text className="text-xs font-sans-medium text-foreground">{MEAL_LABEL[meal]}</Text>
+                    <Text className="text-xs font-sans-medium text-foreground">
+                      {MEAL_LABEL[meal]}
+                    </Text>
                     <View className="mt-2 flex-row gap-1.5">
                       {DAY_SHORT.map((label, day) => {
                         const active = shared?.[meal].includes(day) ?? false;
@@ -402,7 +408,9 @@ export default function Hogar() {
             <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
               <View className="flex-row items-center gap-2">
                 <Target size={16} color="#6dbe7b" />
-                <Text className="text-sm font-sans-semibold text-foreground">Objetivo del hogar</Text>
+                <Text className="text-sm font-sans-semibold text-foreground">
+                  Objetivo del hogar
+                </Text>
               </View>
               <Text className="mt-1 text-xs text-muted-foreground">
                 Un objetivo compartido, visible para todos en casa. Vuestro progreso individual
@@ -605,7 +613,9 @@ export default function Hogar() {
               className="mt-6 flex-row items-center justify-center gap-2 rounded-full border border-input py-4 active:opacity-80"
             >
               <LogOut size={16} color="#83796c" />
-              <Text className="text-sm font-sans-medium text-muted-foreground">Salir del hogar</Text>
+              <Text className="text-sm font-sans-medium text-muted-foreground">
+                Salir del hogar
+              </Text>
             </Pressable>
           </>
         )}

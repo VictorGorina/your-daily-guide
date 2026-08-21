@@ -14,8 +14,7 @@ código compartido por ahora — cuando duela duplicar, se monta `packages/share
 - **Operaciones de IA y las que necesitan clave de servicio**: por HTTP con
   [lib/api.ts](lib/api.ts) contra `/api/v1/*`, adjuntando el token de Supabase como Bearer.
   Ojo con los errores: la API devuelve `{"error": mensaje}` con textos para enseñar tal cual, y su
-  código de estado no distingue "dato inválido" de "fallo real" — guíate por el mensaje y por el
-  401.
+  código de estado no distingue "dato inválido" de "fallo real" — guíate por el mensaje y por el 401.
 
 ## Versiones que no se pueden tocar a la ligera
 
@@ -33,7 +32,7 @@ arrastra react-dom 19.2.8 y expo fija react 19.2.3); sin eso npm no instala nada
 
 ## El directorio `ios/` no se toca a mano
 
-`expo run:ios` genera `ios/` con *prebuild* a partir de `app.json`, y está en `.gitignore` a
+`expo run:ios` genera `ios/` con _prebuild_ a partir de `app.json`, y está en `.gitignore` a
 propósito. Cualquier cambio de configuración nativa (permisos, capacidades, iconos, bundle id) va
 en `app.json` o en un config plugin: lo que se edite dentro de `ios/` se pierde en el siguiente
 prebuild.

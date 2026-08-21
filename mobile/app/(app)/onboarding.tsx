@@ -76,7 +76,9 @@ const parseBiometrics = (raw: string): Biometrics => {
   if (!height && meters) height = Math.round(meters * 100);
 
   const numbers = (t.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
-  const used = new Set<number>([age, weight, height, meters].filter((n): n is number => n !== null));
+  const used = new Set<number>(
+    [age, weight, height, meters].filter((n): n is number => n !== null),
+  );
   for (const n of numbers) {
     if (used.has(n)) continue;
     if (!height && ((n >= 120 && n <= 250) || (n >= 1.2 && n <= 2.5))) {
@@ -274,7 +276,13 @@ const SCREENS: Screen[] = [
     questions: [
       {
         q: "¿Cuál es tu objetivo principal?",
-        chips: ["Perder peso", "Ganar masa muscular", "Mantener", "Mejorar hábitos", "Más energía y sueño"],
+        chips: [
+          "Perder peso",
+          "Ganar masa muscular",
+          "Mantener",
+          "Mejorar hábitos",
+          "Más energía y sueño",
+        ],
       },
       {
         q: "Si tu objetivo es de peso, ¿cuánto y en qué plazo te gustaría lograrlo? Sin presión, solo para orientarnos.",
@@ -323,9 +331,21 @@ const GAP_LABEL: Record<GapKey, { label: string; help: string; type: "number" | 
     help: "Sin él no puedo calcular tu progreso.",
     type: "number",
   },
-  height_cm: { label: "Altura (cm)", help: "Me ayuda a ajustar cantidades y consejos.", type: "number" },
-  morning_time: { label: "Resumen de la mañana", help: "Cuándo te doy la guía del día.", type: "time" },
-  evening_time: { label: "Repaso de la noche", help: "Cuándo hacemos el cierre del día.", type: "time" },
+  height_cm: {
+    label: "Altura (cm)",
+    help: "Me ayuda a ajustar cantidades y consejos.",
+    type: "number",
+  },
+  morning_time: {
+    label: "Resumen de la mañana",
+    help: "Cuándo te doy la guía del día.",
+    type: "time",
+  },
+  evening_time: {
+    label: "Repaso de la noche",
+    help: "Cuándo hacemos el cierre del día.",
+    type: "time",
+  },
 };
 
 type Answer = { key: string; q: string; section: string; a: string };
@@ -347,15 +367,16 @@ export default function Onboarding() {
   const router = useRouter();
   const qc = useQueryClient();
 
-  const parse = (transcript: string) =>
-    apiPost<Draft>("onboarding/parse", { transcript });
+  const parse = (transcript: string) => apiPost<Draft>("onboarding/parse", { transcript });
   const makePlan = (month: string) => apiPost("plan/generate", { month });
   const brief = (month: string) => apiPost<{ text?: string }>("plan/welcome", { month });
 
   const [screen, setScreen] = useState(0);
   const [step, setStep] = useState(0);
   const [screenDone, setScreenDone] = useState(false);
-  const [turns, setTurns] = useState<Turn[]>([{ role: "coach", text: SCREENS[0]!.questions[0]!.q }]);
+  const [turns, setTurns] = useState<Turn[]>([
+    { role: "coach", text: SCREENS[0]!.questions[0]!.q },
+  ]);
   const [value, setValue] = useState("");
   const [selectedChips, setSelectedChips] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -567,7 +588,12 @@ export default function Onboarding() {
     setPartnerHasApp(hasApp);
     setAnswers((prev) => [
       ...prev,
-      { key: `${screen}-partner-app`, q: PARTNER_APP_Q.q, section: SCREENS[screen]!.title, a: text },
+      {
+        key: `${screen}-partner-app`,
+        q: PARTNER_APP_Q.q,
+        section: SCREENS[screen]!.title,
+        a: text,
+      },
     ]);
     setValue("");
     setError(null);
@@ -720,7 +746,9 @@ export default function Onboarding() {
                       placeholderTextColor="#83796c"
                       className="mt-1 h-12 rounded-2xl border border-input bg-background px-4 text-sm text-foreground"
                     />
-                    <Text className="mt-1 text-[11px] text-muted-foreground">{GAP_LABEL[key].help}</Text>
+                    <Text className="mt-1 text-[11px] text-muted-foreground">
+                      {GAP_LABEL[key].help}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -739,7 +767,9 @@ export default function Onboarding() {
                             multiline
                             value={a.a}
                             onChangeText={(t) => {
-                              setAnswers((prev) => prev.map((x) => (x.key === a.key ? { ...x, a: t } : x)));
+                              setAnswers((prev) =>
+                                prev.map((x) => (x.key === a.key ? { ...x, a: t } : x)),
+                              );
                               if (a.q === BIRTHDATE_Q.q) setDob(parseDatePretty(t));
                               setDirty(true);
                             }}
@@ -750,7 +780,9 @@ export default function Onboarding() {
                             onPress={() => setEditing(null)}
                             className="self-end rounded-full bg-secondary px-3.5 py-1.5"
                           >
-                            <Text className="text-xs font-sans-medium text-secondary-foreground">Listo</Text>
+                            <Text className="text-xs font-sans-medium text-secondary-foreground">
+                              Listo
+                            </Text>
                           </Pressable>
                         </View>
                       ) : (
@@ -900,7 +932,9 @@ export default function Onboarding() {
                 onPress={nextScreen}
                 className="flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
               >
-                <Text className="text-sm font-sans-semibold text-primary-foreground">Continuar</Text>
+                <Text className="text-sm font-sans-semibold text-primary-foreground">
+                  Continuar
+                </Text>
                 <ArrowRight size={16} color="#3e3d39" />
               </Pressable>
             </View>
@@ -992,10 +1026,17 @@ function OnboardingProgress({
       <View className="mt-3 flex-row gap-1.5">
         {STAGES.map((label, i) => {
           const width =
-            i < stage ? "100%" : i === stage ? `${Math.round(Math.min(1, Math.max(0.08, stageFill)) * 100)}%` : "0%";
+            i < stage
+              ? "100%"
+              : i === stage
+                ? `${Math.round(Math.min(1, Math.max(0.08, stageFill)) * 100)}%`
+                : "0%";
           return (
             <View key={label} className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <View className="h-1.5 rounded-full bg-primary" style={{ width: width as `${number}%` }} />
+              <View
+                className="h-1.5 rounded-full bg-primary"
+                style={{ width: width as `${number}%` }}
+              />
             </View>
           );
         })}

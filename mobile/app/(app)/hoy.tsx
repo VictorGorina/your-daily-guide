@@ -237,7 +237,9 @@ export default function Hoy() {
 
           {!habits.length ? (
             <View className="rounded-3xl border border-border bg-surface p-5">
-              <Text className="text-sm text-muted-foreground">Preparando las comidas de hoy...</Text>
+              <Text className="text-sm text-muted-foreground">
+                Preparando las comidas de hoy...
+              </Text>
             </View>
           ) : allDone ? (
             <View className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-5">
@@ -268,8 +270,8 @@ export default function Hoy() {
               ) : null}
               {sharedWith(nextMeal.label) ? (
                 <Text className="mt-1.5 text-xs text-primary-foreground/80">
-                  Base común con {sharedWith(nextMeal.label)}. ¿Ración distinta? dilo en "comiste otra
-                  cosa".
+                  Base común con {sharedWith(nextMeal.label)}. ¿Ración distinta? dilo en "comiste
+                  otra cosa".
                 </Text>
               ) : null}
               <Pressable
@@ -285,7 +287,9 @@ export default function Hoy() {
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => setMealStatus(nextIndex!, "salteo")}>
-                  <Text className="text-xs font-sans-medium text-primary-foreground/80">me lo salté</Text>
+                  <Text className="text-xs font-sans-medium text-primary-foreground/80">
+                    me lo salté
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -351,8 +355,8 @@ export default function Hoy() {
               ) : null}
               {sharedWith(habits[expandedMeal]!.label) ? (
                 <Text className="mt-1.5 text-xs text-primary">
-                  Base común con {sharedWith(habits[expandedMeal]!.label)} · marca "Comí distinto" si
-                  tu ración se sale de eso
+                  Base común con {sharedWith(habits[expandedMeal]!.label)} · marca "Comí distinto"
+                  si tu ración se sale de eso
                 </Text>
               ) : null}
               <View className="mt-3 flex-row flex-wrap gap-2">
@@ -421,7 +425,9 @@ export default function Hoy() {
                           key={m.moment}
                           className="flex-row gap-3 rounded-xl border border-border bg-surface p-3"
                         >
-                          <Text className="text-xs font-sans-semibold text-primary">{m.moment}</Text>
+                          <Text className="text-xs font-sans-semibold text-primary">
+                            {m.moment}
+                          </Text>
                           <Text className="flex-1 text-sm text-foreground">{m.idea}</Text>
                         </View>
                       ))}
@@ -476,7 +482,9 @@ export default function Hoy() {
             onPress={() => setCalendarOpen((o) => !o)}
             className="flex-row items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3"
           >
-            <Text className="text-xs font-sans-medium text-muted-foreground">Ver calendario del mes</Text>
+            <Text className="text-xs font-sans-medium text-muted-foreground">
+              Ver calendario del mes
+            </Text>
             <View style={{ transform: [{ rotate: calendarOpen ? "180deg" : "0deg" }] }}>
               <ChevronDown size={16} color="#83796c" />
             </View>

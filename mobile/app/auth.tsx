@@ -194,7 +194,10 @@ export default function Auth() {
                 )}
               </Pressable>
 
-              <Pressable onPress={() => setMode(mode === "in" ? "up" : "in")} className="w-full py-2">
+              <Pressable
+                onPress={() => setMode(mode === "in" ? "up" : "in")}
+                className="w-full py-2"
+              >
                 <Text className="text-center text-xs text-muted-foreground">
                   {mode === "in"
                     ? "No tengo cuenta todavía, quiero crearla"
@@ -216,7 +219,9 @@ export default function Auth() {
                 {googleLoading ? (
                   <ActivityIndicator color="#83796c" />
                 ) : (
-                  <Text className="text-sm font-sans-medium text-foreground">Continuar con Google</Text>
+                  <Text className="text-sm font-sans-medium text-foreground">
+                    Continuar con Google
+                  </Text>
                 )}
               </Pressable>
 

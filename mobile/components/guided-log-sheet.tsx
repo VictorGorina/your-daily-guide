@@ -139,7 +139,9 @@ export function GuidedLogSheet({
       description="Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan."
     >
       <View className="gap-5 pb-8 pt-4">
-        {contextNote ? <Text className="text-xs font-sans-medium text-primary">{contextNote}</Text> : null}
+        {contextNote ? (
+          <Text className="text-xs font-sans-medium text-primary">{contextNote}</Text>
+        ) : null}
 
         <View className="flex-row gap-2">
           <Pressable
@@ -149,7 +151,11 @@ export function GuidedLogSheet({
             }`}
           >
             <Activity size={16} color={mode === "actividad" ? "#3e3d39" : "#83796c"} />
-            <Text className={mode === "actividad" ? "text-sm text-foreground" : "text-sm text-muted-foreground"}>
+            <Text
+              className={
+                mode === "actividad" ? "text-sm text-foreground" : "text-sm text-muted-foreground"
+              }
+            >
               Actividad
             </Text>
           </Pressable>
@@ -160,7 +166,11 @@ export function GuidedLogSheet({
             }`}
           >
             <UtensilsCrossed size={16} color={mode === "exceso" ? "#3e3d39" : "#83796c"} />
-            <Text className={mode === "exceso" ? "text-sm text-foreground" : "text-sm text-muted-foreground"}>
+            <Text
+              className={
+                mode === "exceso" ? "text-sm text-foreground" : "text-sm text-muted-foreground"
+              }
+            >
               Exceso o ajuste
             </Text>
           </Pressable>

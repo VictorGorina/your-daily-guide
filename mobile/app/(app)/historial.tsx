@@ -166,7 +166,9 @@ function AdherenceHeatmap({ logs }: { logs: DailyLog[] }) {
 
   return (
     <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
-      <Text className="text-sm font-sans-semibold text-foreground">Adherencia · últimos 14 días</Text>
+      <Text className="text-sm font-sans-semibold text-foreground">
+        Adherencia · últimos 14 días
+      </Text>
       <View className="mt-3 gap-1.5">
         {rows.map((row, r) => (
           <View key={r} className="flex-row gap-1.5">
@@ -233,7 +235,9 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
           </Text>
         </View>
         <View className="h-10 w-10 items-center justify-center rounded-full bg-secondary">
-          <Text className="text-xs font-sans-semibold text-foreground">{Math.round(ratio * 100)}%</Text>
+          <Text className="text-xs font-sans-semibold text-foreground">
+            {Math.round(ratio * 100)}%
+          </Text>
         </View>
       </Pressable>
 

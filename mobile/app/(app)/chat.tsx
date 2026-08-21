@@ -235,7 +235,9 @@ export default function Chat() {
               </Pressable>
               <View>
                 <Text className="text-2xl font-display text-foreground">Tu coach</Text>
-                <Text className="text-xs text-muted-foreground">Conversación de hoy · {dateLabel}</Text>
+                <Text className="text-xs text-muted-foreground">
+                  Conversación de hoy · {dateLabel}
+                </Text>
               </View>
             </View>
             <Pressable
@@ -275,7 +277,9 @@ export default function Chat() {
                       mine ? "self-end bg-primary" : "self-start bg-surface border border-border"
                     }`}
                   >
-                    <Text className={`text-[15px] leading-relaxed ${mine ? "text-primary-foreground" : "text-foreground"}`}>
+                    <Text
+                      className={`text-[15px] leading-relaxed ${mine ? "text-primary-foreground" : "text-foreground"}`}
+                    >
                       {text}
                     </Text>
                   </View>
@@ -344,7 +348,12 @@ export default function Chat() {
         </View>
       </KeyboardAvoidingView>
 
-      <GuidedLogSheet open={guidedOpen} onOpenChange={setGuidedOpen} onSend={send} disabled={busy} />
+      <GuidedLogSheet
+        open={guidedOpen}
+        onOpenChange={setGuidedOpen}
+        onSend={send}
+        disabled={busy}
+      />
     </SafeAreaView>
   );
 }

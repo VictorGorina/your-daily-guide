@@ -119,7 +119,10 @@ export default function Perfil() {
         </Text>
 
         {PROFILE_SECTIONS.map((section) => (
-          <View key={section.title} className="mt-5 rounded-3xl border border-border bg-surface p-4">
+          <View
+            key={section.title}
+            className="mt-5 rounded-3xl border border-border bg-surface p-4"
+          >
             <Text className="px-1 text-sm font-sans-semibold text-foreground">{section.title}</Text>
             <View className="mt-2">
               {section.fields.map((field, idx) => {
@@ -132,7 +135,9 @@ export default function Perfil() {
                   >
                     {isEditing ? (
                       <View className="rounded-2xl bg-primary-soft/40 p-3">
-                        <Text className="text-xs font-sans-medium text-foreground">{field.label}</Text>
+                        <Text className="text-xs font-sans-medium text-foreground">
+                          {field.label}
+                        </Text>
                         {field.kind === "chips" ? (
                           <View className="mt-2 flex-row flex-wrap gap-2">
                             {field.options?.map((opt) => {
@@ -142,7 +147,9 @@ export default function Perfil() {
                                   key={opt}
                                   onPress={() => commit(field, opt)}
                                   className={`rounded-full border px-3 py-2 active:opacity-80 ${
-                                    active ? "border-primary bg-primary-soft" : "border-input bg-surface"
+                                    active
+                                      ? "border-primary bg-primary-soft"
+                                      : "border-input bg-surface"
                                   }`}
                                 >
                                   <Text

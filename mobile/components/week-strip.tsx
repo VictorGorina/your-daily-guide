@@ -106,7 +106,9 @@ export function WeekStrip({
               isOpen ? "border-primary" : ""
             }`}
           >
-            <Text className={`text-lg font-sans-semibold leading-none ${textBase}`}>{d.getDate()}</Text>
+            <Text className={`text-lg font-sans-semibold leading-none ${textBase}`}>
+              {d.getDate()}
+            </Text>
             <Text className={`text-[11px] font-sans-semibold ${textBase}`}>
               {DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}
             </Text>

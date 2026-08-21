@@ -10,9 +10,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.victorgorina.dailyguide",
       "entitlements": {
-        "com.apple.security.application-groups": [
-          "group.com.victorgorina.dailyguide"
-        ]
+        "com.apple.security.application-groups": ["group.com.victorgorina.dailyguide"]
       }
     },
     "android": {
@@ -27,11 +25,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      "expo-web-browser",
-      "@bacons/apple-targets"
-    ],
+    "plugins": ["expo-router", "expo-web-browser", "@bacons/apple-targets"],
     "scheme": "dailyguide"
   }
 }

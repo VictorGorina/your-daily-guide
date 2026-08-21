@@ -50,7 +50,11 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
   const isFuture = selected ? selected > today : false;
   const isToday = selected === today;
 
-  const cellClasses = (signal: ReturnType<typeof ratioSignal>, isWeekend: boolean, past: boolean) => {
+  const cellClasses = (
+    signal: ReturnType<typeof ratioSignal>,
+    isWeekend: boolean,
+    past: boolean,
+  ) => {
     if (signal === "success") return "border-transparent bg-success";
     if (signal === "warning") return "border-transparent bg-warning";
     if (signal === "muted") return "border-transparent bg-muted";
@@ -127,7 +131,9 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
             Menú del día
           </Text>
           {!isFuture && selectedLog?.guide?.meals?.length ? (
-            selectedLog.guide.meals.map((m) => <Row key={m.moment} label={m.moment} value={m.idea} />)
+            selectedLog.guide.meals.map((m) => (
+              <Row key={m.moment} label={m.moment} value={m.idea} />
+            ))
           ) : selectedPlan?.day ? (
             <>
               <Row label="Comida" value={selectedPlan.day.lunch} />
@@ -164,11 +170,7 @@ export function MonthCalendar({ logs, plan, planHabits }: Props) {
                     h.done ? "bg-success" : "bg-secondary"
                   }`}
                 >
-                  {h.done ? (
-                    <Check size={14} color="#fbfaf7" />
-                  ) : (
-                    <X size={14} color="#83796c" />
-                  )}
+                  {h.done ? <Check size={14} color="#fbfaf7" /> : <X size={14} color="#83796c" />}
                 </View>
                 <Text className="flex-1 text-sm text-foreground">{h.label}</Text>
               </View>

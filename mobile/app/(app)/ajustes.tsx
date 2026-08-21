@@ -162,7 +162,9 @@ export default function Ajustes() {
           >
             <Pencil size={16} color="#6dbe7b" />
             <View className="min-w-0 flex-1">
-              <Text className="text-sm font-sans-medium text-foreground">Editar mis respuestas</Text>
+              <Text className="text-sm font-sans-medium text-foreground">
+                Editar mis respuestas
+              </Text>
               <Text className="text-xs text-muted-foreground">
                 Corrige cualquier dato del onboarding en dos toques
               </Text>

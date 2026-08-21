@@ -275,7 +275,9 @@ export default function Plan() {
                 ) : null}
 
                 <View className="rounded-3xl border border-border bg-surface p-5">
-                  <Text className="text-sm font-sans-semibold text-foreground">Cada cuánto compras</Text>
+                  <Text className="text-sm font-sans-semibold text-foreground">
+                    Cada cuánto compras
+                  </Text>
                   <Text className="mt-1 text-xs text-muted-foreground">
                     Reparto los frescos entre compras para que nada se eche a perder.
                   </Text>
@@ -331,7 +333,9 @@ export default function Plan() {
                         <Text className="flex-1 text-sm font-sans-semibold text-foreground">
                           {tripLabel(activeCadence, t.trip)}
                         </Text>
-                        <Text className="text-xs font-sans-semibold text-primary">{eur(tripTotal)}</Text>
+                        <Text className="text-xs font-sans-semibold text-primary">
+                          {eur(tripTotal)}
+                        </Text>
                       </View>
                       {t.groups.map((group) => (
                         <View key={group.category} className="mt-3">

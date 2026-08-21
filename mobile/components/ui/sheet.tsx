@@ -22,7 +22,12 @@ export function Sheet({
   children: ReactNode;
 }) {
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={() => onOpenChange(false)}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="slide"
+      onRequestClose={() => onOpenChange(false)}
+    >
       <View className="flex-1 justify-end">
         <Pressable className="absolute inset-0 bg-black/40" onPress={() => onOpenChange(false)} />
         <View className="max-h-[88%] rounded-t-3xl border-t border-border bg-background">
