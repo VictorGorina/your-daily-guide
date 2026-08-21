@@ -44,6 +44,9 @@ export type DailyGuide = {
   intro: string;
   calories: string;
   macros: string;
+  /** Estimación aproximada de macros del día, calculada a partir de los platos
+   * reales del plan de hoy. Orientativa, no un conteo nutricional exacto. */
+  macroEstimate?: import("@/lib/guide.functions").MacroEstimate | null;
   behaviors: string[];
   meals?: { moment: string; idea: string }[];
   tips?: string[];

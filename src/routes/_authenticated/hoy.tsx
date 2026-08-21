@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { DishRecipe } from "@/components/dish-recipe";
-import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
+import { DishImage, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
@@ -26,7 +26,7 @@ import {
   type MealStatus,
 } from "@/lib/daily";
 
-import { generateDailyGuide } from "@/lib/guide.functions";
+import { generateDailyGuide, type MacroEstimate } from "@/lib/guide.functions";
 import { fetchHousehold } from "@/lib/household";
 import { sharedDays, type MealKey } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
@@ -126,7 +126,11 @@ function Hoy() {
   const requestGuide = async () => {
     setGenerating(true);
     try {
-      const g = await makeGuide({ data: undefined } as never);
+      const g = await makeGuide({
+        data: {
+          meals: todayMeals.filter((m) => m.idea).map((m) => ({ moment: m.moment, idea: m.idea })),
+        },
+      });
       await updateTodayLog({ guide: g });
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
@@ -241,6 +245,10 @@ function Hoy() {
         “{quote.text}” <span className="not-italic">— {quote.author}</span>
       </p>
 
+      {guide?.macroEstimate ? (
+        <MacroBars estimate={guide.macroEstimate} weightKg={profile?.current_weight_kg ?? null} />
+      ) : null}
+
       <section className="animate-rise mt-6">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-2xl">Comidas de hoy</h2>
@@ -271,12 +279,23 @@ function Hoy() {
           </div>
         ) : nextMeal ? (
           <div className="rounded-3xl bg-primary p-5 text-neutral-200">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-200/70">
-              Siguiente · {nextMeal.label}
-            </span>
-            <p className="mt-1 font-display text-xl leading-snug">
-              {nextIdea || "Aún no hay menú para esta comida"}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-200/70">
+                  Siguiente · {nextMeal.label}
+                </span>
+                <p className="mt-1 font-display text-xl leading-snug">
+                  {nextIdea || "Aún no hay menú para esta comida"}
+                </p>
+              </div>
+              {nextIdea ? (
+                <DishImage
+                  dish={nextIdea}
+                  size={48}
+                  className="ring-2 ring-primary-foreground/20"
+                />
+              ) : null}
+            </div>
             {offListNote(nextPlanned?.off) ? (
               <p className="mt-1.5 text-xs text-neutral-200/80">{offListNote(nextPlanned?.off)}</p>
             ) : null}
@@ -348,15 +367,20 @@ function Hoy() {
             className="surface-card animate-sheet-up mt-2 p-4"
             style={expandedPlanned?.idea ? foodBgStyle(expandedPlanned.idea) : {}}
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="block font-display text-sm">{habits[expandedMeal].label}</span>
-              {expandedPlanned?.idea ? <FoodCategoryBadge dish={expandedPlanned.idea} /> : null}
+            <div className="flex items-center gap-3">
+              {expandedPlanned?.idea ? <DishImage dish={expandedPlanned.idea} size={40} /> : null}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="block font-display text-sm">{habits[expandedMeal].label}</span>
+                  {expandedPlanned?.idea ? <FoodCategoryBadge dish={expandedPlanned.idea} /> : null}
+                </div>
+                {expandedPlanned?.idea ? (
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {expandedPlanned.idea}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            {expandedPlanned?.idea ? (
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {expandedPlanned.idea}
-              </span>
-            ) : null}
             {offListNote(expandedPlanned?.off) ? (
               <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
                 {offListNote(expandedPlanned?.off)}
@@ -432,9 +456,10 @@ function Hoy() {
                     {guide.meals.map((m) => (
                       <div
                         key={m.moment}
-                        className="flex gap-3 rounded-xl border border-border p-3"
+                        className="flex items-center gap-3 rounded-xl border border-border p-3"
                         style={foodBgStyle(m.idea)}
                       >
+                        <DishImage dish={m.idea} size={36} />
                         <span className="shrink-0 text-xs font-semibold text-primary">
                           {m.moment}
                         </span>
@@ -517,6 +542,57 @@ function Hoy() {
   );
 }
 
+/**
+ * Referencia genérica (no personalizada por profesional alguno) para dibujar
+ * la barra de cada macro: cuánto de ese objetivo cubren ya los platos de hoy.
+ * La proteína sí se ajusta al peso (~1,2 g/kg, cifra habitual para población
+ * general); carbohidratos, grasa y fibra usan un valor de referencia fijo.
+ * Todo el bloque es orientativo — ver el aviso bajo la barra.
+ */
+function macroTargets(weightKg: number | null) {
+  const proteinTarget = Math.round(Math.min(200, Math.max(45, (weightKg ?? 70) * 1.2)));
+  return { protein_g: proteinTarget, carbs_g: 250, fat_g: 70, fiber_g: 30 };
+}
+
+const MACRO_BAR_ITEMS = [
+  { key: "protein_g", label: "Proteína", color: "var(--color-chart-1)" },
+  { key: "carbs_g", label: "Carbos", color: "var(--color-chart-2)" },
+  { key: "fat_g", label: "Grasas", color: "var(--color-chart-3)" },
+  { key: "fiber_g", label: "Fibra", color: "var(--color-chart-4)" },
+] as const;
+
+function MacroBars({ estimate, weightKg }: { estimate: MacroEstimate; weightKg: number | null }) {
+  const targets = macroTargets(weightKg);
+  return (
+    <section className="animate-rise mt-5">
+      <div className="grid grid-cols-4 gap-2.5">
+        {MACRO_BAR_ITEMS.map((it) => {
+          const value = estimate[it.key];
+          const pct = Math.min(100, Math.round((value / targets[it.key]) * 100));
+          return (
+            <div key={it.key} className="min-w-0">
+              <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full rounded-full transition-[width] duration-700"
+                  style={{ width: `${pct}%`, backgroundColor: it.color }}
+                />
+              </div>
+              <p className="mt-1.5 truncate text-[9.5px] font-medium uppercase tracking-wide text-muted-foreground">
+                {it.label}
+              </p>
+              <p className="text-[11px] font-semibold tabular-nums text-foreground">{value} g</p>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+        ~{estimate.kcal} kcal según tus platos de hoy: estimación orientativa, no un conteo
+        nutricional exacto.
+      </p>
+    </section>
+  );
+}
+
 function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
   // para ese día), no la lista entera de desayunos de la semana.
@@ -569,19 +645,24 @@ function Field({
   const bgStyle = recipeMonth ? foodBgStyle(value) : {};
   return (
     <div className="rounded-xl bg-secondary/60 p-3" style={bgStyle}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </span>
-        {recipeMonth ? <FoodCategoryBadge dish={value} /> : null}
+      <div className="flex items-start gap-2.5">
+        {recipeMonth ? <DishImage dish={value} size={32} /> : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {label}
+            </span>
+            {recipeMonth ? <FoodCategoryBadge dish={value} /> : null}
+          </div>
+          <p className="mt-0.5 text-sm text-foreground">{value}</p>
+          {note ? (
+            <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
+              {note}
+            </span>
+          ) : null}
+          {recipeMonth ? <DishRecipe dish={value} month={recipeMonth} /> : null}
+        </div>
       </div>
-      <p className="mt-0.5 text-sm text-foreground">{value}</p>
-      {note ? (
-        <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
-          {note}
-        </span>
-      ) : null}
-      {recipeMonth ? <DishRecipe dish={value} month={recipeMonth} /> : null}
     </div>
   );
 }

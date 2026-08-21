@@ -78,7 +78,8 @@ function Landing() {
           Empezar ahora
         </Link>
         <p className="text-center text-xs text-muted-foreground">
-          Guía flexible de bienestar. No sustituye consejo médico.
+          Guía flexible de bienestar. Calorías y macros son estimaciones orientativas, no un conteo
+          nutricional exacto. No sustituye consejo médico.
         </p>
       </div>
     </main>

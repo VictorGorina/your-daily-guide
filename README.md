@@ -1,7 +1,12 @@
-# Senda
+# Peppers
 
 Tu coach diario de salud y alimentación: guía por la mañana, repaso por la noche y progreso
 visual hacia tu objetivo.
+
+> Las calorías y macros que muestra la app (incluida la barra de macros de Hoy) son una
+> **estimación orientativa** calculada por IA a partir de los platos reales del plan del día, no
+> un conteo nutricional preciso ni un dato de una base de datos de alimentos. No sustituye
+> consejo médico ni de un profesional de la nutrición.
 
 ## Desarrollo
 

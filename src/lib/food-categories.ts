@@ -7,26 +7,21 @@
 // ---------------------------------------------------------------------------
 
 export type FoodCategory =
-  | "verdura"
-  | "pescado"
-  | "carne"
-  | "pollo"
-  | "pasta"
-  | "fruta"
-  | "lacteo"
-  | "legumbre"
-  | "otro";
+  "verdura" | "pescado" | "carne" | "pollo" | "pasta" | "fruta" | "lacteo" | "legumbre" | "otro";
 
-export const FOOD_CATEGORIES: Record<FoodCategory, { label: string; accent: string; icon: string }> = {
-  verdura: { label: "Verduras", accent: "#6DBE7B", icon: "🥬" },
-  pescado: { label: "Pescado", accent: "#4C9BD6", icon: "🐟" },
-  carne: { label: "Carne", accent: "#E57373", icon: "🥩" },
-  pollo: { label: "Aves", accent: "#F2C14E", icon: "🍗" },
-  pasta: { label: "Cereales", accent: "#D7B58A", icon: "🌾" },
-  fruta: { label: "Fruta", accent: "#FF8A3D", icon: "🍊" },
-  lacteo: { label: "Lácteos", accent: "#F5E6C8", icon: "🥛" },
-  legumbre: { label: "Legumbres", accent: "#9A7655", icon: "🫘" },
-  otro: { label: "Otro", accent: "#83796C", icon: "🍽️" },
+export const FOOD_CATEGORIES: Record<
+  FoodCategory,
+  { label: string; accent: string; icon: string; asset: string | null }
+> = {
+  verdura: { label: "Verduras", accent: "#6DBE7B", icon: "🥬", asset: "/food/cat-verduras.png" },
+  pescado: { label: "Pescado", accent: "#4C9BD6", icon: "🐟", asset: "/food/cat-pescado.png" },
+  carne: { label: "Carne", accent: "#E57373", icon: "🥩", asset: "/food/cat-carne.png" },
+  pollo: { label: "Aves", accent: "#F2C14E", icon: "🍗", asset: "/food/cat-aves.png" },
+  pasta: { label: "Cereales", accent: "#D7B58A", icon: "🌾", asset: "/food/cat-cereales.png" },
+  fruta: { label: "Fruta", accent: "#FF8A3D", icon: "🍊", asset: "/food/cat-fruta.png" },
+  lacteo: { label: "Lácteos", accent: "#F5E6C8", icon: "🥛", asset: "/food/cat-lacteos.png" },
+  legumbre: { label: "Legumbres", accent: "#9A7655", icon: "🫘", asset: "/food/cat-legumbres.png" },
+  otro: { label: "Otro", accent: "#83796C", icon: "🍽️", asset: null },
 };
 
 // ---------------------------------------------------------------------------

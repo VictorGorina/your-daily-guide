@@ -2,20 +2,53 @@ import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
 
 /**
  * Inline style for food-category contextual backgrounds.
- * A soft 14% tint of the category accent over the current surface color
- * (spec §4: "usar normalmente con 10–20% opacidad"), so it stays subtle and
- * automatically follows whichever theme is active.
+ * A soft tint of the category accent over the current surface color (spec §4:
+ * "usar normalmente con 10–20% opacidad"), so it stays subtle and
+ * automatically follows whichever theme is active. `pct` lets callers go
+ * stronger for elements where the tint carries more of the element (e.g. the
+ * meal rows in Hoy) — default keeps the original 14% used everywhere else.
  *
  * Usage: <div style={foodBgStyle("Ensalada de tomate")}>…</div>
  */
-export function foodBgStyle(dishName: string | undefined | null): React.CSSProperties {
+export function foodBgStyle(dishName: string | undefined | null, pct = 14): React.CSSProperties {
   if (!dishName) return {};
   const cat = classifyDish(dishName);
   if (cat === "otro") return {};
   const entry = FOOD_CATEGORIES[cat];
   return {
-    backgroundColor: `color-mix(in oklab, ${entry.accent} 14%, var(--color-surface))`,
+    backgroundColor: `color-mix(in oklab, ${entry.accent} ${pct}%, var(--color-surface))`,
   };
+}
+
+/**
+ * Small circular hand-drawn illustration for the food category of a dish
+ * (see public/food/cat-*.png). Purely decorative — the dish name and/or
+ * FoodCategoryBadge next to it already carry the information — so it's
+ * rendered with an empty alt. Returns null for "otro" (no illustration) or
+ * when the dish doesn't classify into a known category.
+ */
+export function DishImage({
+  dish,
+  size = 40,
+  className,
+}: {
+  dish: string;
+  size?: number;
+  className?: string;
+}) {
+  const cat = classifyDish(dish);
+  const entry = FOOD_CATEGORIES[cat];
+  if (!entry.asset) return null;
+  return (
+    <img
+      src={entry.asset}
+      alt=""
+      width={size}
+      height={size}
+      className={`shrink-0 rounded-full ${className ?? ""}`}
+      style={{ width: size, height: size }}
+    />
+  );
 }
 
 /**
