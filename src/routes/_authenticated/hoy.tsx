@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, Flame, Sparkle, X } from "lucide-react";
+import { Check, ChevronDown, Replace, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -11,6 +11,7 @@ import { DishImage, foodBgStyle, FoodCategoryBadge } from "@/components/food-cat
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
+import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
 import {
   ensureTodayLog,
   fetchLogs,
@@ -50,12 +51,48 @@ const MOMENT_RANK: Record<string, number> = {
 };
 const rankOf = (label: string) => MOMENT_RANK[label] ?? 1.5;
 
+// Hora orientativa de cada momento del día. La app no guarda horas por comida
+// (el perfil solo tiene `meal_schedule` en texto libre), así que la tira usa
+// estas de referencia; un momento con nombre propio simplemente no muestra
+// hora. Coherentes con MOMENT_RANK para que la tira se lea de arriba abajo.
+const MOMENT_TIME: Record<string, string> = {
+  Desayuno: "8:30",
+  Almuerzo: "11:00",
+  Comida: "14:00",
+  Merienda: "17:30",
+  Snack: "17:30",
+  Cena: "20:30",
+};
+
 // Solo desayuno/comida/cena pueden ser comidas compartidas del hogar (el snack no).
 const MOMENT_TO_MEAL_KEY: Record<string, MealKey | undefined> = {
   Desayuno: "desayuno",
   Comida: "comida",
   Cena: "cena",
 };
+
+/** Tinte del acento de la categoría sobre la superficie del tema activo. */
+const tint = (accent: string, pct: number) =>
+  `color-mix(in oklab, ${accent} ${pct}%, var(--color-surface))`;
+
+/**
+ * Color legible encima de un acento de categoría. Los acentos claros (lácteos,
+ * cereales, aves) dejarían invisible un check blanco, así que se decide por
+ * luminancia. Son hex fijos, independientes del tema, por eso el par de
+ * contraste también lo es.
+ */
+function onAccent(hex: string) {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const channel = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const lum =
+    0.2126 * channel((n >> 16) & 255) +
+    0.7152 * channel((n >> 8) & 255) +
+    0.0722 * channel(n & 255);
+  return lum > 0.45 ? "#3e3d39" : "#fbfaf7";
+}
 
 function Hoy() {
   const navigate = useNavigate();
@@ -184,9 +221,10 @@ function Hoy() {
   const habits = today?.habits ?? [];
   const doneCount = habits.filter((h) => h.done).length;
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Buenos días" : hour < 20 ? "Buenas tardes" : "Buenas noches";
   const quote = quoteOfTheDay();
+  const dateLabel = new Date(`${today0}T00:00:00`)
+    .toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+    .replace(",", "");
 
   const setMealStatus = (index: number, status: MealStatus) => {
     const next = habits.map((h, i) =>
@@ -215,207 +253,228 @@ function Hoy() {
     .filter(({ h }) => h.status == null)
     .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
   const nextIndex = pending.length ? pending[0].i : null;
-  const nextMeal = nextIndex != null ? habits[nextIndex] : null;
-  const nextPlanned = nextMeal ? todayMeals.find((m) => m.moment === nextMeal.label) : undefined;
-  const expandedPlanned =
-    expandedMeal != null
-      ? todayMeals.find((m) => m.moment === habits[expandedMeal]?.label)
-      : undefined;
-  const nextIdea = nextPlanned?.idea;
-  const allDone = habits.length > 0 && nextIndex == null;
+
+  // El día se lee como una tira de arriba abajo, así que las comidas van en
+  // orden cronológico aunque el plan las guarde en otro orden.
+  const dayStrip = habits
+    .map((h, i) => ({ h, i }))
+    .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
 
   return (
-    <main className="mx-auto min-h-screen max-w-lg px-5 pb-36 pt-12">
-      <header className="animate-rise grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+    <main className="mx-auto min-h-screen max-w-lg px-5 pb-44 pt-12 font-ui">
+      <header className="animate-rise flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-muted-foreground">{greeting},</p>
-          <h1 className="truncate font-display text-[2.6rem] leading-[1.05] text-foreground">
-            {profile?.display_name || "Vamos allá"}
+          <p className="font-num text-[11px] font-medium uppercase leading-none tracking-[0.09em] text-muted-foreground">
+            {dateLabel}
+          </p>
+          <h1 className="mt-1.5 font-title text-[40px] font-semibold leading-[0.98] tracking-[-0.03em] text-foreground">
+            Hoy
           </h1>
         </div>
-        <span
-          className="flex shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-bold text-background"
+        <div
+          className="flex shrink-0 flex-col items-end gap-1"
           title="Impulso: sube con los días buenos, baja con los flojos, nunca vuelve a cero"
         >
-          <Flame className="h-3.5 w-3.5" /> {impulso}%
-        </span>
+          <div className="flex items-baseline gap-[3px]">
+            <span className="font-title text-[26px] font-semibold leading-none tabular-nums text-foreground">
+              {impulso}
+            </span>
+            <span className="font-num text-[11px] font-medium leading-none text-muted-foreground">
+              %
+            </span>
+          </div>
+          <span className="font-num text-[9.5px] font-medium uppercase leading-none tracking-[0.1em] text-muted-foreground">
+            impulso
+          </span>
+        </div>
       </header>
-
-      <p className="animate-rise mt-2 text-sm italic leading-snug text-muted-foreground">
-        “{quote.text}” <span className="not-italic">— {quote.author}</span>
-      </p>
 
       {guide?.macroEstimate ? (
         <MacroBars estimate={guide.macroEstimate} weightKg={profile?.current_weight_kg ?? null} />
       ) : null}
 
       <section className="animate-rise mt-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-2xl">Comidas de hoy</h2>
+        <div className="flex items-baseline justify-between gap-2.5">
+          <h2 className="font-title text-[21px] font-semibold leading-none tracking-[-0.02em]">
+            Comidas de hoy
+          </h2>
           {habits.length ? (
-            <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold tabular-nums text-secondary-foreground">
-              {doneCount}/{habits.length}
+            <span className="font-num text-[11px] font-medium tabular-nums text-muted-foreground">
+              {doneCount} de {habits.length}
             </span>
           ) : null}
         </div>
 
         {!habits.length ? (
-          <div className="surface-card p-5">
-            <p className="animate-pulse text-sm text-muted-foreground">
-              Preparando las comidas de hoy...
-            </p>
-          </div>
-        ) : allDone ? (
-          <div className="surface-card flex items-center gap-3 p-5">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-success/15 text-success">
-              <CheckCircle2 className="h-5 w-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="font-display text-lg leading-tight">Todo registrado hoy</p>
-              <p className="text-sm text-muted-foreground">
-                Has anotado las {habits.length} comidas del día.
-              </p>
-            </div>
-          </div>
-        ) : nextMeal ? (
-          <div className="rounded-3xl bg-primary p-5 text-neutral-200">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-200/70">
-                  Siguiente · {nextMeal.label}
-                </span>
-                <p className="mt-1 font-display text-xl leading-snug">
-                  {nextIdea || "Aún no hay menú para esta comida"}
-                </p>
-              </div>
-              {nextIdea ? (
-                <DishImage
-                  dish={nextIdea}
-                  size={48}
-                  className="ring-2 ring-primary-foreground/20"
-                />
-              ) : null}
-            </div>
-            {offListNote(nextPlanned?.off) ? (
-              <p className="mt-1.5 text-xs text-neutral-200/80">{offListNote(nextPlanned?.off)}</p>
-            ) : null}
-            {sharedWith(nextMeal.label) ? (
-              <p className="mt-1.5 text-xs text-neutral-200/80">
-                Base común con {sharedWith(nextMeal.label)}. ¿Ración distinta? dilo en "comiste otra
-                cosa".
-              </p>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setMealStatus(nextIndex!, "plan")}
-              className="mt-4 w-full rounded-full bg-primary-foreground py-3 text-sm font-semibold text-primary transition-transform active:scale-[0.98]"
-            >
-              Comí esto
-            </button>
-            <div className="mt-2.5 flex items-center justify-center gap-5 text-xs font-medium text-neutral-200/80">
-              <button type="button" onClick={() => handleMealStatus(nextIndex!, "distinto")}>
-                ¿comiste otra cosa?
-              </button>
-              <button type="button" onClick={() => setMealStatus(nextIndex!, "salteo")}>
-                me lo salté
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {habits.length ? (
-          <div className="mt-3 flex gap-2">
-            {habits.map((h, i) => {
+          <p className="mt-3.5 animate-pulse text-sm text-muted-foreground">
+            Preparando las comidas de hoy...
+          </p>
+        ) : (
+          <div className="mt-3.5 flex flex-col gap-2.5">
+            {dayStrip.map(({ h, i }) => {
+              const planned = todayMeals.find((m) => m.moment === h.label);
+              const idea = planned?.idea ?? "";
+              const cat = FOOD_CATEGORIES[classifyDish(idea)];
               const isNext = i === nextIndex;
-              const isDone = h.done;
-              const isSkipped = h.status === "salteo";
+              const isSkip = h.status === "salteo";
+              const isExpanded = expandedMeal === i;
+              const note = offListNote(planned?.off);
+              const shared = sharedWith(h.label);
+
               return (
-                <button
+                <div
                   key={h.label}
-                  type="button"
-                  onClick={() => setExpandedMeal((prev) => (prev === i ? null : i))}
-                  aria-expanded={expandedMeal === i}
-                  className={`flex-1 rounded-2xl border px-2 py-2.5 text-center transition-colors active:scale-95 ${
-                    isNext
-                      ? "border-primary bg-primary-soft"
-                      : isDone
-                        ? "border-success/30 bg-success/10"
-                        : isSkipped
-                          ? "border-border bg-secondary/50"
-                          : "border-border bg-surface"
-                  } ${expandedMeal === i ? "ring-2 ring-inset ring-primary" : ""}`}
+                  className="rounded-[20px] px-3.5 py-3.5 transition-[background-color,opacity] duration-300"
+                  style={{
+                    backgroundColor: isSkip
+                      ? "var(--color-muted)"
+                      : tint(cat.accent, isNext ? 22 : 13),
+                    opacity: isSkip ? 0.55 : 1,
+                  }}
                 >
-                  <span className="block truncate text-[11px] font-semibold text-foreground">
-                    {h.label}
-                  </span>
-                  <span className="mt-0.5 flex items-center justify-center gap-1 text-[10px] font-medium text-muted-foreground">
-                    {isDone ? (
-                      <Check className="h-3 w-3 text-success" />
-                    ) : isSkipped ? (
-                      <X className="h-3 w-3" />
-                    ) : null}
-                    {isNext ? "ahora" : isDone ? "hecho" : isSkipped ? "saltado" : "pendiente"}
-                  </span>
-                </button>
+                  <div className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-x-3">
+                    <span
+                      className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-base"
+                      style={{ backgroundColor: tint(cat.accent, 20) }}
+                    >
+                      {cat.asset ? <DishImage dish={idea} size={40} /> : cat.icon}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setExpandedMeal((prev) => (prev === i ? null : i))}
+                      aria-expanded={isExpanded}
+                      className="min-w-0 text-left"
+                    >
+                      <span className="flex items-baseline gap-[7px]">
+                        <span className="text-[11.5px] font-semibold tracking-[0.01em]">
+                          {h.label}
+                        </span>
+                        {MOMENT_TIME[h.label] ? (
+                          <span className="font-num text-[10.5px] text-muted-foreground">
+                            {MOMENT_TIME[h.label]}
+                          </span>
+                        ) : null}
+                      </span>
+                      {/* El plato es el protagonista de la fila; cuando todavía
+                          no hay menú, el hueco se rellena en pequeño y apagado
+                          para no gritar lo que falta. */}
+                      <span
+                        className={`mt-1.5 block font-title tracking-[-0.02em] text-pretty ${
+                          idea
+                            ? `text-[16.5px] font-medium leading-tight ${
+                                isSkip ? "text-muted-foreground line-through" : "text-foreground"
+                              }`
+                            : "text-[13px] leading-snug text-muted-foreground"
+                        }`}
+                      >
+                        {idea || "Sin menú todavía"}
+                      </span>
+                      {classifyDish(idea) !== "otro" ? (
+                        <span className="mt-1.5 block font-num text-[9.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                          {cat.label}
+                        </span>
+                      ) : null}
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      {h.status == null ? (
+                        <>
+                          <button
+                            type="button"
+                            title="Comí otra cosa"
+                            aria-label={`${h.label}: comí otra cosa`}
+                            onClick={() => handleMealStatus(i, "distinto")}
+                            className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
+                          >
+                            <Replace className="h-[15px] w-[15px]" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Me lo salté"
+                            aria-label={`${h.label}: me lo salté`}
+                            onClick={() => setMealStatus(i, "salteo")}
+                            className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Comí esto"
+                            aria-label={`${h.label}: comí esto`}
+                            onClick={() => setMealStatus(i, "plan")}
+                            className="grid h-[34px] w-[34px] place-items-center rounded-full transition-transform active:scale-95"
+                            style={{
+                              backgroundColor: cat.accent,
+                              color: onAccent(cat.accent),
+                            }}
+                          >
+                            <Check className="h-[17px] w-[17px]" strokeWidth={2.6} />
+                          </button>
+                        </>
+                      ) : h.done ? (
+                        <span
+                          className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full"
+                          style={{ backgroundColor: cat.accent, color: onAccent(cat.accent) }}
+                        >
+                          <Check className="h-[17px] w-[17px]" strokeWidth={2.6} />
+                        </span>
+                      ) : (
+                        <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-secondary text-muted-foreground">
+                          <X className="h-[15px] w-[15px]" />
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {isExpanded ? (
+                    <div className="animate-sheet-up mt-3 border-t border-foreground/10 pt-3">
+                      {note ? (
+                        <span className="mb-2 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                          {note}
+                        </span>
+                      ) : null}
+                      {shared ? (
+                        <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
+                          Base común con {shared} · marca “Comí otra cosa” si tu ración se sale de
+                          eso.
+                        </p>
+                      ) : null}
+                      {idea ? (
+                        <>
+                          <FoodCategoryBadge dish={idea} />
+                          <DishRecipe dish={idea} month={month} />
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Crea el menú del mes en la pestaña Plan para ver aquí el plato.
+                        </p>
+                      )}
+                      {h.status != null ? (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => handleMealStatus(i, s)}
+                              className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors active:scale-95 ${
+                                h.status === s
+                                  ? "bg-foreground text-background"
+                                  : "bg-surface text-muted-foreground"
+                              }`}
+                            >
+                              {MEAL_STATUS_LABEL[s]}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
           </div>
-        ) : null}
-
-        {expandedMeal != null ? (
-          <div
-            className="surface-card animate-sheet-up mt-2 p-4"
-            style={expandedPlanned?.idea ? foodBgStyle(expandedPlanned.idea) : {}}
-          >
-            <div className="flex items-center gap-3">
-              {expandedPlanned?.idea ? <DishImage dish={expandedPlanned.idea} size={40} /> : null}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="block font-display text-sm">{habits[expandedMeal].label}</span>
-                  {expandedPlanned?.idea ? <FoodCategoryBadge dish={expandedPlanned.idea} /> : null}
-                </div>
-                {expandedPlanned?.idea ? (
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {expandedPlanned.idea}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            {offListNote(expandedPlanned?.off) ? (
-              <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
-                {offListNote(expandedPlanned?.off)}
-              </span>
-            ) : null}
-            {sharedWith(habits[expandedMeal].label) ? (
-              <span className="mt-1.5 block text-xs text-primary">
-                Base común con {sharedWith(habits[expandedMeal].label)} · marca "Comí distinto" si
-                tu ración se sale de eso
-              </span>
-            ) : null}
-            {expandedPlanned?.idea ? (
-              <DishRecipe dish={expandedPlanned.idea} month={month} />
-            ) : null}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => {
-                    handleMealStatus(expandedMeal, s);
-                    setExpandedMeal(null);
-                  }}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
-                    habits[expandedMeal].status === s
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-input text-muted-foreground"
-                  }`}
-                >
-                  {MEAL_STATUS_LABEL[s]}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        )}
       </section>
 
       <section className="mt-4">
@@ -423,15 +482,19 @@ function Hoy() {
           type="button"
           onClick={() => setGuideOpen((o) => !o)}
           aria-expanded={guideOpen}
-          className="flex w-full items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-left text-xs font-medium text-muted-foreground"
+          className="flex w-full items-center justify-between gap-2.5 rounded-2xl bg-surface px-4 py-3.5 text-left"
         >
-          <span className="flex items-center gap-2">
-            <Sparkle className="h-3.5 w-3.5 text-primary" />
-            Guía del coach{guide?.calories ? ` · ${guide.calories}` : ""}
+          <span className="flex min-w-0 items-center gap-2.5 text-xs font-medium text-muted-foreground">
+            <span className="block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            {/* `calories` es una frase entera del coach, no una cifra: se recorta
+                a una línea para que la fila siga siendo una fila. */}
+            <span className="truncate">
+              Guía del coach{guide?.calories ? ` · ${guide.calories}` : ""}
+            </span>
           </span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform ${guideOpen ? "rotate-180" : ""}`}
-          />
+          <span className="font-num text-[11px] font-medium text-muted-foreground">
+            {guideOpen ? "cerrar" : "ver"}
+          </span>
         </button>
         {guideOpen ? (
           <div className="surface-card animate-sheet-up mt-2 p-5">
@@ -450,7 +513,7 @@ function Hoy() {
                 </div>
                 {guide.meals?.length ? (
                   <div className="space-y-2 pt-1">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <span className="font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                       Platos sugeridos
                     </span>
                     {guide.meals.map((m) => (
@@ -475,7 +538,7 @@ function Hoy() {
                 ) : null}
                 {guide.tips?.length ? (
                   <div className="space-y-1.5 pt-1">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <span className="font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                       Consejos de nutrición
                     </span>
                     <ul className="space-y-1.5">
@@ -500,15 +563,24 @@ function Hoy() {
 
       <section className="animate-rise mt-6">
         <WeekStrip
-          done={doneCount}
-          total={habits.length}
           selected={openDay}
           onSelect={(d) => setOpenDay((prev) => (prev === d ? null : d))}
           logs={logsQ.data ?? []}
           todayHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
         />
         {openDay ? <DayMenu date={openDay} plan={planQ.data?.plan ?? null} /> : null}
-        <p className="mt-2 px-1 text-[11px] text-muted-foreground">Toca un día para ver su menú.</p>
+        <p className="mt-2.5 px-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+          Toca un día para ver su menú.
+        </p>
+      </section>
+
+      <section className="mt-6 px-0.5">
+        <p className="font-title text-sm leading-[1.45] tracking-[-0.01em] text-pretty text-muted-foreground">
+          “{quote.text}”
+        </p>
+        <p className="mt-1.5 font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
+          {quote.author}
+        </p>
       </section>
 
       <GuidedLogSheet
@@ -555,37 +627,39 @@ function macroTargets(weightKg: number | null) {
 }
 
 const MACRO_BAR_ITEMS = [
-  { key: "protein_g", label: "Proteína", color: "var(--color-chart-1)" },
-  { key: "carbs_g", label: "Carbos", color: "var(--color-chart-2)" },
-  { key: "fat_g", label: "Grasas", color: "var(--color-chart-3)" },
-  { key: "fiber_g", label: "Fibra", color: "var(--color-chart-4)" },
+  { key: "protein_g", label: "prot", color: "var(--color-chart-1)" },
+  { key: "carbs_g", label: "carb", color: "var(--color-chart-2)" },
+  { key: "fat_g", label: "gras", color: "var(--color-chart-3)" },
+  { key: "fiber_g", label: "fibra", color: "var(--color-chart-4)" },
 ] as const;
 
 function MacroBars({ estimate, weightKg }: { estimate: MacroEstimate; weightKg: number | null }) {
   const targets = macroTargets(weightKg);
   return (
-    <section className="animate-rise mt-5">
+    <section className="animate-rise mt-[22px]">
       <div className="grid grid-cols-4 gap-2.5">
         {MACRO_BAR_ITEMS.map((it) => {
           const value = estimate[it.key];
           const pct = Math.min(100, Math.round((value / targets[it.key]) * 100));
           return (
             <div key={it.key} className="min-w-0">
-              <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+              <div className="h-[5px] overflow-hidden rounded-full bg-secondary">
                 <div
-                  className="h-full rounded-full transition-[width] duration-700"
+                  className="h-full rounded-full transition-[width] duration-1000 ease-out"
                   style={{ width: `${pct}%`, backgroundColor: it.color }}
                 />
               </div>
-              <p className="mt-1.5 truncate text-[9.5px] font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="mt-[7px] truncate font-num text-[9.5px] font-medium uppercase leading-none tracking-[0.06em] text-muted-foreground">
                 {it.label}
               </p>
-              <p className="text-[11px] font-semibold tabular-nums text-foreground">{value} g</p>
+              <p className="mt-[3px] font-num text-[11px] font-medium leading-none tabular-nums text-foreground">
+                {value} g
+              </p>
             </div>
           );
         })}
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+      <p className="mt-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
         ~{estimate.kcal} kcal según tus platos de hoy: estimación orientativa, no un conteo
         nutricional exacto.
       </p>
@@ -649,7 +723,7 @@ function Field({
         {recipeMonth ? <DishImage dish={value} size={32} /> : null}
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
               {label}
             </span>
             {recipeMonth ? <FoodCategoryBadge dish={value} /> : null}

@@ -22,6 +22,13 @@
   --radius-4xl: calc(var(--radius) + 26px);
   --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  /* Tipografías del rediseño de Hoy (proyecto de Claude Design "Rediseño
+     Peppers nutrición"): titulares geométricos, texto de interfaz de más
+     altura de x y cifras monoespaciadas. De momento solo las usa /hoy — el
+     resto de pantallas sigue en Fraunces + Work Sans. */
+  --font-title: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-num: "DM Mono", ui-monospace, Menlo, monospace;
   --color-habit-1: var(--habit-1);
   --color-habit-2: var(--habit-2);
   --color-habit-3: var(--habit-3);
