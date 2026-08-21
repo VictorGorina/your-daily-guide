@@ -11,7 +11,7 @@ import { DishImage, foodBgStyle, FoodCategoryBadge } from "@/components/food-cat
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
-import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
+import { classifyDish, dishAsset, FOOD_CATEGORIES } from "@/lib/food-categories";
 import {
   ensureTodayLog,
   fetchLogs,
@@ -337,7 +337,7 @@ function Hoy() {
                       className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-base"
                       style={{ backgroundColor: tint(cat.accent, 20) }}
                     >
-                      {cat.asset ? <DishImage dish={idea} size={40} /> : cat.icon}
+                      {dishAsset(idea) ? <DishImage dish={idea} size={40} /> : cat.icon}
                     </span>
 
                     <button

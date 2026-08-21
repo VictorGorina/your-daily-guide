@@ -14,13 +14,13 @@ export const FOOD_CATEGORIES: Record<
   { label: string; accent: string; icon: string; asset: string | null }
 > = {
   verdura: { label: "Verduras", accent: "#6DBE7B", icon: "🥬", asset: "/food/cat-verduras.png" },
-  pescado: { label: "Pescado", accent: "#4C9BD6", icon: "🐟", asset: "/food/cat-pescado.png" },
+  pescado: { label: "Pescado", accent: "#4C9BD6", icon: "🐟", asset: "/food/icon-pescado.svg" },
   carne: { label: "Carne", accent: "#E57373", icon: "🥩", asset: "/food/cat-carne.png" },
-  pollo: { label: "Aves", accent: "#F2C14E", icon: "🍗", asset: "/food/cat-aves.png" },
-  pasta: { label: "Cereales", accent: "#D7B58A", icon: "🌾", asset: "/food/cat-cereales.png" },
+  pollo: { label: "Aves", accent: "#F2C14E", icon: "🍗", asset: "/food/icon-aves.svg" },
+  pasta: { label: "Cereales", accent: "#D7B58A", icon: "🌾", asset: "/food/icon-cereales.svg" },
   fruta: { label: "Fruta", accent: "#FF8A3D", icon: "🍊", asset: "/food/cat-fruta.png" },
   lacteo: { label: "Lácteos", accent: "#F5E6C8", icon: "🥛", asset: "/food/cat-lacteos.png" },
-  legumbre: { label: "Legumbres", accent: "#9A7655", icon: "🫘", asset: "/food/cat-legumbres.png" },
+  legumbre: { label: "Legumbres", accent: "#9A7655", icon: "🫘", asset: "/food/icon-legumbres.svg" },
   otro: { label: "Otro", accent: "#83796C", icon: "🍽️", asset: null },
 };
 
@@ -502,6 +502,141 @@ export function classifyDish(dishName: string): FoodCategory {
   }
 
   return "otro";
+}
+
+// ---------------------------------------------------------------------------
+// Ingredient-level SVG icons (public/food/icon-*.svg)
+// Ordered by priority: specific proteins > specific fish > legumes > grains >
+// vegetables > fruit > dairy > condiments/extras — the "star" ingredient wins.
+// Each entry: [keyword(s) to match, SVG filename without path/extension].
+// Multi-word entries come first within each group so they match before their
+// single-word parts (same logic as category keywords above).
+// ---------------------------------------------------------------------------
+
+const INGREDIENT_ICONS: [string[], string][] = [
+  // --- Proteins (meat & poultry — highest priority) ---
+  [["pechuga de pollo", "muslo de pollo", "alitas de pollo", "pollo asado", "pollo al horno", "pollo al curry", "pollo a la plancha", "pollo"], "pollo"],
+  [["pechuga de pavo", "hamburguesa de pavo", "pavo"], "pavo-carne"],
+  [["pato"], "pato"],
+  [["solomillo de ternera", "filete de ternera", "entrecot de ternera", "estofado de ternera", "ragout de ternera", "chuleton de buey", "ternera"], "ternera"],
+  [["solomillo de cerdo", "lomo de cerdo", "costilla de cerdo", "costillas de cerdo", "filete de cerdo", "chuleta de cerdo", "secreto iberico", "pluma iberica", "presa iberica", "cerdo"], "cerdo"],
+  [["chuleta de cordero", "pierna de cordero", "paletilla de cordero", "cordero"], "cordero"],
+  [["jamon"], "jamon"],
+
+  // --- Fish & seafood ---
+  [["salmon", "tartar de salmon", "ceviche de salmon"], "salmon"],
+  [["atun", "tataki de atun", "tartar de atun"], "atun"],
+  [["merluza"], "merluza"],
+  [["sardina", "sardinas"], "sardina"],
+  [["gamba", "gambas", "ceviche de gambas", "langostino", "langostinos"], "gambas"],
+  [["pulpo"], "pulpo"],
+  [["calamar", "calamares"], "calamar"],
+  [["mejillon", "mejillones"], "mejillon"],
+  [["almeja", "almejas", "chirla", "chirlas"], "almeja"],
+
+  // --- Legumes ---
+  [["lenteja", "lentejas", "guiso de lentejas", "potaje de lentejas", "ensalada de lentejas"], "lentejas"],
+  [["garbanzo", "garbanzos", "potaje de garbanzos", "garbanzos con espinacas", "ensalada de garbanzos"], "garbanzos"],
+  [["alubia", "alubias", "alubias con chorizo", "fabada", "frijol", "frijoles"], "alubias"],
+  [["hummus"], "hummus"],
+
+  // --- Grains & starches ---
+  [["arroz", "arroz con leche", "arroz con pollo", "arroz caldoso", "arroz negro", "arroz a la cubana", "arroz tres delicias", "paella", "risotto"], "arroz"],
+  [["pasta", "espagueti", "espaguetis", "spaghetti", "macarron", "macarrones", "lasaña", "tallarin", "tallarines", "fideo", "fideos", "fideua", "penne", "fusilli", "ravioli", "tortellini", "gnocchi", "noodles", "ramen", "udon", "soba"], "pasta"],
+  [["quinoa"], "quinoa"],
+  [["pan", "tostada", "bocadillo", "sandwich", "bagel"], "pan"],
+  [["patata", "patatas", "pure de patata", "tortilla de patata"], "patata"],
+  [["batata", "boniato"], "batata"],
+
+  // --- Eggs ---
+  [["huevo", "huevos", "tortilla francesa", "revuelto"], "huevo"],
+
+  // --- Vegetables ---
+  [["brocoli"], "brocoli"],
+  [["espinaca", "espinacas", "crema de espinacas", "revuelto de espinacas", "tortilla de espinacas"], "espinaca"],
+  [["tomate", "tomate frito", "tostada con tomate", "gazpacho", "salmorejo"], "tomate"],
+  [["zanahoria", "zanahorias", "crema de zanahoria"], "zanahoria"],
+  [["berenjena"], "berenjena"],
+  [["calabacin", "crema de calabacin"], "calabacin"],
+  [["pimiento", "pimientos", "pimientos rellenos", "pimientos del padron", "pimientos asados"], "pimiento"],
+  [["champiñon", "champiñones", "seta", "setas", "revuelto de champiñones", "revuelto de setas"], "champinon"],
+  [["judias verdes"], "judias-verdes"],
+  [["lechuga", "ensalada"], "lechuga"],
+  [["cebolla"], "cebolla"],
+
+  // --- Fruit ---
+  [["manzana"], "manzana"],
+  [["naranja", "zumo de naranja"], "naranja"],
+  [["platano", "banana", "batido de platano"], "platano"],
+  [["limon", "lima"], "limon"],
+  [["fresa", "fresas", "batido de fresa", "frambuesa", "frambuesas", "mora", "moras", "arandano", "arandanos"], "frutos-rojos"],
+  [["uva", "uvas"], "uvas"],
+  [["coco"], "coco"],
+
+  // --- Dairy ---
+  [["yogur", "kefir"], "yogur"],
+  [["queso", "queso fresco", "queso manchego", "queso de cabra", "queso de burgos", "fondue", "quesadilla"], "queso"],
+  [["leche", "leche con cereales"], "leche"],
+  [["requeson", "cuajada"], "requeson"],
+
+  // --- Nuts & seeds ---
+  [["almendra", "almendras"], "almendras"],
+  [["nuez", "nueces"], "nueces"],
+  [["avellana", "avellanas"], "avellanas"],
+  [["semilla", "semillas"], "semillas"],
+
+  // --- Extras / condiments ---
+  [["tofu"], "tofu"],
+  [["chocolate"], "chocolate"],
+  [["miel"], "miel"],
+  [["aguacate", "tostada de aguacate"], "aguacate"],
+  [["aceite de oliva", "aceite oliva"], "aceite-oliva"],
+  [["aceite de aguacate"], "aceite-aguacate"],
+  [["ajo", "al ajillo"], "ajo"],
+  [["pimienta"], "pimienta"],
+  [["sal"], "sal"],
+  [["especias", "curry"], "especias"],
+  [["hierbas", "albahaca", "perejil", "cilantro", "oregano", "romero", "tomillo"], "hierbas"],
+];
+
+/**
+ * Find the most specific ingredient SVG icon for a dish name.
+ * Returns the path `/food/icon-{name}.svg` of the first matching ingredient,
+ * or `null` if nothing matches at ingredient level.
+ */
+export function ingredientIcon(dishName: string): string | null {
+  const normalized = stripAccents(dishName.toLowerCase().trim());
+
+  // Multi-word keywords first (across all entries)
+  for (const [keywords, icon] of INGREDIENT_ICONS) {
+    for (const kw of keywords) {
+      if (kw.includes(" ") && normalized.includes(kw)) {
+        return `/food/icon-${icon}.svg`;
+      }
+    }
+  }
+
+  // Single-word keywords — whole-word match
+  for (const [keywords, icon] of INGREDIENT_ICONS) {
+    for (const kw of keywords) {
+      if (!kw.includes(" ")) {
+        const re = new RegExp(`(?:^|\\s|[,;.()/-])${kw}(?:$|\\s|[,;.()/-])`, "i");
+        if (re.test(normalized)) {
+          return `/food/icon-${icon}.svg`;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Best available illustration for a dish: specific ingredient SVG first,
+ * then category-level asset, then null.
+ */
+export function dishAsset(dishName: string): string | null {
+  return ingredientIcon(dishName) ?? FOOD_CATEGORIES[classifyDish(dishName)].asset;
 }
 
 /** Return the category accent color for a dish, looked up via `classifyDish`. */

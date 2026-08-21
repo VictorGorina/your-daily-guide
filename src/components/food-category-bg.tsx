@@ -1,4 +1,4 @@
-import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
+import { classifyDish, dishAsset, FOOD_CATEGORIES } from "@/lib/food-categories";
 
 /**
  * Inline style for food-category contextual backgrounds.
@@ -21,11 +21,10 @@ export function foodBgStyle(dishName: string | undefined | null, pct = 14): Reac
 }
 
 /**
- * Small circular hand-drawn illustration for the food category of a dish
- * (see public/food/cat-*.png). Purely decorative — the dish name and/or
- * FoodCategoryBadge next to it already carry the information — so it's
- * rendered with an empty alt. Returns null for "otro" (no illustration) or
- * when the dish doesn't classify into a known category.
+ * Hand-drawn illustration for a dish's main ingredient (public/food/icon-*.svg).
+ * Tries the specific ingredient first (e.g. "salmón" → icon-salmon.svg),
+ * falls back to the broad category asset (e.g. icon-pescado.svg), and
+ * returns null when nothing matches.  Purely decorative (empty alt).
  */
 export function DishImage({
   dish,
@@ -36,12 +35,11 @@ export function DishImage({
   size?: number;
   className?: string;
 }) {
-  const cat = classifyDish(dish);
-  const entry = FOOD_CATEGORIES[cat];
-  if (!entry.asset) return null;
+  const asset = dishAsset(dish);
+  if (!asset) return null;
   return (
     <img
-      src={entry.asset}
+      src={asset}
       alt=""
       width={size}
       height={size}
