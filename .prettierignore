@@ -6,3 +6,15 @@ pnpm-lock.yaml
 package-lock.json
 bun.lock
 routeTree.gen.ts
+
+# Ficheros que no son código del proyecto: los instala y sobrescribe el
+# tooling de agentes (ver skills-lock.json), así que formatearlos solo genera
+# ruido que se pierde en la siguiente actualización.
+.claude
+.agents
+skills-lock.json
+
+# Catálogos de assets de Xcode: los escribe Expo al generar los targets
+# nativos ("author": "expo" dentro de cada Contents.json) y los vuelve a
+# escribir a su manera en el siguiente prebuild.
+**/Assets.xcassets
