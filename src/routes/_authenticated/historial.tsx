@@ -171,7 +171,7 @@ function AdherenceHeatmap({ logs }: { logs: DailyLog[] }) {
         })}
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        Verde: todas las comidas. Naranja: comiste algo. Gris claro: sin comidas ese día. Gris
+        Verde: todas las comidas. Amarillo: comiste algo. Gris claro: sin comidas ese día. Gris
         oscuro: sin registro.
       </p>
     </section>
@@ -226,7 +226,11 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
             {log.weight_kg ? ` · ${log.weight_kg} kg` : ""}
           </p>
         </div>
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold text-foreground">
+        <span
+          className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold ${
+            ratio === 1 ? "bg-success/15 text-success" : "bg-secondary text-foreground"
+          }`}
+        >
           {Math.round(ratio * 100)}%
         </span>
       </button>

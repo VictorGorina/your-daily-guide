@@ -877,7 +877,7 @@ function Onboarding() {
                 aria-pressed={active}
                 className={`rounded-full border px-3.5 py-2 text-xs font-medium transition-transform active:scale-95 ${
                   active
-                    ? "border-primary bg-primary text-primary-foreground"
+                    ? "border-foreground bg-foreground text-background"
                     : "border-input bg-surface"
                 }`}
               >

@@ -350,7 +350,7 @@ function PlanPage() {
                       disabled={confirmed || recadence.isPending}
                       className={`rounded-2xl border px-2 py-2.5 text-xs font-semibold transition-colors disabled:opacity-60 ${
                         activeCadence === c.key
-                          ? "border-transparent bg-primary text-primary-foreground"
+                          ? "border-transparent bg-foreground text-background"
                           : "border-input bg-surface text-muted-foreground"
                       }`}
                     >

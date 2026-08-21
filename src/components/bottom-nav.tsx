@@ -46,7 +46,7 @@ export function BottomNav() {
               <span
                 className={`grid h-10 w-10 place-items-center rounded-2xl transition-all duration-300 ${
                   active
-                    ? "bg-primary text-primary-foreground scale-105"
+                    ? "bg-foreground text-background scale-105"
                     : "text-muted-foreground group-active:scale-95"
                 }`}
               >

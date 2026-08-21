@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react";
+import * as React from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -38,6 +39,27 @@ function FieldNote({ error, help }: { error?: string; help: string }) {
       </p>
     );
   return <p className="mt-1 text-[11px] text-muted-foreground">{help}</p>;
+}
+
+// Campo con la etiqueta siempre visible encima del valor (en vez de un
+// placeholder que desaparece al escribir), para que un dato ya rellenado
+// ("78" de peso) se siga leyendo con contexto.
+function FieldInput({
+  label,
+  className,
+  ...props
+}: { label: string } & React.ComponentProps<"input">) {
+  return (
+    <div className="rounded-2xl bg-muted px-3.5 py-2.5">
+      <label className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </label>
+      <input
+        {...props}
+        className={`mt-0.5 w-full bg-transparent text-sm font-medium text-foreground outline-none ${className ?? ""}`}
+      />
+    </div>
+  );
 }
 
 export const Route = createFileRoute("/_authenticated/ajustes")({
@@ -164,9 +186,6 @@ function Ajustes() {
     }
   };
 
-  const input =
-    "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
-
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
       <h1 className="font-display text-3xl">Ajustes</h1>
@@ -211,19 +230,19 @@ function Ajustes() {
       </span>
       <section className="surface-card mt-2 space-y-4 p-5">
         <h2 className="text-sm font-semibold">Datos básicos</h2>
-        <input
-          className={input}
+        <FieldInput
+          label="Nombre"
           defaultValue={profile?.display_name ?? ""}
-          placeholder="Nombre"
+          placeholder="—"
           onBlur={(e) => save.mutate({ display_name: e.target.value || null })}
         />
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <input
-              className={input}
+            <FieldInput
+              label="Peso"
               inputMode="decimal"
               defaultValue={profile?.current_weight_kg ?? ""}
-              placeholder="Peso (kg)"
+              placeholder="kg"
               onBlur={(e) =>
                 commitNumber(
                   "current_weight_kg",
@@ -241,11 +260,11 @@ function Ajustes() {
             />
           </div>
           <div>
-            <input
-              className={input}
+            <FieldInput
+              label="Altura"
               inputMode="decimal"
               defaultValue={profile?.height_cm ?? ""}
-              placeholder="Altura (cm)"
+              placeholder="cm"
               onBlur={(e) =>
                 commitNumber(
                   "height_cm",
@@ -261,11 +280,11 @@ function Ajustes() {
           </div>
         </div>
         <div>
-          <input
-            className={input}
+          <FieldInput
+            label="Objetivo"
             inputMode="decimal"
             defaultValue={profile?.goal_amount ?? ""}
-            placeholder="Objetivo (kg)"
+            placeholder="kg"
             onBlur={(e) =>
               commitNumber(
                 "goal_amount",
@@ -297,7 +316,7 @@ function Ajustes() {
                 onClick={() => save.mutate({ tone: t })}
                 className={`rounded-2xl border px-3 py-3 text-sm capitalize transition-colors ${
                   profile?.tone === t
-                    ? "border-primary bg-primary-soft text-primary"
+                    ? "border-foreground bg-foreground text-background"
                     : "border-input bg-surface"
                 }`}
               >
@@ -310,26 +329,24 @@ function Ajustes() {
         <div className="pt-4">
           <h2 className="text-sm font-semibold">Recordatorios</h2>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <label className="text-xs text-muted-foreground">
-              Mañana
-              <input
+            <div>
+              <FieldInput
+                label="Mañana"
                 type="time"
-                className={`${input} mt-1`}
                 defaultValue={profile?.morning_time?.slice(0, 5) ?? "08:00"}
                 onBlur={(e) => commitTime("morning_time", e.target.value)}
               />
               <FieldNote error={errors["morning_time"]} help="Hora del resumen matutino." />
-            </label>
-            <label className="text-xs text-muted-foreground">
-              Noche
-              <input
+            </div>
+            <div>
+              <FieldInput
+                label="Noche"
                 type="time"
-                className={`${input} mt-1`}
                 defaultValue={profile?.evening_time?.slice(0, 5) ?? "21:30"}
                 onBlur={(e) => commitTime("evening_time", e.target.value)}
               />
               <FieldNote error={errors["evening_time"]} help="Hora del repaso nocturno." />
-            </label>
+            </div>
           </div>
         </div>
       </section>
@@ -396,14 +413,14 @@ function Ajustes() {
 
       <button
         onClick={signOut}
-        className="mt-2 w-full rounded-full border border-input py-4 text-sm font-medium text-muted-foreground"
+        className="mt-2 w-full rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground"
       >
         Cerrar sesión
       </button>
 
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <button className="mt-3 w-full rounded-full border border-destructive/30 py-4 text-sm font-medium text-destructive">
+          <button className="mt-3 w-full rounded-full bg-destructive/10 py-4 text-sm font-medium text-destructive">
             Eliminar cuenta
           </button>
         </AlertDialogTrigger>
