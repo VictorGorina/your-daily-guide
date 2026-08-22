@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { saveProfile } from "@/lib/daily";
 import { randomDemoProfile } from "@/lib/demo-profile";
+import { safeInternalPath } from "@/lib/safe-next";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>): { next?: string } =>
-    typeof search.next === "string" && search.next.startsWith("/") ? { next: search.next } : {},
+  validateSearch: (search: Record<string, unknown>): { next?: string } => ({
+    next: safeInternalPath(search.next as string | undefined),
+  }),
   head: () => ({
     meta: [
       { title: "Entrar en Peppers" },

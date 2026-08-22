@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { safeInternalPath } from "@/lib/safe-next";
 
 // Página a la que apunta el enlace del correo de "olvidé mi contraseña" (ver
 // redirectTo en forgotPassword de src/routes/auth.tsx). Supabase procesa el
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/restablecer")({
   validateSearch: (
     search: Record<string, unknown>,
   ): { next?: string; error_description?: string } => ({
-    next: typeof search.next === "string" && search.next.startsWith("/") ? search.next : undefined,
+    next: safeInternalPath(search.next as string | undefined),
     error_description:
       typeof search.error_description === "string" ? search.error_description : undefined,
   }),

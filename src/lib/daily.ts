@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId } from "@/lib/auth-headers";
+import { madridTodayISO } from "@/lib/madrid-date";
 
 export type Profile = {
   id: string;
@@ -102,10 +103,8 @@ export type ChatMessage = {
   created_at: string;
 };
 
-export const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+/** Fecha actual en zona Europe/Madrid — único "hoy" de toda la app. */
+export const todayISO = madridTodayISO;
 
 export async function fetchProfile(): Promise<Profile | null> {
   const userId = await currentUserId();
@@ -150,11 +149,14 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
   if (existing) return existing as unknown as DailyLog;
   const { data, error } = await supabase
     .from("daily_logs")
-    .insert({
-      user_id: userId,
-      log_date: date,
-      habits: habits.map((label) => ({ label, done: false })),
-    } as never)
+    .upsert(
+      {
+        user_id: userId,
+        log_date: date,
+        habits: habits.map((label) => ({ label, done: false })),
+      } as never,
+      { onConflict: "user_id,log_date", ignoreDuplicates: true },
+    )
     .select("*")
     .single();
   if (error) throw error;

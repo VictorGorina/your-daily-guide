@@ -90,7 +90,12 @@ export const parseOnboarding = createServerFn({ method: "POST" })
     });
 
     const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-    const p = JSON.parse(json) as Record<string, unknown>;
+    let p: Record<string, unknown>;
+    try {
+      p = JSON.parse(json) as Record<string, unknown>;
+    } catch {
+      throw new Error("No hemos podido interpretar tus respuestas. Inténtalo de nuevo.");
+    }
     return {
       display_name: str(p.display_name),
       age: num(p.age),

@@ -17,6 +17,26 @@ export const Route = createFileRoute("/api/push/subscribe")({
           return new Response("Suscripción incompleta", { status: 400 });
         }
 
+        // H-04: Solo endpoints de servicios de push legítimos (FCM, Apple, Mozilla)
+        let endpointUrl: URL;
+        try {
+          endpointUrl = new URL(body.endpoint);
+        } catch {
+          return new Response("Endpoint no válido", { status: 400 });
+        }
+        const PUSH_HOST_RE =
+          /(?:^|\.)(?:fcm\.googleapis\.com|push\.services\.mozilla\.com|web\.push\.apple\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com)$/;
+        if (endpointUrl.protocol !== "https:" || !PUSH_HOST_RE.test(endpointUrl.hostname)) {
+          return new Response("Endpoint no válido", { status: 400 });
+        }
+        if (
+          [endpointUrl.href, body.keys.p256dh, body.keys.auth].some(
+            (v) => v.length > 512 || v.length < 16,
+          )
+        ) {
+          return new Response("Claves fuera de rango", { status: 400 });
+        }
+
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         // Upsert por endpoint: si el mismo navegador se vuelve a suscribir
         // (p.ej. tras borrar y recrear la suscripción) no duplicamos fila.
@@ -29,7 +49,10 @@ export const Route = createFileRoute("/api/push/subscribe")({
           },
           { onConflict: "endpoint" },
         );
-        if (error) return new Response(error.message, { status: 500 });
+        if (error) {
+          console.error("push/subscribe", error);
+          return new Response("Error al guardar la suscripción", { status: 500 });
+        }
 
         return new Response(null, { status: 204 });
       },

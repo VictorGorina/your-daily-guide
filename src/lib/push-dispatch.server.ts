@@ -1,4 +1,5 @@
 import type { DailyGuide } from "@/lib/daily";
+import { madridTodayISO } from "@/lib/madrid-date";
 import { sendPushNotification, type PushPayload } from "@/lib/web-push.server";
 
 export type DispatchSummary = {
@@ -33,10 +34,7 @@ function madridMinutesNow(): number {
   return hour * 60 + minute;
 }
 
-function madridDateISO(): string {
-  // Locale en-CA formatea como YYYY-MM-DD, cómodo para comparar con `date`.
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE }).format(new Date());
-}
+// Usa madridTodayISO() de madrid-date.ts (misma implementación, un único sitio).
 
 function timeToMinutes(hhmm: string | null): number | null {
   if (!hhmm) return null;
@@ -175,7 +173,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   };
 
   const nowMinutes = madridMinutesNow();
-  const today = madridDateISO();
+  const today = madridTodayISO();
 
   const { data: profiles, error } = await supabaseAdmin
     .from("profiles")

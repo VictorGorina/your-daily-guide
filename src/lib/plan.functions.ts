@@ -30,6 +30,7 @@ import {
   type ShoppingList,
   type TripActuals,
 } from "@/lib/plan-shared";
+import { madridTodayISO } from "@/lib/madrid-date";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
 
@@ -145,7 +146,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = madridTodayISO();
     const coverage = monthCoverage(data.month, today);
     const coveredDays = coverage.toDay - coverage.fromDay + 1;
     const ratio = coverageRatio(coverage, data.month);
@@ -399,7 +400,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
       if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
       const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
         ? input.today!
-        : new Date().toISOString().slice(0, 10);
+        : madridTodayISO();
       const kcal = Number(input?.kcalDelta);
       return {
         month: input.month,

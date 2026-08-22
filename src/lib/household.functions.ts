@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { madridTodayISO } from "@/lib/madrid-date";
 import { cleanPlan, cleanShopping } from "@/lib/plan-shared";
 
 /**
@@ -15,7 +16,7 @@ export const syncHouseholdPlan = createServerFn({ method: "POST" })
       month: input.month,
       today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
         ? input.today!
-        : new Date().toISOString().slice(0, 10),
+        : madridTodayISO(),
     };
   })
   .handler(async ({ data, context }): Promise<{ synced: number }> => {
