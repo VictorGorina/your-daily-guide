@@ -1,5 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DMMono_400Regular, DMMono_500Medium } from "@expo-google-fonts/dm-mono";
+import {
+  Figtree_400Regular,
+  Figtree_500Medium,
+  Figtree_600SemiBold,
+} from "@expo-google-fonts/figtree";
 import { Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
+import {
+  Outfit_400Regular,
+  Outfit_500Medium,
+  Outfit_600SemiBold,
+  Outfit_700Bold,
+} from "@expo-google-fonts/outfit";
 import {
   WorkSans_400Regular,
   WorkSans_500Medium,
@@ -30,6 +42,15 @@ export default function RootLayout() {
     WorkSans_500Medium,
     WorkSans_600SemiBold,
     WorkSans_700Bold,
+    Outfit_400Regular,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
+    Figtree_400Regular,
+    Figtree_500Medium,
+    Figtree_600SemiBold,
+    DMMono_400Regular,
+    DMMono_500Medium,
   });
 
   // Fondo liso mientras cargan las fuentes (instantáneo en la práctica: son

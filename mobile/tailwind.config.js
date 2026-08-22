@@ -49,15 +49,22 @@ module.exports = {
         "category-legumbres": "#9a7655",
       },
       fontFamily: {
-        // Cuerpo/UI — alternativa a Suisse Int'l. Los pesos van con nombres
-        // propios porque React Native no sintetiza negrita sobre una fuente
-        // cargada: cada peso es un archivo/familia distinta (ver app/_layout.tsx).
+        // Cuerpo/UI — Work Sans sigue disponible para componentes que aún lo usen.
         sans: ["WorkSans_400Regular"],
         "sans-medium": ["WorkSans_500Medium"],
         "sans-semibold": ["WorkSans_600SemiBold"],
         "sans-bold": ["WorkSans_700Bold"],
-        // Títulos — alternativa a Recoleta: serif cálida con carácter editorial.
+        // Títulos — Fraunces sigue para componentes legacy.
         display: ["Fraunces_600SemiBold"],
+        // Rediseño Hoy (artboard 1b) — Outfit para headings, Figtree para body, DM Mono para datos.
+        heading: ["Outfit_600SemiBold"],
+        "heading-medium": ["Outfit_500Medium"],
+        "heading-bold": ["Outfit_700Bold"],
+        body: ["Figtree_400Regular"],
+        "body-medium": ["Figtree_500Medium"],
+        "body-semibold": ["Figtree_600SemiBold"],
+        mono: ["DMMono_400Regular"],
+        "mono-medium": ["DMMono_500Medium"],
       },
       borderRadius: {
         // Botones 10–12px, cards 12–16px, elementos destacados hasta ~18px

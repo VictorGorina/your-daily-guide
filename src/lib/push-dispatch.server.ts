@@ -45,6 +45,25 @@ function timeToMinutes(hhmm: string | null): number | null {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
+/** Días que quedan del mes en curso, contando hoy (1 = hoy es el último día). */
+function daysLeftInMonth(dateISO: string): number {
+  const [y, m] = dateISO.slice(0, 7).split("-").map(Number);
+  const lastDay = new Date(y ?? 1970, m ?? 1, 0).getDate();
+  const day = Number(dateISO.slice(8, 10));
+  return lastDay - day + 1;
+}
+
+/** Mes "YYYY-MM" siguiente al de una fecha "YYYY-MM-DD". */
+function nextMonthOf(dateISO: string): string {
+  const [y, m] = dateISO.slice(0, 7).split("-").map(Number);
+  const d = new Date(y ?? 1970, m ?? 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// A partir de cuántos días quedan del mes se avisa de que hay que preparar el
+// plan del siguiente.
+const RENEWAL_DAYS_LEFT = 5;
+
 /** ¿`target` cae en (ahora - WINDOW_MINUTES, ahora]? Contempla el cruce de medianoche. */
 function inWindow(target: number | null, nowMinutes: number): boolean {
   if (target == null) return false;
@@ -60,6 +79,7 @@ type ProfileRow = {
   evening_time: string;
   morning_push_sent_on: string | null;
   evening_push_sent_on: string | null;
+  plan_renewal_push_sent_on: string | null;
   tone: string | null;
 };
 
@@ -113,6 +133,29 @@ function eveningCopy(tone: Tone, name: string | null, pendingCount: number) {
   return { title, body: "Repásalo en menos de un minuto." };
 }
 
+// Aviso de que quedan pocos días de mes y todavía no hay plan del siguiente.
+// Al abrir la app desde este push, la generación automática de la pantalla
+// Hoy se encarga de crearlo en cuanto entre el nuevo mes.
+function renewalCopy(tone: Tone, name: string | null, nextMonthLabel: string) {
+  const title = name ? `${name}, se acaba el mes` : "Se acaba el mes";
+  if (tone === "relajado") {
+    return {
+      title,
+      body: `Cuando quieras, abre la app para preparar tu plan de ${nextMonthLabel}.`,
+    };
+  }
+  if (tone === "exigente") {
+    return {
+      title,
+      body: `Quedan pocos días: prepara ya tu plan de ${nextMonthLabel} y su lista de la compra.`,
+    };
+  }
+  return {
+    title,
+    body: `Tu plan de ${nextMonthLabel} está al caer. Ábrelo y te lo preparo.`,
+  };
+}
+
 /**
  * Recorre los perfiles cuyo `morning_time`/`evening_time` cae en la ventana
  * actual y no se les ha enviado ya hoy, y envía el push correspondiente a
@@ -137,7 +180,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   const { data: profiles, error } = await supabaseAdmin
     .from("profiles")
     .select(
-      "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on, tone",
+      "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on, plan_renewal_push_sent_on, tone",
     )
     .eq("onboarding_completed", true);
   if (error) throw error;
@@ -149,9 +192,36 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   const eveningMatches = rows.filter(
     (p) => p.evening_push_sent_on !== today && inWindow(timeToMinutes(p.evening_time), nowMinutes),
   );
-  if (!morningMatches.length && !eveningMatches.length) return summary;
 
-  const matchedIds = [...new Set([...morningMatches, ...eveningMatches].map((p) => p.id))];
+  // A 5 días o menos de fin de mes, si todavía no hay plan del mes siguiente
+  // (y no se avisó ya hoy), se avisa una vez al día hasta que lo generen —
+  // a mano desde Plan o solo al entrar el día 1 (ver auto-generación en Hoy).
+  const nextMonth = nextMonthOf(today);
+  const renewalCandidates =
+    daysLeftInMonth(today) <= RENEWAL_DAYS_LEFT
+      ? rows.filter((p) => p.plan_renewal_push_sent_on !== today)
+      : [];
+  let renewalMatches: ProfileRow[] = [];
+  if (renewalCandidates.length) {
+    const { data: nextPlans } = await supabaseAdmin
+      .from("monthly_plans")
+      .select("user_id")
+      .eq("month", nextMonth)
+      .in(
+        "user_id",
+        renewalCandidates.map((p) => p.id),
+      );
+    const alreadyPlanned = new Set(
+      (nextPlans ?? []).map((r) => (r as { user_id: string }).user_id),
+    );
+    renewalMatches = renewalCandidates.filter((p) => !alreadyPlanned.has(p.id));
+  }
+
+  if (!morningMatches.length && !eveningMatches.length && !renewalMatches.length) return summary;
+
+  const matchedIds = [
+    ...new Set([...morningMatches, ...eveningMatches, ...renewalMatches].map((p) => p.id)),
+  ];
   const { data: subs } = await supabaseAdmin
     .from("push_subscriptions")
     .select("user_id, endpoint, p256dh, auth")
@@ -225,6 +295,20 @@ export async function dispatchPush(): Promise<DispatchSummary> {
       await sendTo(p.id, { title, body, url: "/hoy" });
     }
     await supabaseAdmin.from("profiles").update({ evening_push_sent_on: today }).eq("id", p.id);
+  }
+
+  if (renewalMatches.length) {
+    const nextMonthLabel = new Date(`${nextMonth}-01T00:00:00`).toLocaleDateString("es-ES", {
+      month: "long",
+    });
+    for (const p of renewalMatches) {
+      const { title, body } = renewalCopy(toneOf(p.tone), p.display_name, nextMonthLabel);
+      await sendTo(p.id, { title, body, url: "/hoy" });
+      await supabaseAdmin
+        .from("profiles")
+        .update({ plan_renewal_push_sent_on: today })
+        .eq("id", p.id);
+    }
   }
 
   return summary;

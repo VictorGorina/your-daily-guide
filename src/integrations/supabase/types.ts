@@ -191,6 +191,7 @@ export type Database = {
           month: string;
           plan: Json | null;
           shopping: Json | null;
+          trip_actuals: Json | null;
           updated_at: string;
           user_id: string;
         };
@@ -201,6 +202,7 @@ export type Database = {
           month: string;
           plan?: Json | null;
           shopping?: Json | null;
+          trip_actuals?: Json | null;
           updated_at?: string;
           user_id: string;
         };
@@ -211,6 +213,7 @@ export type Database = {
           month?: string;
           plan?: Json | null;
           shopping?: Json | null;
+          trip_actuals?: Json | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -247,6 +250,7 @@ export type Database = {
           non_negotiable_foods: string | null;
           onboarding_completed: boolean;
           past_struggles: string | null;
+          plan_renewal_push_sent_on: string | null;
           restrictions: string | null;
           sex: string | null;
           short_term_goal: string | null;
@@ -288,6 +292,7 @@ export type Database = {
           non_negotiable_foods?: string | null;
           onboarding_completed?: boolean;
           past_struggles?: string | null;
+          plan_renewal_push_sent_on?: string | null;
           restrictions?: string | null;
           sex?: string | null;
           short_term_goal?: string | null;
@@ -329,6 +334,7 @@ export type Database = {
           non_negotiable_foods?: string | null;
           onboarding_completed?: boolean;
           past_struggles?: string | null;
+          plan_renewal_push_sent_on?: string | null;
           restrictions?: string | null;
           sex?: string | null;
           short_term_goal?: string | null;

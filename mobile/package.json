@@ -4,7 +4,10 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@ai-sdk/react": "^4.0.45",
+    "@expo-google-fonts/dm-mono": "^0.4.2",
+    "@expo-google-fonts/figtree": "^0.4.1",
     "@expo-google-fonts/fraunces": "^0.4.1",
+    "@expo-google-fonts/outfit": "^0.4.3",
     "@expo-google-fonts/work-sans": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.112.3",

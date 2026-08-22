@@ -1,10 +1,8 @@
-import { Activity, UtensilsCrossed } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { Activity, X } from "lucide-react-native";
+import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { Sheet } from "./ui/sheet";
-
-type Mode = "actividad" | "exceso";
 
 const ACTIVITIES = [
   { label: "Correr", kcalPerMin: 10 },
@@ -46,26 +44,24 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
 
 export function GuidedLogSheet({
   onSend,
+  onSkip,
   disabled,
   open,
   onOpenChange,
-  initialMode = "actividad",
+  mode = "meal",
   contextNote,
 }: {
   onSend: (text: string) => void;
+  /** Se llama cuando el usuario pulsa "Me lo salté" dentro del sheet de comida. */
+  onSkip?: () => void;
   disabled?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialMode?: Mode;
+  /** "meal" = comí distinto + me lo salté; "activity" = registro de actividad física. */
+  mode?: "meal" | "activity";
   /** Línea de contexto opcional (p.ej. qué comida se está detallando). */
   contextNote?: string;
 }) {
-  const [mode, setMode] = useState<Mode>(initialMode);
-
-  useEffect(() => {
-    if (open) setMode(initialMode);
-  }, [open, initialMode]);
-
   // Actividad
   const [activity, setActivity] = useState(ACTIVITIES[0]!.label);
   const [minutes, setMinutes] = useState("30");
@@ -88,7 +84,7 @@ export function GuidedLogSheet({
   const submit = () => {
     setError(null);
 
-    if (mode === "actividad") {
+    if (mode === "activity") {
       const mins = Number(minutes.replace(",", "."));
       if (!Number.isFinite(mins) || mins < 5 || mins > 360) {
         setError("Indica entre 5 y 360 minutos.");
@@ -128,6 +124,12 @@ export function GuidedLogSheet({
     onOpenChange(false);
   };
 
+  const title = mode === "activity" ? "Registrar actividad" : "Comí distinto";
+  const description =
+    mode === "activity"
+      ? "Apunta tu actividad física y ajusto los días futuros del plan."
+      : "Cuéntame qué has comido y ajusto los días futuros del plan.";
+
   return (
     <Sheet
       open={open}
@@ -135,48 +137,15 @@ export function GuidedLogSheet({
         onOpenChange(v);
         if (!v) reset();
       }}
-      title="Registro guiado"
-      description="Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan."
+      title={title}
+      description={description}
     >
       <View className="gap-5 pb-8 pt-4">
         {contextNote ? (
           <Text className="text-xs font-sans-medium text-primary">{contextNote}</Text>
         ) : null}
 
-        <View className="flex-row gap-2">
-          <Pressable
-            onPress={() => setMode("actividad")}
-            className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl border px-3 py-2 ${
-              mode === "actividad" ? "border-primary bg-primary-soft" : "border-border"
-            }`}
-          >
-            <Activity size={16} color={mode === "actividad" ? "#3e3d39" : "#83796c"} />
-            <Text
-              className={
-                mode === "actividad" ? "text-sm text-foreground" : "text-sm text-muted-foreground"
-              }
-            >
-              Actividad
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setMode("exceso")}
-            className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl border px-3 py-2 ${
-              mode === "exceso" ? "border-primary bg-primary-soft" : "border-border"
-            }`}
-          >
-            <UtensilsCrossed size={16} color={mode === "exceso" ? "#3e3d39" : "#83796c"} />
-            <Text
-              className={
-                mode === "exceso" ? "text-sm text-foreground" : "text-sm text-muted-foreground"
-              }
-            >
-              Exceso o ajuste
-            </Text>
-          </Pressable>
-        </View>
-
-        {mode === "actividad" ? (
+        {mode === "activity" ? (
           <>
             <View className="gap-2">
               <Text className="text-xs text-muted-foreground">¿Qué has hecho?</Text>
@@ -220,8 +189,27 @@ export function GuidedLogSheet({
           </>
         ) : (
           <>
+            {onSkip ? (
+              <Pressable
+                onPress={() => {
+                  onSkip();
+                  reset();
+                  onOpenChange(false);
+                }}
+                className="flex-row items-center gap-3 rounded-2xl border border-border bg-secondary/60 px-4 py-3 active:opacity-80"
+              >
+                <X size={16} color="#83796c" />
+                <View className="flex-1">
+                  <Text className="text-sm font-sans-medium text-foreground">Me lo salté</Text>
+                  <Text className="text-xs text-muted-foreground">
+                    No he comido nada en esta comida
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+
             <View className="gap-2">
-              <Text className="text-xs text-muted-foreground">¿Qué ha pasado?</Text>
+              <Text className="text-xs text-muted-foreground">¿Qué has comido?</Text>
               <View className="flex-row flex-wrap gap-2">
                 {EXCESS_PRESETS.map((p) => (
                   <Chip key={p} label={p} active={what === p} onPress={() => setWhat(p)} />

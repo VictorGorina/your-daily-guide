@@ -32,6 +32,7 @@ import { fetchHousehold } from "@/lib/household";
 import { sharedDays, type MealKey } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import { mealsForDate, offListNote, type MonthlyPlan } from "@/lib/plan-shared";
+import { generateMonthlyPlan } from "@/lib/plan.functions";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
 
@@ -98,6 +99,7 @@ function Hoy() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const makeGuide = useServerFn(generateDailyGuide);
+  const makePlan = useServerFn(generateMonthlyPlan);
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
@@ -105,12 +107,36 @@ function Hoy() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
+  const autoPlanTriedRef = useRef(false);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
   const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
+
+  // Si al entrar no hay plan del mes en curso, se genera solo: la persona no
+  // tiene que ir a la pestaña Plan a pulsar el botón. `ensureTodayLog` espera
+  // a que esto termine (ver `enabled` de `todayQ` más abajo) para no crear el
+  // registro de hoy con comidas vacías mientras se genera.
+  const noPlanYet = planQ.isFetched && !planQ.data;
+  const autoPlan = useMutation({
+    mutationFn: () => makePlan({ data: { month } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
+    onError: (e) => {
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : "No hemos podido crear tu plan del mes. Puedes crearlo desde la pestaña Plan.",
+      );
+    },
+  });
+  useEffect(() => {
+    if (!profileQ.data?.onboarding_completed || !noPlanYet || autoPlanTriedRef.current) return;
+    autoPlanTriedRef.current = true;
+    autoPlan.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
   const today0 = todayISO();
   const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0);
@@ -130,9 +156,14 @@ function Hoy() {
   const todayQ = useQuery({
     queryKey: ["today"],
     queryFn: () => ensureTodayLog(todayMeals.map((m) => m.moment)),
-    // Espera a que el plan mensual haya terminado de cargar (con o sin datos)
-    // para crear el registro de hoy con las comidas reales del día.
-    enabled: !!profileQ.data?.onboarding_completed && planQ.isFetched,
+    // Espera a que el plan mensual haya terminado de cargar. Si no hay plan
+    // todavía, espera además a que termine (con éxito o no) la generación
+    // automática de arriba, para no crear el registro de hoy con comidas
+    // vacías mientras el plan se está preparando.
+    enabled:
+      !!profileQ.data?.onboarding_completed &&
+      planQ.isFetched &&
+      (!!planQ.data || autoPlan.isError),
   });
 
   const profile = profileQ.data;
@@ -234,9 +265,7 @@ function Hoy() {
   };
 
   const clearMealStatus = (index: number) => {
-    const next = habits.map((h, i) =>
-      i === index ? { ...h, status: undefined, done: false } : h,
-    );
+    const next = habits.map((h, i) => (i === index ? { ...h, status: undefined, done: false } : h));
     save.mutate({ habits: next });
   };
 
@@ -314,7 +343,9 @@ function Hoy() {
 
         {!habits.length ? (
           <p className="mt-3.5 animate-pulse text-sm text-muted-foreground">
-            Preparando las comidas de hoy...
+            {autoPlan.isPending
+              ? "Preparando tu menú del mes..."
+              : "Preparando las comidas de hoy..."}
           </p>
         ) : (
           <div className="mt-3.5 flex flex-col gap-2.5">

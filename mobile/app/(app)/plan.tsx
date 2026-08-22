@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
 import {
+  Check,
+  CalendarDays,
   CalendarRange,
   CheckCircle2,
   Lock,
@@ -8,11 +11,21 @@ import {
   ShoppingBasket,
   Sparkles,
 } from "lucide-react-native";
-import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { HistorialSection } from "../../components/historial-section";
 import { Dialog } from "../../components/ui/dialog";
 import { apiPost } from "../../lib/api";
 import { fetchMonthlyPlan, fetchProfile, monthISO, todayISO } from "../../lib/daily";
@@ -23,13 +36,18 @@ import {
   groupByTrip,
   mealsForDate,
   offListNote,
+  ownedTotal,
   planForDate,
   shoppingToText,
   shoppingTotal,
+  splitOwned,
+  tripActualsTotal,
   tripLabel,
   type MonthlyPlan,
   type ShoppingCadence,
+  type ShoppingItem,
   type ShoppingList,
+  type TripActuals,
 } from "../../lib/plan-shared";
 
 type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList };
@@ -37,7 +55,10 @@ type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList };
 export default function Plan() {
   const qc = useQueryClient();
   const month = monthISO();
-  const [tab, setTab] = useState<"plan" | "compra">("plan");
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<"plan" | "compra" | "historial">(
+    params.tab === "compra" || params.tab === "historial" ? params.tab : "plan",
+  );
   const [cadence, setCadence] = useState<ShoppingCadence | null>(null);
 
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
@@ -63,10 +84,36 @@ export default function Plan() {
     onError: () => Alert.alert("No hemos podido confirmar la compra"),
   });
 
+  const owned = useMutation({
+    mutationFn: (vars: { itemName: string; owned: boolean }) =>
+      apiPost<{ shopping: ShoppingList }>("plan/shopping-owned", { month, ...vars }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, shopping: res.shopping } : prev,
+      );
+    },
+    onError: () => Alert.alert("No hemos podido guardar el cambio"),
+  });
+
+  const setActual = useMutation({
+    mutationFn: (vars: { trip: number; amount: number | null }) =>
+      apiPost<{ trip_actuals: TripActuals }>("plan/trip-actual", { month, ...vars }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, trip_actuals: res.trip_actuals } : prev,
+      );
+    },
+    onError: () => Alert.alert("No hemos podido guardar el gasto"),
+  });
+
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
   const confirmed = Boolean(planQ.data?.confirmed_at);
   const total = shoppingTotal(shopping);
+  const alreadyOwned = ownedTotal(shopping);
+  const tripActuals = planQ.data?.trip_actuals ?? {};
+  const spentSoFar = tripActualsTotal(tripActuals);
+  const hasActuals = Object.keys(tripActuals).length > 0;
   const activeCadence: ShoppingCadence = cadence ?? cadenceOf(shopping);
   const trips = groupByTrip(shopping);
 
@@ -147,7 +194,8 @@ export default function Plan() {
               {(
                 [
                   ["plan", "Plan", CalendarRange],
-                  ["compra", "La compra", ShoppingBasket],
+                  ["compra", "Compra", ShoppingBasket],
+                  ["historial", "Historial", CalendarDays],
                 ] as const
               ).map(([key, label, Icon]) => {
                 const active = tab === key;
@@ -155,13 +203,13 @@ export default function Plan() {
                   <Pressable
                     key={key}
                     onPress={() => setTab(key)}
-                    className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-2.5 active:opacity-80 ${
+                    className={`flex-1 flex-row items-center justify-center gap-1 rounded-full py-2.5 active:opacity-80 ${
                       active ? "bg-surface" : ""
                     }`}
                   >
-                    <Icon size={16} color={active ? "#6dbe7b" : "#83796c"} />
+                    <Icon size={14} color={active ? "#6dbe7b" : "#83796c"} />
                     <Text
-                      className={`text-sm font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
+                      className={`text-xs font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
                     >
                       {label}
                     </Text>
@@ -198,6 +246,8 @@ export default function Plan() {
 
                 <PlanMonthCalendar plan={plan} month={month} />
               </View>
+            ) : tab === "historial" ? (
+              <HistorialSection />
             ) : (
               <View className="mt-5 gap-4">
                 <View className="rounded-3xl border border-border bg-surface p-5">
@@ -231,6 +281,25 @@ export default function Plan() {
                         style={{ width: `${budgetRatio}%` }}
                       />
                     </View>
+                  ) : null}
+                  {alreadyOwned > 0 ? (
+                    <Text className="mt-2 text-xs text-muted-foreground">
+                      Ya tienes {eur(alreadyOwned)} en casa · Te falta comprar{" "}
+                      {eur(Math.max(0, total - alreadyOwned))}
+                    </Text>
+                  ) : null}
+                  {confirmed && hasActuals ? (
+                    <Text className="mt-2 text-xs text-muted-foreground">
+                      Gasto real hasta ahora:{" "}
+                      <Text className="font-sans-semibold text-foreground">{eur(spentSoFar)}</Text>
+                      {spentSoFar !== total ? (
+                        <Text className={spentSoFar > total ? "text-destructive" : "text-success"}>
+                          {" "}
+                          ({spentSoFar > total ? "+" : ""}
+                          {eur(spentSoFar - total)} vs. lo estimado)
+                        </Text>
+                      ) : null}
+                    </Text>
                   ) : null}
                   {overBudget ? (
                     <Text className="mt-2 text-xs text-destructive">
@@ -325,49 +394,20 @@ export default function Plan() {
                   Precios orientativos de supermercado. Ajusta cantidades a tu casa.
                 </Text>
 
-                {trips.map((t) => {
-                  const tripTotal = shoppingTotal(t.groups);
-                  return (
-                    <View key={t.trip} className="rounded-3xl border border-border bg-surface p-5">
-                      <View className="flex-row items-baseline justify-between gap-3">
-                        <Text className="flex-1 text-sm font-sans-semibold text-foreground">
-                          {tripLabel(activeCadence, t.trip)}
-                        </Text>
-                        <Text className="text-xs font-sans-semibold text-primary">
-                          {eur(tripTotal)}
-                        </Text>
-                      </View>
-                      {t.groups.map((group) => (
-                        <View key={group.category} className="mt-3">
-                          <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
-                            {group.category}
-                          </Text>
-                          <View className="mt-1.5 gap-1.5">
-                            {group.items.map((item) => (
-                              <View key={item.name} className="flex-row items-baseline gap-2">
-                                <View className="mt-2 h-1.5 w-1.5 rounded-full bg-primary" />
-                                <Text className="flex-1 text-sm text-foreground">
-                                  {item.name}
-                                  {item.qty ? (
-                                    <Text className="text-muted-foreground"> · {item.qty}</Text>
-                                  ) : null}
-                                  {item.perishable ? (
-                                    <Text className="text-[11px] font-sans-semibold text-secondary-foreground">
-                                      {"  fresco"}
-                                    </Text>
-                                  ) : null}
-                                </Text>
-                                <Text className="text-xs text-muted-foreground">
-                                  {eur(item.price_eur)}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  );
-                })}
+                {trips.map((t) => (
+                  <TripCard
+                    key={t.trip}
+                    trip={t}
+                    label={tripLabel(activeCadence, t.trip)}
+                    confirmed={confirmed}
+                    tripActual={tripActuals[t.trip]}
+                    savingActual={setActual.isPending}
+                    onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
+                    onToggleOwned={(itemName, nextOwned) =>
+                      owned.mutate({ itemName, owned: nextOwned })
+                    }
+                  />
+                ))}
                 {!shopping?.length ? (
                   <Text className="text-sm text-muted-foreground">
                     Aún no hay lista. Regenera el plan para crearla.
@@ -488,6 +528,189 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
           </Text>
         )}
       </Dialog>
+    </View>
+  );
+}
+
+/**
+ * Campo para anotar lo que se ha gastado de verdad en un viaje de compra, aparte
+ * del precio estimado por la IA. Guarda al perder el foco (no en cada tecla) y
+ * muestra la diferencia contra lo estimado cuando hay un importe guardado.
+ */
+function TripActualField({
+  value,
+  estimated,
+  saving,
+  onSave,
+}: {
+  value: number | undefined;
+  estimated: number;
+  saving: boolean;
+  onSave: (amount: number | null) => void;
+}) {
+  const [text, setText] = useState(value != null ? String(value) : "");
+
+  useEffect(() => {
+    setText(value != null ? String(value) : "");
+  }, [value]);
+
+  const commit = () => {
+    const trimmed = text.trim().replace(",", ".");
+    if (!trimmed) {
+      if (value != null) onSave(null);
+      return;
+    }
+    const n = Number(trimmed);
+    if (Number.isFinite(n) && n >= 0 && n !== value) onSave(Math.round(n * 100) / 100);
+  };
+
+  const diff = value != null ? Math.round((value - estimated) * 100) / 100 : null;
+
+  return (
+    <View className="mt-3 flex-row items-center gap-2 border-t border-border pt-3">
+      <Text className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</Text>
+      <View className="flex-row items-center gap-1">
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          onBlur={commit}
+          placeholder={eur(estimated)}
+          keyboardType="decimal-pad"
+          editable={!saving}
+          className="w-20 rounded-lg border border-input bg-surface px-2 py-1.5 text-right text-sm text-foreground"
+          style={saving ? { opacity: 0.6 } : undefined}
+        />
+        <Text className="text-xs text-muted-foreground">€</Text>
+      </View>
+      {diff != null && diff !== 0 ? (
+        <Text
+          className={`text-xs font-sans-semibold ${diff > 0 ? "text-destructive" : "text-success"}`}
+        >
+          {diff > 0 ? "+" : ""}
+          {eur(diff)}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Tarjeta de una compra: separa lo pendiente de comprar (arriba, agrupado por
+ * categoría como en el súper) de lo ya marcado como "en casa" (abajo, oculto
+ * por defecto), para que de un vistazo se sepa qué falta de verdad.
+ */
+function TripCard({
+  trip,
+  label,
+  confirmed,
+  tripActual,
+  savingActual,
+  onSaveActual,
+  onToggleOwned,
+}: {
+  trip: { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
+  label: string;
+  confirmed: boolean;
+  tripActual: number | undefined;
+  savingActual: boolean;
+  onSaveActual: (amount: number | null) => void;
+  onToggleOwned: (itemName: string, owned: boolean) => void;
+}) {
+  const [ownedOpen, setOwnedOpen] = useState(false);
+  const tripTotal = shoppingTotal(trip.groups);
+  const { pending, owned } = splitOwned(trip.groups);
+  const pendingCount = pending.reduce((s, g) => s + g.items.length, 0);
+  const ownedCount = owned.reduce((s, g) => s + g.items.length, 0);
+
+  return (
+    <View className="rounded-3xl border border-border bg-surface p-5">
+      <View className="flex-row items-baseline justify-between gap-3">
+        <Text className="flex-1 text-sm font-sans-semibold text-foreground">{label}</Text>
+        <Text className="text-xs font-sans-semibold text-primary">{eur(tripTotal)}</Text>
+      </View>
+      {ownedCount > 0 ? (
+        <Text className="mt-1 text-xs text-muted-foreground">
+          {pendingCount > 0
+            ? `Te falta comprar ${pendingCount} de ${pendingCount + ownedCount}`
+            : "Ya tienes todo de esta compra"}
+        </Text>
+      ) : null}
+
+      {pending.map((group) => (
+        <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+      ))}
+
+      {owned.length ? (
+        <View className="mt-4 border-t border-border pt-3">
+          <Pressable
+            onPress={() => setOwnedOpen((o) => !o)}
+            className="flex-row items-center justify-between active:opacity-70"
+          >
+            <Text className="text-xs font-sans-medium text-muted-foreground">
+              Ya en casa ({ownedCount})
+            </Text>
+            <Text className="text-xs font-sans-medium text-muted-foreground">
+              {ownedOpen ? "ocultar" : "ver"}
+            </Text>
+          </Pressable>
+          {ownedOpen
+            ? owned.map((group) => (
+                <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+              ))
+            : null}
+        </View>
+      ) : null}
+
+      {confirmed ? (
+        <TripActualField
+          value={tripActual}
+          estimated={tripTotal}
+          saving={savingActual}
+          onSave={onSaveActual}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function ShoppingGroup({
+  group,
+  onToggleOwned,
+}: {
+  group: { category: string; items: ShoppingItem[] };
+  onToggleOwned: (itemName: string, owned: boolean) => void;
+}) {
+  return (
+    <View className="mt-3">
+      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
+        {group.category}
+      </Text>
+      <View className="mt-1.5 gap-1.5">
+        {group.items.map((item) => (
+          <View key={item.name} className="flex-row items-center gap-2">
+            <Pressable
+              onPress={() => onToggleOwned(item.name, !item.owned)}
+              className={`h-5 w-5 items-center justify-center rounded-full border active:opacity-70 ${
+                item.owned ? "border-transparent bg-primary" : "border-input bg-surface"
+              }`}
+            >
+              {item.owned ? <Check size={12} color="#3e3d39" /> : null}
+            </Pressable>
+            <Text
+              className={`flex-1 text-sm ${item.owned ? "text-muted-foreground line-through" : "text-foreground"}`}
+            >
+              {item.name}
+              {item.qty ? <Text className="text-muted-foreground"> · {item.qty}</Text> : null}
+              {item.perishable ? (
+                <Text className="text-[11px] font-sans-semibold text-secondary-foreground">
+                  {"  fresco"}
+                </Text>
+              ) : null}
+            </Text>
+            <Text className="text-xs text-muted-foreground">{eur(item.price_eur)}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

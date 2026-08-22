@@ -73,8 +73,31 @@ export type ShoppingItem = {
   trip: number;
   /** Alimento fresco (poca vida útil). */
   perishable: boolean;
+  /** Marcado a mano por la persona: ya lo tiene en casa, no hace falta comprarlo. */
+  owned?: boolean;
 };
 export type ShoppingList = { category: string; items: ShoppingItem[] }[];
+
+/** Gasto real por viaje de compra (índice de `trip` → euros), a mano tras comprar. */
+export type TripActuals = Record<number, number>;
+
+export const cleanTripActuals = (raw: unknown): TripActuals => {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: TripActuals = {};
+  for (const [key, value] of Object.entries(o)) {
+    const trip = Number(key);
+    const amount = Number(value);
+    if (Number.isFinite(trip) && trip >= 0 && Number.isFinite(amount) && amount >= 0) {
+      out[Math.round(trip)] = Math.round(amount * 100) / 100;
+    }
+  }
+  return out;
+};
+
+/** Suma de lo realmente gastado en todos los viajes con importe registrado. */
+export const tripActualsTotal = (actuals: TripActuals | null | undefined) =>
+  Math.round(Object.values(actuals ?? {}).reduce((sum, n) => sum + (Number(n) || 0), 0) * 100) /
+  100;
 
 export const tripCount = (shopping: ShoppingList | null | undefined) =>
   Math.max(1, ...((shopping ?? []).flatMap((g) => g.items.map((i) => i.trip + 1)) || [1]));
@@ -171,6 +194,21 @@ export const groupByTrip = (shopping: ShoppingList | null | undefined) => {
   })).filter((t) => t.groups.length);
 };
 
+/**
+ * Separa los grupos de una compra en lo que falta por comprar y lo que ya está
+ * en casa, sin categorías vacías en ninguno de los dos lados. Así la pantalla
+ * puede mostrar primero, y ordenado por categoría, lo pendiente para el súper,
+ * y aparte lo ya marcado como comprado.
+ */
+export const splitOwned = (groups: { category: string; items: ShoppingItem[] }[]) => ({
+  pending: groups
+    .map((g) => ({ category: g.category, items: g.items.filter((i) => !i.owned) }))
+    .filter((g) => g.items.length),
+  owned: groups
+    .map((g) => ({ category: g.category, items: g.items.filter((i) => i.owned) }))
+    .filter((g) => g.items.length),
+});
+
 const asItem = (raw: unknown): ShoppingItem | null => {
   const o = (raw ?? {}) as Record<string, unknown>;
   const name = String(o.name ?? "").trim();
@@ -183,6 +221,7 @@ const asItem = (raw: unknown): ShoppingItem | null => {
     price_eur: Number.isFinite(price) && price >= 0 ? Math.round(price * 100) / 100 : 0,
     trip: Number.isFinite(trip) && trip > 0 ? Math.min(Math.round(trip), 3) : 0,
     perishable: Boolean(o.perishable),
+    ...(o.owned ? { owned: true } : {}),
   };
 };
 
@@ -268,6 +307,15 @@ export const shoppingTotal = (shopping: ShoppingList | null | undefined) =>
   Math.round(
     (shopping ?? []).reduce(
       (sum, g) => sum + g.items.reduce((s, i) => s + (Number(i.price_eur) || 0), 0),
+      0,
+    ) * 100,
+  ) / 100;
+
+/** Suma de lo marcado como "ya lo tengo en casa": lo que no hace falta comprar. */
+export const ownedTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round(
+    (shopping ?? []).reduce(
+      (sum, g) => sum + g.items.reduce((s, i) => s + (i.owned ? Number(i.price_eur) || 0 : 0), 0),
       0,
     ) * 100,
   ) / 100;

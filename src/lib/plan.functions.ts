@@ -6,6 +6,7 @@ import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provi
 import {
   cleanPlan,
   cleanShopping,
+  cleanTripActuals,
   completePlan,
   coverageRatio,
   ingredientNames,
@@ -27,6 +28,7 @@ import {
   type MonthlyPlan,
   type PlanDay,
   type ShoppingList,
+  type TripActuals,
 } from "@/lib/plan-shared";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
@@ -288,6 +290,90 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     }
 
     return { plan, shopping };
+  });
+
+/**
+ * Marca o desmarca un ingrediente como "ya lo tengo en casa" — no cambia la
+ * lista de la compra en sí (los ítems y su precio siguen igual), solo anota qué
+ * no hace falta comprar. Se puede tocar tanto antes como después de confirmar
+ * la compra, porque no afecta a lo que se compró.
+ */
+export const toggleShoppingOwned = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { month: string; itemName: string; owned: boolean }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    const itemName = String(input?.itemName ?? "").trim();
+    if (!itemName) throw new Error("Falta el ingrediente");
+    return { month: input.month, itemName, owned: Boolean(input?.owned) };
+  })
+  .handler(async ({ data, context }): Promise<{ shopping: ShoppingList }> => {
+    const { data: row } = await context.supabase
+      .from("monthly_plans")
+      .select("shopping")
+      .eq("month", data.month)
+      .maybeSingle();
+    const current = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+    if (!current.length) throw new Error("Todavía no hay lista de la compra este mes");
+
+    const shopping: ShoppingList = current.map((group) => ({
+      category: group.category,
+      items: group.items.map((item) =>
+        item.name === data.itemName ? { ...item, owned: data.owned } : item,
+      ),
+    }));
+
+    const { error } = await context.supabase
+      .from("monthly_plans")
+      .update({ shopping: shopping as never } as never)
+      .eq("month", data.month)
+      .eq("user_id", context.userId);
+    if (error) {
+      console.error("toggleShoppingOwned", error);
+      throw new Error("No hemos podido guardar el cambio");
+    }
+
+    return { shopping };
+  });
+
+/**
+ * Guarda lo que se ha gastado de verdad en un viaje de compra concreto. Los
+ * precios de `shopping` son la estimación de la IA hecha al generar el plan;
+ * esto es aparte y no los toca, para poder comparar estimado contra real.
+ */
+export const setTripActual = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { month: string; trip: number; amount: number | null }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    const trip = Number(input?.trip);
+    if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
+    const amount = input?.amount == null ? null : Number(input.amount);
+    if (amount != null && (!Number.isFinite(amount) || amount < 0)) {
+      throw new Error("Importe no válido");
+    }
+    return { month: input.month, trip: Math.round(trip), amount };
+  })
+  .handler(async ({ data, context }): Promise<{ trip_actuals: TripActuals }> => {
+    const { data: row } = await context.supabase
+      .from("monthly_plans")
+      .select("trip_actuals")
+      .eq("month", data.month)
+      .maybeSingle();
+    const current = cleanTripActuals((row as { trip_actuals?: unknown } | null)?.trip_actuals);
+    const next = { ...current };
+    if (data.amount == null) delete next[data.trip];
+    else next[data.trip] = data.amount;
+
+    const { error } = await context.supabase
+      .from("monthly_plans")
+      .update({ trip_actuals: next as never } as never)
+      .eq("month", data.month)
+      .eq("user_id", context.userId);
+    if (error) {
+      console.error("setTripActual", error);
+      throw new Error("No hemos podido guardar el gasto");
+    }
+
+    return { trip_actuals: next };
   });
 
 export const confirmMonthlyPlan = createServerFn({ method: "POST" })

@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { CalendarDays, CalendarRange, Home, Settings, Users } from "lucide-react";
+import { CalendarRange, Home, Settings, Users } from "lucide-react";
 
 import { fetchHousehold } from "@/lib/household";
 
 // El coach ya no es una pestaña: vive como burbuja flotante (CoachFab) sobre
-// cualquiera de estas pantallas, siempre a un toque de distancia.
+// cualquiera de estas pantallas, siempre a un toque de distancia. Historial
+// tampoco es de primer nivel: vive como tercera sub-pestaña dentro de Plan.
 const baseItems = [
   { to: "/hoy", label: "Hoy", icon: Home },
   { to: "/plan", label: "Plan", icon: CalendarRange },
-  { to: "/historial", label: "Historial", icon: CalendarDays },
   { to: "/ajustes", label: "Ajustes", icon: Settings },
 ] as const;
 
@@ -25,14 +25,14 @@ export function BottomNav() {
   // Insertamos "Familia" antes de "Ajustes" para que quede pegada al resto
   // de secciones de contenido en vez de al final, junto a la config.
   const items = hasHousehold
-    ? [...baseItems.slice(0, 3), familyItem, ...baseItems.slice(3)]
+    ? [...baseItems.slice(0, 2), familyItem, ...baseItems.slice(2)]
     : baseItems;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div
         className={`mx-auto grid max-w-md gap-1 rounded-4xl border border-border bg-background/95 p-2 shadow-[0_1px_2px_oklch(0_0_0/4%)] backdrop-blur-xl ${
-          hasHousehold ? "grid-cols-5" : "grid-cols-4"
+          hasHousehold ? "grid-cols-4" : "grid-cols-3"
         }`}
       >
         {items.map(({ to, label, icon: Icon }) => {
