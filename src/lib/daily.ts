@@ -58,6 +58,7 @@ export type MonthlyPlanRow = {
   plan: import("@/lib/plan-shared").MonthlyPlan | null;
   shopping: import("@/lib/plan-shared").ShoppingList | null;
   confirmed_at: string | null;
+  trip_actuals: import("@/lib/plan-shared").TripActuals | null;
 };
 
 export const monthISO = () => todayISO().slice(0, 7);
@@ -65,7 +66,7 @@ export const monthISO = () => todayISO().slice(0, 7);
 export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
   const { data, error } = await supabase
     .from("monthly_plans")
-    .select("id, month, plan, shopping, confirmed_at")
+    .select("id, month, plan, shopping, confirmed_at, trip_actuals")
     .eq("month", month)
     .maybeSingle();
 

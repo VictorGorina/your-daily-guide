@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { MonthlyPlan, ShoppingList } from "./plan-shared";
+import type { MonthlyPlan, ShoppingList, TripActuals } from "./plan-shared";
 
 /**
  * Acceso a los datos del día, equivalente móvil de `src/lib/daily.ts` de la web.
@@ -186,6 +186,7 @@ export type MonthlyPlanRow = {
   plan: MonthlyPlan | null;
   shopping: ShoppingList | null;
   confirmed_at: string | null;
+  trip_actuals: TripActuals | null;
 };
 
 /** Mes actual en formato YYYY-MM, para la clave del plan mensual. */
@@ -194,7 +195,7 @@ export const monthISO = () => todayISO().slice(0, 7);
 export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
   const { data, error } = await supabase
     .from("monthly_plans")
-    .select("id, month, plan, shopping, confirmed_at")
+    .select("id, month, plan, shopping, confirmed_at, trip_actuals")
     .eq("month", month)
     .maybeSingle();
 

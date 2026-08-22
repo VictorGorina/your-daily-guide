@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  Check,
+  CalendarDays,
   CalendarRange,
   CheckCircle2,
   Copy,
@@ -12,10 +14,11 @@ import {
   ShoppingBasket,
   Sparkle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { HistorialSection } from "@/components/historial-section";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
 import { fetchMonthlyPlan, fetchProfile, monthISO } from "@/lib/daily";
 import {
@@ -24,19 +27,31 @@ import {
   coverageRatio,
   eur,
   groupByTrip,
+  ownedTotal,
   shoppingToText,
+  splitOwned,
+  tripActualsTotal,
   tripCount,
   tripLabel,
   shoppingTotal,
   type ShoppingCadence,
+  type ShoppingItem,
 } from "@/lib/plan-shared";
 import {
   confirmMonthlyPlan,
   generateMonthlyPlan,
   recadenceMonthlyPlan,
+  setTripActual,
+  toggleShoppingOwned,
 } from "@/lib/plan.functions";
 
 export const Route = createFileRoute("/_authenticated/plan")({
+  validateSearch: (search: Record<string, unknown>): { tab?: "plan" | "compra" | "historial" } => ({
+    tab:
+      search.tab === "compra" || search.tab === "historial"
+        ? (search.tab as "compra" | "historial")
+        : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Plan del mes · Peppers" },
@@ -63,7 +78,8 @@ function PlanPage() {
   const make = useServerFn(generateMonthlyPlan);
   const confirm = useServerFn(confirmMonthlyPlan);
   const recad = useServerFn(recadenceMonthlyPlan);
-  const [tab, setTab] = useState<"plan" | "compra">("plan");
+  const searchTab = Route.useSearch({ select: (s) => s.tab });
+  const [tab, setTab] = useState<"plan" | "compra" | "historial">(searchTab ?? "plan");
   const [cadence, setCadence] = useState<ShoppingCadence | null>(null);
 
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
@@ -101,10 +117,38 @@ function PlanPage() {
     onError: () => toast.error("No hemos podido confirmar la compra"),
   });
 
+  const toggleOwned = useServerFn(toggleShoppingOwned);
+  const owned = useMutation({
+    mutationFn: (vars: { itemName: string; owned: boolean }) =>
+      toggleOwned({ data: { month, ...vars } }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, shopping: res.shopping } : prev,
+      );
+    },
+    onError: () => toast.error("No hemos podido guardar el cambio"),
+  });
+
+  const tripActual = useServerFn(setTripActual);
+  const setActual = useMutation({
+    mutationFn: (vars: { trip: number; amount: number | null }) =>
+      tripActual({ data: { month, ...vars } }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, trip_actuals: res.trip_actuals } : prev,
+      );
+    },
+    onError: () => toast.error("No hemos podido guardar el gasto"),
+  });
+
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
   const confirmed = Boolean(planQ.data?.confirmed_at);
   const total = shoppingTotal(shopping);
+  const alreadyOwned = ownedTotal(shopping);
+  const tripActuals = planQ.data?.trip_actuals ?? {};
+  const spentSoFar = tripActualsTotal(tripActuals);
+  const hasActuals = Object.keys(tripActuals).length > 0;
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
   const trips = groupByTrip(shopping);
@@ -198,21 +242,22 @@ function PlanPage() {
         </section>
       ) : (
         <>
-          <div className="sticky top-3 z-10 mt-6 grid grid-cols-2 gap-2 rounded-full bg-secondary/80 p-1 backdrop-blur">
+          <div className="sticky top-3 z-10 mt-6 grid grid-cols-3 gap-2 rounded-full bg-secondary/80 p-1 backdrop-blur">
             {(
               [
                 ["plan", "Plan", CalendarRange],
-                ["compra", "La compra", ShoppingBasket],
+                ["compra", "Compra", ShoppingBasket],
+                ["historial", "Historial", CalendarDays],
               ] as const
             ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`flex items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-medium transition-colors ${
+                className={`flex items-center justify-center gap-1 rounded-full py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:text-sm ${
                   tab === key ? "bg-surface text-primary shadow-sm" : "text-muted-foreground"
                 }`}
               >
-                <Icon className="h-4 w-4" /> {label}
+                <Icon className="h-4 w-4 shrink-0" /> {label}
               </button>
             ))}
           </div>
@@ -245,6 +290,8 @@ function PlanPage() {
 
               <PlanMonthCalendar plan={plan} month={month} />
             </section>
+          ) : tab === "historial" ? (
+            <HistorialSection />
           ) : (
             <section className="mt-5 space-y-4">
               <div className="surface-card p-5">
@@ -285,6 +332,23 @@ function PlanPage() {
                   <p className="mt-2 text-xs text-muted-foreground">
                     Este plan cubre del día {coverage.fromDay} al {coverage.toDay}, la parte que
                     queda de mes.
+                  </p>
+                ) : null}
+                {alreadyOwned > 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Ya tienes {eur(alreadyOwned)} en casa · Te falta comprar{" "}
+                    {eur(Math.max(0, total - alreadyOwned))}
+                  </p>
+                ) : null}
+                {confirmed && hasActuals ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Gasto real hasta ahora: <span className="font-semibold">{eur(spentSoFar)}</span>{" "}
+                    {spentSoFar !== total ? (
+                      <span className={spentSoFar > total ? "text-destructive" : "text-success"}>
+                        ({spentSoFar > total ? "+" : ""}
+                        {eur(spentSoFar - total)} vs. lo estimado)
+                      </span>
+                    ) : null}
                   </p>
                 ) : null}
                 {overBudget ? (
@@ -370,49 +434,20 @@ function PlanPage() {
               <p className="px-1 text-xs text-muted-foreground">
                 Precios orientativos de supermercado. Ajusta cantidades a tu casa.
               </p>
-              {trips.map((t) => {
-                const tripTotal = shoppingTotal(t.groups);
-                return (
-                  <div key={t.trip} className="surface-card p-5">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <h3 className="text-sm font-semibold">
-                        {tripLabel(activeCadence, t.trip, coverage, tripsTotal)}
-                      </h3>
-                      <span className="shrink-0 text-xs font-semibold text-primary">
-                        {eur(tripTotal)}
-                      </span>
-                    </div>
-                    {t.groups.map((group) => (
-                      <div key={group.category} className="mt-3">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          {group.category}
-                        </span>
-                        <ul className="mt-1.5 space-y-1.5">
-                          {group.items.map((item) => (
-                            <li key={item.name} className="flex items-baseline gap-2 text-sm">
-                              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                              <span className="min-w-0 flex-1">
-                                {item.name}
-                                {item.qty ? (
-                                  <span className="text-muted-foreground"> · {item.qty}</span>
-                                ) : null}
-                                {item.perishable ? (
-                                  <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">
-                                    fresco
-                                  </span>
-                                ) : null}
-                              </span>
-                              <span className="shrink-0 text-xs text-muted-foreground">
-                                {eur(item.price_eur)}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
+              {trips.map((t) => (
+                <TripCard
+                  key={t.trip}
+                  trip={t}
+                  label={tripLabel(activeCadence, t.trip, coverage, tripsTotal)}
+                  confirmed={confirmed}
+                  tripActual={tripActuals[t.trip]}
+                  savingActual={setActual.isPending}
+                  onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
+                  onToggleOwned={(itemName, nextOwned) =>
+                    owned.mutate({ itemName, owned: nextOwned })
+                  }
+                />
+              ))}
               {!shopping?.length ? (
                 <p className="text-sm text-muted-foreground">
                   Aún no hay lista. Regenera el plan para crearla.
@@ -425,5 +460,194 @@ function PlanPage() {
 
       <BottomNav />
     </main>
+  );
+}
+
+/**
+ * Campo para anotar lo que se ha gastado de verdad en un viaje de compra, aparte
+ * del precio estimado por la IA. Guarda al perder el foco (no en cada tecla) y
+ * muestra la diferencia contra lo estimado cuando hay un importe guardado.
+ */
+function TripActualField({
+  value,
+  estimated,
+  saving,
+  onSave,
+}: {
+  value: number | undefined;
+  estimated: number;
+  saving: boolean;
+  onSave: (amount: number | null) => void;
+}) {
+  const [text, setText] = useState(value != null ? String(value) : "");
+
+  useEffect(() => {
+    setText(value != null ? String(value) : "");
+  }, [value]);
+
+  const commit = () => {
+    const trimmed = text.trim().replace(",", ".");
+    if (!trimmed) {
+      if (value != null) onSave(null);
+      return;
+    }
+    const n = Number(trimmed);
+    if (Number.isFinite(n) && n >= 0 && n !== value) onSave(Math.round(n * 100) / 100);
+  };
+
+  const diff = value != null ? Math.round((value - estimated) * 100) / 100 : null;
+
+  return (
+    <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+      <label className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</label>
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          placeholder={eur(estimated)}
+          disabled={saving}
+          className="w-20 rounded-lg border border-input bg-surface px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
+        />
+        <span className="text-xs text-muted-foreground">€</span>
+      </div>
+      {diff != null && diff !== 0 ? (
+        <span
+          className={`shrink-0 text-xs font-semibold ${diff > 0 ? "text-destructive" : "text-success"}`}
+        >
+          {diff > 0 ? "+" : ""}
+          {eur(diff)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Tarjeta de una compra: separa lo pendiente de comprar (arriba, agrupado por
+ * categoría como en el súper) de lo ya marcado como "en casa" (abajo, oculto
+ * por defecto), para que de un vistazo se sepa qué falta de verdad.
+ */
+function TripCard({
+  trip,
+  label,
+  confirmed,
+  tripActual,
+  savingActual,
+  onSaveActual,
+  onToggleOwned,
+}: {
+  trip: { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
+  label: string;
+  confirmed: boolean;
+  tripActual: number | undefined;
+  savingActual: boolean;
+  onSaveActual: (amount: number | null) => void;
+  onToggleOwned: (itemName: string, owned: boolean) => void;
+}) {
+  const [ownedOpen, setOwnedOpen] = useState(false);
+  const tripTotal = shoppingTotal(trip.groups);
+  const { pending, owned } = splitOwned(trip.groups);
+  const pendingCount = pending.reduce((s, g) => s + g.items.length, 0);
+  const ownedCount = owned.reduce((s, g) => s + g.items.length, 0);
+
+  return (
+    <div className="surface-card p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-semibold">{label}</h3>
+        <span className="shrink-0 text-xs font-semibold text-primary">{eur(tripTotal)}</span>
+      </div>
+      {ownedCount > 0 ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {pendingCount > 0
+            ? `Te falta comprar ${pendingCount} de ${pendingCount + ownedCount}`
+            : "Ya tienes todo de esta compra"}
+        </p>
+      ) : null}
+
+      {pending.map((group) => (
+        <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+      ))}
+
+      {owned.length ? (
+        <div className="mt-4 border-t border-border pt-3">
+          <button
+            type="button"
+            onClick={() => setOwnedOpen((o) => !o)}
+            aria-expanded={ownedOpen}
+            className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground"
+          >
+            <span>Ya en casa ({ownedCount})</span>
+            <span>{ownedOpen ? "ocultar" : "ver"}</span>
+          </button>
+          {ownedOpen
+            ? owned.map((group) => (
+                <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+              ))
+            : null}
+        </div>
+      ) : null}
+
+      {confirmed ? (
+        <TripActualField
+          value={tripActual}
+          estimated={tripTotal}
+          saving={savingActual}
+          onSave={onSaveActual}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ShoppingGroup({
+  group,
+  onToggleOwned,
+}: {
+  group: { category: string; items: ShoppingItem[] };
+  onToggleOwned: (itemName: string, owned: boolean) => void;
+}) {
+  return (
+    <div className="mt-3">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {group.category}
+      </span>
+      <ul className="mt-1.5 space-y-1.5">
+        {group.items.map((item) => (
+          <li key={item.name} className="flex items-center gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() => onToggleOwned(item.name, !item.owned)}
+              aria-label={
+                item.owned
+                  ? `${item.name}: ya la tienes, quitar marca`
+                  : `${item.name}: marcar que ya la tienes en casa`
+              }
+              className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-colors ${
+                item.owned
+                  ? "border-transparent bg-primary text-primary-foreground"
+                  : "border-input bg-surface"
+              }`}
+            >
+              {item.owned ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+            </button>
+            <span
+              className={`min-w-0 flex-1 ${item.owned ? "text-muted-foreground line-through" : ""}`}
+            >
+              {item.name}
+              {item.qty ? <span className="text-muted-foreground"> · {item.qty}</span> : null}
+              {item.perishable ? (
+                <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">
+                  fresco
+                </span>
+              ) : null}
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">{eur(item.price_eur)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

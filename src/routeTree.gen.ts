@@ -35,6 +35,8 @@ import { Route as ApiV1PlanConfirmRouteImport } from './routes/api/v1/plan/confi
 import { Route as ApiV1PlanGenerateRouteImport } from './routes/api/v1/plan/generate'
 import { Route as ApiV1PlanGoalImpactRouteImport } from './routes/api/v1/plan/goal-impact'
 import { Route as ApiV1PlanMealRouteImport } from './routes/api/v1/plan/meal'
+import { Route as ApiV1PlanShoppingOwnedRouteImport } from './routes/api/v1/plan/shopping-owned'
+import { Route as ApiV1PlanTripActualRouteImport } from './routes/api/v1/plan/trip-actual'
 import { Route as ApiV1PlanWelcomeRouteImport } from './routes/api/v1/plan/welcome'
 
 const IndexRoute = IndexRouteImport.update({
@@ -166,6 +168,16 @@ const ApiV1PlanMealRoute = ApiV1PlanMealRouteImport.update({
   path: '/api/v1/plan/meal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlanShoppingOwnedRoute = ApiV1PlanShoppingOwnedRouteImport.update({
+  id: '/api/v1/plan/shopping-owned',
+  path: '/api/v1/plan/shopping-owned',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanTripActualRoute = ApiV1PlanTripActualRouteImport.update({
+  id: '/api/v1/plan/trip-actual',
+  path: '/api/v1/plan/trip-actual',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1PlanWelcomeRoute = ApiV1PlanWelcomeRouteImport.update({
   id: '/api/v1/plan/welcome',
   path: '/api/v1/plan/welcome',
@@ -198,6 +210,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
+  '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesByTo {
@@ -226,6 +240,8 @@ export interface FileRoutesByTo {
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
+  '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesById {
@@ -256,6 +272,8 @@ export interface FileRoutesById {
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
+  '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRouteTypes {
@@ -286,6 +304,8 @@ export interface FileRouteTypes {
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
+    | '/api/v1/plan/shopping-owned'
+    | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/welcome'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -314,6 +334,8 @@ export interface FileRouteTypes {
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
+    | '/api/v1/plan/shopping-owned'
+    | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/welcome'
   id:
     | '__root__'
@@ -343,6 +365,8 @@ export interface FileRouteTypes {
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
+    | '/api/v1/plan/shopping-owned'
+    | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/welcome'
   fileRoutesById: FileRoutesById
 }
@@ -365,6 +389,8 @@ export interface RootRouteChildren {
   ApiV1PlanGenerateRoute: typeof ApiV1PlanGenerateRoute
   ApiV1PlanGoalImpactRoute: typeof ApiV1PlanGoalImpactRoute
   ApiV1PlanMealRoute: typeof ApiV1PlanMealRoute
+  ApiV1PlanShoppingOwnedRoute: typeof ApiV1PlanShoppingOwnedRoute
+  ApiV1PlanTripActualRoute: typeof ApiV1PlanTripActualRoute
   ApiV1PlanWelcomeRoute: typeof ApiV1PlanWelcomeRoute
 }
 
@@ -552,6 +578,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanMealRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plan/shopping-owned': {
+      id: '/api/v1/plan/shopping-owned'
+      path: '/api/v1/plan/shopping-owned'
+      fullPath: '/api/v1/plan/shopping-owned'
+      preLoaderRoute: typeof ApiV1PlanShoppingOwnedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/trip-actual': {
+      id: '/api/v1/plan/trip-actual'
+      path: '/api/v1/plan/trip-actual'
+      fullPath: '/api/v1/plan/trip-actual'
+      preLoaderRoute: typeof ApiV1PlanTripActualRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/plan/welcome': {
       id: '/api/v1/plan/welcome'
       path: '/api/v1/plan/welcome'
@@ -606,6 +646,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanGenerateRoute: ApiV1PlanGenerateRoute,
   ApiV1PlanGoalImpactRoute: ApiV1PlanGoalImpactRoute,
   ApiV1PlanMealRoute: ApiV1PlanMealRoute,
+  ApiV1PlanShoppingOwnedRoute: ApiV1PlanShoppingOwnedRoute,
+  ApiV1PlanTripActualRoute: ApiV1PlanTripActualRoute,
   ApiV1PlanWelcomeRoute: ApiV1PlanWelcomeRoute,
 }
 export const routeTree = rootRouteImport

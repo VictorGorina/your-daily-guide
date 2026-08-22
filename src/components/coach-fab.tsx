@@ -248,7 +248,7 @@ export function CoachFab() {
   return (
     <>
       {!open && lastAction ? (
-        <div className="animate-toast-in fixed bottom-44 right-4 z-50 max-w-[16rem]">
+        <div className="animate-toast-in fixed bottom-[calc(11.25rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 max-w-[16rem]">
           <ActionRow action={lastAction} />
         </div>
       ) : null}
@@ -257,7 +257,7 @@ export function CoachFab() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Hablar con el coach"
-        className={`fixed bottom-24 right-4 z-50 relative grid h-14 w-14 place-items-center rounded-full shadow-[0_4px_14px_-6px_oklch(0_0_0/25%)] transition-all duration-300 active:scale-90 ${
+        className={`fixed bottom-[calc(6.25rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 grid h-14 w-14 place-items-center rounded-full shadow-[0_4px_14px_-6px_oklch(0_0_0/25%)] transition-all duration-300 active:scale-90 ${
           flash === "done"
             ? "bg-primary text-primary-foreground scale-105"
             : flash === "error"

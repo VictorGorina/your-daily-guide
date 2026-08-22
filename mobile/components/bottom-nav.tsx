@@ -1,13 +1,13 @@
 import { useRouter, usePathname } from "expo-router";
-import { CalendarDays, CalendarRange, Home, Settings } from "lucide-react-native";
+import { CalendarRange, Home, Settings } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
-// Mismas cuatro pestañas que la web (el coach vive como burbuja flotante, no
-// como pestaña). Los href son las rutas de expo-router dentro del grupo (app).
+// Mismas pestañas que la web (el coach vive como burbuja flotante y el
+// historial como sub-pestaña de Plan, ninguno de primer nivel). Los href son
+// las rutas de expo-router dentro del grupo (app).
 const items = [
   { href: "/hoy", label: "Hoy", icon: Home },
   { href: "/plan", label: "Plan", icon: CalendarRange },
-  { href: "/historial", label: "Historial", icon: CalendarDays },
   { href: "/ajustes", label: "Ajustes", icon: Settings },
 ] as const;
 

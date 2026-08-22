@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { ratioSignal, type DailyLog } from "../lib/daily";
 
@@ -67,12 +67,11 @@ export function WeekStrip({
   const logByDate = new Map((logs ?? []).map((l) => [l.log_date, l]));
   const todaySignal = ratioSignal(done, total);
 
+  // Fila de 7 columnas iguales (sin scroll horizontal ni la píldora de "x/y",
+  // que ya se ve en el contador de "Comidas de hoy") para que la semana entera
+  // quepa siempre en el ancho de la pantalla, del iPhone más estrecho en adelante.
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerClassName="gap-2 px-1 pb-1"
-    >
+    <View className="flex-row gap-1.5">
       {days.map((d) => {
         const isToday = d.toDateString() === today.toDateString();
         const date = iso(d);
@@ -102,24 +101,19 @@ export function WeekStrip({
           <Pressable
             key={date}
             onPress={() => onSelect?.(date)}
-            className={`min-w-[56px] items-center gap-0.5 rounded-2xl border px-2 py-2.5 active:opacity-80 ${containerBase} ${
+            className={`flex-1 items-center gap-0.5 rounded-2xl border py-2.5 active:opacity-80 ${containerBase} ${
               isOpen ? "border-primary" : ""
             }`}
           >
-            <Text className={`text-lg font-sans-semibold leading-none ${textBase}`}>
+            <Text className={`text-base font-sans-semibold leading-none ${textBase}`}>
               {d.getDate()}
             </Text>
-            <Text className={`text-[11px] font-sans-semibold ${textBase}`}>
+            <Text className={`text-[10px] font-sans-semibold ${textBase}`}>
               {DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}
             </Text>
           </Pressable>
         );
       })}
-      <View className="min-w-[56px] items-center justify-center rounded-2xl border border-border bg-surface px-2">
-        <Text className="text-[11px] font-sans-semibold text-muted-foreground">
-          {done}/{total}
-        </Text>
-      </View>
-    </ScrollView>
+    </View>
   );
 }

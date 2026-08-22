@@ -1,15 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { Check, CheckCircle2, ChevronDown, Flame, Sparkle, X } from "lucide-react-native";
+import { Check, CheckCircle2, ChevronDown, MessageCircle, RefreshCw, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
-import { MonthCalendar } from "../../components/month-calendar";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
 import { WeekStrip } from "../../components/week-strip";
+import { classifyDish, FOOD_CATEGORIES } from "../../lib/food-categories";
 import { apiPost } from "../../lib/api";
 import {
   ensureTodayLog,
@@ -17,7 +17,6 @@ import {
   fetchMonthlyPlan,
   fetchProfile,
   impulsoFrom,
-  MEAL_STATUS_LABEL,
   monthISO,
   todayISO,
   updateTodayLog,
@@ -29,7 +28,12 @@ import {
 import { fetchHousehold } from "../../lib/household";
 import { sharedDays, type MealKey } from "../../lib/household-shared";
 import { setPendingChatMessage } from "../../lib/pending-chat-message";
-import { mealsForDate, offListNote, type MonthlyPlan } from "../../lib/plan-shared";
+import {
+  mealsForDate,
+  offListNote,
+  type MonthlyPlan,
+  type ShoppingList,
+} from "../../lib/plan-shared";
 import { quoteOfTheDay } from "../../lib/quotes";
 
 // Orden cronológico aproximado de cada momento, para saber cuál toca ahora.
@@ -49,23 +53,67 @@ const MOMENT_TO_MEAL_KEY: Record<string, MealKey | undefined> = {
   Cena: "cena",
 };
 
+// Fecha formateada en español
+function formatDate(): string {
+  return new Date()
+    .toLocaleDateString("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    })
+    .replace(",", "");
+}
+
+// Mezcla un color accent con el fondo a un porcentaje
+function tintBg(accent: string, pct: number): string {
+  // Aproximación: convertir hex a rgba con opacidad
+  const r = parseInt(accent.slice(1, 3), 16);
+  const g = parseInt(accent.slice(3, 5), 16);
+  const b = parseInt(accent.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${pct / 100})`;
+}
+
 export default function Hoy() {
   const router = useRouter();
   const qc = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
-  const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
+  const autoPlanTriedRef = useRef(false);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
   const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
+
+  // Si al entrar no hay plan del mes en curso, se genera solo: la persona no
+  // tiene que ir a la pestaña Plan a pulsar el botón. `ensureTodayLog` espera
+  // a que esto termine (ver `enabled` de `todayQ` más abajo) para no crear el
+  // registro de hoy con comidas vacías mientras se genera.
+  const noPlanYet = planQ.isFetched && !planQ.data;
+  const autoPlan = useMutation({
+    mutationFn: () =>
+      apiPost<{ plan: MonthlyPlan; shopping: ShoppingList }>("plan/generate", { month }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
+    onError: (e) => {
+      Alert.alert(
+        e instanceof Error
+          ? e.message
+          : "No hemos podido crear tu plan del mes. Puedes crearlo desde la pestaña Plan.",
+      );
+    },
+  });
+  useEffect(() => {
+    if (!profileQ.data?.onboarding_completed || !noPlanYet || autoPlanTriedRef.current) return;
+    autoPlanTriedRef.current = true;
+    autoPlan.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
   const today0 = todayISO();
   const todayMeals = mealsForDate((planQ.data?.plan as MonthlyPlan | null) ?? null, today0);
@@ -85,9 +133,13 @@ export default function Hoy() {
   const todayQ = useQuery({
     queryKey: ["today"],
     queryFn: () => ensureTodayLog(todayMeals.map((m) => m.moment)),
-    // Espera a que el plan mensual haya terminado de cargar (con o sin datos)
-    // para crear el registro de hoy con las comidas reales del día.
-    enabled: !!profileQ.data?.onboarding_completed && planQ.isFetched,
+    // Si no hay plan todavía, espera además a que termine (con éxito o no) la
+    // generación automática de arriba, para no crear el registro de hoy con
+    // comidas vacías mientras el plan se está preparando.
+    enabled:
+      !!profileQ.data?.onboarding_completed &&
+      planQ.isFetched &&
+      (!!planQ.data || autoPlan.isError),
   });
 
   const profile = profileQ.data;
@@ -134,8 +186,6 @@ export default function Hoy() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id]);
 
-  // Abre el repaso nocturno solo (una vez por carga) si ya ha pasado la hora
-  // configurada y hoy aún no se ha cerrado.
   useEffect(() => {
     if (nightlyAutoOpenedRef.current || !profile?.evening_time || !today) return;
     const [h, m] = profile.evening_time.split(":").map(Number);
@@ -153,8 +203,6 @@ export default function Hoy() {
     setNightlyOpen(false);
   };
 
-  // "Hoy paso de estas": cierra en bloque, como saltadas, las comidas que se
-  // quedaron sin marcar del todo, para que no queden en limbo en el historial.
   const skipPendingMeals = () => {
     const next = habits.map((h) => (h.status ? h : { ...h, status: "salteo" as const }));
     save.mutate({ habits: next });
@@ -164,9 +212,6 @@ export default function Hoy() {
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
   const habits = today?.habits ?? [];
   const doneCount = habits.filter((h) => h.done).length;
-
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Buenos días" : hour < 20 ? "Buenas tardes" : "Buenas noches";
   const quote = quoteOfTheDay();
 
   const setMealStatus = (index: number, status: MealStatus) => {
@@ -178,246 +223,228 @@ export default function Hoy() {
 
   const handleMealStatus = (index: number, status: MealStatus) => {
     setMealStatus(index, status);
-    // "Comí distinto" queda registrado al instante, pero ofrecemos detallar qué
-    // ha cambiado para que el coach ajuste solo los días futuros del plan.
     if (status === "distinto") setGuidedIndex(index);
   };
 
   const guidedMeal = guidedIndex != null ? habits[guidedIndex] : undefined;
 
-  // La "siguiente comida" es la primera, en orden cronológico, que aún no tiene
-  // un estado explícito. Se filtra por `status`, no por `done`: "me lo salté"
-  // deja done:false a propósito pero sí queda resuelto.
   const pending = habits
     .map((h, i) => ({ h, i }))
     .filter(({ h }) => h.status == null)
     .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
   const nextIndex = pending.length ? pending[0]!.i : null;
-  const nextMeal = nextIndex != null ? habits[nextIndex] : null;
-  const nextPlanned = nextMeal ? todayMeals.find((m) => m.moment === nextMeal.label) : undefined;
-  const expandedPlanned =
-    expandedMeal != null
-      ? todayMeals.find((m) => m.moment === habits[expandedMeal]?.label)
-      : undefined;
-  const nextIdea = nextPlanned?.idea;
-  const allDone = habits.length > 0 && nextIndex == null;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6">
-        <View className="flex-row items-center gap-4">
+      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-4">
+        {/* ── Header: fecha + "Hoy" + impulso ── */}
+        <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
-            <Text className="text-sm font-sans-semibold text-muted-foreground">{greeting},</Text>
-            <Text className="text-4xl font-display leading-tight text-foreground" numberOfLines={1}>
-              {profile?.display_name || "Vamos allá"}
+            <Text className="font-mono-medium text-[11px] uppercase tracking-widest text-muted-foreground">
+              {formatDate()}
+            </Text>
+            <Text
+              className="font-heading text-foreground"
+              style={{ fontSize: 40, lineHeight: 42, letterSpacing: -1.2 }}
+            >
+              Hoy
             </Text>
           </View>
-          <View className="flex-row items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5">
-            <Flame size={14} color="#f3f1ed" />
-            <Text className="text-xs font-sans-bold text-background">{impulso}%</Text>
+          <View className="items-end gap-1">
+            <View className="flex-row items-baseline gap-0.5">
+              <Text
+                className="font-heading text-foreground"
+                style={{ fontSize: 26, lineHeight: 28 }}
+              >
+                {impulso}
+              </Text>
+              <Text className="font-mono-medium text-[11px] text-muted-foreground">%</Text>
+            </View>
+            <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
+              impulso
+            </Text>
           </View>
         </View>
 
-        <Text className="mt-2 text-sm italic leading-snug text-muted-foreground">
-          “{quote.text}” — {quote.author}
-        </Text>
+        {/* ── Barras de macros ── */}
+        {guide?.macros ? <MacroBars macros={guide.macros} /> : null}
 
-        {/* Comidas de hoy */}
+        {/* ── Comidas de hoy ── */}
         <View className="mt-6">
-          <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-2xl font-display text-foreground">Comidas de hoy</Text>
-            {habits.length ? (
-              <View className="rounded-full bg-secondary px-2.5 py-1">
-                <Text className="text-xs font-sans-bold text-secondary-foreground">
-                  {doneCount}/{habits.length}
-                </Text>
-              </View>
-            ) : null}
+          <View className="mb-3.5 flex-row items-baseline justify-between">
+            <Text
+              className="font-heading text-foreground"
+              style={{ fontSize: 21, lineHeight: 22, letterSpacing: -0.4 }}
+            >
+              Comidas de hoy
+            </Text>
+            <Text className="font-mono-medium text-[11px] text-muted-foreground">
+              {doneCount} de {habits.length}
+            </Text>
           </View>
 
           {!habits.length ? (
-            <View className="rounded-3xl border border-border bg-surface p-5">
-              <Text className="text-sm text-muted-foreground">
-                Preparando las comidas de hoy...
+            <View className="rounded-[20px] bg-surface p-4">
+              <Text className="font-body text-sm text-muted-foreground">
+                {autoPlan.isPending
+                  ? "Preparando tu menú del mes..."
+                  : "Preparando las comidas de hoy..."}
               </Text>
             </View>
-          ) : allDone ? (
-            <View className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-5">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-success-soft">
-                <CheckCircle2 size={20} color="#4cae64" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-lg font-sans-semibold leading-tight text-foreground">
-                  Todo registrado hoy
-                </Text>
-                <Text className="text-sm text-muted-foreground">
-                  Has anotado las {habits.length} comidas del día.
-                </Text>
-              </View>
-            </View>
-          ) : nextMeal ? (
-            <View className="rounded-3xl bg-primary p-5">
-              <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-primary-foreground/70">
-                Siguiente · {nextMeal.label}
-              </Text>
-              <Text className="mt-1 text-xl font-sans-semibold leading-snug text-primary-foreground">
-                {nextIdea || "Aún no hay menú para esta comida"}
-              </Text>
-              {offListNote(nextPlanned?.off) ? (
-                <Text className="mt-1.5 text-xs text-primary-foreground/80">
-                  {offListNote(nextPlanned?.off)}
-                </Text>
-              ) : null}
-              {sharedWith(nextMeal.label) ? (
-                <Text className="mt-1.5 text-xs text-primary-foreground/80">
-                  Base común con {sharedWith(nextMeal.label)}. ¿Ración distinta? dilo en "comiste
-                  otra cosa".
-                </Text>
-              ) : null}
-              <Pressable
-                onPress={() => setMealStatus(nextIndex!, "plan")}
-                className="mt-4 w-full items-center rounded-full bg-primary-foreground py-3 active:opacity-90"
-              >
-                <Text className="text-sm font-sans-semibold text-primary">Comí esto</Text>
-              </Pressable>
-              <View className="mt-2.5 flex-row items-center justify-center gap-5">
-                <Pressable onPress={() => handleMealStatus(nextIndex!, "distinto")}>
-                  <Text className="text-xs font-sans-medium text-primary-foreground/80">
-                    ¿comiste otra cosa?
-                  </Text>
-                </Pressable>
-                <Pressable onPress={() => setMealStatus(nextIndex!, "salteo")}>
-                  <Text className="text-xs font-sans-medium text-primary-foreground/80">
-                    me lo salté
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-
-          {habits.length ? (
-            <View className="mt-3 flex-row gap-2">
+          ) : (
+            <View className="gap-2.5">
               {habits.map((h, i) => {
                 const isNext = i === nextIndex;
-                const isDone = h.done;
-                const isSkipped = h.status === "salteo";
-                const container = isNext
-                  ? "border-primary bg-primary-soft"
-                  : isDone
-                    ? "border-success bg-success-soft"
-                    : isSkipped
-                      ? "border-border bg-secondary"
-                      : "border-border bg-surface";
+                const isDone = h.status === "plan" || h.status === "distinto";
+                const isSkip = h.status === "salteo";
+                const isPending = h.status == null;
+                const planned = todayMeals.find((m) => m.moment === h.label);
+                const dish = planned?.idea || h.label;
+                const cat = classifyDish(dish);
+                const catInfo = FOOD_CATEGORIES[cat];
+                const accent = catInfo.accent;
+
                 return (
-                  <Pressable
+                  <View
                     key={h.label}
-                    onPress={() => setExpandedMeal((prev) => (prev === i ? null : i))}
-                    className={`flex-1 items-center rounded-2xl border px-2 py-2.5 active:opacity-80 ${container} ${
-                      expandedMeal === i ? "border-primary" : ""
-                    }`}
+                    className="flex-row items-center rounded-[20px] px-3.5 py-3"
+                    style={{
+                      backgroundColor: isSkip ? "#f0ede7" : tintBg(accent, isNext ? 22 : 13),
+                      opacity: isSkip ? 0.55 : 1,
+                      columnGap: 12,
+                    }}
                   >
-                    <Text
-                      className="text-[11px] font-sans-semibold text-foreground"
-                      numberOfLines={1}
+                    {/* Icono de categoría */}
+                    <View
+                      className="h-10 w-10 items-center justify-center rounded-full"
+                      style={{ backgroundColor: tintBg(accent, 20) }}
                     >
-                      {h.label}
-                    </Text>
-                    <View className="mt-0.5 flex-row items-center gap-1">
-                      {isDone ? (
-                        <Check size={12} color="#4cae64" />
-                      ) : isSkipped ? (
-                        <X size={12} color="#83796c" />
-                      ) : null}
-                      <Text className="text-[10px] font-sans-medium text-muted-foreground">
-                        {isNext ? "ahora" : isDone ? "hecho" : isSkipped ? "saltado" : "pendiente"}
+                      <Text style={{ fontSize: 20 }}>{catInfo.icon}</Text>
+                    </View>
+
+                    {/* Info */}
+                    <View className="min-w-0 flex-1">
+                      <View className="flex-row items-baseline gap-1.5">
+                        <Text className="font-body-semibold text-[11.5px] text-foreground">
+                          {h.label}
+                        </Text>
+                        {planned ? (
+                          <Text className="font-mono text-[10.5px] text-muted-foreground">
+                            {MOMENT_RANK[h.label] === 0
+                              ? "8:30"
+                              : MOMENT_RANK[h.label] === 1
+                                ? "14:00"
+                                : MOMENT_RANK[h.label] === 3
+                                  ? "20:30"
+                                  : "17:00"}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text
+                        className="font-heading-medium mt-1 text-foreground"
+                        style={{
+                          fontSize: 16.5,
+                          lineHeight: 20,
+                          letterSpacing: -0.3,
+                          color: isSkip ? "#83796c" : "#3e3d39",
+                        }}
+                        numberOfLines={2}
+                      >
+                        {dish}
+                      </Text>
+                      <Text className="font-mono-medium mt-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">
+                        {catInfo.label}
                       </Text>
                     </View>
-                  </Pressable>
+
+                    {/* Acciones */}
+                    <View className="flex-row items-center gap-1.5">
+                      {isPending ? (
+                        <>
+                          <Pressable
+                            onPress={() => handleMealStatus(i, "distinto")}
+                            className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
+                          >
+                            <RefreshCw size={14} color="#83796c" />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => setMealStatus(i, "salteo")}
+                            className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
+                          >
+                            <X size={14} color="#83796c" strokeWidth={2.2} />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => setMealStatus(i, "plan")}
+                            className="h-[34px] w-[34px] items-center justify-center rounded-full active:opacity-80"
+                            style={{ backgroundColor: accent }}
+                          >
+                            <Check size={17} color="#fbfaf7" strokeWidth={2.6} />
+                          </Pressable>
+                        </>
+                      ) : isDone ? (
+                        <Pressable
+                          onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
+                          className="h-[34px] w-[34px] items-center justify-center rounded-full"
+                          style={{ backgroundColor: accent }}
+                        >
+                          <Check size={17} color="#fbfaf7" strokeWidth={2.6} />
+                        </Pressable>
+                      ) : isSkip ? (
+                        <Pressable
+                          onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
+                          className="h-[34px] w-[34px] items-center justify-center rounded-full bg-secondary"
+                        >
+                          <X size={15} color="#83796c" strokeWidth={2.2} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
                 );
               })}
             </View>
-          ) : null}
-
-          {expandedMeal != null ? (
-            <View className="mt-2 rounded-3xl border border-border bg-surface p-4">
-              <Text className="text-sm font-sans-semibold text-foreground">
-                {habits[expandedMeal]!.label}
-              </Text>
-              {expandedPlanned?.idea ? (
-                <Text className="mt-0.5 text-xs text-muted-foreground">{expandedPlanned.idea}</Text>
-              ) : null}
-              {offListNote(expandedPlanned?.off) ? (
-                <View className="mt-1.5 self-start rounded-full bg-warning/20 px-2 py-0.5">
-                  <Text className="text-[11px] font-sans-medium text-foreground">
-                    {offListNote(expandedPlanned?.off)}
-                  </Text>
-                </View>
-              ) : null}
-              {sharedWith(habits[expandedMeal]!.label) ? (
-                <Text className="mt-1.5 text-xs text-primary">
-                  Base común con {sharedWith(habits[expandedMeal]!.label)} · marca "Comí distinto"
-                  si tu ración se sale de eso
-                </Text>
-              ) : null}
-              <View className="mt-3 flex-row flex-wrap gap-2">
-                {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => {
-                  const active = habits[expandedMeal]!.status === s;
-                  return (
-                    <Pressable
-                      key={s}
-                      onPress={() => {
-                        handleMealStatus(expandedMeal, s);
-                        setExpandedMeal(null);
-                      }}
-                      className={`rounded-full border px-3 py-1.5 active:opacity-80 ${
-                        active ? "border-foreground bg-foreground" : "border-input"
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs font-sans-semibold ${
-                          active ? "text-background" : "text-muted-foreground"
-                        }`}
-                      >
-                        {MEAL_STATUS_LABEL[s]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
+          )}
         </View>
 
-        {/* Guía del coach */}
+        {/* ── Guía del coach ── */}
         <View className="mt-4">
           <Pressable
             onPress={() => setGuideOpen((o) => !o)}
-            className="flex-row items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3"
+            className="flex-row items-center justify-between rounded-2xl bg-surface px-4 py-3.5 active:bg-accent"
           >
-            <View className="flex-row items-center gap-2">
-              <Sparkle size={14} color="#6dbe7b" />
-              <Text className="text-xs font-sans-medium text-muted-foreground">
+            <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
+              <View
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: "#ff8a3d" }}
+              />
+              <Text
+                className="min-w-0 flex-1 font-body-medium text-xs text-muted-foreground"
+                numberOfLines={1}
+              >
                 Guía del coach{guide?.calories ? ` · ${guide.calories}` : ""}
               </Text>
             </View>
-            <View style={{ transform: [{ rotate: guideOpen ? "180deg" : "0deg" }] }}>
-              <ChevronDown size={16} color="#83796c" />
-            </View>
+            <Text className="ml-2 shrink-0 font-mono-medium text-[11px] text-muted-foreground">
+              {guideOpen ? "ocultar" : "ver"}
+            </Text>
           </Pressable>
           {guideOpen ? (
             <View className="mt-2 rounded-3xl border border-border bg-surface p-5">
               {generating || (!guide && todayQ.isLoading) ? (
-                <Text className="text-sm text-muted-foreground">Preparando tu guía del día...</Text>
+                <Text className="font-body text-sm text-muted-foreground">
+                  Preparando tu guía del día...
+                </Text>
               ) : guide ? (
                 <View className="gap-3">
-                  <Text className="text-sm leading-relaxed text-foreground">{guide.intro}</Text>
+                  <Text className="font-body text-sm leading-relaxed text-foreground">
+                    {guide.intro}
+                  </Text>
                   <View className="gap-2">
                     <Field label="Energía" value={guide.calories} />
                     <Field label="Macros" value={guide.macros} />
                   </View>
                   {guide.meals?.length ? (
                     <View className="gap-2 pt-1">
-                      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
+                      <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
                         Platos sugeridos
                       </Text>
                       {guide.meals.map((m) => (
@@ -425,23 +452,23 @@ export default function Hoy() {
                           key={m.moment}
                           className="flex-row gap-3 rounded-xl border border-border bg-surface p-3"
                         >
-                          <Text className="text-xs font-sans-semibold text-primary">
+                          <Text className="font-body-semibold text-xs text-primary">
                             {m.moment}
                           </Text>
-                          <Text className="flex-1 text-sm text-foreground">{m.idea}</Text>
+                          <Text className="font-body flex-1 text-sm text-foreground">{m.idea}</Text>
                         </View>
                       ))}
                     </View>
                   ) : null}
                   {guide.tips?.length ? (
                     <View className="gap-1.5 pt-1">
-                      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
+                      <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
                         Consejos de nutrición
                       </Text>
                       {guide.tips.map((t) => (
                         <View key={t} className="flex-row gap-2">
                           <View className="mt-2 h-1.5 w-1.5 rounded-full bg-primary" />
-                          <Text className="flex-1 text-sm text-foreground">{t}</Text>
+                          <Text className="font-body flex-1 text-sm text-foreground">{t}</Text>
                         </View>
                       ))}
                     </View>
@@ -449,14 +476,14 @@ export default function Hoy() {
                 </View>
               ) : (
                 <Pressable onPress={requestGuide}>
-                  <Text className="text-sm font-sans-medium text-primary">Generar guía</Text>
+                  <Text className="font-body-medium text-sm text-primary">Generar guía</Text>
                 </Pressable>
               )}
             </View>
           ) : null}
         </View>
 
-        {/* Tira de la semana */}
+        {/* ── Tira de la semana ── */}
         <View className="mt-6">
           <WeekStrip
             done={doneCount}
@@ -471,46 +498,68 @@ export default function Hoy() {
           {openDay ? (
             <DayMenu date={openDay} plan={(planQ.data?.plan as MonthlyPlan | null) ?? null} />
           ) : null}
-          <Text className="mt-2 px-1 text-[11px] text-muted-foreground">
+          <Text className="font-body mt-2 px-1 text-[10.5px] text-muted-foreground">
             Toca un día para ver su menú.
           </Text>
         </View>
 
-        {/* Calendario del mes */}
-        <View className="mt-4">
-          <Pressable
-            onPress={() => setCalendarOpen((o) => !o)}
-            className="flex-row items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3"
+        {/* ── Cita ── */}
+        <View className="mt-6 px-0.5">
+          <Text
+            className="font-heading text-muted-foreground"
+            style={{ fontSize: 14, lineHeight: 20, letterSpacing: -0.1 }}
           >
-            <Text className="text-xs font-sans-medium text-muted-foreground">
-              Ver calendario del mes
-            </Text>
-            <View style={{ transform: [{ rotate: calendarOpen ? "180deg" : "0deg" }] }}>
-              <ChevronDown size={16} color="#83796c" />
-            </View>
-          </Pressable>
-          {calendarOpen ? (
-            <MonthCalendar
-              logs={logsQ.data ?? []}
-              plan={(planQ.data?.plan as MonthlyPlan | null) ?? null}
-              planHabits={
-                habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)
-              }
-            />
-          ) : null}
+            "{quote.text}"
+          </Text>
+          <Text className="font-mono-medium mt-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/60">
+            {quote.author}
+          </Text>
         </View>
       </ScrollView>
 
+      {/* ── FAB de chat: pegado justo encima de la barra de pestañas ── */}
+      <Pressable
+        onPress={() => router.navigate("/chat")}
+        className="absolute bottom-32 right-5 h-14 w-14 items-center justify-center rounded-full active:opacity-90"
+        style={{
+          backgroundColor: "#ff8a3d",
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.35,
+          shadowRadius: 18,
+          elevation: 8,
+        }}
+      >
+        <ChatBubbleIcon />
+      </Pressable>
+
       <GuidedLogSheet
-        initialMode="exceso"
+        mode="meal"
         open={guidedIndex != null}
         onOpenChange={(v) => {
           if (!v) setGuidedIndex(null);
         }}
         contextNote={guidedMeal ? `Qué has comido en vez de: ${guidedMeal.label}` : undefined}
+        onSkip={() => {
+          if (guidedIndex != null) {
+            setMealStatus(guidedIndex, "salteo");
+            setGuidedIndex(null);
+          }
+        }}
         onSend={(text) => {
           setPendingChatMessage(text);
           setGuidedIndex(null);
+          router.navigate("/chat");
+        }}
+      />
+
+      <GuidedLogSheet
+        mode="activity"
+        open={activityOpen}
+        onOpenChange={setActivityOpen}
+        onSend={(text) => {
+          setPendingChatMessage(text);
+          setActivityOpen(false);
           router.navigate("/chat");
         }}
       />
@@ -531,6 +580,70 @@ export default function Hoy() {
   );
 }
 
+// ── Barra de macros orientativa ──
+function MacroBars({ macros }: { macros: string }) {
+  // Parsear string tipo "Proteínas: 72g · Carbohidratos: 160g · Grasas: 48g · Fibra: 22g"
+  const parsed = parseMacros(macros);
+  if (!parsed.length) return null;
+
+  return (
+    <View className="mt-5 flex-row gap-2.5">
+      {parsed.map((m) => (
+        <View key={m.key} className="flex-1">
+          <View className="h-[5px] overflow-hidden rounded-full bg-secondary">
+            <View
+              className="h-full rounded-full"
+              style={{ width: `${m.pct}%`, backgroundColor: m.color }}
+            />
+          </View>
+          <Text className="font-mono-medium mt-1.5 text-[9.5px] uppercase tracking-wider text-muted-foreground">
+            {m.key}
+          </Text>
+          <Text className="font-mono-medium mt-0.5 text-[11px] text-foreground">{m.val}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const MACRO_COLORS: Record<string, string> = {
+  prot: "#6DBE7B",
+  carb: "#FF8A3D",
+  gras: "#F2C14E",
+  fibra: "#6DBE7B",
+};
+
+// Targets orientativos para porcentaje visual
+const MACRO_TARGETS: Record<string, number> = {
+  prot: 120,
+  carb: 200,
+  gras: 70,
+  fibra: 30,
+};
+
+function parseMacros(raw: string): { key: string; val: string; pct: number; color: string }[] {
+  const result: { key: string; val: string; pct: number; color: string }[] = [];
+  // Match patterns like "Proteínas: 72g" or "72 g proteínas"
+  const patterns: [RegExp, string][] = [
+    [/prote[ií]n\w*[:\s]+(\d+)\s*g/i, "prot"],
+    [/carbo\w*[:\s]+(\d+)\s*g/i, "carb"],
+    [/gras\w*[:\s]+(\d+)\s*g/i, "gras"],
+    [/fibra[:\s]+(\d+)\s*g/i, "fibra"],
+  ];
+  for (const [re, key] of patterns) {
+    const m = raw.match(re);
+    if (m) {
+      const val = `${m[1]} g`;
+      const num = parseInt(m[1]!, 10);
+      const target = MACRO_TARGETS[key] ?? 100;
+      const pct = Math.min(100, Math.round((num / target) * 100));
+      result.push({ key, val, pct, color: MACRO_COLORS[key] ?? "#83796c" });
+    }
+  }
+  return result;
+}
+
+// ── Menú de un día expandido ──
 function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   const meals = mealsForDate(plan, date).filter((m) => m.idea);
   const label = new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
@@ -543,7 +656,7 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
     <View className="mt-3 rounded-3xl border border-border bg-surface p-4">
       <View className="flex-row items-center gap-2">
         <ChevronDown size={16} color="#6dbe7b" />
-        <Text className="text-sm font-sans-semibold capitalize text-foreground">{label}</Text>
+        <Text className="font-body-semibold text-sm capitalize text-foreground">{label}</Text>
       </View>
       {meals.length ? (
         <View className="mt-3 gap-2">
@@ -552,7 +665,7 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
           ))}
         </View>
       ) : (
-        <Text className="mt-2 text-sm text-muted-foreground">
+        <Text className="font-body mt-2 text-sm text-muted-foreground">
           Aún no hay menú para este día. Crea tu plan del mes en la pestaña Plan.
         </Text>
       )}
@@ -563,15 +676,19 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
 function Field({ label, value, note }: { label: string; value: string; note?: string | null }) {
   return (
     <View className="rounded-xl bg-secondary/60 p-3">
-      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
+      <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
         {label}
       </Text>
-      <Text className="mt-0.5 text-sm text-foreground">{value}</Text>
+      <Text className="font-body mt-0.5 text-sm text-foreground">{value}</Text>
       {note ? (
         <View className="mt-1.5 self-start rounded-full bg-warning/20 px-2 py-0.5">
-          <Text className="text-[11px] font-sans-medium text-foreground">{note}</Text>
+          <Text className="font-body-medium text-[11px] text-foreground">{note}</Text>
         </View>
       ) : null}
     </View>
   );
+}
+
+function ChatBubbleIcon() {
+  return <MessageCircle size={22} color="#fbfaf7" />;
 }
