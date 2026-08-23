@@ -37,6 +37,7 @@ import { Route as ApiV1PlanMealRouteImport } from './routes/api/v1/plan/meal'
 import { Route as ApiV1PlanRecipeRouteImport } from './routes/api/v1/plan/recipe'
 import { Route as ApiV1PlanShoppingOwnedRouteImport } from './routes/api/v1/plan/shopping-owned'
 import { Route as ApiV1PlanTripActualRouteImport } from './routes/api/v1/plan/trip-actual'
+import { Route as ApiV1PlanTripConfirmRouteImport } from './routes/api/v1/plan/trip-confirm'
 import { Route as ApiV1PlanWelcomeRouteImport } from './routes/api/v1/plan/welcome'
 
 const IndexRoute = IndexRouteImport.update({
@@ -178,6 +179,11 @@ const ApiV1PlanTripActualRoute = ApiV1PlanTripActualRouteImport.update({
   path: '/api/v1/plan/trip-actual',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlanTripConfirmRoute = ApiV1PlanTripConfirmRouteImport.update({
+  id: '/api/v1/plan/trip-confirm',
+  path: '/api/v1/plan/trip-confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1PlanWelcomeRoute = ApiV1PlanWelcomeRouteImport.update({
   id: '/api/v1/plan/welcome',
   path: '/api/v1/plan/welcome',
@@ -212,6 +218,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
+  '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesByTo {
@@ -242,6 +249,7 @@ export interface FileRoutesByTo {
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
+  '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesById {
@@ -274,6 +282,7 @@ export interface FileRoutesById {
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
+  '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRouteTypes {
@@ -306,6 +315,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
+    | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -336,6 +346,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
+    | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
   id:
     | '__root__'
@@ -367,6 +378,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
+    | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
   fileRoutesById: FileRoutesById
 }
@@ -391,6 +403,7 @@ export interface RootRouteChildren {
   ApiV1PlanRecipeRoute: typeof ApiV1PlanRecipeRoute
   ApiV1PlanShoppingOwnedRoute: typeof ApiV1PlanShoppingOwnedRoute
   ApiV1PlanTripActualRoute: typeof ApiV1PlanTripActualRoute
+  ApiV1PlanTripConfirmRoute: typeof ApiV1PlanTripConfirmRoute
   ApiV1PlanWelcomeRoute: typeof ApiV1PlanWelcomeRoute
 }
 
@@ -592,6 +605,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanTripActualRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plan/trip-confirm': {
+      id: '/api/v1/plan/trip-confirm'
+      path: '/api/v1/plan/trip-confirm'
+      fullPath: '/api/v1/plan/trip-confirm'
+      preLoaderRoute: typeof ApiV1PlanTripConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/plan/welcome': {
       id: '/api/v1/plan/welcome'
       path: '/api/v1/plan/welcome'
@@ -648,6 +668,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanRecipeRoute: ApiV1PlanRecipeRoute,
   ApiV1PlanShoppingOwnedRoute: ApiV1PlanShoppingOwnedRoute,
   ApiV1PlanTripActualRoute: ApiV1PlanTripActualRoute,
+  ApiV1PlanTripConfirmRoute: ApiV1PlanTripConfirmRoute,
   ApiV1PlanWelcomeRoute: ApiV1PlanWelcomeRoute,
 }
 export const routeTree = rootRouteImport

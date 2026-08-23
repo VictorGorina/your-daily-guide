@@ -4,6 +4,8 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   CalendarDays,
   CalendarRange,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Download,
   Refrigerator,
@@ -19,29 +21,36 @@ import { toast } from "sonner";
 import { BottomNav } from "@/components/bottom-nav";
 import { HistorialSection } from "@/components/historial-section";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
-import { fetchMonthlyPlan, fetchProfile, monthISO } from "@/lib/daily";
+import { fetchMonthlyPlan, fetchProfile, monthISO, todayISO } from "@/lib/daily";
 import {
+  boughtTotal,
   cadenceOf,
+  cadenceScopeLabel,
   CADENCES,
   coverageRatio,
   eur,
   groupByTrip,
+  homeTotal,
   ownedTotal,
   pendingTotal,
   shoppingToText,
-  sortByPending,
+  splitTripByStatus,
   tripActualsTotal,
   tripCount,
   tripLabel,
+  tripTiming,
   tripToText,
   shoppingTotal,
   type ShoppingCadence,
   type ShoppingItem,
+  type TripConfirmations,
+  type TripTiming,
 } from "@/lib/plan-shared";
 import {
   generateMonthlyPlan,
   recadenceMonthlyPlan,
   setTripActual,
+  setTripConfirmed,
   toggleShoppingOwned,
 } from "@/lib/plan.functions";
 
@@ -131,17 +140,33 @@ function PlanPage() {
     onError: () => toast.error("No hemos podido guardar el gasto"),
   });
 
+  const tripConfirm = useServerFn(setTripConfirmed);
+  const confirmTrip = useMutation({
+    mutationFn: (vars: { trip: number; confirmed: boolean }) =>
+      tripConfirm({ data: { month, ...vars } }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, confirmed_trips: res.confirmed_trips } : prev,
+      );
+    },
+    onError: () => toast.error("No hemos podido fijar los ingredientes"),
+  });
+
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
   const total = shoppingTotal(shopping);
-  const alreadyOwned = ownedTotal(shopping);
+  const alreadyHome = homeTotal(shopping);
+  const alreadyBought = boughtTotal(shopping);
+  const stillPending = pendingTotal(shopping);
   const tripActuals = planQ.data?.trip_actuals ?? {};
   const spentSoFar = tripActualsTotal(tripActuals);
   const hasActuals = Object.keys(tripActuals).length > 0;
+  const confirmedTrips = planQ.data?.confirmed_trips ?? {};
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
   const trips = groupByTrip(shopping);
   const tripsTotal = tripCount(shopping);
+  const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   const listText = () => shoppingToText(shopping, activeCadence, month, coverage);
 
@@ -334,11 +359,25 @@ function PlanPage() {
                     queda de mes.
                   </p>
                 ) : null}
-                {alreadyOwned > 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Ya tienes {eur(alreadyOwned)} en casa · Te falta comprar{" "}
-                    {eur(Math.max(0, total - alreadyOwned))}
-                  </p>
+                {alreadyHome > 0 || alreadyBought > 0 ? (
+                  <div className="mt-3 space-y-1.5">
+                    {alreadyHome > 0 ? (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Ya tienes en casa</span>
+                        <span className="font-medium">{eur(alreadyHome)}</span>
+                      </div>
+                    ) : null}
+                    {alreadyBought > 0 ? (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Coste de la compra</span>
+                        <span className="font-medium">{eur(alreadyBought)}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Te falta comprar</span>
+                      <span className="font-medium text-primary">{eur(stillPending)}</span>
+                    </div>
+                  </div>
                 ) : null}
                 {hasActuals ? (
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -419,16 +458,22 @@ function PlanPage() {
               </p>
               {trips.map((t) => {
                 const label = tripLabel(activeCadence, t.trip, coverage, tripsTotal);
+                const timing = tripTiming(tripsTotal, t.trip, todayDayOfMonth, coverage);
                 return (
                   <TripCard
                     key={t.trip}
                     trip={t}
                     label={label}
+                    timing={timing}
+                    cadence={activeCadence}
                     onShare={() => void shareTrip(t, label)}
                     tripActual={tripActuals[t.trip]}
                     savingActual={setActual.isPending}
                     onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
                     onToggleOwned={(itemName, source) => owned.mutate({ itemName, source })}
+                    confirmedAt={confirmedTrips[t.trip]}
+                    confirming={confirmTrip.isPending}
+                    onConfirm={(confirmed) => confirmTrip.mutate({ trip: t.trip, confirmed })}
                   />
                 );
               })}
@@ -510,42 +555,64 @@ function TripActualField({
 }
 
 /**
- * Tarjeta de un tramo de ingredientes: agrupados por categoría como en el
- * súper, con los ya marcados (nevera o comprados) hundidos al final de cada
- * grupo para que arriba solo queden los pendientes de comprar — así el
- * importe junto al título baja según se van marcando (lo que ya tienes en la
- * nevera te ahorra ese dinero). El botón de compartir va aquí, junto al
- * nombre del tramo, porque cada uno es una lista aparte (no el mes entero).
+ * Tarjeta de un tramo de ingredientes, en tres zonas: pendientes (agrupados
+ * por categoría como en el súper), "Ingredientes en casa" (nevera) e
+ * "Ingredientes comprados" (súper) — marcar un artículo lo mueve de la
+ * primera zona a una de las otras dos, cada una con su propio subtotal. El
+ * tramo que toca hoy va abierto; los futuros empiezan comprimidos (se
+ * despliegan al tocar la cabecera) y los que ya han pasado van en gris. El
+ * botón de compartir va aquí, junto al nombre del tramo, porque cada uno es
+ * una lista aparte (no el mes entero).
  */
 function TripCard({
   trip,
   label,
+  timing,
+  cadence,
   onShare,
   tripActual,
   savingActual,
   onSaveActual,
   onToggleOwned,
+  confirmedAt,
+  confirming,
+  onConfirm,
 }: {
   trip: { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
   label: string;
+  timing: TripTiming;
+  cadence: ShoppingCadence;
   onShare: () => void;
   tripActual: number | undefined;
   savingActual: boolean;
   onSaveActual: (amount: number | null) => void;
   onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
+  confirmedAt: string | undefined;
+  confirming: boolean;
+  onConfirm: (confirmed: boolean) => void;
 }) {
+  const [open, setOpen] = useState(timing !== "future");
   const tripTotal = pendingTotal(trip.groups);
   const totalCount = trip.groups.reduce((s, g) => s + g.items.length, 0);
-  const ownedCount = trip.groups.reduce(
-    (s, g) => s + g.items.filter((item) => item.owned).length,
-    0,
-  );
-  const pendingCount = totalCount - ownedCount;
+  const { pending, home, bought } = splitTripByStatus(trip.groups);
+  const isPast = timing === "past";
+  const canConfirm = home.length + bought.length > 0;
 
   return (
-    <div className="surface-card p-5">
+    <div className={`surface-card p-5 ${isPast ? "opacity-50" : ""}`}>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="min-w-0 flex-1 text-sm font-semibold">{label}</h3>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        >
+          <h3 className="min-w-0 flex-1 text-sm font-semibold">{label}</h3>
+          {open ? (
+            <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+        </button>
         <div className="flex shrink-0 items-center gap-2">
           <span className="text-xs font-semibold text-primary">{eur(tripTotal)}</span>
           <button
@@ -559,24 +626,47 @@ function TripCard({
         </div>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
+        {isPast ? "Ya ha pasado · " : null}
         {totalCount} artículo{totalCount === 1 ? "" : "s"}
-        {ownedCount > 0
-          ? pendingCount > 0
-            ? ` · te falta comprar ${pendingCount}`
-            : " · ya tienes todo"
-          : null}
+        {!open ? " · toca para ver" : null}
       </p>
 
-      {trip.groups.map((group) => (
-        <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
-      ))}
+      {open ? (
+        <>
+          {pending.map((group) => (
+            <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+          ))}
 
-      <TripActualField
-        value={tripActual}
-        estimated={tripTotal}
-        saving={savingActual}
-        onSave={onSaveActual}
-      />
+          <OwnedSection
+            title="Ingredientes en casa"
+            items={home}
+            subtotal={homeTotal(trip.groups)}
+            onToggleOwned={onToggleOwned}
+          />
+          <OwnedSection
+            title="Ingredientes comprados"
+            items={bought}
+            subtotal={boughtTotal(trip.groups)}
+            onToggleOwned={onToggleOwned}
+          />
+
+          {canConfirm || confirmedAt ? (
+            <FijarTripButton
+              cadence={cadence}
+              confirmedAt={confirmedAt}
+              confirming={confirming}
+              onConfirm={onConfirm}
+            />
+          ) : null}
+
+          <TripActualField
+            value={tripActual}
+            estimated={tripTotal}
+            saving={savingActual}
+            onSave={onSaveActual}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -588,16 +678,15 @@ function ShoppingGroup({
   group: { category: string; items: ShoppingItem[] };
   onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
 }) {
-  const items = sortByPending(group.items);
   return (
     <div className="mt-3">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {group.category}
       </span>
       <ul className="mt-1.5 space-y-1.5">
-        {items.map((item) => (
+        {group.items.map((item) => (
           <li key={item.name} className="flex items-center gap-2 text-sm">
-            <span className={`min-w-0 flex-1 ${item.owned ? "text-success" : ""}`}>
+            <span className="min-w-0 flex-1">
               {item.name}
               {item.qty ? <span className="text-muted-foreground"> · {item.qty}</span> : null}
             </span>
@@ -611,6 +700,95 @@ function ShoppingGroup({
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Zona plana de ingredientes ya resueltos (en casa o comprados): sin
+ * categorías, porque lo que importa aquí es de dónde han salido, no dónde
+ * están en el súper. Se puede seguir tocando el toggle para cambiar de origen
+ * o desmarcar, y entonces el artículo vuelve a subir a pendientes.
+ */
+function OwnedSection({
+  title,
+  items,
+  subtotal,
+  onToggleOwned,
+}: {
+  title: string;
+  items: ShoppingItem[];
+  subtotal: number;
+  onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-3 rounded-2xl bg-success/10 p-3.5">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        <span className="text-xs font-semibold text-success">{eur(subtotal)}</span>
+      </div>
+      <ul className="mt-2 space-y-1.5">
+        {items.map((item) => (
+          <li key={item.name} className="flex items-center gap-2 text-sm">
+            <span className="min-w-0 flex-1 text-success">
+              {item.name}
+              {item.qty ? <span className="text-muted-foreground"> · {item.qty}</span> : null}
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">{eur(item.price_eur)}</span>
+            <OwnedToggle
+              owned={item.owned}
+              onChange={(next) => onToggleOwned(item.name, next)}
+              name={item.name}
+            />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Botón para "fijar" los ingredientes del tramo (marcar ese periodo como
+ * resuelto), o la confirmación de que ya lo está con opción a deshacer. Solo
+ * aparece cuando hay algo marcado (en casa o comprado) — antes de eso no hay
+ * nada que fijar.
+ */
+function FijarTripButton({
+  cadence,
+  confirmedAt,
+  confirming,
+  onConfirm,
+}: {
+  cadence: ShoppingCadence;
+  confirmedAt: string | undefined;
+  confirming: boolean;
+  onConfirm: (confirmed: boolean) => void;
+}) {
+  const scope = cadenceScopeLabel(cadence);
+  if (confirmedAt) {
+    return (
+      <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-success/15 px-3.5 py-3">
+        <span className="text-xs font-medium text-success">Ingredientes {scope} fijados</span>
+        <button
+          type="button"
+          onClick={() => onConfirm(false)}
+          disabled={confirming}
+          className="text-xs font-semibold text-muted-foreground disabled:opacity-60"
+        >
+          Deshacer
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onConfirm(true)}
+      disabled={confirming}
+      className="mt-3 w-full rounded-2xl bg-secondary py-3 text-xs font-semibold transition-transform active:scale-[0.98] disabled:opacity-60"
+    >
+      {confirming ? "Fijando..." : `Fijar ingredientes ${scope}`}
+    </button>
   );
 }
 

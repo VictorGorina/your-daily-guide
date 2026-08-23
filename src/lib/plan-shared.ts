@@ -104,6 +104,25 @@ export const tripActualsTotal = (actuals: TripActuals | null | undefined) =>
   Math.round(Object.values(actuals ?? {}).reduce((sum, n) => sum + (Number(n) || 0), 0) * 100) /
   100;
 
+/**
+ * Fecha (ISO) en la que se han "fijado" los ingredientes de cada tramo de
+ * compra (índice de `trip` → fecha), a mano cuando la persona confirma que ya
+ * están resueltos (comprados o en casa). Un tramo fijado deja de pedir más
+ * marcas: es el equivalente a cerrar esa semana/quincena/mes.
+ */
+export type TripConfirmations = Record<number, string>;
+
+export const cleanTripConfirmations = (raw: unknown): TripConfirmations => {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: TripConfirmations = {};
+  for (const [key, value] of Object.entries(o)) {
+    const trip = Number(key);
+    const date = String(value ?? "").trim();
+    if (Number.isFinite(trip) && trip >= 0 && date) out[Math.round(trip)] = date;
+  }
+  return out;
+};
+
 export const tripCount = (shopping: ShoppingList | null | undefined) =>
   Math.max(1, ...((shopping ?? []).flatMap((g) => g.items.map((i) => i.trip + 1)) || [1]));
 
@@ -147,6 +166,35 @@ export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number
   const from = coverage.fromDay + trip * per;
   const to = Math.min(coverage.toDay, from + per - 1);
   return { from, to };
+};
+
+/** A quién se refiere cada tramo de ingredientes, en palabras, según la cadencia. */
+export const cadenceScopeLabel = (cadence: ShoppingCadence) =>
+  cadence === "semanal"
+    ? "de la semana"
+    : cadence === "bisemanal"
+      ? "de las dos semanas"
+      : "del mes";
+
+/**
+ * Cuándo cae un tramo respecto a hoy: "past" si sus días ya han pasado (ya no
+ * toca, se muestra en gris), "current" si hoy cae dentro de su rango (es el
+ * que toca ahora, va abierto), o "future" si todavía no le toca (se muestra
+ * comprimido). Se apoya en `tripDayRange`, así que respeta la cobertura real
+ * del plan igual que las etiquetas.
+ */
+export type TripTiming = "past" | "current" | "future";
+
+export const tripTiming = (
+  trips: number,
+  trip: number,
+  todayDayOfMonth: number,
+  coverage: PlanCoverage = FULL_MONTH_COVERAGE,
+): TripTiming => {
+  const { from, to } = tripDayRange(coverage, trips, trip);
+  if (todayDayOfMonth > to) return "past";
+  if (todayDayOfMonth < from) return "future";
+  return "current";
 };
 
 /**
@@ -309,11 +357,35 @@ export const shoppingTotal = (shopping: ShoppingList | null | undefined) =>
     ) * 100,
   ) / 100;
 
-/** Suma de lo marcado como "ya lo tengo en casa": lo que no hace falta comprar. */
+/** Suma de lo marcado como "ya lo tengo en casa" o "comprado": lo que no hace falta comprar. */
 export const ownedTotal = (shopping: ShoppingList | null | undefined) =>
   Math.round(
     (shopping ?? []).reduce(
       (sum, g) => sum + g.items.reduce((s, i) => s + (i.owned ? Number(i.price_eur) || 0 : 0), 0),
+      0,
+    ) * 100,
+  ) / 100;
+
+/** Suma de lo marcado como "ya lo tenía en casa" (nevera): dinero que te ahorras, no gasto. */
+export const homeTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round(
+    (shopping ?? []).reduce(
+      (sum, g) =>
+        sum +
+        g.items.reduce((s, i) => s + (i.owned === "fridge" ? Number(i.price_eur) || 0 : 0), 0),
+      0,
+    ) * 100,
+  ) / 100;
+
+/**
+ * Suma de lo marcado como "comprado en el súper": el coste real de la compra
+ * ya hecha, sin contar lo que ya se tenía en casa (eso no es gasto nuevo).
+ */
+export const boughtTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round(
+    (shopping ?? []).reduce(
+      (sum, g) =>
+        sum + g.items.reduce((s, i) => s + (i.owned === "store" ? Number(i.price_eur) || 0 : 0), 0),
       0,
     ) * 100,
   ) / 100;
@@ -333,6 +405,34 @@ export const pendingTotal = (shopping: ShoppingList | null | undefined) =>
  */
 export const sortByPending = (items: ShoppingItem[]): ShoppingItem[] =>
   [...items].sort((a, b) => Number(Boolean(a.owned)) - Number(Boolean(b.owned)));
+
+/**
+ * Separa los grupos de un tramo en tres zonas según su estado: pendientes
+ * (agrupados por categoría, como en el súper), en casa (nevera) y comprados
+ * (súper) — estos dos últimos en listas planas, porque ya no hace falta
+ * comprarlos y lo relevante ahí es de dónde salieron, no la categoría. Marcar
+ * un ingrediente lo mueve de la primera zona a una de las otras dos.
+ */
+export const splitTripByStatus = (
+  groups: { category: string; items: ShoppingItem[] }[],
+): {
+  pending: { category: string; items: ShoppingItem[] }[];
+  home: ShoppingItem[];
+  bought: ShoppingItem[];
+} => {
+  const pending: { category: string; items: ShoppingItem[] }[] = [];
+  const home: ShoppingItem[] = [];
+  const bought: ShoppingItem[] = [];
+  for (const g of groups) {
+    const stillPending = g.items.filter((i) => !i.owned);
+    if (stillPending.length) pending.push({ category: g.category, items: stillPending });
+    for (const i of g.items) {
+      if (i.owned === "fridge") home.push(i);
+      else if (i.owned === "store") bought.push(i);
+    }
+  }
+  return { pending, home, bought };
+};
 
 export const ingredientNames = (shopping: ShoppingList) =>
   shopping.flatMap((g) => g.items.map((i) => i.name)).join(", ");

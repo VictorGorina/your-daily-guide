@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { MonthlyPlan, ShoppingList, TripActuals } from "./plan-shared";
+import type { MonthlyPlan, ShoppingList, TripActuals, TripConfirmations } from "./plan-shared";
 
 /**
  * Acceso a los datos del día, equivalente móvil de `src/lib/daily.ts` de la web.
@@ -203,6 +203,7 @@ export type MonthlyPlanRow = {
   shopping: ShoppingList | null;
   confirmed_at: string | null;
   trip_actuals: TripActuals | null;
+  confirmed_trips: TripConfirmations | null;
 };
 
 /** Mes actual en formato YYYY-MM, para la clave del plan mensual. */
@@ -211,11 +212,26 @@ export const monthISO = () => todayISO().slice(0, 7);
 export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
   const { data, error } = await supabase
     .from("monthly_plans")
-    .select("id, month, plan, shopping, confirmed_at, trip_actuals")
+    .select("id, month, plan, shopping, confirmed_at, trip_actuals, confirmed_trips")
     .eq("month", month)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    // Compatibilidad hacia atrás: si la migración de confirmed_trips todavía
+    // no se ha aplicado en la base de datos, esa columna no existe y esta
+    // consulta falla entera. Reintenta sin ella para no tumbar toda la
+    // pestaña Plan mientras tanto; en cuanto la migración esté aplicada, el
+    // primer intento vuelve a funcionar solo.
+    const retry = await supabase
+      .from("monthly_plans")
+      .select("id, month, plan, shopping, confirmed_at, trip_actuals")
+      .eq("month", month)
+      .maybeSingle();
+    if (retry.error) throw retry.error;
+    return retry.data
+      ? { ...(retry.data as unknown as MonthlyPlanRow), confirmed_trips: null }
+      : null;
+  }
   return (data as unknown as MonthlyPlanRow | null) ?? null;
 }
 
