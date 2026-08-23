@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ConfirmadoRouteImport } from './routes/confirmado'
+import { Route as PrivacidadRouteImport } from './routes/privacidad'
 import { Route as RestablecerRouteImport } from './routes/restablecer'
 import { Route as AuthenticatedAjustesRouteImport } from './routes/_authenticated/ajustes'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
@@ -37,6 +38,7 @@ import { Route as ApiV1PlanMealRouteImport } from './routes/api/v1/plan/meal'
 import { Route as ApiV1PlanRecipeRouteImport } from './routes/api/v1/plan/recipe'
 import { Route as ApiV1PlanShoppingOwnedRouteImport } from './routes/api/v1/plan/shopping-owned'
 import { Route as ApiV1PlanTripActualRouteImport } from './routes/api/v1/plan/trip-actual'
+import { Route as ApiV1PlanTripConfirmRouteImport } from './routes/api/v1/plan/trip-confirm'
 import { Route as ApiV1PlanWelcomeRouteImport } from './routes/api/v1/plan/welcome'
 
 const IndexRoute = IndexRouteImport.update({
@@ -56,6 +58,11 @@ const AuthRoute = AuthRouteImport.update({
 const ConfirmadoRoute = ConfirmadoRouteImport.update({
   id: '/confirmado',
   path: '/confirmado',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacidadRoute = PrivacidadRouteImport.update({
+  id: '/privacidad',
+  path: '/privacidad',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RestablecerRoute = RestablecerRouteImport.update({
@@ -178,6 +185,11 @@ const ApiV1PlanTripActualRoute = ApiV1PlanTripActualRouteImport.update({
   path: '/api/v1/plan/trip-actual',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlanTripConfirmRoute = ApiV1PlanTripConfirmRouteImport.update({
+  id: '/api/v1/plan/trip-confirm',
+  path: '/api/v1/plan/trip-confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1PlanWelcomeRoute = ApiV1PlanWelcomeRouteImport.update({
   id: '/api/v1/plan/welcome',
   path: '/api/v1/plan/welcome',
@@ -188,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/confirmado': typeof ConfirmadoRoute
+  '/privacidad': typeof PrivacidadRoute
   '/restablecer': typeof RestablecerRoute
   '/ajustes': typeof AuthenticatedAjustesRoute
   '/chat': typeof AuthenticatedChatRoute
@@ -212,12 +225,14 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
+  '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/confirmado': typeof ConfirmadoRoute
+  '/privacidad': typeof PrivacidadRoute
   '/restablecer': typeof RestablecerRoute
   '/ajustes': typeof AuthenticatedAjustesRoute
   '/chat': typeof AuthenticatedChatRoute
@@ -242,6 +257,7 @@ export interface FileRoutesByTo {
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
+  '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRoutesById {
@@ -250,6 +266,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/confirmado': typeof ConfirmadoRoute
+  '/privacidad': typeof PrivacidadRoute
   '/restablecer': typeof RestablecerRoute
   '/_authenticated/ajustes': typeof AuthenticatedAjustesRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
@@ -274,6 +291,7 @@ export interface FileRoutesById {
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
+  '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
 }
 export interface FileRouteTypes {
@@ -282,6 +300,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/confirmado'
+    | '/privacidad'
     | '/restablecer'
     | '/ajustes'
     | '/chat'
@@ -306,12 +325,14 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
+    | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/confirmado'
+    | '/privacidad'
     | '/restablecer'
     | '/ajustes'
     | '/chat'
@@ -336,6 +357,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
+    | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
   id:
     | '__root__'
@@ -343,6 +365,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/confirmado'
+    | '/privacidad'
     | '/restablecer'
     | '/_authenticated/ajustes'
     | '/_authenticated/chat'
@@ -367,6 +390,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
+    | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
   fileRoutesById: FileRoutesById
 }
@@ -375,6 +399,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ConfirmadoRoute: typeof ConfirmadoRoute
+  PrivacidadRoute: typeof PrivacidadRoute
   RestablecerRoute: typeof RestablecerRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute
@@ -391,6 +416,7 @@ export interface RootRouteChildren {
   ApiV1PlanRecipeRoute: typeof ApiV1PlanRecipeRoute
   ApiV1PlanShoppingOwnedRoute: typeof ApiV1PlanShoppingOwnedRoute
   ApiV1PlanTripActualRoute: typeof ApiV1PlanTripActualRoute
+  ApiV1PlanTripConfirmRoute: typeof ApiV1PlanTripConfirmRoute
   ApiV1PlanWelcomeRoute: typeof ApiV1PlanWelcomeRoute
 }
 
@@ -422,6 +448,13 @@ declare module '@tanstack/react-router' {
       path: '/confirmado'
       fullPath: '/confirmado'
       preLoaderRoute: typeof ConfirmadoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacidad': {
+      id: '/privacidad'
+      path: '/privacidad'
+      fullPath: '/privacidad'
+      preLoaderRoute: typeof PrivacidadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/restablecer': {
@@ -592,6 +625,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanTripActualRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plan/trip-confirm': {
+      id: '/api/v1/plan/trip-confirm'
+      path: '/api/v1/plan/trip-confirm'
+      fullPath: '/api/v1/plan/trip-confirm'
+      preLoaderRoute: typeof ApiV1PlanTripConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/plan/welcome': {
       id: '/api/v1/plan/welcome'
       path: '/api/v1/plan/welcome'
@@ -632,6 +672,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ConfirmadoRoute: ConfirmadoRoute,
+  PrivacidadRoute: PrivacidadRoute,
   RestablecerRoute: RestablecerRoute,
   ApiChatRoute: ApiChatRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
@@ -648,6 +689,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanRecipeRoute: ApiV1PlanRecipeRoute,
   ApiV1PlanShoppingOwnedRoute: ApiV1PlanShoppingOwnedRoute,
   ApiV1PlanTripActualRoute: ApiV1PlanTripActualRoute,
+  ApiV1PlanTripConfirmRoute: ApiV1PlanTripConfirmRoute,
   ApiV1PlanWelcomeRoute: ApiV1PlanWelcomeRoute,
 }
 export const routeTree = rootRouteImport

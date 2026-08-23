@@ -4,9 +4,11 @@ import { generateText, streamText } from "ai";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
 import {
+  cadenceOf,
   cleanPlan,
   cleanShopping,
   cleanTripActuals,
+  cleanTripConfirmations,
   completePlan,
   coverageRatio,
   ingredientNames,
@@ -29,6 +31,7 @@ import {
   type PlanDay,
   type ShoppingList,
   type TripActuals,
+  type TripConfirmations,
 } from "@/lib/plan-shared";
 import { madridTodayISO } from "@/lib/madrid-date";
 
@@ -368,6 +371,59 @@ export const setTripActual = createServerFn({ method: "POST" })
     }
 
     return { trip_actuals: next };
+  });
+
+/**
+ * "Fija" (o deshace) los ingredientes de un tramo de compra: la persona
+ * confirma que ese tramo ya está resuelto (comprado o en casa) y deja de
+ * pedir más marcas. Cuando quedan fijados TODOS los tramos del mes, también
+ * marca `confirmed_at` del plan — es la señal que ya usa `syncSharedMeals`
+ * para no tocar la compra de alguien cuyo mes ya está cerrado del todo; si se
+ * deshace cualquier tramo, `confirmed_at` se limpia otra vez.
+ */
+export const setTripConfirmed = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { month: string; trip: number; confirmed: boolean }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    const trip = Number(input?.trip);
+    if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
+    return { month: input.month, trip: Math.round(trip), confirmed: Boolean(input?.confirmed) };
+  })
+  .handler(async ({ data, context }): Promise<{ confirmed_trips: TripConfirmations }> => {
+    const { data: row } = await context.supabase
+      .from("monthly_plans")
+      .select("plan, shopping, confirmed_trips")
+      .eq("month", data.month)
+      .maybeSingle();
+    const typed = row as { plan?: unknown; shopping?: unknown; confirmed_trips?: unknown } | null;
+    const shopping = cleanShopping(typed?.shopping);
+    if (!shopping.length) throw new Error("Todavía no hay lista de la compra este mes");
+
+    const current = cleanTripConfirmations(typed?.confirmed_trips);
+    const next = { ...current };
+    if (data.confirmed) next[data.trip] = madridTodayISO();
+    else delete next[data.trip];
+
+    // El número "oficial" de tramos es el de la cadencia guardada, no el que se
+    // deduzca de los datos (un tramo sin artículos asignados no debe contar de
+    // menos y dar por fijado el mes entero antes de tiempo).
+    const cadence = cleanPlan(typed?.plan)?.cadence ?? cadenceOf(shopping);
+    const allConfirmed = Object.keys(next).length >= tripsOfCadence(cadence);
+
+    const { error } = await context.supabase
+      .from("monthly_plans")
+      .update({
+        confirmed_trips: next as never,
+        confirmed_at: allConfirmed ? new Date().toISOString() : null,
+      } as never)
+      .eq("month", data.month)
+      .eq("user_id", context.userId);
+    if (error) {
+      console.error("setTripConfirmed", error);
+      throw new Error("No hemos podido fijar los ingredientes");
+    }
+
+    return { confirmed_trips: next };
   });
 
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })

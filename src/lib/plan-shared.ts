@@ -104,6 +104,25 @@ export const tripActualsTotal = (actuals: TripActuals | null | undefined) =>
   Math.round(Object.values(actuals ?? {}).reduce((sum, n) => sum + (Number(n) || 0), 0) * 100) /
   100;
 
+/**
+ * Fecha (ISO) en la que se han "fijado" los ingredientes de cada tramo de
+ * compra (índice de `trip` → fecha), a mano cuando la persona confirma que ya
+ * están resueltos (comprados o en casa). Un tramo fijado deja de pedir más
+ * marcas: es el equivalente a cerrar esa semana/quincena/mes.
+ */
+export type TripConfirmations = Record<number, string>;
+
+export const cleanTripConfirmations = (raw: unknown): TripConfirmations => {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: TripConfirmations = {};
+  for (const [key, value] of Object.entries(o)) {
+    const trip = Number(key);
+    const date = String(value ?? "").trim();
+    if (Number.isFinite(trip) && trip >= 0 && date) out[Math.round(trip)] = date;
+  }
+  return out;
+};
+
 export const tripCount = (shopping: ShoppingList | null | undefined) =>
   Math.max(1, ...((shopping ?? []).flatMap((g) => g.items.map((i) => i.trip + 1)) || [1]));
 
@@ -140,13 +159,55 @@ export const coverageRatio = (coverage: PlanCoverage, month: string) => {
 
 const FULL_MONTH_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
-/** Rango de días [from, to] del mes que cubre una compra dentro de la cobertura del plan. */
+/**
+ * Rango de días [from, to] del mes que cubre una compra dentro de la
+ * cobertura del plan. Reparte los días lo más igual posible entre tramos (los
+ * primeros se llevan el día de más si no divide exacto) en vez de redondear
+ * cada tramo hacia arriba: con eso último, un tramo tras otro se iba comiendo
+ * más días de los que quedaban y el último acababa con un rango imposible
+ * (p. ej. "días 32-31" cubriendo 9 días entre 4 compras). Si aun así no
+ * quedan días para un tramo (menos días que compras), se deja en el último
+ * día cubierto en vez de desbordar el mes.
+ */
 export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number) => {
   const total = Math.max(1, coverage.toDay - coverage.fromDay + 1);
-  const per = Math.ceil(total / Math.max(1, trips));
-  const from = coverage.fromDay + trip * per;
-  const to = Math.min(coverage.toDay, from + per - 1);
+  const t = Math.max(1, trips);
+  const base = Math.floor(total / t);
+  const extra = total % t;
+  const start = trip * base + Math.min(trip, extra);
+  const size = base + (trip < extra ? 1 : 0);
+  const from = Math.min(coverage.toDay, coverage.fromDay + start);
+  const to = Math.max(from, Math.min(coverage.toDay, from + size - 1));
   return { from, to };
+};
+
+/** A quién se refiere cada tramo de ingredientes, en palabras, según la cadencia. */
+export const cadenceScopeLabel = (cadence: ShoppingCadence) =>
+  cadence === "semanal"
+    ? "de la semana"
+    : cadence === "bisemanal"
+      ? "de las dos semanas"
+      : "del mes";
+
+/**
+ * Cuándo cae un tramo respecto a hoy: "past" si sus días ya han pasado (ya no
+ * toca, se muestra en gris), "current" si hoy cae dentro de su rango (es el
+ * que toca ahora, va abierto), o "future" si todavía no le toca (se muestra
+ * comprimido). Se apoya en `tripDayRange`, así que respeta la cobertura real
+ * del plan igual que las etiquetas.
+ */
+export type TripTiming = "past" | "current" | "future";
+
+export const tripTiming = (
+  trips: number,
+  trip: number,
+  todayDayOfMonth: number,
+  coverage: PlanCoverage = FULL_MONTH_COVERAGE,
+): TripTiming => {
+  const { from, to } = tripDayRange(coverage, trips, trip);
+  if (todayDayOfMonth > to) return "past";
+  if (todayDayOfMonth < from) return "future";
+  return "current";
 };
 
 /**
@@ -193,16 +254,20 @@ export const repartitionTrips = (
   }));
 };
 
-/** Agrupa la lista por compra, conservando categorías. */
-export const groupByTrip = (shopping: ShoppingList | null | undefined) => {
-  const trips = tripCount(shopping);
-  return Array.from({ length: trips }, (_, t) => ({
+/**
+ * Agrupa la lista por compra, conservando categorías. `trips` debe venir de la
+ * cadencia (`tripsOfCadence`), no de escanear los datos: si un tramo se queda
+ * sin artículos (p. ej. pocos frescos repartidos entre muchas compras), sigue
+ * apareciendo vacío en vez de desaparecer — si no, "semana 4 de 4" podía faltar
+ * sin más cuando esa semana no tenía nada asignado.
+ */
+export const groupByTrip = (shopping: ShoppingList | null | undefined, trips: number) =>
+  Array.from({ length: Math.max(1, trips) }, (_, t) => ({
     trip: t,
     groups: (shopping ?? [])
       .map((g) => ({ category: g.category, items: g.items.filter((i) => i.trip === t) }))
       .filter((g) => g.items.length),
-  })).filter((t) => t.groups.length);
-};
+  }));
 
 const asItem = (raw: unknown): ShoppingItem | null => {
   const o = (raw ?? {}) as Record<string, unknown>;
@@ -309,11 +374,35 @@ export const shoppingTotal = (shopping: ShoppingList | null | undefined) =>
     ) * 100,
   ) / 100;
 
-/** Suma de lo marcado como "ya lo tengo en casa": lo que no hace falta comprar. */
+/** Suma de lo marcado como "ya lo tengo en casa" o "comprado": lo que no hace falta comprar. */
 export const ownedTotal = (shopping: ShoppingList | null | undefined) =>
   Math.round(
     (shopping ?? []).reduce(
       (sum, g) => sum + g.items.reduce((s, i) => s + (i.owned ? Number(i.price_eur) || 0 : 0), 0),
+      0,
+    ) * 100,
+  ) / 100;
+
+/** Suma de lo marcado como "ya lo tenía en casa" (nevera): dinero que te ahorras, no gasto. */
+export const homeTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round(
+    (shopping ?? []).reduce(
+      (sum, g) =>
+        sum +
+        g.items.reduce((s, i) => s + (i.owned === "fridge" ? Number(i.price_eur) || 0 : 0), 0),
+      0,
+    ) * 100,
+  ) / 100;
+
+/**
+ * Suma de lo marcado como "comprado en el súper": el coste real de la compra
+ * ya hecha, sin contar lo que ya se tenía en casa (eso no es gasto nuevo).
+ */
+export const boughtTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round(
+    (shopping ?? []).reduce(
+      (sum, g) =>
+        sum + g.items.reduce((s, i) => s + (i.owned === "store" ? Number(i.price_eur) || 0 : 0), 0),
       0,
     ) * 100,
   ) / 100;
@@ -333,6 +422,34 @@ export const pendingTotal = (shopping: ShoppingList | null | undefined) =>
  */
 export const sortByPending = (items: ShoppingItem[]): ShoppingItem[] =>
   [...items].sort((a, b) => Number(Boolean(a.owned)) - Number(Boolean(b.owned)));
+
+/**
+ * Separa los grupos de un tramo en tres zonas según su estado: pendientes
+ * (agrupados por categoría, como en el súper), en casa (nevera) y comprados
+ * (súper) — estos dos últimos en listas planas, porque ya no hace falta
+ * comprarlos y lo relevante ahí es de dónde salieron, no la categoría. Marcar
+ * un ingrediente lo mueve de la primera zona a una de las otras dos.
+ */
+export const splitTripByStatus = (
+  groups: { category: string; items: ShoppingItem[] }[],
+): {
+  pending: { category: string; items: ShoppingItem[] }[];
+  home: ShoppingItem[];
+  bought: ShoppingItem[];
+} => {
+  const pending: { category: string; items: ShoppingItem[] }[] = [];
+  const home: ShoppingItem[] = [];
+  const bought: ShoppingItem[] = [];
+  for (const g of groups) {
+    const stillPending = g.items.filter((i) => !i.owned);
+    if (stillPending.length) pending.push({ category: g.category, items: stillPending });
+    for (const i of g.items) {
+      if (i.owned === "fridge") home.push(i);
+      else if (i.owned === "store") bought.push(i);
+    }
+  }
+  return { pending, home, bought };
+};
 
 export const ingredientNames = (shopping: ShoppingList) =>
   shopping.flatMap((g) => g.items.map((i) => i.name)).join(", ");
@@ -631,8 +748,8 @@ export const shoppingToText = (
     year: "numeric",
   });
   const lines = [`Ingredientes del mes · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
-  const trips = tripCount(shopping);
-  for (const trip of groupByTrip(shopping)) {
+  const trips = tripsOfCadence(cadence);
+  for (const trip of groupByTrip(shopping, trips)) {
     lines.push(
       `${tripLabel(cadence, trip.trip, coverage, trips)} — ${eur(pendingTotal(trip.groups))}`,
     );

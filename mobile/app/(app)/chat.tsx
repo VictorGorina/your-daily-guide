@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DictateButton } from "../../components/dictate-button";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { API_BASE_URL, getAccessToken } from "../../lib/api";
 import {
@@ -331,6 +332,9 @@ export default function Chat() {
               editable={!busy}
               onSubmitEditing={handleSubmit}
               className="max-h-32 flex-1 rounded-3xl bg-surface px-4 py-3 text-[15px] text-foreground"
+            />
+            <DictateButton
+              onText={(t) => setInput((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))}
             />
             <Pressable
               onPress={handleSubmit}

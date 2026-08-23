@@ -186,6 +186,7 @@ export type Database = {
       monthly_plans: {
         Row: {
           confirmed_at: string | null;
+          confirmed_trips: Json | null;
           created_at: string;
           id: string;
           month: string;
@@ -197,6 +198,7 @@ export type Database = {
         };
         Insert: {
           confirmed_at?: string | null;
+          confirmed_trips?: Json | null;
           created_at?: string;
           id?: string;
           month: string;
@@ -208,6 +210,7 @@ export type Database = {
         };
         Update: {
           confirmed_at?: string | null;
+          confirmed_trips?: Json | null;
           created_at?: string;
           id?: string;
           month?: string;
