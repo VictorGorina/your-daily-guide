@@ -32,13 +32,18 @@ export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
       const result = await fn({ data } as { data: never });
       return Response.json(result);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Error inesperado";
+      const raw = error instanceof Error ? error.message : "";
       // El middleware de auth prefija sus mensajes con "Unauthorized"; sin sesión
       // la respuesta debe ser 401 para que el cliente sepa que toca reautenticar
       // en vez de reintentar.
-      const status = message.startsWith("Unauthorized") ? 401 : 500;
-      if (status === 500) console.error("apiPost", error);
-      return Response.json({ error: message }, { status });
+      if (raw.startsWith("Unauthorized")) {
+        return Response.json({ error: raw }, { status: 401 });
+      }
+      console.error("apiPost", error);
+      return Response.json(
+        { error: "No hemos podido completar la acción. Inténtalo de nuevo." },
+        { status: 500 },
+      );
     }
   };
 }

@@ -68,16 +68,10 @@ export function WeekStrip({
               ? ""
               : "bg-secondary text-muted-foreground";
 
-        // El fin de semana futuro se tiñe con el naranja de la paleta en vez de
-        // con un color propio, así sigue al tema activo (incluido "noche").
-        const weekendStyle =
-          !isToday && !isPast && isWeekend
-            ? {
-                backgroundColor:
-                  "color-mix(in oklab, var(--color-chart-2) 18%, var(--color-surface))",
-                color: "color-mix(in oklab, var(--color-chart-2) 55%, var(--color-foreground))",
-              }
-            : undefined;
+        // Fin de semana futuro: fondo/texto fijos del guideline (§2), ya no
+        // dependen del tema activo — solo hay un acento en toda la app.
+        const weekendClass =
+          !isToday && !isPast && isWeekend ? "bg-weekend text-weekend-foreground" : "";
 
         return (
           <button
@@ -85,15 +79,14 @@ export function WeekStrip({
             type="button"
             onClick={() => onSelect?.(date)}
             aria-expanded={isOpen}
-            style={weekendStyle}
-            className={`rounded-[14px] px-1 pt-2.5 pb-2 text-center transition-transform active:scale-95 ${baseClass} ${
+            className={`rounded-[14px] px-1 pt-2.5 pb-2 text-center transition-transform active:scale-95 ${baseClass} ${weekendClass} ${
               isOpen ? "ring-2 ring-inset ring-primary" : ""
             }`}
           >
             <span className="block font-title text-[15px] font-semibold leading-none">
               {d.getDate()}
             </span>
-            <span className="mt-1 block font-num text-[8.5px] font-medium uppercase tracking-[0.05em] opacity-80">
+            <span className="mt-1 block font-num text-[9.5px] font-medium uppercase tracking-[0.06em] opacity-80">
               {DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}
             </span>
           </button>

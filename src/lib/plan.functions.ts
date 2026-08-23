@@ -30,6 +30,7 @@ import {
   type ShoppingList,
   type TripActuals,
 } from "@/lib/plan-shared";
+import { madridTodayISO } from "@/lib/madrid-date";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
 
@@ -127,15 +128,6 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
-    const { data: existing } = await context.supabase
-      .from("monthly_plans")
-      .select("confirmed_at")
-      .eq("month", data.month)
-      .maybeSingle();
-    if ((existing as { confirmed_at?: string | null } | null)?.confirmed_at) {
-      throw new Error("El plan de este mes ya está confirmado: la compra no puede cambiar");
-    }
-
     const { data: profile } = await context.supabase
       .from("profiles")
       .select("*")
@@ -145,7 +137,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = madridTodayISO();
     const coverage = monthCoverage(data.month, today);
     const coveredDays = coverage.toDay - coverage.fromDay + 1;
     const ratio = coverageRatio(coverage, data.month);
@@ -248,8 +240,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
 /**
  * Cambia solo la cadencia de compra (semanal/bisemanal/mensual) sin volver a
  * llamar a la IA: reparte los mismos ingredientes entre más o menos compras. Es
- * instantáneo y no puede fallar por la IA, que es lo que rompía antes. No se
- * puede cambiar si la compra ya está confirmada.
+ * instantáneo y no puede fallar por la IA, que es lo que rompía antes.
  */
 export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -262,17 +253,10 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
     const { data: row } = await context.supabase
       .from("monthly_plans")
-      .select("plan, shopping, confirmed_at")
+      .select("plan, shopping")
       .eq("month", data.month)
       .maybeSingle();
-    const typed = row as {
-      plan?: unknown;
-      shopping?: unknown;
-      confirmed_at?: string | null;
-    } | null;
-    if (typed?.confirmed_at) {
-      throw new Error("La compra ya está confirmada: la frecuencia no puede cambiar este mes");
-    }
+    const typed = row as { plan?: unknown; shopping?: unknown } | null;
 
     const current = cleanPlan(typed?.plan);
     if (!current) throw new Error("Todavía no hay plan de este mes");
@@ -293,19 +277,24 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   });
 
 /**
- * Marca o desmarca un ingrediente como "ya lo tengo en casa" — no cambia la
- * lista de la compra en sí (los ítems y su precio siguen igual), solo anota qué
- * no hace falta comprar. Se puede tocar tanto antes como después de confirmar
- * la compra, porque no afecta a lo que se compró.
+ * Marca un ingrediente como comprado ("fridge": ya lo tenía en casa, "store":
+ * lo ha comprado en el súper) o lo deja sin decidir (source null) — no cambia
+ * la lista de la compra en sí (los ítems y su precio siguen igual), solo anota
+ * de dónde ha salido cada uno. Ir marcando ingrediente a ingrediente es lo que
+ * antes hacía de golpe el botón "Ya he comprado esto": no hace falta un paso
+ * de confirmación aparte.
  */
 export const toggleShoppingOwned = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string; itemName: string; owned: boolean }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
-    const itemName = String(input?.itemName ?? "").trim();
-    if (!itemName) throw new Error("Falta el ingrediente");
-    return { month: input.month, itemName, owned: Boolean(input?.owned) };
-  })
+  .inputValidator(
+    (input: { month: string; itemName: string; source: "fridge" | "store" | null }) => {
+      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+      const itemName = String(input?.itemName ?? "").trim();
+      if (!itemName) throw new Error("Falta el ingrediente");
+      const source = input?.source === "fridge" || input?.source === "store" ? input.source : null;
+      return { month: input.month, itemName, source };
+    },
+  )
   .handler(async ({ data, context }): Promise<{ shopping: ShoppingList }> => {
     const { data: row } = await context.supabase
       .from("monthly_plans")
@@ -317,9 +306,14 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
 
     const shopping: ShoppingList = current.map((group) => ({
       category: group.category,
-      items: group.items.map((item) =>
-        item.name === data.itemName ? { ...item, owned: data.owned } : item,
-      ),
+      items: group.items.map((item) => {
+        if (item.name !== data.itemName) return item;
+        if (!data.source) {
+          const { owned: _owned, ...rest } = item;
+          return rest;
+        }
+        return { ...item, owned: data.source };
+      }),
     }));
 
     const { error } = await context.supabase
@@ -376,22 +370,6 @@ export const setTripActual = createServerFn({ method: "POST" })
     return { trip_actuals: next };
   });
 
-export const confirmMonthlyPlan = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
-    return { month: input.month };
-  })
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({ confirmed_at: new Date().toISOString() } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
-    if (error) throw error;
-    return { ok: true };
-  });
-
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
@@ -399,7 +377,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
       if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
       const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
         ? input.today!
-        : new Date().toISOString().slice(0, 10);
+        : madridTodayISO();
       const kcal = Number(input?.kcalDelta);
       return {
         month: input.month,

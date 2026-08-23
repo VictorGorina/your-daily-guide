@@ -95,8 +95,7 @@ export default function Perfil() {
     setEditing(null);
   };
 
-  const inputClass =
-    "mt-2 h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground";
+  const inputClass = "mt-2 h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -113,16 +112,13 @@ export default function Perfil() {
           <Text className="text-xs font-sans-medium text-muted-foreground">Ajustes</Text>
         </Pressable>
 
-        <Text className="mt-3 text-3xl font-display text-foreground">Mis respuestas</Text>
+        <Text className="mt-3 font-heading text-3xl text-foreground">Mis respuestas</Text>
         <Text className="mt-1 text-sm text-muted-foreground">
           Toca cualquier respuesta para corregirla. No hace falta repetir el onboarding.
         </Text>
 
         {PROFILE_SECTIONS.map((section) => (
-          <View
-            key={section.title}
-            className="mt-5 rounded-3xl border border-border bg-surface p-4"
-          >
+          <View key={section.title} className="mt-5 rounded-3xl bg-surface p-4">
             <Text className="px-1 text-sm font-sans-semibold text-foreground">{section.title}</Text>
             <View className="mt-2">
               {section.fields.map((field, idx) => {
@@ -146,10 +142,8 @@ export default function Perfil() {
                                 <Pressable
                                   key={opt}
                                   onPress={() => commit(field, opt)}
-                                  className={`rounded-full border px-3 py-2 active:opacity-80 ${
-                                    active
-                                      ? "border-primary bg-primary-soft"
-                                      : "border-input bg-surface"
+                                  className={`rounded-full px-3 py-2 active:opacity-80 ${
+                                    active ? "bg-primary-soft" : "bg-surface"
                                   }`}
                                 >
                                   <Text
@@ -171,7 +165,7 @@ export default function Perfil() {
                             value={draft}
                             onChangeText={setDraft}
                             placeholderTextColor="#a69d8f"
-                            className="mt-2 min-h-24 w-full rounded-2xl border border-input bg-surface px-4 py-3 text-sm text-foreground"
+                            className="mt-2 min-h-24 w-full rounded-2xl bg-surface px-4 py-3 text-sm text-foreground"
                           />
                         ) : (
                           <TextInput
@@ -218,7 +212,7 @@ export default function Perfil() {
                             </Pressable>
                             <Pressable
                               onPress={() => setEditing(null)}
-                              className="flex-row items-center justify-center gap-1.5 rounded-full border border-input px-4 py-2.5 active:opacity-80"
+                              className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 active:opacity-80"
                             >
                               <X size={14} color="#83796c" />
                               <Text className="text-xs font-sans-medium text-muted-foreground">
@@ -243,7 +237,7 @@ export default function Perfil() {
                           <Text className="text-xs text-muted-foreground">{field.label}</Text>
                           <Text
                             className={`mt-0.5 text-sm ${
-                              shown ? "text-foreground" : "italic text-muted-foreground"
+                              shown ? "text-foreground" : "text-muted-foreground"
                             }`}
                           >
                             {shown ?? "Sin responder — toca para añadir"}

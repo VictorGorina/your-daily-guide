@@ -22,13 +22,17 @@ export function ProgressBar({
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-foreground">{label}</p>
-          {caption ? <p className="truncate text-[11px] text-muted-foreground">{caption}</p> : null}
+          {caption ? (
+            <p className="truncate font-num text-[10.5px] text-muted-foreground">{caption}</p>
+          ) : null}
         </div>
-        <span className="font-display text-2xl tabular-nums text-foreground">{pct}%</span>
+        <span className="font-title text-2xl font-semibold tabular-nums text-foreground">
+          {pct}%
+        </span>
       </div>
-      <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-secondary">
+      <div className="mt-3.5 h-2 w-full overflow-hidden rounded-full bg-secondary">
         <div
-          className="h-full rounded-full bg-primary"
+          className="h-full rounded-full bg-[#6dbe7b]"
           style={{
             width: `${pct}%`,
             transition: "width 1.1s cubic-bezier(0.22, 1, 0.36, 1)",

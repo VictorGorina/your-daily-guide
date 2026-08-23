@@ -74,10 +74,10 @@ function ActionRow({ action }: { action: ActionEntry }) {
   const running = action.state === "running";
   return (
     <div
-      className={`animate-toast-in flex items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 text-xs font-medium ${
+      className={`animate-toast-in flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 text-xs font-medium ${
         action.state === "error"
-          ? "border-destructive/30 bg-destructive/10 text-destructive"
-          : "border-primary/25 bg-primary/10 text-primary"
+          ? "bg-destructive/10 text-destructive"
+          : "bg-primary/10 text-primary"
       }`}
       aria-live="polite"
     >
@@ -257,7 +257,7 @@ export function CoachFab() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Hablar con el coach"
-        className={`fixed bottom-[calc(6.25rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 grid h-14 w-14 place-items-center rounded-full shadow-[0_4px_14px_-6px_oklch(0_0_0/25%)] transition-all duration-300 active:scale-90 ${
+        className={`fixed bottom-[calc(6.5rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 grid h-14 w-14 place-items-center rounded-full shadow-[0_6px_18px_-6px_rgba(0,0,0,.35)] transition-all duration-300 active:scale-90 ${
           flash === "done"
             ? "bg-primary text-primary-foreground scale-105"
             : flash === "error"
@@ -287,10 +287,12 @@ export function CoachFab() {
             onClick={() => setOpen(false)}
             className="flex-1"
           />
-          <div className="animate-sheet-up mx-auto flex h-[78dvh] w-full max-w-lg flex-col rounded-t-3xl border-t border-border bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+          <div className="animate-sheet-up mx-auto flex h-[78dvh] w-full max-w-lg flex-col rounded-t-3xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
             <div className="flex items-center justify-between pb-2">
               <div>
-                <h2 className="font-display text-lg">Coach rápido</h2>
+                <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
+                  Coach rápido
+                </h2>
                 <p className="text-xs text-muted-foreground">Cuéntame y lo cambio en tu pantalla</p>
               </div>
               <button

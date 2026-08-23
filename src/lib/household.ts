@@ -39,10 +39,8 @@ export type HouseholdState = {
 
 const randomCode = () => {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from(
-    { length: 6 },
-    () => alphabet[Math.floor(Math.random() * alphabet.length)]!,
-  ).join("");
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]!).join("");
 };
 
 export async function fetchHousehold(): Promise<HouseholdState> {

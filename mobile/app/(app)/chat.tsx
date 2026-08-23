@@ -37,10 +37,10 @@ import { coachPlanContext, type ShoppingList } from "../../lib/plan-shared";
 import { useCoachActions } from "../../lib/use-coach-actions";
 
 const QUICK_PROMPTS = [
-  "Ya he desayunado 🥣",
+  "Ya he desayunado",
   "He comido fuera de casa",
   "Me he saltado el plan",
-  "He salido a correr 🏃",
+  "He salido a correr",
   "Hoy tengo mucha hambre",
   "Me siento sin energía",
   "Ajusta el plan de mañana",
@@ -234,7 +234,7 @@ export default function Chat() {
                 <ChevronLeft size={22} color="#83796c" />
               </Pressable>
               <View>
-                <Text className="text-2xl font-display text-foreground">Tu coach</Text>
+                <Text className="font-heading text-2xl text-foreground">Tu coach</Text>
                 <Text className="text-xs text-muted-foreground">
                   Conversación de hoy · {dateLabel}
                 </Text>
@@ -243,7 +243,7 @@ export default function Chat() {
             <Pressable
               onPress={() => setGuidedOpen(true)}
               hitSlop={8}
-              className="h-9 w-9 items-center justify-center rounded-full border border-border active:opacity-70"
+              className="h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70"
             >
               <ClipboardList size={18} color="#83796c" />
             </Pressable>
@@ -274,7 +274,7 @@ export default function Chat() {
                   <View
                     key={m.id}
                     className={`max-w-[85%] rounded-3xl px-4 py-2.5 ${
-                      mine ? "self-end bg-primary" : "self-start bg-surface border border-border"
+                      mine ? "self-end bg-primary" : "self-start bg-surface"
                     }`}
                   >
                     <Text
@@ -287,7 +287,7 @@ export default function Chat() {
               })
             )}
             {status === "submitted" ? (
-              <View className="flex-row items-center gap-2 self-start rounded-3xl border border-border bg-surface px-4 py-3">
+              <View className="flex-row items-center gap-2 self-start rounded-3xl bg-surface px-4 py-3">
                 <ActivityIndicator size="small" color="#6dbe7b" />
                 <Text className="text-sm text-muted-foreground">El coach está pensando...</Text>
               </View>
@@ -312,7 +312,7 @@ export default function Chat() {
                 key={q}
                 disabled={busy}
                 onPress={() => send(q)}
-                className="rounded-full border border-border bg-surface px-3 py-1.5 active:opacity-70"
+                className="rounded-full bg-secondary px-3 py-1.5 active:opacity-70"
                 style={busy ? { opacity: 0.5 } : undefined}
               >
                 <Text className="text-xs text-muted-foreground">{q}</Text>
@@ -330,7 +330,7 @@ export default function Chat() {
               multiline
               editable={!busy}
               onSubmitEditing={handleSubmit}
-              className="max-h-32 flex-1 rounded-3xl border border-border bg-surface px-4 py-3 text-[15px] text-foreground"
+              className="max-h-32 flex-1 rounded-3xl bg-surface px-4 py-3 text-[15px] text-foreground"
             />
             <Pressable
               onPress={handleSubmit}

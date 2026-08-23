@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { saveProfile } from "@/lib/daily";
 import { randomDemoProfile } from "@/lib/demo-profile";
+import { safeInternalPath } from "@/lib/safe-next";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>): { next?: string } =>
-    typeof search.next === "string" && search.next.startsWith("/") ? { next: search.next } : {},
+  validateSearch: (search: Record<string, unknown>): { next?: string } => ({
+    next: safeInternalPath(search.next as string | undefined),
+  }),
   head: () => ({
     meta: [
       { title: "Entrar en Peppers" },
@@ -157,12 +159,12 @@ function AuthPage() {
   };
 
   const field =
-    "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
+    "h-12 w-full rounded-2xl bg-muted px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
 
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-14">
       <div className="animate-rise">
-        <h1 className="font-display text-4xl">
+        <h1 className="font-title text-4xl font-semibold tracking-[-0.03em]">
           {mode === "in"
             ? "Bienvenido de vuelta"
             : mode === "up"
@@ -179,7 +181,7 @@ function AuthPage() {
 
         {sent ? (
           <div className="mt-8 space-y-3">
-            <div className="rounded-2xl border border-primary/30 bg-primary-soft px-4 py-4 text-sm">
+            <div className="rounded-2xl bg-primary-soft px-4 py-4 text-sm">
               {mode === "forgot"
                 ? "Te hemos enviado un correo con un enlace para restablecer tu contraseña. Ábrelo y crea una nueva."
                 : "Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar."}
@@ -270,7 +272,7 @@ function AuthPage() {
 
         <button
           onClick={google}
-          className="w-full rounded-full border border-input bg-surface py-4 text-sm font-medium text-foreground transition-transform active:scale-[0.98]"
+          className="w-full rounded-full bg-surface py-4 text-sm font-medium text-foreground transition-transform active:scale-[0.98]"
         >
           Continuar con Google
         </button>
@@ -278,7 +280,7 @@ function AuthPage() {
         <button
           onClick={demo}
           disabled={demoLoading}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-input bg-surface py-3.5 text-sm font-medium text-muted-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3.5 text-sm font-medium text-muted-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
         >
           <Shuffle className="h-4 w-4" />
           {demoLoading ? "Creando perfil..." : "Probar con un perfil aleatorio"}

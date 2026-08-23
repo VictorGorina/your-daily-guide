@@ -50,7 +50,7 @@ import {
 } from "../../lib/household-shared";
 import { eur, shoppingTotal } from "../../lib/plan-shared";
 
-const INPUT = "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground";
+const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 
 // La sincronización del plan compartido toca el plan del otro miembro con la
 // clave de servicio, así que va por /api/v1/* como en la web (el resto del CRUD
@@ -232,7 +232,7 @@ export default function Hogar() {
           <Text className="text-xs font-sans-medium text-muted-foreground">Ajustes</Text>
         </Pressable>
 
-        <Text className="mt-3 text-3xl font-display text-foreground">Tu hogar</Text>
+        <Text className="mt-3 font-heading text-3xl text-foreground">Tu hogar</Text>
         <Text className="mt-2 text-sm text-muted-foreground">
           Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder tu
           propio plan.
@@ -249,7 +249,7 @@ export default function Hogar() {
 
         {!household ? (
           <>
-            <View className="mt-6 gap-3 rounded-3xl border border-border bg-surface p-5">
+            <View className="mt-6 gap-3 rounded-3xl bg-surface p-5">
               <View className="flex-row items-center gap-2">
                 <Users size={16} color="#6dbe7b" />
                 <Text className="text-sm font-sans-semibold text-foreground">Crear un hogar</Text>
@@ -273,7 +273,7 @@ export default function Hogar() {
               </Pressable>
             </View>
 
-            <View className="mt-4 gap-3 rounded-3xl border border-border bg-surface p-5">
+            <View className="mt-4 gap-3 rounded-3xl bg-surface p-5">
               <Text className="text-sm font-sans-semibold text-foreground">
                 Unirme con un código
               </Text>
@@ -289,7 +289,7 @@ export default function Hogar() {
               <Pressable
                 onPress={() => join.mutate()}
                 disabled={join.isPending || code.trim().length < 4}
-                className="items-center rounded-full border border-input bg-surface py-3.5 active:opacity-80"
+                className="items-center rounded-full bg-secondary py-3.5 active:opacity-80"
                 style={join.isPending || code.trim().length < 4 ? { opacity: 0.6 } : undefined}
               >
                 <Text className="text-sm font-sans-medium text-foreground">
@@ -300,7 +300,7 @@ export default function Hogar() {
           </>
         ) : (
           <>
-            <View className="mt-6 gap-3 rounded-3xl border border-border bg-surface p-5">
+            <View className="mt-6 gap-3 rounded-3xl bg-surface p-5">
               <Text className="text-sm font-sans-semibold text-foreground">{household.name}</Text>
               <TextInput
                 key={`name-${household.id}`}
@@ -313,7 +313,7 @@ export default function Hogar() {
               />
               <Pressable
                 onPress={() => shareCode(household.invite_code)}
-                className="flex-row items-center justify-between rounded-2xl border border-dashed border-input bg-surface px-4 py-3 active:opacity-80"
+                className="flex-row items-center justify-between rounded-2xl bg-secondary px-4 py-3 active:opacity-80"
               >
                 <Text className="text-sm text-muted-foreground">Código de invitación</Text>
                 <View className="flex-row items-center gap-2">
@@ -331,7 +331,7 @@ export default function Hogar() {
               </Text>
             </View>
 
-            <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
+            <View className="mt-4 rounded-3xl bg-surface p-5">
               <Text className="text-sm font-sans-semibold text-foreground">
                 ¿Qué comidas compartís?
               </Text>
@@ -360,8 +360,8 @@ export default function Hogar() {
                                 prev ? { ...prev, [meal]: toggleDay(prev[meal], day) } : prev,
                               )
                             }
-                            className={`h-10 flex-1 items-center justify-center rounded-xl border active:opacity-80 ${
-                              active ? "border-primary bg-primary-soft" : "border-input bg-surface"
+                            className={`h-10 flex-1 items-center justify-center rounded-xl active:opacity-80 ${
+                              active ? "bg-primary-soft" : "bg-secondary"
                             }`}
                           >
                             <Text
@@ -391,7 +391,7 @@ export default function Hogar() {
               <Pressable
                 onPress={() => syncNow.mutate()}
                 disabled={syncNow.isPending}
-                className="mt-2 flex-row items-center justify-center gap-2 rounded-full border border-input bg-surface py-3 active:opacity-80"
+                className="mt-2 flex-row items-center justify-center gap-2 rounded-full bg-secondary py-3 active:opacity-80"
                 style={syncNow.isPending ? { opacity: 0.6 } : undefined}
               >
                 {syncNow.isPending ? (
@@ -405,7 +405,7 @@ export default function Hogar() {
               </Pressable>
             </View>
 
-            <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
+            <View className="mt-4 rounded-3xl bg-surface p-5">
               <View className="flex-row items-center gap-2">
                 <Target size={16} color="#6dbe7b" />
                 <Text className="text-sm font-sans-semibold text-foreground">
@@ -527,7 +527,7 @@ export default function Hogar() {
               ) : null}
             </View>
 
-            <View className="mt-4 rounded-3xl border border-border bg-surface p-5">
+            <View className="mt-4 rounded-3xl bg-surface p-5">
               <View className="flex-row items-center gap-2">
                 <Baby size={16} color="#6dbe7b" />
                 <Text className="text-sm font-sans-semibold text-foreground">Peques en casa</Text>
@@ -536,7 +536,7 @@ export default function Hogar() {
                 {state.data?.children.map((c) => (
                   <View
                     key={c.id}
-                    className="flex-row items-start gap-3 rounded-2xl border border-input bg-surface px-4 py-3"
+                    className="flex-row items-start gap-3 rounded-2xl bg-secondary px-4 py-3"
                   >
                     <View className="flex-1">
                       <Text className="text-sm font-sans-medium text-foreground">
@@ -599,7 +599,7 @@ export default function Hogar() {
                 <Pressable
                   onPress={() => newChild.mutate()}
                   disabled={newChild.isPending || !child.name.trim()}
-                  className="flex-row items-center justify-center gap-2 rounded-full border border-input bg-surface py-3 active:opacity-80"
+                  className="flex-row items-center justify-center gap-2 rounded-full bg-secondary py-3 active:opacity-80"
                   style={newChild.isPending || !child.name.trim() ? { opacity: 0.6 } : undefined}
                 >
                   <Plus size={16} color="#3e3d39" />
@@ -610,7 +610,7 @@ export default function Hogar() {
 
             <Pressable
               onPress={confirmLeave}
-              className="mt-6 flex-row items-center justify-center gap-2 rounded-full border border-input py-4 active:opacity-80"
+              className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-4 active:opacity-80"
             >
               <LogOut size={16} color="#83796c" />
               <Text className="text-sm font-sans-medium text-muted-foreground">

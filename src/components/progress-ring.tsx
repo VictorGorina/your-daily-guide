@@ -47,7 +47,7 @@ export function ProgressRing({
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="font-display text-4xl tabular-nums text-foreground">
+        <span className="font-title text-4xl font-semibold tabular-nums text-foreground">
           {Math.round(shown * 100)}%
         </span>
         <span className="mt-1 text-xs font-medium text-muted-foreground">{label}</span>

@@ -29,15 +29,18 @@ export function Sheet({
       onRequestClose={() => onOpenChange(false)}
     >
       <View className="flex-1 justify-end">
-        <Pressable className="absolute inset-0 bg-black/40" onPress={() => onOpenChange(false)} />
-        <View className="max-h-[88%] rounded-t-3xl border-t border-border bg-background">
+        <Pressable
+          className="absolute inset-0 bg-foreground/30"
+          onPress={() => onOpenChange(false)}
+        />
+        <View className="max-h-[88%] rounded-t-3xl bg-background">
           <SafeAreaView edges={["bottom"]}>
             <View className="items-center pt-3">
-              <View className="h-1 w-10 rounded-full bg-border" />
+              <View className="h-1 w-10 rounded-full bg-secondary" />
             </View>
             {title != null ? (
               <View className="gap-1 px-4 pt-4">
-                <Text className="text-lg font-sans-semibold text-foreground">{title}</Text>
+                <Text className="font-heading-medium text-lg text-foreground">{title}</Text>
                 {description ? (
                   <Text className="text-sm text-muted-foreground">{description}</Text>
                 ) : null}

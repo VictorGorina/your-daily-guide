@@ -9,24 +9,26 @@
 export type FoodCategory =
   "verdura" | "pescado" | "carne" | "pollo" | "pasta" | "fruta" | "lacteo" | "legumbre" | "otro";
 
+// Sin emoji (guideline §6/§9 "cero emoji en toda la app"): el color de
+// categoría es el propio dato, y cuando no hay dibujo de ingrediente propio
+// (dishAsset) el hueco se queda con solo el tinte, sin glifo de relleno.
 export const FOOD_CATEGORIES: Record<
   FoodCategory,
-  { label: string; accent: string; icon: string; asset: string | null }
+  { label: string; accent: string; asset: string | null }
 > = {
-  verdura: { label: "Verduras", accent: "#6DBE7B", icon: "🥬", asset: "/food/cat-verduras.png" },
-  pescado: { label: "Pescado", accent: "#4C9BD6", icon: "🐟", asset: "/food/icon-pescado.svg" },
-  carne: { label: "Carne", accent: "#E57373", icon: "🥩", asset: "/food/cat-carne.png" },
-  pollo: { label: "Aves", accent: "#F2C14E", icon: "🍗", asset: "/food/icon-aves.svg" },
-  pasta: { label: "Cereales", accent: "#D7B58A", icon: "🌾", asset: "/food/icon-cereales.svg" },
-  fruta: { label: "Fruta", accent: "#FF8A3D", icon: "🍊", asset: "/food/cat-fruta.png" },
-  lacteo: { label: "Lácteos", accent: "#F5E6C8", icon: "🥛", asset: "/food/cat-lacteos.png" },
+  verdura: { label: "Verduras", accent: "#6DBE7B", asset: "/food/cat-verduras.png" },
+  pescado: { label: "Pescado", accent: "#4C9BD6", asset: "/food/icon-pescado.svg" },
+  carne: { label: "Carne", accent: "#E57373", asset: "/food/cat-carne.png" },
+  pollo: { label: "Aves", accent: "#F2C14E", asset: "/food/icon-aves.svg" },
+  pasta: { label: "Cereales", accent: "#D7B58A", asset: "/food/icon-cereales.svg" },
+  fruta: { label: "Fruta", accent: "#FF8A3D", asset: "/food/cat-fruta.png" },
+  lacteo: { label: "Lácteos", accent: "#F5E6C8", asset: "/food/cat-lacteos.png" },
   legumbre: {
     label: "Legumbres",
     accent: "#9A7655",
-    icon: "🫘",
     asset: "/food/icon-legumbres.svg",
   },
-  otro: { label: "Otro", accent: "#83796C", icon: "🍽️", asset: null },
+  otro: { label: "Otro", accent: "#83796C", asset: null },
 };
 
 // ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
               <span
                 key={date}
                 aria-hidden
-                className="grid aspect-square place-items-center rounded-xl border border-dashed border-border/60 text-sm text-muted-foreground/40"
+                className="grid aspect-square place-items-center rounded-xl bg-muted/50 text-sm text-muted-foreground/40"
               >
                 {Number(date.slice(8, 10))}
               </span>
@@ -62,10 +62,8 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
             <button
               key={date}
               onClick={() => setSelected(date)}
-              className={`aspect-square rounded-xl border text-sm transition-all active:scale-95 ${
-                isWeekend
-                  ? "border-accent/40 bg-accent/30 text-accent-foreground"
-                  : "border-border bg-surface text-foreground"
+              className={`aspect-square rounded-xl text-sm transition-all active:scale-95 ${
+                isWeekend ? "bg-accent/60 text-accent-foreground" : "bg-secondary text-foreground"
               } ${date === today ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : ""} ${
                 date < today && !isWeekend ? "text-muted-foreground" : ""
               }`}
@@ -97,11 +95,7 @@ export function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: s
               </p>
               <div className="space-y-2">
                 {meals.map((meal) => (
-                  <div
-                    key={meal.slot}
-                    className="rounded-xl border border-border p-3"
-                    style={foodBgStyle(meal.idea)}
-                  >
+                  <div key={meal.slot} className="rounded-xl p-3" style={foodBgStyle(meal.idea)}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-semibold text-primary">{meal.moment}</span>
                       <FoodCategoryBadge dish={meal.idea} />

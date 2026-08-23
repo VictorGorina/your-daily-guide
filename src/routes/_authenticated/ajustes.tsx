@@ -188,10 +188,10 @@ function Ajustes() {
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
-      <h1 className="font-display text-3xl">Ajustes</h1>
+      <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">Ajustes</h1>
 
       {missing.length ? (
-        <div className="mt-4 flex items-start gap-2 rounded-2xl border border-primary/30 bg-primary-soft px-4 py-3 text-xs">
+        <div className="mt-4 flex items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-xs">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <span>
             Para que el progreso y los avisos funcionen bien, completa: {missing.join(", ")}.
@@ -314,10 +314,8 @@ function Ajustes() {
               <button
                 key={t}
                 onClick={() => save.mutate({ tone: t })}
-                className={`rounded-2xl border px-3 py-3 text-sm capitalize transition-colors ${
-                  profile?.tone === t
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-input bg-surface"
+                className={`rounded-2xl px-3 py-3 text-sm capitalize transition-colors ${
+                  profile?.tone === t ? "bg-foreground text-background" : "bg-secondary"
                 }`}
               >
                 {t}
@@ -380,30 +378,32 @@ function Ajustes() {
       </span>
       <section className="surface-card mt-2 p-5">
         <h2 className="text-sm font-semibold">Tema</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => {
-                applyTheme(t.id);
-                save.mutate({ theme: t.id });
-              }}
-              className={`rounded-2xl border p-3 text-left transition-colors ${
-                profile?.theme === t.id ? "border-primary" : "border-input"
-              }`}
-            >
-              <span className="flex gap-1">
-                {t.swatch.map((c) => (
-                  <span
-                    key={c}
-                    className="h-5 w-5 rounded-full border border-border"
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </span>
-              <span className="mt-2 block text-xs font-medium">{t.label}</span>
-            </button>
-          ))}
+        <p className="mt-1 text-xs text-muted-foreground">
+          El naranja de la marca es el mismo en los dos — solo cambia el fondo.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-full bg-secondary p-1">
+          {THEMES.map((t) => {
+            const active = (profile?.theme ?? "claro") === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  applyTheme(t.id);
+                  save.mutate({ theme: t.id });
+                }}
+                aria-pressed={active}
+                className={`flex items-center justify-center gap-2 rounded-full py-2 text-xs font-semibold transition-colors ${
+                  active ? "bg-background text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                <span
+                  className="h-3.5 w-3.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: t.swatch[2] }}
+                />
+                {t.label}
+              </button>
+            );
+          })}
         </div>
       </section>
 

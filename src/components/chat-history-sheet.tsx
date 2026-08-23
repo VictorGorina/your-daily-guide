@@ -58,12 +58,16 @@ export function ChatHistorySheet() {
                 <ChevronLeft className="size-3.5" aria-hidden />
                 Todos los días
               </button>
-              <SheetTitle className="font-display capitalize">{formatDay(day)}</SheetTitle>
+              <SheetTitle className="font-title font-semibold tracking-[-0.02em] capitalize">
+                {formatDay(day)}
+              </SheetTitle>
               <SheetDescription>Conversación guardada, solo lectura.</SheetDescription>
             </>
           ) : (
             <>
-              <SheetTitle className="font-display">Historial de conversaciones</SheetTitle>
+              <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
+                Historial de conversaciones
+              </SheetTitle>
               <SheetDescription>Revisa lo que hablasteis en días anteriores.</SheetDescription>
             </>
           )}
@@ -84,7 +88,7 @@ export function ChatHistorySheet() {
                     <button
                       type="button"
                       onClick={() => setDay(d.date)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-card/60 px-4 py-3 text-left"
+                      className="flex w-full items-center justify-between rounded-xl bg-secondary/60 px-4 py-3 text-left"
                     >
                       <span className="text-sm capitalize">{formatDay(d.date)}</span>
                       <span className="text-xs text-muted-foreground">{d.count} mensajes</span>

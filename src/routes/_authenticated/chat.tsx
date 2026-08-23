@@ -47,10 +47,10 @@ export const Route = createFileRoute("/_authenticated/chat")({
 });
 
 const QUICK_PROMPTS = [
-  "Ya he desayunado 🥣",
+  "Ya he desayunado",
   "He comido fuera de casa",
   "Me he saltado el plan",
-  "He salido a correr 🏃",
+  "He salido a correr",
   "Hoy tengo mucha hambre",
   "Me siento sin energía",
   "Ajusta el plan de mañana",
@@ -213,7 +213,7 @@ function ChatPage() {
     <main className="mx-auto flex h-[100dvh] max-w-lg flex-col px-4 pb-24 pt-10">
       <header className="flex items-end justify-between px-1 pb-3">
         <div>
-          <h1 className="font-display text-2xl">Tu coach</h1>
+          <h1 className="font-title text-2xl font-semibold tracking-[-0.02em]">Tu coach</h1>
           <p className="text-xs text-muted-foreground">
             Conversación de hoy · {new Date().toLocaleDateString("es-ES", { dateStyle: "long" })}
           </p>
@@ -265,7 +265,7 @@ function ChatPage() {
             type="button"
             disabled={busy}
             onClick={() => sendQuick(q)}
-            className="shrink-0 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
           >
             {q}
           </button>

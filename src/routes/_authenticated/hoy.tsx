@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Replace, X } from "lucide-react";
+import { Check, ChevronDown, PencilLine, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -27,7 +27,11 @@ import {
   type MealStatus,
 } from "@/lib/daily";
 
-import { generateDailyGuide, type MacroEstimate } from "@/lib/guide.functions";
+import {
+  generateDailyGuide,
+  type MacroEstimate,
+  type MealMacroEstimate,
+} from "@/lib/guide.functions";
 import { fetchHousehold } from "@/lib/household";
 import { sharedDays, type MealKey } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
@@ -209,12 +213,16 @@ function Hoy() {
   };
 
   useEffect(() => {
-    if (
-      today &&
-      !generating &&
-      (!today.guide || !today.guide.meals?.length || !today.guide.tips?.length)
-    )
-      void requestGuide();
+    if (!today || generating) return;
+    const g = today.guide;
+    // Si ya hay platos reales de hoy pero la guía guardada es de antes de que
+    // existiera la barra de macros (o el modelo no la rellenó, o es de antes
+    // de que la barra sumara por plato), regenera para rellenar `mealMacros`
+    // — si no, se queda sin barras para siempre: esta guía ya tiene
+    // `meals`/`tips`, así que la condición de abajo no la pillaría.
+    const missingMacros =
+      !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
+    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) void requestGuide();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id]);
 
@@ -251,6 +259,10 @@ function Hoy() {
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
   const habits = today?.habits ?? [];
   const doneCount = habits.filter((h) => h.done).length;
+  // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
+  // "comí distinto"), no el menú completo del día: así deshacer una comida
+  // la mueve, en vez de quedarse fija en un total del día entero.
+  const doneMacros = sumDoneMacros(guide?.mealMacros, habits);
 
   const quote = quoteOfTheDay();
   const dateLabel = new Date(`${today0}T00:00:00`)
@@ -325,8 +337,8 @@ function Hoy() {
         </div>
       </header>
 
-      {guide?.macroEstimate ? (
-        <MacroBars estimate={guide.macroEstimate} weightKg={profile?.current_weight_kg ?? null} />
+      {doneMacros ? (
+        <MacroBars estimate={doneMacros} weightKg={profile?.current_weight_kg ?? null} />
       ) : null}
 
       <section className="animate-rise mt-6">
@@ -375,7 +387,7 @@ function Hoy() {
                       className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-base"
                       style={{ backgroundColor: tint(cat.accent, 20) }}
                     >
-                      {dishAsset(idea) ? <DishImage dish={idea} size={40} /> : cat.icon}
+                      {dishAsset(idea) ? <DishImage dish={idea} size={40} /> : null}
                     </span>
 
                     <button
@@ -425,7 +437,7 @@ function Hoy() {
                             onClick={() => handleMealStatus(i, "distinto")}
                             className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
                           >
-                            <Replace className="h-[15px] w-[15px]" />
+                            <PencilLine className="h-[15px] w-[15px]" />
                           </button>
                           <button
                             type="button"
@@ -476,7 +488,7 @@ function Hoy() {
                   </div>
 
                   {isExpanded ? (
-                    <div className="animate-sheet-up mt-3 border-t border-foreground/10 pt-3">
+                    <div className="animate-sheet-up mt-3 pt-3">
                       {note ? (
                         <span className="mb-2 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
                           {note}
@@ -574,7 +586,7 @@ function Hoy() {
                     {guide.meals.map((m) => (
                       <div
                         key={m.moment}
-                        className="flex items-center gap-3 rounded-xl border border-border p-3"
+                        className="flex items-center gap-3 rounded-xl p-3"
                         style={foodBgStyle(m.idea)}
                       >
                         <DishImage dish={m.idea} size={36} />
@@ -670,11 +682,40 @@ function Hoy() {
 }
 
 /**
+ * Suma las estimaciones por plato (`mealMacros`) de las comidas que ya están
+ * marcadas como comidas ("comí esto" / "comí distinto"), para que la barra
+ * de Hoy refleje solo lo confirmado — no el menú del día entero de golpe.
+ * Deshacer una comida la resta de la suma, igual que el contador "x de y".
+ * null cuando la guía todavía no trae `mealMacros` (así el caller no muestra
+ * la sección en vez de enseñar una barra vacía por falta de datos).
+ */
+function sumDoneMacros(
+  mealMacros: MealMacroEstimate[] | null | undefined,
+  habits: DailyLog["habits"],
+): MacroEstimate | null {
+  if (!mealMacros?.length) return null;
+  const doneLabels = new Set(
+    habits.filter((h) => h.status === "plan" || h.status === "distinto").map((h) => h.label),
+  );
+  const totals: MacroEstimate = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 };
+  for (const m of mealMacros) {
+    if (!doneLabels.has(m.moment)) continue;
+    totals.kcal += m.kcal;
+    totals.protein_g += m.protein_g;
+    totals.carbs_g += m.carbs_g;
+    totals.fat_g += m.fat_g;
+    totals.fiber_g += m.fiber_g;
+  }
+  return totals;
+}
+
+/**
  * Referencia genérica (no personalizada por profesional alguno) para dibujar
- * la barra de cada macro: cuánto de ese objetivo cubren ya los platos de hoy.
- * La proteína sí se ajusta al peso (~1,2 g/kg, cifra habitual para población
- * general); carbohidratos, grasa y fibra usan un valor de referencia fijo.
- * Todo el bloque es orientativo — ver el aviso bajo la barra.
+ * la barra de cada macro: cuánto de ese objetivo cubren ya las comidas que
+ * marcaste como comidas hoy. La proteína sí se ajusta al peso (~1,2 g/kg,
+ * cifra habitual para población general); carbohidratos, grasa y fibra usan
+ * un valor de referencia fijo. Todo el bloque es orientativo — ver el aviso
+ * bajo la barra.
  */
 function macroTargets(weightKg: number | null) {
   const proteinTarget = Math.round(Math.min(200, Math.max(45, (weightKg ?? 70) * 1.2)));
@@ -715,7 +756,7 @@ function MacroBars({ estimate, weightKg }: { estimate: MacroEstimate; weightKg: 
         })}
       </div>
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
-        ~{estimate.kcal} kcal según tus platos de hoy: estimación orientativa, no un conteo
+        ~{estimate.kcal} kcal de lo que llevas comido hoy: estimación orientativa, no un conteo
         nutricional exacto.
       </p>
     </section>

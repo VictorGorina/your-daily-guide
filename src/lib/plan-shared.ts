@@ -73,8 +73,13 @@ export type ShoppingItem = {
   trip: number;
   /** Alimento fresco (poca vida útil). */
   perishable: boolean;
-  /** Marcado a mano por la persona: ya lo tiene en casa, no hace falta comprarlo. */
-  owned?: boolean;
+  /**
+   * Marcado a mano según de dónde ha salido: "fridge" si ya lo tenía en casa,
+   * "store" si lo ha comprado en el súper. Los dos significan que ya no hace
+   * falta comprarlo — solo cambia el origen, para saber qué icono resaltar.
+   * Sin valor: todavía pendiente, sin decidir.
+   */
+  owned?: "fridge" | "store";
 };
 export type ShoppingList = { category: string; items: ShoppingItem[] }[];
 
@@ -145,9 +150,11 @@ export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number
 };
 
 /**
- * Etiqueta legible de cada compra con los días que comprende (ej. "Compra 2 ·
- * días 8-14"), calculada a partir de la cobertura real del plan para que un
- * plan creado a media de mes muestre los días correctos.
+ * Etiqueta legible de cada tramo de ingredientes con los días que comprende
+ * (ej. "Ingredientes de la semana 2 de 4 · días 8-14"), calculada a partir de
+ * la cobertura real del plan para que un plan creado a media de mes muestre
+ * los días correctos. El "de N" deja claro, sobre todo con semanal/bisemanal,
+ * que cada tramo es una lista distinta y no un trozo de la misma.
  */
 export const tripLabel = (
   cadence: ShoppingCadence,
@@ -156,7 +163,10 @@ export const tripLabel = (
   trips = tripsOfCadence(cadence),
 ) => {
   const { from, to } = tripDayRange(coverage, trips, trip);
-  const prefix = cadence === "mensual" ? "Compra del mes" : `Compra ${trip + 1}`;
+  const prefix =
+    cadence === "mensual"
+      ? "Ingredientes del mes"
+      : `Ingredientes de la semana ${trip + 1} de ${trips}`;
   return `${prefix} · días ${from}-${to}`;
 };
 
@@ -194,34 +204,22 @@ export const groupByTrip = (shopping: ShoppingList | null | undefined) => {
   })).filter((t) => t.groups.length);
 };
 
-/**
- * Separa los grupos de una compra en lo que falta por comprar y lo que ya está
- * en casa, sin categorías vacías en ninguno de los dos lados. Así la pantalla
- * puede mostrar primero, y ordenado por categoría, lo pendiente para el súper,
- * y aparte lo ya marcado como comprado.
- */
-export const splitOwned = (groups: { category: string; items: ShoppingItem[] }[]) => ({
-  pending: groups
-    .map((g) => ({ category: g.category, items: g.items.filter((i) => !i.owned) }))
-    .filter((g) => g.items.length),
-  owned: groups
-    .map((g) => ({ category: g.category, items: g.items.filter((i) => i.owned) }))
-    .filter((g) => g.items.length),
-});
-
 const asItem = (raw: unknown): ShoppingItem | null => {
   const o = (raw ?? {}) as Record<string, unknown>;
   const name = String(o.name ?? "").trim();
   if (!name) return null;
   const price = Number(o.price_eur);
   const trip = Number(o.trip);
+  // Compatible con datos antiguos donde "owned" era un booleano sin origen:
+  // se trata como "fridge" para no perder la marca ya guardada.
+  const owned = o.owned === "store" ? "store" : o.owned ? "fridge" : undefined;
   return {
     name,
     qty: String(o.qty ?? "").trim(),
     price_eur: Number.isFinite(price) && price >= 0 ? Math.round(price * 100) / 100 : 0,
     trip: Number.isFinite(trip) && trip > 0 ? Math.min(Math.round(trip), 3) : 0,
     perishable: Boolean(o.perishable),
-    ...(o.owned ? { owned: true } : {}),
+    ...(owned ? { owned } : {}),
   };
 };
 
@@ -319,6 +317,22 @@ export const ownedTotal = (shopping: ShoppingList | null | undefined) =>
       0,
     ) * 100,
   ) / 100;
+
+/**
+ * Lo que de verdad queda por comprar: el total menos lo ya marcado (nevera o
+ * súper). Es el importe que se muestra junto a cada tramo para que se vea
+ * bajar según marcas ingredientes — tenerlo en la nevera ahorra ese dinero.
+ */
+export const pendingTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round((shoppingTotal(shopping) - ownedTotal(shopping)) * 100) / 100;
+
+/**
+ * Ordena los artículos con los pendientes primero: los ya marcados (nevera o
+ * comprados) bajan al final del grupo, así al auditar la nevera solo destacan
+ * arriba los que de verdad faltan por comprar.
+ */
+export const sortByPending = (items: ShoppingItem[]): ShoppingItem[] =>
+  [...items].sort((a, b) => Number(Boolean(a.owned)) - Number(Boolean(b.owned)));
 
 export const ingredientNames = (shopping: ShoppingList) =>
   shopping.flatMap((g) => g.items.map((i) => i.name)).join(", ");
@@ -605,7 +619,7 @@ export function coachPlanContext(
   };
 }
 
-/** Texto plano de la lista de la compra, listo para compartir o descargar. */
+/** Texto plano de los ingredientes del mes, listo para compartir o descargar. */
 export const shoppingToText = (
   shopping: ShoppingList | null | undefined,
   cadence: ShoppingCadence,
@@ -616,22 +630,40 @@ export const shoppingToText = (
     month: "long",
     year: "numeric",
   });
-  const lines = [`Lista de la compra · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
+  const lines = [`Ingredientes del mes · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
   const trips = tripCount(shopping);
   for (const trip of groupByTrip(shopping)) {
     lines.push(
-      `${tripLabel(cadence, trip.trip, coverage, trips)} — ${eur(shoppingTotal(trip.groups))}`,
+      `${tripLabel(cadence, trip.trip, coverage, trips)} — ${eur(pendingTotal(trip.groups))}`,
     );
     for (const group of trip.groups) {
       lines.push(`  ${group.category}`);
       for (const item of group.items) {
         const qty = item.qty ? ` (${item.qty})` : "";
-        const fresh = item.perishable ? " · fresco" : "";
-        lines.push(`   - ${item.name}${qty}${fresh} — ${eur(item.price_eur)}`);
+        lines.push(`   - ${item.name}${qty} — ${eur(item.price_eur)}`);
       }
     }
     lines.push("");
   }
   lines.push(`Total del mes: ${eur(shoppingTotal(shopping))}`);
+  return lines.join("\n");
+};
+
+/**
+ * Texto plano de un solo tramo de ingredientes, listo para compartir aparte —
+ * cada tramo es una lista distinta, así que compartirlo no manda todo el mes.
+ */
+export const tripToText = (
+  trip: { groups: { category: string; items: ShoppingItem[] }[] },
+  label: string,
+) => {
+  const lines = [`${label} — ${eur(pendingTotal(trip.groups))}`, ""];
+  for (const group of trip.groups) {
+    lines.push(group.category);
+    for (const item of group.items) {
+      const qty = item.qty ? ` (${item.qty})` : "";
+      lines.push(`  - ${item.name}${qty} — ${eur(item.price_eur)}`);
+    }
+  }
   return lines.join("\n");
 };

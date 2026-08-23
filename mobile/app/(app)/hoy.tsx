@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { Check, CheckCircle2, ChevronDown, MessageCircle, RefreshCw, X } from "lucide-react-native";
+import { Activity, Check, ChevronDown, MessageCircle, PencilLine, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { DishRecipe } from "../../components/dish-recipe";
+import { DishImage } from "../../components/food-category-bg";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
 import { WeekStrip } from "../../components/week-strip";
-import { classifyDish, FOOD_CATEGORIES } from "../../lib/food-categories";
+import { classifyDish, dishAsset, FOOD_CATEGORIES } from "../../lib/food-categories";
 import { apiPost } from "../../lib/api";
 import {
   ensureTodayLog,
@@ -23,6 +25,8 @@ import {
   weeklyTrendFrom,
   type DailyGuide,
   type DailyLog,
+  type MacroEstimate,
+  type MealMacroEstimate,
   type MealStatus,
 } from "../../lib/daily";
 import { fetchHousehold } from "../../lib/household";
@@ -80,7 +84,6 @@ export default function Hoy() {
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
   const autoPlanTriedRef = useRef(false);
@@ -166,7 +169,9 @@ export default function Hoy() {
   const requestGuide = async () => {
     setGenerating(true);
     try {
-      const g = await apiPost<DailyGuide>("guide");
+      const g = await apiPost<DailyGuide>("guide", {
+        meals: todayMeals.filter((m) => m.idea).map((m) => ({ moment: m.moment, idea: m.idea })),
+      });
       await updateTodayLog({ guide: g });
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
@@ -177,12 +182,16 @@ export default function Hoy() {
   };
 
   useEffect(() => {
-    if (
-      today &&
-      !generating &&
-      (!today.guide || !today.guide.meals?.length || !today.guide.tips?.length)
-    )
-      void requestGuide();
+    if (!today || generating) return;
+    const g = today.guide;
+    // Si ya hay platos reales de hoy pero la guía guardada es de antes de que
+    // existiera la barra de macros (o el modelo no la rellenó, o es de antes
+    // de que la barra sumara por plato), regenera para rellenar `mealMacros`
+    // — si no, se queda sin barras para siempre: esta guía ya tiene
+    // `meals`/`tips`, así que la condición de abajo no la pillaría.
+    const missingMacros =
+      !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
+    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) void requestGuide();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id]);
 
@@ -212,6 +221,10 @@ export default function Hoy() {
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
   const habits = today?.habits ?? [];
   const doneCount = habits.filter((h) => h.done).length;
+  // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
+  // "comí distinto"), no el menú completo del día: así deshacer una comida
+  // la mueve, en vez de quedarse fija en un total del día entero.
+  const doneMacros = sumDoneMacros(guide?.mealMacros, habits);
   const quote = quoteOfTheDay();
 
   const setMealStatus = (index: number, status: MealStatus) => {
@@ -236,7 +249,7 @@ export default function Hoy() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-4">
+      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-52 pt-4">
         {/* ── Header: fecha + "Hoy" + impulso ── */}
         <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
@@ -267,7 +280,31 @@ export default function Hoy() {
         </View>
 
         {/* ── Barras de macros ── */}
-        {guide?.macros ? <MacroBars macros={guide.macros} /> : null}
+        {doneMacros ? (
+          <MacroBars estimate={doneMacros} weightKg={profile?.current_weight_kg ?? null} />
+        ) : null}
+
+        {/* ── Guía del coach: solo el rango de calorías del día, sin el resto
+            (intro, macros en texto, platos sugeridos, consejos) — se quería
+            menos información, no una tarjeta expandible. ── */}
+        <View className="mt-6 flex-row items-center gap-2.5 rounded-2xl bg-surface px-4 py-3.5">
+          <View
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: "#ff8a3d" }}
+          />
+          <Text className="min-w-0 flex-1 font-body-medium text-xs text-muted-foreground">
+            {generating || (!guide && todayQ.isLoading)
+              ? "Preparando tu guía del día..."
+              : guide
+                ? `Guía del coach · ${guide.calories}`
+                : "Guía del coach"}
+          </Text>
+          {!guide && !generating && !todayQ.isLoading ? (
+            <Pressable onPress={requestGuide}>
+              <Text className="font-body-medium text-xs text-primary">Generar</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         {/* ── Comidas de hoy ── */}
         <View className="mt-6">
@@ -314,12 +351,13 @@ export default function Hoy() {
                       columnGap: 12,
                     }}
                   >
-                    {/* Icono de categoría */}
+                    {/* Icono de categoría: ilustración SVG del ingrediente si hay
+                        plato reconocible, si no el emoji de la categoría. */}
                     <View
-                      className="h-10 w-10 items-center justify-center rounded-full"
+                      className="h-10 w-10 items-center justify-center overflow-hidden rounded-full"
                       style={{ backgroundColor: tintBg(accent, 20) }}
                     >
-                      <Text style={{ fontSize: 20 }}>{catInfo.icon}</Text>
+                      {dishAsset(dish) ? <DishImage dish={dish} size={40} /> : null}
                     </View>
 
                     {/* Info */}
@@ -355,6 +393,7 @@ export default function Hoy() {
                       <Text className="font-mono-medium mt-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">
                         {catInfo.label}
                       </Text>
+                      {planned?.idea ? <DishRecipe dish={dish} month={month} /> : null}
                     </View>
 
                     {/* Acciones */}
@@ -365,13 +404,7 @@ export default function Hoy() {
                             onPress={() => handleMealStatus(i, "distinto")}
                             className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
                           >
-                            <RefreshCw size={14} color="#83796c" />
-                          </Pressable>
-                          <Pressable
-                            onPress={() => setMealStatus(i, "salteo")}
-                            className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
-                          >
-                            <X size={14} color="#83796c" strokeWidth={2.2} />
+                            <PencilLine size={14} color="#83796c" />
                           </Pressable>
                           <Pressable
                             onPress={() => setMealStatus(i, "plan")}
@@ -405,89 +438,18 @@ export default function Hoy() {
           )}
         </View>
 
-        {/* ── Guía del coach ── */}
-        <View className="mt-4">
-          <Pressable
-            onPress={() => setGuideOpen((o) => !o)}
-            className="flex-row items-center justify-between rounded-2xl bg-surface px-4 py-3.5 active:bg-accent"
-          >
-            <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
-              <View
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ backgroundColor: "#ff8a3d" }}
-              />
-              <Text
-                className="min-w-0 flex-1 font-body-medium text-xs text-muted-foreground"
-                numberOfLines={1}
-              >
-                Guía del coach{guide?.calories ? ` · ${guide.calories}` : ""}
-              </Text>
-            </View>
-            <Text className="ml-2 shrink-0 font-mono-medium text-[11px] text-muted-foreground">
-              {guideOpen ? "ocultar" : "ver"}
-            </Text>
-          </Pressable>
-          {guideOpen ? (
-            <View className="mt-2 rounded-3xl border border-border bg-surface p-5">
-              {generating || (!guide && todayQ.isLoading) ? (
-                <Text className="font-body text-sm text-muted-foreground">
-                  Preparando tu guía del día...
-                </Text>
-              ) : guide ? (
-                <View className="gap-3">
-                  <Text className="font-body text-sm leading-relaxed text-foreground">
-                    {guide.intro}
-                  </Text>
-                  <View className="gap-2">
-                    <Field label="Energía" value={guide.calories} />
-                    <Field label="Macros" value={guide.macros} />
-                  </View>
-                  {guide.meals?.length ? (
-                    <View className="gap-2 pt-1">
-                      <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
-                        Platos sugeridos
-                      </Text>
-                      {guide.meals.map((m) => (
-                        <View
-                          key={m.moment}
-                          className="flex-row gap-3 rounded-xl border border-border bg-surface p-3"
-                        >
-                          <Text className="font-body-semibold text-xs text-primary">
-                            {m.moment}
-                          </Text>
-                          <Text className="font-body flex-1 text-sm text-foreground">{m.idea}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                  {guide.tips?.length ? (
-                    <View className="gap-1.5 pt-1">
-                      <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
-                        Consejos de nutrición
-                      </Text>
-                      {guide.tips.map((t) => (
-                        <View key={t} className="flex-row gap-2">
-                          <View className="mt-2 h-1.5 w-1.5 rounded-full bg-primary" />
-                          <Text className="font-body flex-1 text-sm text-foreground">{t}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              ) : (
-                <Pressable onPress={requestGuide}>
-                  <Text className="font-body-medium text-sm text-primary">Generar guía</Text>
-                </Pressable>
-              )}
-            </View>
-          ) : null}
-        </View>
+        {/* ── Registrar deporte: pegado encima de la tira de la semana ── */}
+        <Pressable
+          onPress={() => setActivityOpen(true)}
+          className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
+        >
+          <Activity size={16} color="#3e3d39" />
+          <Text className="font-body-semibold text-sm text-foreground">Registrar deporte</Text>
+        </Pressable>
 
         {/* ── Tira de la semana ── */}
         <View className="mt-6">
           <WeekStrip
-            done={doneCount}
-            total={habits.length}
             selected={openDay}
             onSelect={(d) => setOpenDay((prev) => (prev === d ? null : d))}
             logs={logsQ.data ?? []}
@@ -581,66 +543,81 @@ export default function Hoy() {
 }
 
 // ── Barra de macros orientativa ──
-function MacroBars({ macros }: { macros: string }) {
-  // Parsear string tipo "Proteínas: 72g · Carbohidratos: 160g · Grasas: 48g · Fibra: 22g"
-  const parsed = parseMacros(macros);
-  if (!parsed.length) return null;
-
-  return (
-    <View className="mt-5 flex-row gap-2.5">
-      {parsed.map((m) => (
-        <View key={m.key} className="flex-1">
-          <View className="h-[5px] overflow-hidden rounded-full bg-secondary">
-            <View
-              className="h-full rounded-full"
-              style={{ width: `${m.pct}%`, backgroundColor: m.color }}
-            />
-          </View>
-          <Text className="font-mono-medium mt-1.5 text-[9.5px] uppercase tracking-wider text-muted-foreground">
-            {m.key}
-          </Text>
-          <Text className="font-mono-medium mt-0.5 text-[11px] text-foreground">{m.val}</Text>
-        </View>
-      ))}
-    </View>
+/**
+ * Suma las estimaciones por plato (`mealMacros`) de las comidas que ya están
+ * marcadas como comidas ("comí esto" / "comí distinto"), para que la barra
+ * de Hoy refleje solo lo confirmado — no el menú del día entero de golpe.
+ * Deshacer una comida la resta de la suma, igual que el contador "x de y".
+ * null cuando la guía todavía no trae `mealMacros` (así el caller no muestra
+ * la sección en vez de enseñar una barra vacía por falta de datos). Mismo
+ * criterio que la web (src/routes/_authenticated/hoy.tsx).
+ */
+function sumDoneMacros(
+  mealMacros: MealMacroEstimate[] | null | undefined,
+  habits: DailyLog["habits"],
+): MacroEstimate | null {
+  if (!mealMacros?.length) return null;
+  const doneLabels = new Set(
+    habits.filter((h) => h.status === "plan" || h.status === "distinto").map((h) => h.label),
   );
+  const totals: MacroEstimate = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 };
+  for (const m of mealMacros) {
+    if (!doneLabels.has(m.moment)) continue;
+    totals.kcal += m.kcal;
+    totals.protein_g += m.protein_g;
+    totals.carbs_g += m.carbs_g;
+    totals.fat_g += m.fat_g;
+    totals.fiber_g += m.fiber_g;
+  }
+  return totals;
 }
 
-const MACRO_COLORS: Record<string, string> = {
-  prot: "#6DBE7B",
-  carb: "#FF8A3D",
-  gras: "#F2C14E",
-  fibra: "#6DBE7B",
-};
+// Mismo criterio que la web (src/routes/_authenticated/hoy.tsx): objetivos de
+// referencia genéricos, no personalizados por ningún profesional — la
+// proteína sí se ajusta al peso (~1,2 g/kg), el resto usa un valor fijo.
+function macroTargets(weightKg: number | null) {
+  const proteinTarget = Math.round(Math.min(200, Math.max(45, (weightKg ?? 70) * 1.2)));
+  return { protein_g: proteinTarget, carbs_g: 250, fat_g: 70, fiber_g: 30 };
+}
 
-// Targets orientativos para porcentaje visual
-const MACRO_TARGETS: Record<string, number> = {
-  prot: 120,
-  carb: 200,
-  gras: 70,
-  fibra: 30,
-};
+const MACRO_BAR_ITEMS = [
+  { key: "protein_g", label: "prot", color: "#6DBE7B" },
+  { key: "carbs_g", label: "carb", color: "#FF8A3D" },
+  { key: "fat_g", label: "gras", color: "#F2C14E" },
+  { key: "fiber_g", label: "fibra", color: "#4C9BD6" },
+] as const;
 
-function parseMacros(raw: string): { key: string; val: string; pct: number; color: string }[] {
-  const result: { key: string; val: string; pct: number; color: string }[] = [];
-  // Match patterns like "Proteínas: 72g" or "72 g proteínas"
-  const patterns: [RegExp, string][] = [
-    [/prote[ií]n\w*[:\s]+(\d+)\s*g/i, "prot"],
-    [/carbo\w*[:\s]+(\d+)\s*g/i, "carb"],
-    [/gras\w*[:\s]+(\d+)\s*g/i, "gras"],
-    [/fibra[:\s]+(\d+)\s*g/i, "fibra"],
-  ];
-  for (const [re, key] of patterns) {
-    const m = raw.match(re);
-    if (m) {
-      const val = `${m[1]} g`;
-      const num = parseInt(m[1]!, 10);
-      const target = MACRO_TARGETS[key] ?? 100;
-      const pct = Math.min(100, Math.round((num / target) * 100));
-      result.push({ key, val, pct, color: MACRO_COLORS[key] ?? "#83796c" });
-    }
-  }
-  return result;
+function MacroBars({ estimate, weightKg }: { estimate: MacroEstimate; weightKg: number | null }) {
+  const targets = macroTargets(weightKg);
+
+  return (
+    <View className="mt-5">
+      <View className="flex-row gap-2.5">
+        {MACRO_BAR_ITEMS.map((it) => {
+          const value = estimate[it.key];
+          const pct = Math.min(100, Math.round((value / targets[it.key]) * 100));
+          return (
+            <View key={it.key} className="flex-1">
+              <View className="h-[5px] overflow-hidden rounded-full bg-secondary">
+                <View
+                  className="h-full rounded-full"
+                  style={{ width: `${pct}%`, backgroundColor: it.color }}
+                />
+              </View>
+              <Text className="font-mono-medium mt-1.5 text-[9.5px] uppercase tracking-wider text-muted-foreground">
+                {it.label}
+              </Text>
+              <Text className="font-mono-medium mt-0.5 text-[11px] text-foreground">{value} g</Text>
+            </View>
+          );
+        })}
+      </View>
+      <Text className="font-body mt-2.5 text-[10.5px] text-muted-foreground">
+        ~{estimate.kcal} kcal de lo que llevas comido hoy: estimación orientativa, no un conteo
+        nutricional exacto.
+      </Text>
+    </View>
+  );
 }
 
 // ── Menú de un día expandido ──
@@ -653,7 +630,7 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   });
 
   return (
-    <View className="mt-3 rounded-3xl border border-border bg-surface p-4">
+    <View className="mt-3 rounded-3xl bg-surface p-4">
       <View className="flex-row items-center gap-2">
         <ChevronDown size={16} color="#6dbe7b" />
         <Text className="font-body-semibold text-sm capitalize text-foreground">{label}</Text>
@@ -661,7 +638,13 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
       {meals.length ? (
         <View className="mt-3 gap-2">
           {meals.map((m) => (
-            <Field key={m.slot} label={m.moment} value={m.idea} note={offListNote(m.off)} />
+            <Field
+              key={m.slot}
+              label={m.moment}
+              value={m.idea}
+              note={offListNote(m.off)}
+              recipeMonth={date.slice(0, 7)}
+            />
           ))}
         </View>
       ) : (
@@ -673,7 +656,18 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   );
 }
 
-function Field({ label, value, note }: { label: string; value: string; note?: string | null }) {
+function Field({
+  label,
+  value,
+  note,
+  recipeMonth,
+}: {
+  label: string;
+  value: string;
+  note?: string | null;
+  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes. */
+  recipeMonth?: string;
+}) {
   return (
     <View className="rounded-xl bg-secondary/60 p-3">
       <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
@@ -685,6 +679,7 @@ function Field({ label, value, note }: { label: string; value: string; note?: st
           <Text className="font-body-medium text-[11px] text-foreground">{note}</Text>
         </View>
       ) : null}
+      {recipeMonth ? <DishRecipe dish={value} month={recipeMonth} /> : null}
     </View>
   );
 }

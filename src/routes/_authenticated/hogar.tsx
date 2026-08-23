@@ -63,7 +63,7 @@ export const Route = createFileRoute("/_authenticated/hogar")({
 });
 
 const input =
-  "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
+  "h-12 w-full rounded-2xl bg-muted px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
 
 function Hogar() {
   const qc = useQueryClient();
@@ -210,7 +210,7 @@ function Hogar() {
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
-      <h1 className="font-display text-3xl">Tu hogar</h1>
+      <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">Tu hogar</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder tu
         propio plan.
@@ -257,7 +257,7 @@ function Hogar() {
             <button
               onClick={() => join.mutate()}
               disabled={join.isPending || code.trim().length < 4}
-              className="w-full rounded-full border border-input bg-surface py-3.5 text-sm font-medium disabled:opacity-60"
+              className="w-full rounded-full bg-secondary py-3.5 text-sm font-medium disabled:opacity-60"
             >
               {join.isPending ? "Uniéndome..." : "Unirme al hogar"}
             </button>
@@ -270,7 +270,7 @@ function Hogar() {
               Tu familia
             </span>
             <input
-              className="mt-1 w-full border-b border-dashed border-input bg-transparent pb-2 font-display text-3xl outline-none focus:border-primary"
+              className="mt-1 w-full rounded-2xl bg-muted px-3.5 py-2 font-title text-3xl font-semibold tracking-[-0.02em] outline-none"
               defaultValue={household.name}
               onBlur={(e) => {
                 void renameHousehold(household.id, e.target.value).then(refresh);
@@ -287,9 +287,9 @@ function Hogar() {
                 return (
                   <div
                     key={m.user_id}
-                    className="flex items-center gap-3 rounded-2xl border border-input bg-surface px-4 py-3 text-sm"
+                    className="flex items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-sm"
                   >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-display text-sm text-primary">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-title text-sm font-semibold text-primary">
                       {initial}
                     </span>
                     <span className="flex-1 font-medium">
@@ -330,10 +330,10 @@ function Hogar() {
                               prev ? { ...prev, [meal]: toggleDay(prev[meal], day) } : prev,
                             )
                           }
-                          className={`h-10 rounded-xl border text-xs font-medium transition-colors ${
+                          className={`h-10 rounded-xl text-xs font-medium transition-colors ${
                             active
-                              ? "border-primary bg-primary-soft text-primary"
-                              : "border-input bg-surface text-muted-foreground"
+                              ? "bg-primary-soft text-primary"
+                              : "bg-secondary text-muted-foreground"
                           }`}
                         >
                           {label}
@@ -354,7 +354,7 @@ function Hogar() {
             <button
               onClick={() => syncNow.mutate()}
               disabled={syncNow.isPending}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border border-input bg-surface py-3 text-sm font-medium disabled:opacity-60"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium disabled:opacity-60"
             >
               <RefreshCw className={`h-4 w-4 ${syncNow.isPending ? "animate-spin" : ""}`} />
               Sincronizar el plan del mes
@@ -381,7 +381,7 @@ function Hogar() {
                   key={key}
                   onClick={() => setGoalType(key)}
                   className={`rounded-full py-2 text-xs font-medium transition-colors ${
-                    goalType === key ? "bg-surface text-primary shadow-sm" : "text-muted-foreground"
+                    goalType === key ? "bg-surface text-primary" : "text-muted-foreground"
                   }`}
                 >
                   {label}
@@ -434,7 +434,7 @@ function Hogar() {
                     Compra de este mes vs. objetivo del hogar
                   </p>
                   <span
-                    className={`font-display text-lg tabular-nums ${
+                    className={`font-title text-lg font-semibold tabular-nums ${
                       monthSpend > household.goal_budget_eur ? "text-destructive" : "text-primary"
                     }`}
                   >
@@ -481,7 +481,7 @@ function Hogar() {
               {state.data?.children.map((c) => (
                 <div
                   key={c.id}
-                  className="flex items-start gap-3 rounded-2xl border border-input bg-surface px-4 py-3 text-sm"
+                  className="flex items-start gap-3 rounded-2xl bg-secondary px-4 py-3 text-sm"
                 >
                   <span className="flex-1">
                     <span className="block font-medium">
@@ -535,7 +535,7 @@ function Hogar() {
               <button
                 onClick={() => newChild.mutate()}
                 disabled={newChild.isPending || !child.name.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-full border border-input bg-surface py-3 text-sm font-medium disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium disabled:opacity-60"
               >
                 <Plus className="h-4 w-4" /> Añadir peque
               </button>
@@ -549,7 +549,7 @@ function Hogar() {
                 void navigator.clipboard?.writeText(household.invite_code);
                 toast.success("Código copiado");
               }}
-              className="flex w-full items-center justify-between rounded-2xl border border-dashed border-input bg-surface px-4 py-3 text-sm"
+              className="flex w-full items-center justify-between rounded-2xl bg-secondary px-4 py-3 text-sm"
             >
               <span className="text-muted-foreground">Código de invitación</span>
               <span className="flex items-center gap-2 font-mono text-base tracking-widest">
@@ -563,7 +563,7 @@ function Hogar() {
 
           <button
             onClick={() => leave.mutate()}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full border border-input py-4 text-sm font-medium text-muted-foreground"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground"
           >
             <LogOut className="h-4 w-4" /> Salir del hogar
           </button>

@@ -41,10 +41,8 @@ const EXCESS_PRESETS = [
 ];
 
 function chipClass(active: boolean) {
-  return `rounded-full border px-3 py-1.5 text-xs transition-colors ${
-    active
-      ? "border-primary bg-primary text-primary-foreground"
-      : "border-border/70 bg-card/70 text-muted-foreground"
+  return `rounded-full px-3 py-1.5 text-xs transition-colors ${
+    active ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
   }`;
 }
 
@@ -163,7 +161,9 @@ export function GuidedLogSheet({
 
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
-          <SheetTitle className="font-display">Registro guiado</SheetTitle>
+          <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
+            Registro guiado
+          </SheetTitle>
           <SheetDescription>
             Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan.
           </SheetDescription>
@@ -175,10 +175,10 @@ export function GuidedLogSheet({
             <button
               type="button"
               onClick={() => setMode("actividad")}
-              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
                 mode === "actividad"
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border/70 text-muted-foreground"
+                  ? "bg-primary/10 text-foreground"
+                  : "bg-secondary text-muted-foreground"
               }`}
             >
               <Activity className="size-4" aria-hidden />
@@ -187,10 +187,10 @@ export function GuidedLogSheet({
             <button
               type="button"
               onClick={() => setMode("exceso")}
-              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
                 mode === "exceso"
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border/70 text-muted-foreground"
+                  ? "bg-primary/10 text-foreground"
+                  : "bg-secondary text-muted-foreground"
               }`}
             >
               <UtensilsCrossed className="size-4" aria-hidden />

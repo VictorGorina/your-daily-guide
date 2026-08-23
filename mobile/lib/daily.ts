@@ -50,10 +50,26 @@ export type Profile = {
   onboarding_completed: boolean;
 };
 
+export type MacroEstimate = {
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+};
+
+/** Estimación de macros de un plato concreto de hoy — ver `mealMacros` abajo. */
+export type MealMacroEstimate = MacroEstimate & { moment: string };
+
 export type DailyGuide = {
   intro: string;
   calories: string;
   macros: string;
+  /** null cuando aún no hay platos reales de hoy (sin plan) de los que partir. */
+  macroEstimate?: MacroEstimate | null;
+  /** Estimación por plato de hoy, para sumar solo lo ya marcado como comido
+   * (ver `MacroBars` en Hoy) en vez de todo el menú del día de golpe. */
+  mealMacros?: MealMacroEstimate[] | null;
   behaviors: string[];
   meals?: { moment: string; idea: string }[];
   tips?: string[];

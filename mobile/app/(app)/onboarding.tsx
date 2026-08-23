@@ -726,7 +726,7 @@ export default function Onboarding() {
             </Text>
 
             <ScrollView className="mt-5 flex-1" contentContainerClassName="gap-5 pb-4">
-              <View className="gap-3 rounded-3xl border border-border bg-surface p-4">
+              <View className="gap-3 rounded-3xl bg-surface p-4">
                 <Text className="text-sm font-sans-medium text-foreground">Datos clave</Text>
                 {KEY_FIELDS.map((key) => (
                   <View key={key}>
@@ -744,7 +744,7 @@ export default function Onboarding() {
                       keyboardType={GAP_LABEL[key].type === "number" ? "decimal-pad" : "default"}
                       placeholder={GAP_LABEL[key].type === "time" ? "HH:MM" : ""}
                       placeholderTextColor="#83796c"
-                      className="mt-1 h-12 rounded-2xl border border-input bg-background px-4 text-sm text-foreground"
+                      className="mt-1 h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
                     />
                     <Text className="mt-1 text-[11px] text-muted-foreground">
                       {GAP_LABEL[key].help}
@@ -759,7 +759,7 @@ export default function Onboarding() {
                     {s.title}
                   </Text>
                   {s.items.map((a) => (
-                    <View key={a.key} className="rounded-3xl border border-border bg-surface p-4">
+                    <View key={a.key} className="rounded-3xl bg-surface p-4">
                       <Text className="text-xs leading-relaxed text-muted-foreground">{a.q}</Text>
                       {editing === a.key ? (
                         <View className="mt-2 gap-2">
@@ -773,7 +773,7 @@ export default function Onboarding() {
                               if (a.q === BIRTHDATE_Q.q) setDob(parseDatePretty(t));
                               setDirty(true);
                             }}
-                            className="min-h-[72px] rounded-2xl border border-input bg-background px-3.5 py-2.5 text-sm text-foreground"
+                            className="min-h-[72px] rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-foreground"
                             textAlignVertical="top"
                           />
                           <Pressable
@@ -863,7 +863,7 @@ export default function Onboarding() {
               >
                 <View
                   className={`max-w-[85%] rounded-3xl px-4 py-3 ${
-                    t.role === "me" ? "bg-primary" : "border border-border bg-surface"
+                    t.role === "me" ? "bg-primary" : "bg-surface"
                   }`}
                 >
                   <Text
@@ -886,8 +886,8 @@ export default function Onboarding() {
                   <Pressable
                     key={c}
                     onPress={() => toggleChip(c)}
-                    className={`rounded-full border px-3.5 py-2 active:opacity-80 ${
-                      active ? "border-primary bg-primary" : "border-input bg-surface"
+                    className={`rounded-full px-3.5 py-2 active:opacity-80 ${
+                      active ? "bg-foreground" : "bg-surface"
                     }`}
                   >
                     <Text
@@ -904,7 +904,7 @@ export default function Onboarding() {
           ) : null}
 
           {error && !done ? (
-            <View className="mb-2 flex-row items-start gap-2 rounded-2xl border border-primary/30 bg-primary-soft px-3.5 py-2.5">
+            <View className="mb-2 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-3.5 py-2.5">
               <Info size={14} color="#6dbe7b" />
               <Text className="flex-1 text-xs text-foreground">{error}</Text>
             </View>
@@ -920,7 +920,7 @@ export default function Onboarding() {
               </Text>
             </Pressable>
           ) : screenDone ? (
-            <View className="mb-2 gap-3 rounded-3xl border border-border bg-surface p-4">
+            <View className="mb-2 gap-3 rounded-3xl bg-surface p-4">
               <Text className="text-sm text-muted-foreground">
                 Perfecto, ya tengo {SCREENS[screen]!.subtitle.toLowerCase()}. Seguimos con{" "}
                 <Text className="font-sans-medium text-foreground">
@@ -939,7 +939,7 @@ export default function Onboarding() {
               </Pressable>
             </View>
           ) : (
-            <View className="mb-2 rounded-3xl border border-input bg-surface p-2">
+            <View className="mb-2 rounded-3xl bg-surface p-2">
               <TextInput
                 editable={!saving}
                 value={value}
@@ -1064,7 +1064,7 @@ function PlanGeneratingScreen() {
       </View>
 
       <View className="items-center gap-2.5">
-        <Text className="text-xl font-display text-foreground">Estoy preparando tu plan</Text>
+        <Text className="font-heading text-xl text-foreground">Estoy preparando tu plan</Text>
         <Text className="min-h-[20px] text-center text-sm text-muted-foreground">
           {GENERATING_MESSAGES[i]}
         </Text>

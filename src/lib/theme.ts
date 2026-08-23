@@ -1,24 +1,29 @@
+// Solo dos temas: claro y oscuro. El acento naranja es fijo en ambos (§2/§9
+// del guideline: "un solo naranja por pantalla" — no hay selector de acento).
 export const THEMES = [
-  { id: "peppers", label: "Peppers verde", swatch: ["#F3F1ED", "#EAE6DD", "#6DBE7B"] },
-  { id: "mostaza", label: "Mostaza dorado", swatch: ["#F3F1ED", "#EAE6DD", "#F2C14E"] },
-  { id: "naranja", label: "Naranja cálido", swatch: ["#F3F1ED", "#EAE6DD", "#FF8A3D"] },
-  { id: "noche", label: "Noche serena", swatch: ["#24221F", "#2C2A26", "#7FCB8D"] },
+  { id: "claro", label: "Claro", swatch: ["#F3F1ED", "#EAE6DD", "#FF8A3D"] },
+  { id: "oscuro", label: "Oscuro", swatch: ["#24221F", "#2C2A26", "#FF9D5C"] },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];
 
-// Migraciones de nombres de tema de versiones anteriores de la app (Senda).
+// Migraciones de nombres de tema de versiones anteriores (Senda, y el
+// selector de 4 acentos que hubo antes de converger a solo claro/oscuro).
 const LEGACY_MIGRATIONS: Record<string, ThemeId> = {
-  niebla: "peppers",
-  senda: "peppers",
-  salvia: "mostaza",
-  arena: "naranja",
+  niebla: "claro",
+  senda: "claro",
+  salvia: "claro",
+  arena: "claro",
+  peppers: "claro",
+  mostaza: "claro",
+  naranja: "claro",
+  noche: "oscuro",
 };
 
 function migrate(id: string | null | undefined): ThemeId {
-  if (!id) return "peppers";
+  if (!id) return "claro";
   const mapped = LEGACY_MIGRATIONS[id] ?? id;
-  return THEMES.some((t) => t.id === mapped) ? (mapped as ThemeId) : "peppers";
+  return THEMES.some((t) => t.id === mapped) ? (mapped as ThemeId) : "claro";
 }
 
 export function applyTheme(theme: string | null | undefined) {
@@ -33,11 +38,18 @@ export function applyTheme(theme: string | null | undefined) {
 }
 
 export function storedTheme(): ThemeId {
-  if (typeof window === "undefined") return "peppers";
+  if (typeof window === "undefined") return "claro";
   try {
     const v = localStorage.getItem("senda-theme") ?? localStorage.getItem("dg-theme");
     return migrate(v);
   } catch {
-    return "peppers";
+    return "claro";
   }
+}
+
+/** Tema del sistema operativo, para usarlo como valor inicial si la persona
+ * usuaria no ha elegido nunca uno a mano. */
+export function systemTheme(): ThemeId {
+  if (typeof window === "undefined" || !window.matchMedia) return "claro";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro";
 }
