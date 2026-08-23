@@ -338,7 +338,11 @@ function Hoy() {
       </header>
 
       {doneMacros ? (
-        <MacroBars estimate={doneMacros} weightKg={profile?.current_weight_kg ?? null} />
+        <MacroBars
+          estimate={doneMacros}
+          target={guide?.macroEstimate ?? null}
+          weightKg={profile?.current_weight_kg ?? null}
+        />
       ) : null}
 
       <section className="animate-rise mt-6">
@@ -710,12 +714,14 @@ function sumDoneMacros(
 }
 
 /**
- * Referencia genérica (no personalizada por profesional alguno) para dibujar
- * la barra de cada macro: cuánto de ese objetivo cubren ya las comidas que
- * marcaste como comidas hoy. La proteína sí se ajusta al peso (~1,2 g/kg,
- * cifra habitual para población general); carbohidratos, grasa y fibra usan
- * un valor de referencia fijo. Todo el bloque es orientativo — ver el aviso
- * bajo la barra.
+ * Referencia genérica (no personalizada por profesional alguno) de respaldo,
+ * solo para cuando todavía no hay `macroEstimate` del día (guía sin generar o
+ * sin plan). La proteína se ajusta al peso (~1,2 g/kg, cifra habitual para
+ * población general); carbohidratos, grasa y fibra usan un valor fijo. En
+ * cuanto hay guía, el objetivo real es el total estimado para los platos
+ * reales de hoy (`macroEstimate`) — así comer todo el menú se acerca al 100%,
+ * en vez de compararse contra una referencia genérica que puede no cuadrar
+ * con ese menú. Todo el bloque es orientativo — ver el aviso bajo la barra.
  */
 function macroTargets(weightKg: number | null) {
   const proteinTarget = Math.round(Math.min(200, Math.max(45, (weightKg ?? 70) * 1.2)));
@@ -729,27 +735,47 @@ const MACRO_BAR_ITEMS = [
   { key: "fiber_g", label: "fibra", color: "var(--color-chart-4)" },
 ] as const;
 
-function MacroBars({ estimate, weightKg }: { estimate: MacroEstimate; weightKg: number | null }) {
-  const targets = macroTargets(weightKg);
+/**
+ * `target` es el `macroEstimate` del día (calculado por el coach a partir de
+ * los platos reales de hoy) cuando ya existe; si un plato cambia a mano (el
+ * coach lo recalcula, ver `cambiar_plato` en use-coach-actions.ts), este
+ * objetivo se actualiza con él. Solo cae a la referencia genérica de peso
+ * (`macroTargets`) mientras aún no hay guía. El porcentaje NO se recorta a
+ * 100: si ya comiste de más, la barra se queda llena pero el número de al
+ * lado enseña el exceso (p.ej. "132 g · 118%"); ese número solo se muestra
+ * cuando el objetivo es el real de hoy, no la referencia genérica.
+ */
+function MacroBars({
+  estimate,
+  target,
+  weightKg,
+}: {
+  estimate: MacroEstimate;
+  target: MacroEstimate | null;
+  weightKg: number | null;
+}) {
+  const fallbackTargets = macroTargets(weightKg);
   return (
     <section className="animate-rise mt-[22px]">
       <div className="grid grid-cols-4 gap-2.5">
         {MACRO_BAR_ITEMS.map((it) => {
           const value = estimate[it.key];
-          const pct = Math.min(100, Math.round((value / targets[it.key]) * 100));
+          const goal = target?.[it.key] || fallbackTargets[it.key];
+          const pct = goal > 0 ? Math.round((value / goal) * 100) : 0;
+          const width = Math.min(100, pct);
           return (
             <div key={it.key} className="min-w-0">
               <div className="h-[5px] overflow-hidden rounded-full bg-secondary">
                 <div
                   className="h-full rounded-full transition-[width] duration-1000 ease-out"
-                  style={{ width: `${pct}%`, backgroundColor: it.color }}
+                  style={{ width: `${width}%`, backgroundColor: it.color }}
                 />
               </div>
               <p className="mt-[7px] truncate font-num text-[9.5px] font-medium uppercase leading-none tracking-[0.06em] text-muted-foreground">
                 {it.label}
               </p>
               <p className="mt-[3px] font-num text-[11px] font-medium leading-none tabular-nums text-foreground">
-                {value} g
+                {value} g{target ? ` · ${pct}%` : ""}
               </p>
             </div>
           );

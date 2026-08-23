@@ -12,6 +12,7 @@ import {
 } from "@/lib/daily";
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { adjustMonthlyPlan, goalImpact, setPlanMeal } from "@/lib/plan.functions";
+import { mealsForDate } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "@/lib/profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
@@ -78,7 +79,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       if (toolName === "cambiar_plato") {
         const targetDate = String(input.fecha ?? "");
         const dish = String(input.plato ?? "").trim();
-        const { label, off } = await changeMeal({
+        const { plan, label, off } = await changeMeal({
           data: {
             date: targetDate,
             slot: String(input.comida ?? ""),
@@ -86,6 +87,18 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
             today: date,
           },
         });
+        // Si el plato cambiado es el de HOY, la estimación de macros guardada en
+        // la guía (`macroEstimate`/`mealMacros`) queda desactualizada — todavía
+        // habla del plato viejo. Se regenera solo para eso, para que la barra de
+        // macros de Hoy refleje el plato real en cuanto el coach lo cambia, en
+        // vez de esperar a la siguiente recarga.
+        if (targetDate === date) {
+          const meals = mealsForDate(plan, date)
+            .filter((m) => m.idea)
+            .map((m) => ({ moment: m.moment, idea: m.idea }));
+          const guide = await makeGuide({ data: { meals } });
+          await updateTodayLog({ guide });
+        }
         const dayLabel = /^\d{4}-\d{2}-\d{2}$/.test(targetDate)
           ? new Date(`${targetDate}T00:00:00`).toLocaleDateString("es-ES", {
               weekday: "long",

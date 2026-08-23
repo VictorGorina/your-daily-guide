@@ -281,7 +281,11 @@ export default function Hoy() {
 
         {/* ── Barras de macros ── */}
         {doneMacros ? (
-          <MacroBars estimate={doneMacros} weightKg={profile?.current_weight_kg ?? null} />
+          <MacroBars
+            estimate={doneMacros}
+            target={guide?.macroEstimate ?? null}
+            weightKg={profile?.current_weight_kg ?? null}
+          />
         ) : null}
 
         {/* ── Guía del coach: solo el rango de calorías del día, sin el resto
@@ -572,9 +576,13 @@ function sumDoneMacros(
   return totals;
 }
 
-// Mismo criterio que la web (src/routes/_authenticated/hoy.tsx): objetivos de
-// referencia genéricos, no personalizados por ningún profesional — la
-// proteína sí se ajusta al peso (~1,2 g/kg), el resto usa un valor fijo.
+// Mismo criterio que la web (src/routes/_authenticated/hoy.tsx): esto es solo
+// el respaldo genérico (no personalizado por ningún profesional) para cuando
+// aún no hay `macroEstimate` del día. En cuanto hay guía, el objetivo real es
+// el total estimado para los platos reales de hoy — así comer todo el menú se
+// acerca al 100%, en vez de compararse contra una referencia que puede no
+// cuadrar con ese menú. La proteína se ajusta al peso (~1,2 g/kg), el resto
+// usa un valor fijo.
 function macroTargets(weightKg: number | null) {
   const proteinTarget = Math.round(Math.min(200, Math.max(45, (weightKg ?? 70) * 1.2)));
   return { protein_g: proteinTarget, carbs_g: 250, fat_g: 70, fiber_g: 30 };
@@ -587,27 +595,45 @@ const MACRO_BAR_ITEMS = [
   { key: "fiber_g", label: "fibra", color: "#4C9BD6" },
 ] as const;
 
-function MacroBars({ estimate, weightKg }: { estimate: MacroEstimate; weightKg: number | null }) {
-  const targets = macroTargets(weightKg);
+// `target` es el `macroEstimate` del día cuando ya existe (se recalcula si un
+// plato cambia, ver `cambiar_plato` en use-coach-actions.ts); solo cae al
+// respaldo genérico por peso mientras aún no hay guía. El porcentaje no se
+// recorta a 100: si ya comiste de más la barra se queda llena, pero el número
+// de al lado enseña el exceso (p.ej. "132 g · 118%") — solo cuando el
+// objetivo es el real de hoy, no el genérico.
+function MacroBars({
+  estimate,
+  target,
+  weightKg,
+}: {
+  estimate: MacroEstimate;
+  target: MacroEstimate | null;
+  weightKg: number | null;
+}) {
+  const fallbackTargets = macroTargets(weightKg);
 
   return (
     <View className="mt-5">
       <View className="flex-row gap-2.5">
         {MACRO_BAR_ITEMS.map((it) => {
           const value = estimate[it.key];
-          const pct = Math.min(100, Math.round((value / targets[it.key]) * 100));
+          const goal = target?.[it.key] || fallbackTargets[it.key];
+          const pct = goal > 0 ? Math.round((value / goal) * 100) : 0;
+          const width = Math.min(100, pct);
           return (
             <View key={it.key} className="flex-1">
               <View className="h-[5px] overflow-hidden rounded-full bg-secondary">
                 <View
                   className="h-full rounded-full"
-                  style={{ width: `${pct}%`, backgroundColor: it.color }}
+                  style={{ width: `${width}%`, backgroundColor: it.color }}
                 />
               </View>
               <Text className="font-mono-medium mt-1.5 text-[9.5px] uppercase tracking-wider text-muted-foreground">
                 {it.label}
               </Text>
-              <Text className="font-mono-medium mt-0.5 text-[11px] text-foreground">{value} g</Text>
+              <Text className="font-mono-medium mt-0.5 text-[11px] text-foreground">
+                {value} g{target ? ` · ${pct}%` : ""}
+              </Text>
             </View>
           );
         })}

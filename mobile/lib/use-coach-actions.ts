@@ -11,6 +11,7 @@ import {
   type DailyLog,
   type Profile,
 } from "./daily";
+import { mealsForDate, type MonthlyPlan } from "./plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "./profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
@@ -76,12 +77,28 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       if (toolName === "cambiar_plato") {
         const fecha = String(input.fecha ?? "");
         const plato = String(input.plato ?? "").trim();
-        const { label, off } = await apiPost<{ label: string; off: string[] }>("plan/meal", {
+        const { plan, label, off } = await apiPost<{
+          plan: MonthlyPlan;
+          label: string;
+          off: string[];
+        }>("plan/meal", {
           date: fecha,
           slot: String(input.comida ?? ""),
           dish: plato,
           today: date,
         });
+        // Si el plato cambiado es el de HOY, la estimación de macros guardada en
+        // la guía (`macroEstimate`/`mealMacros`) queda desactualizada — todavía
+        // habla del plato viejo. Se regenera solo para eso, para que la barra de
+        // macros de Hoy refleje el plato real en cuanto el coach lo cambia, en
+        // vez de esperar a la siguiente recarga.
+        if (fecha === date) {
+          const meals = mealsForDate(plan, date)
+            .filter((m) => m.idea)
+            .map((m) => ({ moment: m.moment, idea: m.idea }));
+          const guide = await apiPost<DailyGuide>("guide", { meals });
+          await updateTodayLog({ guide });
+        }
         const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha)
           ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-ES", {
               weekday: "long",
