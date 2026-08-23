@@ -147,7 +147,7 @@ export default function Plan() {
             <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
               Plan mensual
             </Text>
-            <Text className="text-3xl font-display capitalize text-foreground" numberOfLines={1}>
+            <Text className="font-heading text-3xl capitalize text-foreground" numberOfLines={1}>
               {monthLabel}
             </Text>
           </View>
@@ -155,7 +155,7 @@ export default function Plan() {
             <Pressable
               onPress={() => generate.mutate(undefined)}
               disabled={generate.isPending}
-              className="mt-1 h-11 w-11 items-center justify-center rounded-full border border-input bg-surface active:opacity-70"
+              className="mt-1 h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-70"
               style={generate.isPending ? { opacity: 0.6 } : undefined}
             >
               {generate.isPending ? (
@@ -168,7 +168,7 @@ export default function Plan() {
         </View>
 
         {!plan ? (
-          <View className="mt-8 items-center rounded-3xl border border-border bg-surface p-6">
+          <View className="mt-8 items-center rounded-3xl bg-surface p-6">
             <CalendarRange size={28} color="#6dbe7b" />
             <Text className="mt-3 text-sm font-sans-semibold text-foreground">
               Todavía no tienes plan de este mes
@@ -220,7 +220,7 @@ export default function Plan() {
 
             {tab === "plan" ? (
               <View className="mt-5 gap-5">
-                <View className="rounded-3xl border border-border bg-surface p-5">
+                <View className="rounded-3xl bg-surface p-5">
                   <View className="flex-row items-center gap-2">
                     <Sparkles size={16} color="#6dbe7b" />
                     <Text className="text-sm font-sans-semibold text-foreground">
@@ -250,7 +250,7 @@ export default function Plan() {
               <HistorialSection />
             ) : (
               <View className="mt-5 gap-4">
-                <View className="rounded-3xl border border-border bg-surface p-5">
+                <View className="rounded-3xl bg-surface p-5">
                   <View className="flex-row items-baseline justify-between gap-3">
                     <View className="min-w-0 flex-1">
                       <Text className="text-sm font-sans-semibold text-foreground">
@@ -263,7 +263,7 @@ export default function Plan() {
                       </Text>
                     </View>
                     <Text
-                      className={`text-2xl font-display tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
+                      className={`font-heading text-2xl tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
                     >
                       {eur(total)}
                     </Text>
@@ -334,7 +334,7 @@ export default function Plan() {
                 {shopping?.length ? (
                   <Pressable
                     onPress={() => void shareList()}
-                    className="flex-row items-center justify-center gap-2 rounded-2xl border border-input bg-surface py-3.5 active:opacity-80"
+                    className="flex-row items-center justify-center gap-2 rounded-2xl bg-surface py-3.5 active:opacity-80"
                   >
                     <Share2 size={16} color="#6dbe7b" />
                     <Text className="text-sm font-sans-semibold text-foreground">
@@ -343,7 +343,7 @@ export default function Plan() {
                   </Pressable>
                 ) : null}
 
-                <View className="rounded-3xl border border-border bg-surface p-5">
+                <View className="rounded-3xl bg-surface p-5">
                   <Text className="text-sm font-sans-semibold text-foreground">
                     Cada cuánto compras
                   </Text>
@@ -363,8 +363,8 @@ export default function Plan() {
                             if (c.key !== activeCadence) generate.mutate(c.key);
                           }}
                           disabled={disabled}
-                          className={`flex-1 items-center rounded-2xl border px-2 py-2.5 active:opacity-80 ${
-                            active ? "border-transparent bg-primary" : "border-input bg-surface"
+                          className={`flex-1 items-center rounded-2xl px-2 py-2.5 active:opacity-80 ${
+                            active ? "bg-primary" : "bg-secondary"
                           }`}
                           style={disabled ? { opacity: 0.6 } : undefined}
                         >
@@ -448,7 +448,7 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
   const meals = selected ? mealsForDate(plan, selected).filter((meal) => meal.idea) : [];
 
   return (
-    <View className="rounded-3xl border border-border bg-surface p-5">
+    <View className="rounded-3xl bg-surface p-5">
       <Text className="text-sm font-sans-semibold text-foreground">Calendario del mes</Text>
       <Text className="mt-1 text-xs text-muted-foreground">
         Toca un día para ver su menú completo.
@@ -469,9 +469,9 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
             <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
               <Pressable
                 onPress={() => setSelected(date)}
-                className={`aspect-square items-center justify-center rounded-xl border active:opacity-80 ${
-                  isWeekend ? "border-accent bg-accent/40" : "border-border bg-surface"
-                } ${isToday ? "border-primary" : ""}`}
+                className={`aspect-square items-center justify-center rounded-xl active:opacity-80 ${
+                  isWeekend ? "bg-accent/60" : "bg-secondary"
+                } ${isToday ? "border-2 border-primary" : ""}`}
                 style={isToday ? { borderWidth: 2 } : undefined}
               >
                 <Text
@@ -509,7 +509,7 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
               {meals.map((meal) => {
                 const note = offListNote(meal.off);
                 return (
-                  <View key={meal.slot} className="rounded-xl border border-border bg-surface p-3">
+                  <View key={meal.slot} className="rounded-xl bg-secondary p-3">
                     <Text className="text-xs font-sans-semibold text-primary">{meal.moment}</Text>
                     <Text className="mt-1 text-sm text-foreground">{meal.idea}</Text>
                     {note ? (
@@ -567,7 +567,7 @@ function TripActualField({
   const diff = value != null ? Math.round((value - estimated) * 100) / 100 : null;
 
   return (
-    <View className="mt-3 flex-row items-center gap-2 border-t border-border pt-3">
+    <View className="mt-3 flex-row items-center gap-2 rounded-2xl bg-secondary/40 px-3 py-2.5">
       <Text className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</Text>
       <View className="flex-row items-center gap-1">
         <TextInput
@@ -577,7 +577,7 @@ function TripActualField({
           placeholder={eur(estimated)}
           keyboardType="decimal-pad"
           editable={!saving}
-          className="w-20 rounded-lg border border-input bg-surface px-2 py-1.5 text-right text-sm text-foreground"
+          className="w-20 rounded-lg bg-surface px-2 py-1.5 text-right text-sm text-foreground"
           style={saving ? { opacity: 0.6 } : undefined}
         />
         <Text className="text-xs text-muted-foreground">€</Text>
@@ -623,7 +623,7 @@ function TripCard({
   const ownedCount = owned.reduce((s, g) => s + g.items.length, 0);
 
   return (
-    <View className="rounded-3xl border border-border bg-surface p-5">
+    <View className="rounded-3xl bg-surface p-5">
       <View className="flex-row items-baseline justify-between gap-3">
         <Text className="flex-1 text-sm font-sans-semibold text-foreground">{label}</Text>
         <Text className="text-xs font-sans-semibold text-primary">{eur(tripTotal)}</Text>
@@ -690,8 +690,8 @@ function ShoppingGroup({
           <View key={item.name} className="flex-row items-center gap-2">
             <Pressable
               onPress={() => onToggleOwned(item.name, !item.owned)}
-              className={`h-5 w-5 items-center justify-center rounded-full border active:opacity-70 ${
-                item.owned ? "border-transparent bg-primary" : "border-input bg-surface"
+              className={`h-5 w-5 items-center justify-center rounded-full active:opacity-70 ${
+                item.owned ? "bg-primary" : "bg-secondary"
               }`}
             >
               {item.owned ? <Check size={12} color="#3e3d39" /> : null}

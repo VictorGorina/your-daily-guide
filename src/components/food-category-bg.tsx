@@ -50,7 +50,8 @@ export function DishImage({
 }
 
 /**
- * Small emoji badge for the food category of a dish.
+ * Small badge for the food category of a dish. Sin emoji (guideline §6/§9):
+ * el color de categoría es el propio dato, un punto de su color puro basta.
  */
 export function FoodCategoryBadge({ dish }: { dish: string }) {
   const cat = classifyDish(dish);
@@ -58,7 +59,7 @@ export function FoodCategoryBadge({ dish }: { dish: string }) {
   if (cat === "otro") return null;
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+      className="inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
       style={{
         backgroundColor: `color-mix(in oklab, ${entry.accent} 20%, var(--color-surface))`,
         // Mayormente el color de texto del tema, solo teñido por la categoría —
@@ -67,7 +68,11 @@ export function FoodCategoryBadge({ dish }: { dish: string }) {
         color: `color-mix(in oklab, ${entry.accent} 35%, var(--color-foreground))`,
       }}
     >
-      {entry.icon} {entry.label}
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: entry.accent }}
+      />
+      {entry.label}
     </span>
   );
 }

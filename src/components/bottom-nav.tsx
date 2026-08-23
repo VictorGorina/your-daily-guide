@@ -29,9 +29,9 @@ export function BottomNav() {
     : baseItems;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <nav className="fixed inset-x-0 bottom-0 z-40 px-[30px] pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div
-        className={`mx-auto grid max-w-md gap-1 rounded-4xl border border-border bg-background/95 p-2 shadow-[0_1px_2px_oklch(0_0_0/4%)] backdrop-blur-xl ${
+        className={`mx-auto grid max-w-md gap-1 rounded-[26px] bg-surface/94 p-2 shadow-[0_6px_22px_-14px_rgba(0,0,0,.25)] backdrop-blur-[12px] ${
           hasHousehold ? "grid-cols-4" : "grid-cols-3"
         }`}
       >
@@ -41,10 +41,10 @@ export function BottomNav() {
             <Link
               key={to}
               to={to}
-              className="group flex flex-col items-center gap-1 rounded-3xl py-2 text-[10px] font-semibold transition-colors"
+              className="group flex flex-col items-center gap-1 rounded-3xl py-2 font-ui text-[9.5px] font-semibold transition-colors"
             >
               <span
-                className={`grid h-10 w-10 place-items-center rounded-2xl transition-all duration-300 ${
+                className={`grid h-8 w-[38px] place-items-center rounded-[14px] transition-all duration-300 ${
                   active
                     ? "bg-foreground text-background scale-105"
                     : "text-muted-foreground group-active:scale-95"

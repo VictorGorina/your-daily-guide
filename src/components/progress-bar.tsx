@@ -24,7 +24,9 @@ export function ProgressBar({
           <p className="truncate text-sm font-semibold text-foreground">{label}</p>
           {caption ? <p className="truncate text-[11px] text-muted-foreground">{caption}</p> : null}
         </div>
-        <span className="font-display text-2xl tabular-nums text-foreground">{pct}%</span>
+        <span className="font-title text-2xl font-semibold tabular-nums text-foreground">
+          {pct}%
+        </span>
       </div>
       <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-secondary">
         <div

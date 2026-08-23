@@ -24,10 +24,13 @@ export function Dialog({
       onRequestClose={() => onOpenChange(false)}
     >
       <View className="flex-1 items-center justify-center px-6">
-        <Pressable className="absolute inset-0 bg-black/40" onPress={() => onOpenChange(false)} />
-        <View className="max-h-[80%] w-full max-w-md rounded-3xl border border-border bg-background p-5">
+        <Pressable
+          className="absolute inset-0 bg-foreground/30"
+          onPress={() => onOpenChange(false)}
+        />
+        <View className="max-h-[80%] w-full max-w-md rounded-3xl bg-background p-5">
           {title ? (
-            <Text className="mb-3 text-lg font-sans-semibold capitalize text-foreground">
+            <Text className="font-heading-medium mb-3 text-lg capitalize text-foreground">
               {title}
             </Text>
           ) : null}

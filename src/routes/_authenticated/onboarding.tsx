@@ -722,7 +722,7 @@ function Onboarding() {
         </p>
 
         <div className="mt-5 min-h-0 flex-1 space-y-5 overflow-y-auto pb-2">
-          <section className="space-y-3 rounded-3xl border border-border bg-surface p-4">
+          <section className="space-y-3 rounded-3xl bg-surface p-4">
             <p className="text-sm font-medium">Datos clave</p>
             {KEY_FIELDS.map((key) => (
               <label key={key} className="block text-xs text-muted-foreground">
@@ -737,7 +737,7 @@ function Onboarding() {
                   inputMode={GAP_LABEL[key].type === "number" ? "decimal" : undefined}
                   value={gapValues[key] ?? ""}
                   onChange={(e) => setGapValues((v) => ({ ...v, [key]: e.target.value }))}
-                  className="mt-1 h-12 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
+                  className="mt-1 h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
                 />
                 <span className="mt-1 block text-[11px]">{GAP_LABEL[key].help}</span>
               </label>
@@ -750,7 +750,7 @@ function Onboarding() {
                 {s.title}
               </p>
               {s.items.map((a) => (
-                <div key={a.key} className="rounded-3xl border border-border bg-surface p-4">
+                <div key={a.key} className="rounded-3xl bg-surface p-4">
                   <p className="text-xs leading-relaxed text-muted-foreground">{a.q}</p>
                   {editing === a.key ? (
                     <div className="mt-2 space-y-2">
@@ -767,7 +767,7 @@ function Onboarding() {
                           if (a.q === BIRTHDATE_Q.q) setDob(parseDatePretty(text));
                           setDirty(true);
                         }}
-                        className="w-full resize-none rounded-2xl border border-input bg-background px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/40"
+                        className="w-full resize-none rounded-2xl bg-muted px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/40"
                       />
                       <div className="flex items-center justify-between">
                         <DictateButton
@@ -855,7 +855,7 @@ function Onboarding() {
               className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-relaxed ${
                 t.role === "me"
                   ? "bg-primary text-primary-foreground"
-                  : "border border-border bg-surface text-foreground"
+                  : "bg-surface text-foreground"
               }`}
             >
               {t.text}
@@ -875,10 +875,8 @@ function Onboarding() {
                 type="button"
                 onClick={() => toggleChip(c)}
                 aria-pressed={active}
-                className={`rounded-full border px-3.5 py-2 text-xs font-medium transition-transform active:scale-95 ${
-                  active
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-input bg-surface"
+                className={`rounded-full px-3.5 py-2 text-xs font-medium transition-transform active:scale-95 ${
+                  active ? "bg-foreground text-background" : "bg-surface"
                 }`}
               >
                 {c}
@@ -889,7 +887,7 @@ function Onboarding() {
       ) : null}
 
       {error && !done ? (
-        <div className="animate-rise mb-2 flex items-start gap-2 rounded-2xl border border-primary/30 bg-primary-soft px-3.5 py-2.5 text-xs text-foreground">
+        <div className="animate-rise mb-2 flex items-start gap-2 rounded-2xl bg-primary-soft px-3.5 py-2.5 text-xs text-foreground">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           <span>{error}</span>
         </div>
@@ -904,7 +902,7 @@ function Onboarding() {
           Empezar mi primer día
         </button>
       ) : screenDone ? (
-        <div className="animate-rise space-y-3 rounded-3xl border border-border bg-surface p-4">
+        <div className="animate-rise space-y-3 rounded-3xl bg-surface p-4">
           <p className="text-sm text-muted-foreground">
             Perfecto, ya tengo {SCREENS[screen].subtitle.toLowerCase()}. Seguimos con{" "}
             <span className="font-medium text-foreground">
@@ -926,7 +924,7 @@ function Onboarding() {
             e.preventDefault();
             send(value);
           }}
-          className="rounded-3xl border border-input bg-surface p-2"
+          className="rounded-3xl bg-surface p-2"
         >
           {current?.dateInput ? (
             <input
@@ -1075,23 +1073,15 @@ function PlanGeneratingScreen() {
   return (
     <main className="mx-auto flex h-[100dvh] max-w-lg flex-col items-center justify-center gap-10 px-8 text-center">
       <div className="relative grid h-40 w-40 place-items-center">
-        <span
-          aria-hidden
-          className="animate-orbit absolute h-40 w-40 rounded-full opacity-70 blur-md"
-          style={{
-            background:
-              "conic-gradient(from 0deg, transparent, color-mix(in oklab, var(--color-primary) 60%, transparent), transparent 65%)",
-          }}
-        />
         <span className="animate-coach-pulse absolute h-32 w-32 rounded-full bg-primary/10" />
         <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/15 [animation-delay:0.6s]" />
-        <span className="animate-breathe relative grid h-16 w-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+        <span className="animate-breathe relative grid h-16 w-16 place-items-center rounded-full bg-primary text-primary-foreground">
           <Sparkles className="h-7 w-7" />
         </span>
       </div>
 
       <div className="space-y-2.5">
-        <h1 className="font-display text-xl font-semibold tracking-tight">
+        <h1 className="font-title text-xl font-semibold tracking-[-0.02em]">
           Estoy preparando tu plan
         </h1>
         <p key={i} className="animate-rise min-h-[1.25rem] text-sm text-muted-foreground">

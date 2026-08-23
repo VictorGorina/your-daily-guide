@@ -48,6 +48,9 @@ export type DailyGuide = {
   /** Estimación aproximada de macros del día, calculada a partir de los platos
    * reales del plan de hoy. Orientativa, no un conteo nutricional exacto. */
   macroEstimate?: import("@/lib/guide.functions").MacroEstimate | null;
+  /** Estimación por plato de hoy, para sumar solo lo ya marcado como comido
+   * (ver `MacroBars` en Hoy) en vez de todo el menú del día de golpe. */
+  mealMacros?: import("@/lib/guide.functions").MealMacroEstimate[] | null;
   behaviors: string[];
   meals?: { moment: string; idea: string }[];
   tips?: string[];

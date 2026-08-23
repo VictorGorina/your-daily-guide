@@ -113,7 +113,7 @@ function RestablecerPage() {
   };
 
   const field =
-    "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
+    "h-12 w-full rounded-2xl bg-muted px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
@@ -121,14 +121,18 @@ function RestablecerPage() {
         {status === "waiting" && (
           <>
             <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
-            <h1 className="mt-6 font-display text-3xl">Comprobando el enlace…</h1>
+            <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
+              Comprobando el enlace…
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">Un momento, ya casi está.</p>
           </>
         )}
 
         {status === "ready" && (
           <>
-            <h1 className="font-display text-3xl">Crea tu contraseña nueva</h1>
+            <h1 className="font-title text-3xl font-semibold tracking-[-0.03em]">
+              Crea tu contraseña nueva
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Elige una contraseña de al menos 6 caracteres.
             </p>
@@ -162,7 +166,9 @@ function RestablecerPage() {
 
         {status === "done" && (
           <>
-            <h1 className="mt-6 font-display text-3xl">¡Contraseña actualizada!</h1>
+            <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
+              ¡Contraseña actualizada!
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">Entrando en Peppers…</p>
           </>
         )}
@@ -170,7 +176,9 @@ function RestablecerPage() {
         {status === "error" && (
           <>
             <TriangleAlert className="mx-auto h-10 w-10 text-destructive" />
-            <h1 className="mt-6 font-display text-3xl">Este enlace ya no funciona</h1>
+            <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
+              Este enlace ya no funciona
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               {errorMessage ||
                 "Puede haber caducado o usarse ya. Pide un enlace nuevo desde la pantalla de entrar."}

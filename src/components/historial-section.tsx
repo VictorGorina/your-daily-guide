@@ -98,7 +98,7 @@ function WeightTrend({ logs }: { logs: DailyLog[] }) {
   const delta = last - first;
 
   return (
-    <div className="mt-4 flex items-center gap-4 border-t border-border pt-4">
+    <div className="mt-4 flex items-center gap-4 pt-4">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
@@ -225,7 +225,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
       </button>
 
       {open && (
-        <div className="animate-rise border-t border-border p-4">
+        <div className="animate-rise bg-secondary/30 p-4">
           {log.guide?.intro ? (
             <p className="mb-3 text-sm text-muted-foreground">{log.guide.intro}</p>
           ) : null}
@@ -241,7 +241,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
                     type="button"
                     disabled={isToday}
                     onClick={() => setEditingMeal((prev) => (prev === i ? null : i))}
-                    className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm disabled:opacity-60"
+                    className="flex w-full items-center justify-between rounded-xl bg-surface px-3 py-2 text-left text-sm disabled:opacity-60"
                   >
                     <span className="text-foreground">{h.label}</span>
                     <span className="text-xs text-muted-foreground">
@@ -255,10 +255,10 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
                           key={s}
                           type="button"
                           onClick={() => correctMeal(i, s)}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
                             h.status === s
-                              ? "border-foreground bg-foreground text-background"
-                              : "border-input text-muted-foreground"
+                              ? "bg-foreground text-background"
+                              : "bg-surface text-muted-foreground"
                           }`}
                         >
                           {MEAL_STATUS_LABEL[s]}

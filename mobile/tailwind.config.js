@@ -2,9 +2,10 @@
 // NativeWind v4 va con Tailwind v3 (no v4): la v4 quitó la API de configuración
 // en la que se apoya y la combinación no genera ningún estilo, sin avisar.
 //
-// La paleta es el tema "peppers" (por defecto) de la web (:root en
-// src/styles.css). React Native no entiende oklch/color-mix, así que aquí son
-// los mismos hex ya calculados a mano: si se retoca uno allí, hay que
+// La paleta es el tema "claro" de la web (:root en src/styles.css), con el
+// naranja Peppers como único acento (no hay theming en runtime en móvil, ver
+// AGENTS.md). React Native no entiende oklch/color-mix, así que aquí son los
+// mismos hex ya calculados a mano: si se retoca uno allí, hay que
 // reconvertirlo aquí — son dos copias, no una fuente compartida.
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
@@ -17,9 +18,9 @@ module.exports = {
         surface: "#fbfaf7",
         card: "#fbfaf7",
         "card-foreground": "#3e3d39",
-        primary: "#6dbe7b",
-        "primary-foreground": "#3e3d39",
-        "primary-soft": "#e4f3e7",
+        primary: "#ff8a3d",
+        "primary-foreground": "#fbfaf7",
+        "primary-soft": "#ffe7d3",
         secondary: "#eae6dd",
         "secondary-foreground": "#3e3d39",
         muted: "#eeeae2",

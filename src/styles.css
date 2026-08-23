@@ -7,9 +7,10 @@
 /*
  * Peppers design system.
  * Editorial, warm, calm. Cards over dashboards, ilustración over icons-as-data.
- * Themes are switched with data-theme on <html>; only the accent hue changes
- * between light themes — background/text/surface stay the same warm neutral
- * per section 3 of the design system ("usa pocos colores").
+ * Solo dos temas, cambiados con data-theme en <html>: "claro" y "oscuro".
+ * El acento naranja (--primary) es el mismo en espíritu en los dos — un solo
+ * color de marca en toda la app (docs/design-guidelines.md §2/§9) — y solo se
+ * aclara un poco en oscuro para mantener contraste sobre el fondo carbón.
  */
 
 @theme inline {
@@ -58,6 +59,8 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-success-soft: var(--success-soft);
+  --color-weekend: var(--weekend);
+  --color-weekend-foreground: var(--weekend-foreground);
 
   --color-border: var(--border);
   --color-input: var(--input);
@@ -80,10 +83,9 @@
 }
 
 /*
- * Shared warm-neutral base for every light theme: background, text, surface,
- * borders and muted tones never change — only --primary (and the handful of
- * tokens derived from it) shift per theme. Keeps the app to a small, deliberate
- * palette instead of a different grey for every accent.
+ * Base cálida compartida por los dos temas: fondo, texto, superficie, bordes
+ * y tonos neutros son los mismos en claro; oscuro los redefine todos abajo.
+ * El acento (--primary) es naranja Peppers en los dos — no hay más acentos.
  */
 :root,
 [data-theme] {
@@ -105,6 +107,12 @@
   --border: #e2dcd0;
   --input: #e2dcd0;
 
+  /* Naranja Peppers — único acento de toda la app (FAB, CTA, viñetas). */
+  --primary: #ff8a3d;
+  --primary-foreground: #fbfaf7;
+  --primary-soft: #ffe7d3;
+  --ring: #ff8a3d;
+
   /* Carne — usado también como color semántico de error/peligro */
   --destructive: #e2685f;
   --destructive-foreground: #fbfaf7;
@@ -118,6 +126,9 @@
   --success: #4cae64;
   --success-foreground: #fbfaf7;
   --success-soft: #e1f2e4;
+  /* Fin de semana en la tira semanal (docs/design-guidelines.md §2). */
+  --weekend: #f7e2ce;
+  --weekend-foreground: #a85f24;
 
   --chart-1: #6dbe7b;
   --chart-2: #ff8a3d;
@@ -127,9 +138,12 @@
 
   --sidebar: #f3f1ed;
   --sidebar-foreground: #3e3d39;
+  --sidebar-primary: #ff8a3d;
+  --sidebar-primary-foreground: #fbfaf7;
   --sidebar-accent: #eae6dd;
   --sidebar-accent-foreground: #3e3d39;
   --sidebar-border: #e2dcd0;
+  --sidebar-ring: #ff8a3d;
 
   /* Semáforo de hábitos (sin uso actual en la UI, se deja neutro/coherente) */
   --habit-1: #f2c14e;
@@ -139,42 +153,8 @@
   --habit-foreground: #3e3d39;
 }
 
-/* Peppers — verde fresco. Tema por defecto. */
-:root,
-[data-theme="peppers"] {
-  --primary: #6dbe7b;
-  --primary-foreground: #3e3d39;
-  --primary-soft: #e4f3e7;
-  --ring: #6dbe7b;
-  --sidebar-primary: #6dbe7b;
-  --sidebar-primary-foreground: #3e3d39;
-  --sidebar-ring: #6dbe7b;
-}
-
-/* Mostaza — dorado/ámbar */
-[data-theme="mostaza"] {
-  --primary: #f2c14e;
-  --primary-foreground: #3e3d39;
-  --primary-soft: #fbedc9;
-  --ring: #f2c14e;
-  --sidebar-primary: #f2c14e;
-  --sidebar-primary-foreground: #3e3d39;
-  --sidebar-ring: #f2c14e;
-}
-
-/* Naranja — cálido */
-[data-theme="naranja"] {
-  --primary: #ff8a3d;
-  --primary-foreground: #3e3d39;
-  --primary-soft: #ffe7d3;
-  --ring: #ff8a3d;
-  --sidebar-primary: #ff8a3d;
-  --sidebar-primary-foreground: #3e3d39;
-  --sidebar-ring: #ff8a3d;
-}
-
-/* Noche — gris carbón cálido, nunca negro puro */
-[data-theme="noche"] {
+/* Oscuro — gris carbón cálido, nunca negro puro. */
+[data-theme="oscuro"] {
   --background: #24221f;
   --foreground: #f3f1ed;
   --surface: #2c2a26;
@@ -191,10 +171,12 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 14%);
 
-  --primary: #7fcb8d;
-  --primary-foreground: #1e2b20;
-  --primary-soft: #2e3b2c;
-  --ring: #7fcb8d;
+  /* Naranja aclarado para mantener contraste sobre el fondo carbón — mismo
+     acento, no un tema distinto. */
+  --primary: #ff9d5c;
+  --primary-foreground: #2b1a0d;
+  --primary-soft: #3a2c1c;
+  --ring: #ff9d5c;
 
   --destructive: #e8776f;
   --destructive-foreground: #241a18;
@@ -205,21 +187,23 @@
   --success: #6bc17e;
   --success-foreground: #16231a;
   --success-soft: #2c3a2b;
+  --weekend: #3a2c1c;
+  --weekend-foreground: #f0b27e;
 
   --chart-1: #7fcb8d;
-  --chart-2: #ffa35e;
+  --chart-2: #ff9d5c;
   --chart-3: #f0c766;
   --chart-4: #6fb3e0;
   --chart-5: #e8776f;
 
   --sidebar: #24221f;
   --sidebar-foreground: #f3f1ed;
-  --sidebar-primary: #7fcb8d;
-  --sidebar-primary-foreground: #1e2b20;
+  --sidebar-primary: #ff9d5c;
+  --sidebar-primary-foreground: #2b1a0d;
   --sidebar-accent: #34322d;
   --sidebar-accent-foreground: #f3f1ed;
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: #7fcb8d;
+  --sidebar-ring: #ff9d5c;
 }
 
 @layer base {
@@ -247,20 +231,19 @@
   }
 }
 
-/* Tarjeta editorial estándar: fondo cálido, borde fino, casi sin sombra.
-   Radio fijo a 16px (spec: "cards 12–16px") con independencia de la escala
-   general, que en 3xl/4xl sigue sirviendo a hojas y modales más grandes. */
+/* Tarjeta estándar: se separa del fondo por color, nunca por borde ni sombra
+   (docs/design-guidelines.md §1 "sin bordes", §4 "las tarjetas no llevan
+   sombra"). Radio fijo a 20px ("Fila de comida, tarjeta" en la tabla de
+   radios) con independencia de la escala general, que en 3xl/4xl sigue
+   sirviendo a hojas y modales más grandes. */
 @utility surface-card {
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 1rem;
-  box-shadow: 0 1px 2px oklch(0 0 0 / 3%);
+  border-radius: 1.25rem;
 }
 
 @utility habit-tile {
   border-radius: var(--radius-3xl);
   color: var(--color-habit-foreground);
-  box-shadow: 0 1px 2px oklch(0 0 0 / 4%);
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -406,22 +389,11 @@
   animation: coach-dot 1.4s ease-in-out infinite;
 }
 
-@keyframes orbit-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@utility animate-orbit {
-  animation: orbit-spin 7s linear infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .animate-fab-ring,
   .animate-breathe,
   .animate-coach-pulse,
-  .animate-coach-dot,
-  .animate-orbit {
+  .animate-coach-dot {
     animation: none;
   }
 }

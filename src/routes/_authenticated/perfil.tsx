@@ -118,7 +118,7 @@ function Perfil() {
   };
 
   const input =
-    "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
+    "h-12 w-full rounded-2xl bg-muted px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-10">
@@ -128,7 +128,9 @@ function Perfil() {
       >
         <ChevronLeft className="h-4 w-4" /> Ajustes
       </Link>
-      <h1 className="mt-3 font-display text-3xl">Mis respuestas</h1>
+      <h1 className="mt-3 font-title text-[34px] font-semibold tracking-[-0.03em]">
+        Mis respuestas
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Toca cualquier respuesta para corregirla. No hace falta repetir el onboarding.
       </p>
@@ -151,10 +153,8 @@ function Perfil() {
                             <button
                               key={opt}
                               onClick={() => commit(field, opt)}
-                              className={`rounded-full border px-3 py-2 text-xs capitalize ${
-                                draft === opt
-                                  ? "border-primary bg-primary-soft text-primary"
-                                  : "border-input bg-surface"
+                              className={`rounded-full px-3 py-2 text-xs capitalize ${
+                                draft === opt ? "bg-primary-soft text-primary" : "bg-surface"
                               }`}
                             >
                               {opt}
@@ -168,7 +168,7 @@ function Perfil() {
                             rows={3}
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
-                            className="mt-2 w-full rounded-2xl border border-input bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
+                            className="mt-2 w-full rounded-2xl bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
                           />
                           <DictateButton
                             className="mt-2"
@@ -207,7 +207,7 @@ function Perfil() {
                           </button>
                           <button
                             onClick={() => setEditing(null)}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-input px-4 py-2.5 text-xs font-medium text-muted-foreground"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 text-xs font-medium text-muted-foreground"
                           >
                             <X className="h-3.5 w-3.5" /> Cancelar
                           </button>
@@ -229,7 +229,7 @@ function Perfil() {
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs text-muted-foreground">{field.label}</span>
                         <span
-                          className={`mt-0.5 block text-sm ${shown ? "" : "italic text-muted-foreground"}`}
+                          className={`mt-0.5 block text-sm ${shown ? "" : "text-muted-foreground"}`}
                         >
                           {shown ?? "Sin responder — toca para añadir"}
                         </span>

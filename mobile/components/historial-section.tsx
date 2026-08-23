@@ -31,7 +31,7 @@ export function HistorialSection() {
 
   return (
     <View className="mt-5 gap-4">
-      <View className="rounded-3xl border border-border bg-surface p-5">
+      <View className="rounded-3xl bg-surface p-5">
         <View className="flex-row items-center justify-between">
           <Text className="text-sm font-sans-semibold text-foreground">
             {profile?.goal_type === "mantener"
@@ -108,7 +108,7 @@ function WeightTrend({ logs }: { logs: DailyLog[] }) {
   const delta = last - first;
 
   return (
-    <View className="mt-4 flex-row items-center gap-4 border-t border-border pt-4">
+    <View className="mt-4 flex-row items-center gap-4 pt-4">
       <Svg width={96} height={32} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
         <Polyline
           points={coords}
@@ -155,7 +155,7 @@ function AdherenceHeatmap({ logs }: { logs: DailyLog[] }) {
   };
 
   return (
-    <View className="rounded-3xl border border-border bg-surface p-5">
+    <View className="rounded-3xl bg-surface p-5">
       <Text className="text-sm font-sans-semibold text-foreground">
         Adherencia · últimos 14 días
       </Text>
@@ -210,7 +210,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
   });
 
   return (
-    <View className="overflow-hidden rounded-3xl border border-border bg-surface">
+    <View className="overflow-hidden rounded-3xl bg-surface">
       <Pressable
         onPress={onToggle}
         className="flex-row items-center justify-between gap-3 p-4 active:opacity-80"
@@ -232,7 +232,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
       </Pressable>
 
       {open ? (
-        <View className="border-t border-border p-4">
+        <View className="bg-secondary/30 p-4">
           {log.guide?.intro ? (
             <Text className="mb-3 text-sm text-muted-foreground">{log.guide.intro}</Text>
           ) : null}
@@ -247,7 +247,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
                   <Pressable
                     disabled={isToday}
                     onPress={() => setEditingMeal((prev) => (prev === i ? null : i))}
-                    className="flex-row items-center justify-between rounded-xl border border-border bg-surface px-3 py-2 active:opacity-80"
+                    className="flex-row items-center justify-between rounded-xl bg-surface px-3 py-2 active:opacity-80"
                     style={isToday ? { opacity: 0.6 } : undefined}
                   >
                     <Text className="text-sm text-foreground">{h.label}</Text>
@@ -263,8 +263,8 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
                           <Pressable
                             key={s}
                             onPress={() => correctMeal(i, s)}
-                            className={`rounded-full border px-3 py-1.5 active:opacity-80 ${
-                              active ? "border-foreground bg-foreground" : "border-input"
+                            className={`rounded-full px-3 py-1.5 active:opacity-80 ${
+                              active ? "bg-foreground" : "bg-surface"
                             }`}
                           >
                             <Text
@@ -294,9 +294,7 @@ function DayRow({ log, open, onToggle }: { log: DailyLog; open: boolean; onToggl
               <View
                 key={m.id}
                 className={`max-w-[85%] rounded-2xl px-3 py-2 ${
-                  m.role === "user"
-                    ? "self-end bg-primary"
-                    : "self-start border border-border bg-secondary"
+                  m.role === "user" ? "self-end bg-primary" : "self-start bg-secondary"
                 }`}
               >
                 <Text

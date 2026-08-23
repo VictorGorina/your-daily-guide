@@ -109,14 +109,14 @@ export function NightlyReviewSheet({
       title={
         <View className="flex-row items-center gap-2">
           <Moon size={16} color="#6dbe7b" />
-          <Text className="text-lg font-sans-semibold text-foreground">Repaso de hoy</Text>
+          <Text className="font-heading-medium text-lg text-foreground">Repaso de hoy</Text>
         </View>
       }
       description="Menos de un minuto, sin nota ni examen."
     >
       <View className="gap-4 pb-8 pt-4">
         {pending.length > 0 && onSkipPending ? (
-          <View className="rounded-3xl border border-dashed border-primary/40 bg-surface p-4">
+          <View className="rounded-3xl bg-primary-soft p-4">
             <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
               Sin marcar todavía
             </Text>
@@ -135,7 +135,7 @@ export function NightlyReviewSheet({
           </View>
         ) : null}
 
-        <View className="rounded-3xl border border-border bg-surface p-4">
+        <View className="rounded-3xl bg-surface p-4">
           <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
             Comidas de hoy
           </Text>
@@ -147,11 +147,11 @@ export function NightlyReviewSheet({
               : "Hoy no se han registrado comidas."}
           </Text>
           <Text className="mt-2 text-sm text-foreground">{reactionLine(t, ratio)}</Text>
-          <Text className="mt-1 text-xs text-muted-foreground">Impulso: {impulso}% 🔥</Text>
+          <Text className="mt-1 text-xs text-muted-foreground">Impulso: {impulso}%</Text>
         </View>
 
         {trendLine ? (
-          <View className="rounded-3xl border border-border bg-surface p-4">
+          <View className="rounded-3xl bg-surface p-4">
             <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
               Esta semana
             </Text>
@@ -159,7 +159,7 @@ export function NightlyReviewSheet({
           </View>
         ) : null}
 
-        <View className="rounded-3xl border border-border bg-surface p-4">
+        <View className="rounded-3xl bg-surface p-4">
           <Text className="text-sm leading-relaxed text-foreground">{closingLineOfDay()}</Text>
         </View>
 

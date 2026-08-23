@@ -16,11 +16,11 @@ function habitSignal(log: DailyLog | undefined, fallbackHabits: string[]) {
 function signalClasses(signal: ReturnType<typeof ratioSignal>) {
   switch (signal) {
     case "success":
-      return "border-transparent bg-success";
+      return "bg-success";
     case "warning":
-      return "border-transparent bg-warning";
+      return "bg-warning";
     case "muted":
-      return "border-transparent bg-muted";
+      return "bg-muted";
     default:
       return "";
   }
@@ -38,16 +38,25 @@ function signalText(signal: ReturnType<typeof ratioSignal>) {
   }
 }
 
+// Fin de semana futuro — mismo hex fijo que la web (docs/design-guidelines.md
+// §2, tokens --weekend/--weekend-foreground en src/styles.css).
+const WEEKEND_BG = "#f7e2ce";
+const WEEKEND_TEXT = "#a85f24";
+
+/**
+ * Tira de la semana. El día de hoy va siempre en oscuro como marca de "estás
+ * aquí" — su progreso ya lo cuentan el contador "x de y" y el estado de cada
+ * comida, así que la tira no lo repite. Los días pasados llevan el semáforo de
+ * cumplimiento (sin rojo) y los futuros quedan en neutro, con el fin de semana
+ * apenas teñido para que se distinga de un vistazo. Mismo criterio que la web
+ * (ver src/components/week-strip.tsx) — no se replica su CSS, sino su regla.
+ */
 export function WeekStrip({
-  done,
-  total,
   selected,
   onSelect,
   logs = [],
   todayHabits = [],
 }: {
-  done: number;
-  total: number;
   selected?: string | null;
   onSelect?: (date: string) => void;
   logs?: DailyLog[];
@@ -65,7 +74,6 @@ export function WeekStrip({
   });
 
   const logByDate = new Map((logs ?? []).map((l) => [l.log_date, l]));
-  const todaySignal = ratioSignal(done, total);
 
   // Fila de 7 columnas iguales (sin scroll horizontal ni la píldora de "x/y",
   // que ya se ve en el contador de "Comidas de hoy") para que la semana entera
@@ -77,38 +85,44 @@ export function WeekStrip({
         const date = iso(d);
         const isOpen = selected === date;
         const isPast = date < todayIso;
-        const signal = isToday
-          ? todaySignal
-          : isPast
-            ? habitSignal(logByDate.get(date), todayHabits)
-            : "none";
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        const signal = isPast ? habitSignal(logByDate.get(date), todayHabits) : "none";
+        const isFutureWeekend = !isToday && !isPast && isWeekend;
 
-        const filled = signal !== "none";
         const containerBase = isToday
-          ? filled
-            ? signalClasses(signal)
-            : "border-transparent bg-foreground"
-          : "border-border bg-surface";
+          ? "bg-foreground"
+          : isPast
+            ? signalClasses(signal) || "bg-secondary"
+            : isFutureWeekend
+              ? ""
+              : "bg-secondary";
         const textBase = isToday
-          ? filled
+          ? "text-background"
+          : isPast
             ? signalText(signal)
-            : "text-background"
-          : filled
-            ? signalText(signal)
-            : "text-muted-foreground";
+            : isFutureWeekend
+              ? ""
+              : "text-muted-foreground";
 
         return (
           <Pressable
             key={date}
             onPress={() => onSelect?.(date)}
-            className={`flex-1 items-center gap-0.5 rounded-2xl border py-2.5 active:opacity-80 ${containerBase} ${
-              isOpen ? "border-primary" : ""
+            style={isFutureWeekend ? { backgroundColor: WEEKEND_BG } : undefined}
+            className={`flex-1 items-center gap-0.5 rounded-[14px] py-2.5 active:opacity-80 ${containerBase} ${
+              isOpen ? "border-2 border-primary" : ""
             }`}
           >
-            <Text className={`text-base font-sans-semibold leading-none ${textBase}`}>
+            <Text
+              style={isFutureWeekend ? { color: WEEKEND_TEXT } : undefined}
+              className={`text-base font-heading-medium leading-none ${textBase}`}
+            >
               {d.getDate()}
             </Text>
-            <Text className={`text-[10px] font-sans-semibold ${textBase}`}>
+            <Text
+              style={isFutureWeekend ? { color: WEEKEND_TEXT } : undefined}
+              className={`text-[9.5px] font-mono-medium uppercase tracking-[0.06em] ${textBase}`}
+            >
               {DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}
             </Text>
           </Pressable>

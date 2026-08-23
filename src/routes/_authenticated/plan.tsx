@@ -210,14 +210,16 @@ function PlanPage() {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Plan mensual
           </p>
-          <h1 className="truncate font-display text-3xl capitalize">{monthLabel}</h1>
+          <h1 className="truncate font-title text-[34px] font-semibold tracking-[-0.03em] capitalize">
+            {monthLabel}
+          </h1>
         </div>
         {plan && !confirmed ? (
           <button
             onClick={() => generate.mutate(undefined)}
             disabled={generate.isPending}
             aria-label="Regenerar plan"
-            className="mt-1 rounded-full border border-input bg-surface p-2.5 text-muted-foreground disabled:opacity-60"
+            className="mt-1 rounded-full bg-surface p-2.5 text-muted-foreground disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${generate.isPending ? "animate-spin" : ""}`} />
           </button>
@@ -254,7 +256,7 @@ function PlanPage() {
                 key={key}
                 onClick={() => setTab(key)}
                 className={`flex items-center justify-center gap-1 rounded-full py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:text-sm ${
-                  tab === key ? "bg-surface text-primary shadow-sm" : "text-muted-foreground"
+                  tab === key ? "bg-surface text-primary" : "text-muted-foreground"
                 }`}
               >
                 <Icon className="h-4 w-4 shrink-0" /> {label}
@@ -309,7 +311,7 @@ function PlanPage() {
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 font-display text-2xl tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
+                    className={`shrink-0 font-title text-2xl font-semibold tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
                   >
                     {eur(total)}
                   </span>
@@ -388,7 +390,7 @@ function PlanPage() {
                     <button
                       key={label}
                       onClick={() => void action()}
-                      className="flex flex-col items-center gap-1 rounded-2xl border border-input bg-surface py-3 text-[11px] font-semibold text-muted-foreground transition-transform active:scale-[0.97]"
+                      className="flex flex-col items-center gap-1 rounded-2xl bg-surface py-3 text-[11px] font-semibold text-muted-foreground transition-transform active:scale-[0.97]"
                     >
                       <Icon className="h-4 w-4 text-primary" />
                       {label}
@@ -412,10 +414,10 @@ function PlanPage() {
                         if (c.key !== activeCadence) recadence.mutate(c.key);
                       }}
                       disabled={confirmed || recadence.isPending}
-                      className={`rounded-2xl border px-2 py-2.5 text-xs font-semibold transition-colors disabled:opacity-60 ${
+                      className={`rounded-2xl px-2 py-2.5 text-xs font-semibold transition-colors disabled:opacity-60 ${
                         activeCadence === c.key
-                          ? "border-transparent bg-foreground text-background"
-                          : "border-input bg-surface text-muted-foreground"
+                          ? "bg-foreground text-background"
+                          : "bg-secondary text-muted-foreground"
                       }`}
                     >
                       {c.label}
@@ -498,7 +500,7 @@ function TripActualField({
   const diff = value != null ? Math.round((value - estimated) * 100) / 100 : null;
 
   return (
-    <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+    <div className="mt-3 flex items-center gap-2 rounded-2xl bg-secondary/40 px-3 py-2.5">
       <label className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</label>
       <div className="flex items-center gap-1">
         <input
@@ -509,7 +511,7 @@ function TripActualField({
           onBlur={commit}
           placeholder={eur(estimated)}
           disabled={saving}
-          className="w-20 rounded-lg border border-input bg-surface px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
+          className="w-20 rounded-lg bg-surface px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
         />
         <span className="text-xs text-muted-foreground">€</span>
       </div>
@@ -625,10 +627,8 @@ function ShoppingGroup({
                   ? `${item.name}: ya la tienes, quitar marca`
                   : `${item.name}: marcar que ya la tienes en casa`
               }
-              className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-colors ${
-                item.owned
-                  ? "border-transparent bg-primary text-primary-foreground"
-                  : "border-input bg-surface"
+              className={`grid h-5 w-5 shrink-0 place-items-center rounded-full transition-colors ${
+                item.owned ? "bg-primary text-primary-foreground" : "bg-secondary"
               }`}
             >
               {item.owned ? <Check className="h-3 w-3" strokeWidth={3} /> : null}

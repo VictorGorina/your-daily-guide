@@ -25,7 +25,7 @@ export function DictateButton({
       onClick={handle}
       aria-label={`${label} (no disponible por ahora)`}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-input bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground opacity-60 transition-colors",
+        "inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-muted-foreground opacity-60 transition-colors",
         className,
       )}
     >

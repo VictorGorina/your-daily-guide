@@ -43,7 +43,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="font-display text-2xl text-foreground">Algo no ha cargado</h1>
+        <h1 className="font-title text-2xl font-semibold tracking-[-0.02em] text-foreground">
+          Algo no ha cargado
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">Puedes reintentar o volver al inicio.</p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -57,7 +59,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-full border border-input px-5 py-2.5 text-sm font-medium text-foreground"
+            className="inline-flex items-center justify-center rounded-full bg-secondary px-5 py-2.5 text-sm font-medium text-foreground"
           >
             Inicio
           </a>

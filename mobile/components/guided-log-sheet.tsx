@@ -31,8 +31,8 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
   return (
     <Pressable
       onPress={onPress}
-      className={`rounded-full border px-3 py-1.5 active:opacity-80 ${
-        active ? "border-primary bg-primary" : "border-border bg-card"
+      className={`rounded-full px-3 py-1.5 active:opacity-80 ${
+        active ? "bg-primary" : "bg-secondary"
       }`}
     >
       <Text className={`text-xs ${active ? "text-primary-foreground" : "text-muted-foreground"}`}>
@@ -164,7 +164,7 @@ export function GuidedLogSheet({
             <View className="gap-2">
               <Text className="text-xs text-muted-foreground">Minutos (5-360)</Text>
               <TextInput
-                className="h-12 rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
+                className="h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
                 keyboardType="numeric"
                 value={minutes}
                 onChangeText={setMinutes}
@@ -196,7 +196,7 @@ export function GuidedLogSheet({
                   reset();
                   onOpenChange(false);
                 }}
-                className="flex-row items-center gap-3 rounded-2xl border border-border bg-secondary/60 px-4 py-3 active:opacity-80"
+                className="flex-row items-center gap-3 rounded-2xl bg-secondary/60 px-4 py-3 active:opacity-80"
               >
                 <X size={16} color="#83796c" />
                 <View className="flex-1">
@@ -216,7 +216,7 @@ export function GuidedLogSheet({
                 ))}
               </View>
               <TextInput
-                className="min-h-[80px] rounded-2xl border border-input bg-surface px-4 py-3 text-sm text-foreground"
+                className="min-h-[80px] rounded-2xl bg-muted px-4 py-3 text-sm text-foreground"
                 multiline
                 textAlignVertical="top"
                 value={what}
@@ -231,7 +231,7 @@ export function GuidedLogSheet({
                 Kcal extra aproximadas (opcional, 50-3000)
               </Text>
               <TextInput
-                className="h-12 rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
+                className="h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
                 keyboardType="numeric"
                 value={kcal}
                 onChangeText={setKcal}

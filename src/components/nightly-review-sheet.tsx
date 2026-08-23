@@ -119,7 +119,7 @@ export function NightlyReviewSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center gap-2 font-display">
+          <SheetTitle className="flex items-center gap-2 font-title font-semibold tracking-[-0.02em]">
             <Moon className="h-4 w-4 text-primary" /> Repaso de hoy
           </SheetTitle>
           <SheetDescription>Menos de un minuto, sin nota ni examen.</SheetDescription>
@@ -127,7 +127,7 @@ export function NightlyReviewSheet({
 
         <div className="space-y-4 px-4 pb-8">
           {pending.length > 0 && onSkipPending ? (
-            <div className="surface-card border border-dashed border-primary/40 p-4">
+            <div className="rounded-3xl bg-primary-soft p-4">
               <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Sin marcar todavía
               </span>
@@ -159,7 +159,7 @@ export function NightlyReviewSheet({
               )}
             </p>
             <p className="mt-2 text-sm text-foreground">{reactionLine(t, ratio)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Impulso: {impulso}% 🔥</p>
+            <p className="mt-1 text-xs text-muted-foreground">Impulso: {impulso}%</p>
           </div>
 
           {trendLine ? (

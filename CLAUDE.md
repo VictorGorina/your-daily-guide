@@ -107,6 +107,9 @@ prompt del coach) a partir de un único campo.
 - El código de la app móvil vuelve a convertir la misma paleta de color de la web (definida como
   `oklch()` en `src/styles.css`) a hex en `mobile/tailwind.config.js`, porque React Native no
   entiende `oklch`. Si cambias un color en la web, hay que replicarlo ahí a mano — son dos copias.
+- Guidelines de UI (color, tipografía, radios, espaciado, componentes, movimiento, tono de voz):
+  [docs/design-guidelines.md](docs/design-guidelines.md). Consúltalo antes de tocar estilos para
+  no apartarte de los valores ya establecidos.
 
 ## Agent skills
 

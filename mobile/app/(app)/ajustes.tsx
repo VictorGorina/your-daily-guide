@@ -115,8 +115,7 @@ export default function Ajustes() {
       ],
     );
 
-  const inputClass =
-    "h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground";
+  const inputClass = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
   // `key` fuerza a remontar los inputs no controlados cuando llega el perfil,
   // para que `defaultValue` refleje el dato guardado y no quede en blanco.
   const seed = profile?.id ?? "loading";
@@ -127,10 +126,10 @@ export default function Ajustes() {
         contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6"
         keyboardShouldPersistTaps="handled"
       >
-        <Text className="text-3xl font-display text-foreground">Ajustes</Text>
+        <Text className="font-heading text-3xl text-foreground">Ajustes</Text>
 
         {missing.length ? (
-          <View className="mt-4 flex-row items-start gap-2 rounded-2xl border border-primary/30 bg-primary-soft px-4 py-3">
+          <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3">
             <Info size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
             <Text className="flex-1 text-xs text-foreground">
               Para que el progreso y los avisos funcionen bien, completa: {missing.join(", ")}.
@@ -142,7 +141,7 @@ export default function Ajustes() {
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Cuenta
         </Text>
-        <View className="mt-2 overflow-hidden rounded-3xl border border-border bg-surface">
+        <View className="mt-2 overflow-hidden rounded-3xl bg-surface">
           <Pressable
             onPress={() => router.navigate("/hogar")}
             className="flex-row items-center gap-3 border-b border-border px-4 py-4 active:opacity-70"
@@ -177,7 +176,7 @@ export default function Ajustes() {
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Perfil
         </Text>
-        <View className="mt-2 gap-4 rounded-3xl border border-border bg-surface p-5">
+        <View className="mt-2 gap-4 rounded-3xl bg-surface p-5">
           <Text className="text-sm font-sans-semibold text-foreground">Datos básicos</Text>
           <TextInput
             key={`name-${seed}`}
@@ -261,7 +260,7 @@ export default function Ajustes() {
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Coach
         </Text>
-        <View className="mt-2 gap-4 rounded-3xl border border-border bg-surface p-5">
+        <View className="mt-2 gap-4 rounded-3xl bg-surface p-5">
           <View>
             <Text className="text-sm font-sans-semibold text-foreground">Tono</Text>
             <View className="mt-3 flex-row gap-2">
@@ -271,8 +270,8 @@ export default function Ajustes() {
                   <Pressable
                     key={t}
                     onPress={() => save.mutate({ tone: t })}
-                    className={`flex-1 items-center rounded-2xl border px-3 py-3 active:opacity-80 ${
-                      active ? "border-primary bg-primary-soft" : "border-input bg-surface"
+                    className={`flex-1 items-center rounded-2xl px-3 py-3 active:opacity-80 ${
+                      active ? "bg-primary-soft" : "bg-secondary"
                     }`}
                   >
                     <Text
@@ -286,7 +285,7 @@ export default function Ajustes() {
             </View>
           </View>
 
-          <View className="border-t border-border pt-4">
+          <View className="pt-4">
             <Text className="text-sm font-sans-semibold text-foreground">Recordatorios</Text>
             <View className="mt-3 flex-row gap-3">
               <View className="flex-1">
@@ -325,14 +324,14 @@ export default function Ajustes() {
         </Text>
         <Pressable
           onPress={() => void signOut()}
-          className="mt-2 w-full items-center rounded-full border border-input py-4 active:opacity-80"
+          className="mt-2 w-full items-center rounded-full bg-surface py-4 active:opacity-80"
         >
           <Text className="text-sm font-sans-medium text-muted-foreground">Cerrar sesión</Text>
         </Pressable>
         <Pressable
           onPress={confirmDelete}
           disabled={deleting}
-          className="mt-3 w-full items-center rounded-full border border-destructive/30 py-4 active:opacity-80"
+          className="mt-3 w-full items-center rounded-full bg-destructive/10 py-4 active:opacity-80"
         >
           <Text className="text-sm font-sans-medium text-destructive">
             {deleting ? "Eliminando..." : "Eliminar cuenta"}
