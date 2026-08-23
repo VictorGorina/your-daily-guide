@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import {
+  CalendarClock,
   CalendarDays,
   CalendarRange,
   ChevronDown,
   ChevronUp,
+  Lock,
   Refrigerator,
   RefreshCw,
   Share2,
@@ -48,6 +50,7 @@ import {
   splitTripByStatus,
   tripActualsTotal,
   tripLabel,
+  tripsOfCadence,
   tripTiming,
   tripToText,
   type MonthlyPlan,
@@ -128,7 +131,8 @@ export default function Plan() {
   const hasActuals = Object.keys(tripActuals).length > 0;
   const confirmedTrips = planQ.data?.confirmed_trips ?? {};
   const activeCadence: ShoppingCadence = cadence ?? cadenceOf(shopping);
-  const trips = groupByTrip(shopping);
+  const tripsTotal = tripsOfCadence(activeCadence);
+  const trips = groupByTrip(shopping, tripsTotal);
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   // Cada compra es una lista distinta, así que se comparte aparte (no todo el
@@ -608,11 +612,13 @@ function TripActualField({
  * Tarjeta de un tramo de ingredientes, en tres zonas: pendientes (agrupados
  * por categoría como en el súper), "Ingredientes en casa" (nevera) e
  * "Ingredientes comprados" (súper) — marcar un artículo lo mueve de la
- * primera a una de las otras dos, cada una con su propio subtotal. El tramo
- * que toca hoy va abierto; los futuros empiezan comprimidos (se despliegan al
- * tocar la cabecera) y los que ya han pasado van en gris. El botón de
- * compartir va aquí, junto al nombre del tramo, porque cada uno es una lista
- * aparte (no el mes entero).
+ * primera a una de las otras dos, cada una con su propio subtotal. Solo el
+ * tramo que toca hoy va abierto y se puede marcar; los pasados y los futuros
+ * empiezan comprimidos (se despliegan al tocar la cabecera, solo para
+ * consultar) y llevan un color distinto para que se note que están
+ * bloqueados: gris apagado si ya pasaron, punteado si todavía no toca. El
+ * botón de compartir va aquí, junto al nombre del tramo, porque cada uno es
+ * una lista aparte (no el mes entero).
  */
 function TripCard({
   trip,
@@ -641,20 +647,33 @@ function TripCard({
   confirming: boolean;
   onConfirm: (confirmed: boolean) => void;
 }) {
-  const [open, setOpen] = useState(timing !== "future");
+  const [open, setOpen] = useState(timing === "current");
   const tripTotal = pendingTotal(trip.groups);
   const totalCount = trip.groups.reduce((s, g) => s + g.items.length, 0);
   const { pending, home, bought } = splitTripByStatus(trip.groups);
   const isPast = timing === "past";
+  const isFuture = timing === "future";
+  const editable = timing === "current";
   const canConfirm = home.length + bought.length > 0;
 
   return (
-    <View className={`rounded-3xl bg-surface p-5 ${isPast ? "opacity-50" : ""}`}>
+    <View
+      className={`rounded-3xl p-5 ${
+        isPast
+          ? "bg-secondary/50"
+          : isFuture
+            ? "border border-dashed border-border bg-transparent"
+            : "bg-surface"
+      }`}
+      style={isPast ? { opacity: 0.6 } : undefined}
+    >
       <View className="flex-row items-center justify-between gap-3">
         <Pressable
           onPress={() => setOpen((o) => !o)}
           className="min-w-0 flex-1 flex-row items-center gap-1.5"
         >
+          {isPast ? <Lock size={13} color="#83796c" /> : null}
+          {isFuture ? <CalendarClock size={13} color="#83796c" /> : null}
           <Text className="min-w-0 flex-1 text-sm font-sans-semibold text-foreground">{label}</Text>
           {open ? (
             <ChevronUp size={16} color="#83796c" />
@@ -673,7 +692,8 @@ function TripCard({
         </View>
       </View>
       <Text className="mt-1 text-xs text-muted-foreground">
-        {isPast ? "Ya ha pasado · " : null}
+        {isPast ? "Ya ha pasado · no se puede modificar · " : null}
+        {isFuture ? "Aún no toca · se activa cuando llegue el día · " : null}
         {totalCount} artículo{totalCount === 1 ? "" : "s"}
         {!open ? " · toca para ver" : null}
       </Text>
@@ -682,7 +702,12 @@ function TripCard({
         <>
           <View className="mt-3 gap-3">
             {pending.map((group) => (
-              <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+              <ShoppingGroup
+                key={group.category}
+                group={group}
+                onToggleOwned={onToggleOwned}
+                editable={editable}
+              />
             ))}
           </View>
 
@@ -691,12 +716,14 @@ function TripCard({
             items={home}
             subtotal={homeTotal(trip.groups)}
             onToggleOwned={onToggleOwned}
+            editable={editable}
           />
           <OwnedSection
             title="Ingredientes comprados"
             items={bought}
             subtotal={boughtTotal(trip.groups)}
             onToggleOwned={onToggleOwned}
+            editable={editable}
           />
 
           {canConfirm || confirmedAt ? (
@@ -705,6 +732,7 @@ function TripCard({
               confirmedAt={confirmedAt}
               confirming={confirming}
               onConfirm={onConfirm}
+              editable={editable}
             />
           ) : null}
 
@@ -731,11 +759,13 @@ function OwnedSection({
   items,
   subtotal,
   onToggleOwned,
+  editable,
 }: {
   title: string;
   items: ShoppingItem[];
   subtotal: number;
   onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
+  editable: boolean;
 }) {
   if (!items.length) return null;
   return (
@@ -754,7 +784,11 @@ function OwnedSection({
                 {eur(item.price_eur)}
               </Text>
             </View>
-            <OwnedToggle owned={item.owned} onChange={(next) => onToggleOwned(item.name, next)} />
+            <OwnedToggle
+              owned={item.owned}
+              onChange={(next) => onToggleOwned(item.name, next)}
+              disabled={!editable}
+            />
           </View>
         ))}
       </View>
@@ -766,18 +800,22 @@ function OwnedSection({
  * Botón para "fijar" los ingredientes del tramo (marcar ese periodo como
  * resuelto), o la confirmación de que ya lo está con opción a deshacer. Solo
  * aparece cuando hay algo marcado (en casa o comprado) — antes de eso no hay
- * nada que fijar.
+ * nada que fijar. Fuera del tramo en curso no se puede fijar ni deshacer (ya
+ * no hay nada que marcar); si ya estaba fijado de cuando sí era el tramo
+ * activo, se sigue viendo la marca pero sin el botón de deshacer.
  */
 function FijarTripButton({
   cadence,
   confirmedAt,
   confirming,
   onConfirm,
+  editable,
 }: {
   cadence: ShoppingCadence;
   confirmedAt: string | undefined;
   confirming: boolean;
   onConfirm: (confirmed: boolean) => void;
+  editable: boolean;
 }) {
   const scope = cadenceScopeLabel(cadence);
   if (confirmedAt) {
@@ -786,12 +824,15 @@ function FijarTripButton({
         <Text className="flex-1 text-xs font-sans-medium text-success">
           Ingredientes {scope} fijados
         </Text>
-        <Pressable onPress={() => onConfirm(false)} disabled={confirming} hitSlop={8}>
-          <Text className="text-xs font-sans-semibold text-muted-foreground">Deshacer</Text>
-        </Pressable>
+        {editable ? (
+          <Pressable onPress={() => onConfirm(false)} disabled={confirming} hitSlop={8}>
+            <Text className="text-xs font-sans-semibold text-muted-foreground">Deshacer</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
+  if (!editable) return null;
   return (
     <Pressable
       onPress={() => onConfirm(true)}
@@ -811,19 +852,26 @@ function FijarTripButton({
  * las dos opciones a la vista (nevera / carrito). Empieza sin ninguna marcada
  * (ni color) y solo se resalta en verde la que el usuario elige — volver a
  * tocar la misma la deselecciona. Las dos opciones significan "ya no hace
- * falta comprarlo"; solo cambian de dónde ha salido.
+ * falta comprarlo"; solo cambian de dónde ha salido. Fuera del tramo en curso
+ * (`disabled`) se ve la marca pero no se puede tocar.
  */
 function OwnedToggle({
   owned,
   onChange,
+  disabled = false,
 }: {
   owned: "fridge" | "store" | undefined;
   onChange: (next: "fridge" | "store" | null) => void;
+  disabled?: boolean;
 }) {
   return (
-    <View className="flex-row items-center gap-1 rounded-full bg-secondary/70 p-1">
+    <View
+      className="flex-row items-center gap-1 rounded-full bg-secondary/70 p-1"
+      style={disabled ? { opacity: 0.5 } : undefined}
+    >
       <Pressable
         onPress={() => onChange(owned === "fridge" ? null : "fridge")}
+        disabled={disabled}
         hitSlop={10}
         className={`h-8 w-9 items-center justify-center rounded-full active:opacity-80 ${
           owned === "fridge" ? "bg-success" : ""
@@ -833,6 +881,7 @@ function OwnedToggle({
       </Pressable>
       <Pressable
         onPress={() => onChange(owned === "store" ? null : "store")}
+        disabled={disabled}
         hitSlop={10}
         className={`h-8 w-9 items-center justify-center rounded-full active:opacity-80 ${
           owned === "store" ? "bg-success" : ""
@@ -847,9 +896,11 @@ function OwnedToggle({
 function ShoppingGroup({
   group,
   onToggleOwned,
+  editable,
 }: {
   group: { category: string; items: ShoppingItem[] };
   onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
+  editable: boolean;
 }) {
   const total = pendingTotal([group]);
   return (
@@ -874,7 +925,11 @@ function ShoppingGroup({
                 {eur(item.price_eur)}
               </Text>
             </View>
-            <OwnedToggle owned={item.owned} onChange={(next) => onToggleOwned(item.name, next)} />
+            <OwnedToggle
+              owned={item.owned}
+              onChange={(next) => onToggleOwned(item.name, next)}
+              disabled={!editable}
+            />
           </View>
         ))}
       </View>

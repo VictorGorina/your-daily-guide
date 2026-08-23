@@ -159,12 +159,25 @@ export const coverageRatio = (coverage: PlanCoverage, month: string) => {
 
 const FULL_MONTH_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
-/** Rango de días [from, to] del mes que cubre una compra dentro de la cobertura del plan. */
+/**
+ * Rango de días [from, to] del mes que cubre una compra dentro de la
+ * cobertura del plan. Reparte los días lo más igual posible entre tramos (los
+ * primeros se llevan el día de más si no divide exacto) en vez de redondear
+ * cada tramo hacia arriba: con eso último, un tramo tras otro se iba comiendo
+ * más días de los que quedaban y el último acababa con un rango imposible
+ * (p. ej. "días 32-31" cubriendo 9 días entre 4 compras). Si aun así no
+ * quedan días para un tramo (menos días que compras), se deja en el último
+ * día cubierto en vez de desbordar el mes.
+ */
 export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number) => {
   const total = Math.max(1, coverage.toDay - coverage.fromDay + 1);
-  const per = Math.ceil(total / Math.max(1, trips));
-  const from = coverage.fromDay + trip * per;
-  const to = Math.min(coverage.toDay, from + per - 1);
+  const t = Math.max(1, trips);
+  const base = Math.floor(total / t);
+  const extra = total % t;
+  const start = trip * base + Math.min(trip, extra);
+  const size = base + (trip < extra ? 1 : 0);
+  const from = Math.min(coverage.toDay, coverage.fromDay + start);
+  const to = Math.max(from, Math.min(coverage.toDay, from + size - 1));
   return { from, to };
 };
 
@@ -241,16 +254,20 @@ export const repartitionTrips = (
   }));
 };
 
-/** Agrupa la lista por compra, conservando categorías. */
-export const groupByTrip = (shopping: ShoppingList | null | undefined) => {
-  const trips = tripCount(shopping);
-  return Array.from({ length: trips }, (_, t) => ({
+/**
+ * Agrupa la lista por compra, conservando categorías. `trips` debe venir de la
+ * cadencia (`tripsOfCadence`), no de escanear los datos: si un tramo se queda
+ * sin artículos (p. ej. pocos frescos repartidos entre muchas compras), sigue
+ * apareciendo vacío en vez de desaparecer — si no, "semana 4 de 4" podía faltar
+ * sin más cuando esa semana no tenía nada asignado.
+ */
+export const groupByTrip = (shopping: ShoppingList | null | undefined, trips: number) =>
+  Array.from({ length: Math.max(1, trips) }, (_, t) => ({
     trip: t,
     groups: (shopping ?? [])
       .map((g) => ({ category: g.category, items: g.items.filter((i) => i.trip === t) }))
       .filter((g) => g.items.length),
-  })).filter((t) => t.groups.length);
-};
+  }));
 
 const asItem = (raw: unknown): ShoppingItem | null => {
   const o = (raw ?? {}) as Record<string, unknown>;
@@ -731,8 +748,8 @@ export const shoppingToText = (
     year: "numeric",
   });
   const lines = [`Ingredientes del mes · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
-  const trips = tripCount(shopping);
-  for (const trip of groupByTrip(shopping)) {
+  const trips = tripsOfCadence(cadence);
+  for (const trip of groupByTrip(shopping, trips)) {
     lines.push(
       `${tripLabel(cadence, trip.trip, coverage, trips)} — ${eur(pendingTotal(trip.groups))}`,
     );

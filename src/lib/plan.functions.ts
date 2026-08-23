@@ -4,6 +4,7 @@ import { generateText, streamText } from "ai";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
 import {
+  cadenceOf,
   cleanPlan,
   cleanShopping,
   cleanTripActuals,
@@ -14,7 +15,6 @@ import {
   mergeFuturePlan,
   monthCoverage,
   repartitionTrips,
-  tripCount,
   tripDayRange,
   tripsOfCadence,
   type PlanCoverage,
@@ -392,10 +392,10 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ confirmed_trips: TripConfirmations }> => {
     const { data: row } = await context.supabase
       .from("monthly_plans")
-      .select("shopping, confirmed_trips")
+      .select("plan, shopping, confirmed_trips")
       .eq("month", data.month)
       .maybeSingle();
-    const typed = row as { shopping?: unknown; confirmed_trips?: unknown } | null;
+    const typed = row as { plan?: unknown; shopping?: unknown; confirmed_trips?: unknown } | null;
     const shopping = cleanShopping(typed?.shopping);
     if (!shopping.length) throw new Error("Todavía no hay lista de la compra este mes");
 
@@ -404,7 +404,11 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     if (data.confirmed) next[data.trip] = madridTodayISO();
     else delete next[data.trip];
 
-    const allConfirmed = Object.keys(next).length >= tripCount(shopping);
+    // El número "oficial" de tramos es el de la cadencia guardada, no el que se
+    // deduzca de los datos (un tramo sin artículos asignados no debe contar de
+    // menos y dar por fijado el mes entero antes de tiempo).
+    const cadence = cleanPlan(typed?.plan)?.cadence ?? cadenceOf(shopping);
+    const allConfirmed = Object.keys(next).length >= tripsOfCadence(cadence);
 
     const { error } = await context.supabase
       .from("monthly_plans")

@@ -193,6 +193,10 @@ export const cadenceOf = (shopping: ShoppingList | null | undefined): ShoppingCa
   return trips >= 4 ? "semanal" : trips >= 2 ? "bisemanal" : "mensual";
 };
 
+/** Número "oficial" de tramos de una cadencia (4 semanal, 2 bisemanal, 1 mensual). */
+export const tripsOfCadence = (cadence: ShoppingCadence) =>
+  CADENCES.find((c) => c.key === cadence)?.trips ?? 1;
+
 /** A quién se refiere cada tramo de ingredientes, en palabras, según la cadencia. */
 export const cadenceScopeLabel = (cadence: ShoppingCadence) =>
   cadence === "semanal"
@@ -216,7 +220,7 @@ export const tripDayRange = (cadence: ShoppingCadence, trip: number) => {
  */
 export const tripLabel = (cadence: ShoppingCadence, trip: number) => {
   if (cadence === "mensual") return "Ingredientes del mes";
-  const trips = CADENCES.find((c) => c.key === cadence)?.trips ?? 1;
+  const trips = tripsOfCadence(cadence);
   const { from, to } = tripDayRange(cadence, trip);
   return `Ingredientes de la semana ${trip + 1} de ${trips} · días ${from}-${to}`;
 };
@@ -240,16 +244,20 @@ export const tripTiming = (
   return "current";
 };
 
-/** Agrupa la lista por compra, conservando categorías. */
-export const groupByTrip = (shopping: ShoppingList | null | undefined) => {
-  const trips = tripCount(shopping);
-  return Array.from({ length: trips }, (_, t) => ({
+/**
+ * Agrupa la lista por compra, conservando categorías. `trips` debe venir de la
+ * cadencia (`tripsOfCadence`), no de escanear los datos: si un tramo se queda
+ * sin artículos (p. ej. pocos frescos repartidos entre muchas compras), sigue
+ * apareciendo vacío en vez de desaparecer — si no, "semana 4 de 4" podía
+ * faltar sin más cuando esa semana no tenía nada asignado.
+ */
+export const groupByTrip = (shopping: ShoppingList | null | undefined, trips: number) =>
+  Array.from({ length: Math.max(1, trips) }, (_, t) => ({
     trip: t,
     groups: (shopping ?? [])
       .map((g) => ({ category: g.category, items: g.items.filter((i) => i.trip === t) }))
       .filter((g) => g.items.length),
-  })).filter((t) => t.groups.length);
-};
+  }));
 
 /**
  * Color del punto de categoría en la lista de la compra. Las categorías las

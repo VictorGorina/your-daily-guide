@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  CalendarClock,
   CalendarDays,
   CalendarRange,
   ChevronDown,
   ChevronUp,
   Copy,
   Download,
+  Lock,
   Refrigerator,
   Share2,
   RefreshCw,
@@ -36,8 +38,8 @@ import {
   shoppingToText,
   splitTripByStatus,
   tripActualsTotal,
-  tripCount,
   tripLabel,
+  tripsOfCadence,
   tripTiming,
   tripToText,
   shoppingTotal,
@@ -164,8 +166,8 @@ function PlanPage() {
   const confirmedTrips = planQ.data?.confirmed_trips ?? {};
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
-  const trips = groupByTrip(shopping);
-  const tripsTotal = tripCount(shopping);
+  const tripsTotal = tripsOfCadence(activeCadence);
+  const trips = groupByTrip(shopping, tripsTotal);
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   const listText = () => shoppingToText(shopping, activeCadence, month, coverage);
@@ -558,9 +560,11 @@ function TripActualField({
  * Tarjeta de un tramo de ingredientes, en tres zonas: pendientes (agrupados
  * por categoría como en el súper), "Ingredientes en casa" (nevera) e
  * "Ingredientes comprados" (súper) — marcar un artículo lo mueve de la
- * primera zona a una de las otras dos, cada una con su propio subtotal. El
- * tramo que toca hoy va abierto; los futuros empiezan comprimidos (se
- * despliegan al tocar la cabecera) y los que ya han pasado van en gris. El
+ * primera zona a una de las otras dos, cada una con su propio subtotal. Solo
+ * el tramo que toca hoy va abierto y se puede marcar; los pasados y los
+ * futuros empiezan comprimidos (se despliegan al tocar la cabecera, solo para
+ * consultar) y llevan un color distinto para que se note que están
+ * bloqueados: gris apagado si ya pasaron, punteado si todavía no toca. El
  * botón de compartir va aquí, junto al nombre del tramo, porque cada uno es
  * una lista aparte (no el mes entero).
  */
@@ -591,21 +595,29 @@ function TripCard({
   confirming: boolean;
   onConfirm: (confirmed: boolean) => void;
 }) {
-  const [open, setOpen] = useState(timing !== "future");
+  const [open, setOpen] = useState(timing === "current");
   const tripTotal = pendingTotal(trip.groups);
   const totalCount = trip.groups.reduce((s, g) => s + g.items.length, 0);
   const { pending, home, bought } = splitTripByStatus(trip.groups);
   const isPast = timing === "past";
+  const isFuture = timing === "future";
+  const editable = timing === "current";
   const canConfirm = home.length + bought.length > 0;
 
   return (
-    <div className={`surface-card p-5 ${isPast ? "opacity-50" : ""}`}>
+    <div
+      className={`surface-card p-5 ${isPast ? "bg-secondary/50 opacity-60" : ""} ${isFuture ? "border border-dashed border-border bg-transparent" : ""}`}
+    >
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
         >
+          {isPast ? <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
+          {isFuture ? (
+            <CalendarClock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          ) : null}
           <h3 className="min-w-0 flex-1 text-sm font-semibold">{label}</h3>
           {open ? (
             <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -626,7 +638,8 @@ function TripCard({
         </div>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {isPast ? "Ya ha pasado · " : null}
+        {isPast ? "Ya ha pasado · no se puede modificar · " : null}
+        {isFuture ? "Aún no toca · se activa cuando llegue el día · " : null}
         {totalCount} artículo{totalCount === 1 ? "" : "s"}
         {!open ? " · toca para ver" : null}
       </p>
@@ -634,7 +647,12 @@ function TripCard({
       {open ? (
         <>
           {pending.map((group) => (
-            <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+            <ShoppingGroup
+              key={group.category}
+              group={group}
+              onToggleOwned={onToggleOwned}
+              editable={editable}
+            />
           ))}
 
           <OwnedSection
@@ -642,12 +660,14 @@ function TripCard({
             items={home}
             subtotal={homeTotal(trip.groups)}
             onToggleOwned={onToggleOwned}
+            editable={editable}
           />
           <OwnedSection
             title="Ingredientes comprados"
             items={bought}
             subtotal={boughtTotal(trip.groups)}
             onToggleOwned={onToggleOwned}
+            editable={editable}
           />
 
           {canConfirm || confirmedAt ? (
@@ -656,6 +676,7 @@ function TripCard({
               confirmedAt={confirmedAt}
               confirming={confirming}
               onConfirm={onConfirm}
+              editable={editable}
             />
           ) : null}
 
@@ -674,9 +695,11 @@ function TripCard({
 function ShoppingGroup({
   group,
   onToggleOwned,
+  editable,
 }: {
   group: { category: string; items: ShoppingItem[] };
   onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
+  editable: boolean;
 }) {
   return (
     <div className="mt-3">
@@ -695,6 +718,7 @@ function ShoppingGroup({
               owned={item.owned}
               onChange={(next) => onToggleOwned(item.name, next)}
               name={item.name}
+              disabled={!editable}
             />
           </li>
         ))}
@@ -714,11 +738,13 @@ function OwnedSection({
   items,
   subtotal,
   onToggleOwned,
+  editable,
 }: {
   title: string;
   items: ShoppingItem[];
   subtotal: number;
   onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
+  editable: boolean;
 }) {
   if (!items.length) return null;
   return (
@@ -739,6 +765,7 @@ function OwnedSection({
               owned={item.owned}
               onChange={(next) => onToggleOwned(item.name, next)}
               name={item.name}
+              disabled={!editable}
             />
           </li>
         ))}
@@ -751,35 +778,42 @@ function OwnedSection({
  * Botón para "fijar" los ingredientes del tramo (marcar ese periodo como
  * resuelto), o la confirmación de que ya lo está con opción a deshacer. Solo
  * aparece cuando hay algo marcado (en casa o comprado) — antes de eso no hay
- * nada que fijar.
+ * nada que fijar. Fuera del tramo en curso no se puede fijar ni deshacer (ya
+ * no hay nada que marcar); si ya estaba fijado de cuando sí era el tramo
+ * activo, se sigue viendo la marca pero sin el botón de deshacer.
  */
 function FijarTripButton({
   cadence,
   confirmedAt,
   confirming,
   onConfirm,
+  editable,
 }: {
   cadence: ShoppingCadence;
   confirmedAt: string | undefined;
   confirming: boolean;
   onConfirm: (confirmed: boolean) => void;
+  editable: boolean;
 }) {
   const scope = cadenceScopeLabel(cadence);
   if (confirmedAt) {
     return (
       <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-success/15 px-3.5 py-3">
         <span className="text-xs font-medium text-success">Ingredientes {scope} fijados</span>
-        <button
-          type="button"
-          onClick={() => onConfirm(false)}
-          disabled={confirming}
-          className="text-xs font-semibold text-muted-foreground disabled:opacity-60"
-        >
-          Deshacer
-        </button>
+        {editable ? (
+          <button
+            type="button"
+            onClick={() => onConfirm(false)}
+            disabled={confirming}
+            className="text-xs font-semibold text-muted-foreground disabled:opacity-60"
+          >
+            Deshacer
+          </button>
+        ) : null}
       </div>
     );
   }
+  if (!editable) return null;
   return (
     <button
       type="button"
@@ -796,28 +830,35 @@ function FijarTripButton({
  * Toggle "lo tengo en casa" / "lo he comprado": empieza sin ninguna opción
  * marcada (ni color) y solo se resalta la que el usuario elige — volver a
  * tocar la misma la deselecciona. Las dos opciones significan "ya no hace
- * falta comprarlo"; solo cambian de dónde ha salido.
+ * falta comprarlo"; solo cambian de dónde ha salido. Fuera del tramo en curso
+ * (`disabled`) se ve la marca pero no se puede tocar: un tramo pasado ya no
+ * se edita y uno futuro todavía no toca.
  */
 function OwnedToggle({
   owned,
   onChange,
   name,
+  disabled = false,
 }: {
   owned: "fridge" | "store" | undefined;
   onChange: (next: "fridge" | "store" | null) => void;
   name: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1 rounded-full bg-secondary/70 p-1">
       <button
         type="button"
         onClick={() => onChange(owned === "fridge" ? null : "fridge")}
+        disabled={disabled}
         aria-label={
           owned === "fridge" ? `${name}: ya en la nevera, quitar marca` : `${name}: ya lo tenía`
         }
         aria-pressed={owned === "fridge"}
-        className={`grid h-7 w-7 place-items-center rounded-full transition-colors ${
-          owned === "fridge" ? "bg-success text-success-foreground" : "text-muted-foreground"
+        className={`grid h-7 w-7 place-items-center rounded-full transition-colors disabled:cursor-not-allowed ${
+          owned === "fridge"
+            ? "bg-success text-success-foreground"
+            : "text-muted-foreground disabled:opacity-50"
         }`}
       >
         <Refrigerator className="h-3.5 w-3.5" />
@@ -825,14 +866,17 @@ function OwnedToggle({
       <button
         type="button"
         onClick={() => onChange(owned === "store" ? null : "store")}
+        disabled={disabled}
         aria-label={
           owned === "store"
             ? `${name}: comprado en el súper, quitar marca`
             : `${name}: marcar comprado en el súper`
         }
         aria-pressed={owned === "store"}
-        className={`grid h-7 w-7 place-items-center rounded-full transition-colors ${
-          owned === "store" ? "bg-success text-success-foreground" : "text-muted-foreground"
+        className={`grid h-7 w-7 place-items-center rounded-full transition-colors disabled:cursor-not-allowed ${
+          owned === "store"
+            ? "bg-success text-success-foreground"
+            : "text-muted-foreground disabled:opacity-50"
         }`}
       >
         <ShoppingCart className="h-3.5 w-3.5" />
