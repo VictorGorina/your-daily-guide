@@ -153,7 +153,14 @@ export type ShoppingItem = {
   name: string;
   qty: string;
   price_eur: number;
-  /** Compra a la que pertenece (0 = primera). */
+  /**
+   * Compra a la que pertenece (0 = primera). Si un ingrediente hace falta en
+   * platos de más de una compra (el mismo plato se repite en semanas
+   * distintas), puede aparecer varias veces con el mismo `name` y distinto
+   * `trip` — una fila por compra, cada una solo con la cantidad y el precio
+   * de esa compra. El emparejamiento al marcar "comprado" es por `name` +
+   * `trip` juntos, nunca solo por `name` (ver AGENTS.md).
+   */
   trip: number;
   /** Alimento fresco (poca vida útil). */
   perishable: boolean;

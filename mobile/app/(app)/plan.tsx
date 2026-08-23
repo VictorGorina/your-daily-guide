@@ -87,8 +87,24 @@ export default function Plan() {
       Alert.alert(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
   });
 
+  // Cambiar la cadencia solo reparte la misma compra en más o menos viajes según
+  // los platos reales de cada semana, sin regenerar el plan por IA (ver AGENTS.md).
+  const recadence = useMutation({
+    mutationFn: (nextCadence: ShoppingCadence) =>
+      apiPost<GenerateResult>("plan/recadence", { month, cadence: nextCadence }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, plan: res.plan, shopping: res.shopping } : prev,
+      );
+    },
+    onError: (e) => {
+      setCadence(null);
+      Alert.alert(e instanceof Error ? e.message : "No hemos podido cambiar la frecuencia");
+    },
+  });
+
   const owned = useMutation({
-    mutationFn: (vars: { itemName: string; source: "fridge" | "store" | null }) =>
+    mutationFn: (vars: { itemName: string; trip: number; source: "fridge" | "store" | null }) =>
       apiPost<{ shopping: ShoppingList }>("plan/shopping-owned", { month, ...vars }),
     onSuccess: (res) => {
       qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
@@ -358,14 +374,14 @@ export default function Plan() {
                   <View className="mt-3 flex-row gap-2">
                     {CADENCES.map((c) => {
                       const active = activeCadence === c.key;
-                      const disabled = generate.isPending;
+                      const disabled = recadence.isPending;
                       return (
                         <Pressable
                           key={c.key}
                           onPress={() => {
                             if (disabled) return;
                             setCadence(c.key);
-                            if (c.key !== activeCadence) generate.mutate(c.key);
+                            if (c.key !== activeCadence) recadence.mutate(c.key);
                           }}
                           disabled={disabled}
                           className={`flex-1 items-center rounded-2xl px-2 py-2.5 active:opacity-80 ${
@@ -384,9 +400,9 @@ export default function Plan() {
                       );
                     })}
                   </View>
-                  {generate.isPending ? (
+                  {recadence.isPending ? (
                     <Text className="mt-2 text-xs text-muted-foreground">
-                      Recolocando la compra y los platos...
+                      Repartiendo la compra...
                     </Text>
                   ) : trips.length > 1 ? (
                     <Text className="mt-2 text-xs text-muted-foreground">
@@ -414,7 +430,9 @@ export default function Plan() {
                       tripActual={tripActuals[t.trip]}
                       savingActual={setActual.isPending}
                       onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
-                      onToggleOwned={(itemName, source) => owned.mutate({ itemName, source })}
+                      onToggleOwned={(itemName, source) =>
+                        owned.mutate({ itemName, trip: t.trip, source })
+                      }
                       confirmedAt={confirmedTrips[t.trip]}
                       confirming={confirmTrip.isPending}
                       onConfirm={(confirmed) => confirmTrip.mutate({ trip: t.trip, confirmed })}

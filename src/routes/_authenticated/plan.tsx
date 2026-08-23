@@ -120,7 +120,7 @@ function PlanPage() {
 
   const toggleOwned = useServerFn(toggleShoppingOwned);
   const owned = useMutation({
-    mutationFn: (vars: { itemName: string; source: "fridge" | "store" | null }) =>
+    mutationFn: (vars: { itemName: string; trip: number; source: "fridge" | "store" | null }) =>
       toggleOwned({ data: { month, ...vars } }),
     onSuccess: (res) => {
       qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
@@ -472,7 +472,9 @@ function PlanPage() {
                     tripActual={tripActuals[t.trip]}
                     savingActual={setActual.isPending}
                     onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
-                    onToggleOwned={(itemName, source) => owned.mutate({ itemName, source })}
+                    onToggleOwned={(itemName, source) =>
+                      owned.mutate({ itemName, trip: t.trip, source })
+                    }
                     confirmedAt={confirmedTrips[t.trip]}
                     confirming={confirmTrip.isPending}
                     onConfirm={(confirmed) => confirmTrip.mutate({ trip: t.trip, confirmed })}
