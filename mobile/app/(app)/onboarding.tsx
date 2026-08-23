@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DictateButton } from "../../components/dictate-button";
 import { apiPost } from "../../lib/api";
 import { ageFromDOB } from "../../lib/age";
 import { addMessage, monthISO, saveProfile } from "../../lib/daily";
@@ -776,14 +777,32 @@ export default function Onboarding() {
                             className="min-h-[72px] rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-foreground"
                             textAlignVertical="top"
                           />
-                          <Pressable
-                            onPress={() => setEditing(null)}
-                            className="self-end rounded-full bg-secondary px-3.5 py-1.5"
-                          >
-                            <Text className="text-xs font-sans-medium text-secondary-foreground">
-                              Listo
-                            </Text>
-                          </Pressable>
+                          <View className="flex-row items-center justify-between">
+                            {a.q !== BIRTHDATE_Q.q ? (
+                              <DictateButton
+                                onText={(t) => {
+                                  setAnswers((prev) =>
+                                    prev.map((x) =>
+                                      x.key === a.key
+                                        ? { ...x, a: x.a.trim() ? `${x.a.trim()} ${t}` : t }
+                                        : x,
+                                    ),
+                                  );
+                                  setDirty(true);
+                                }}
+                              />
+                            ) : (
+                              <View />
+                            )}
+                            <Pressable
+                              onPress={() => setEditing(null)}
+                              className="self-end rounded-full bg-secondary px-3.5 py-1.5"
+                            >
+                              <Text className="text-xs font-sans-medium text-secondary-foreground">
+                                Listo
+                              </Text>
+                            </Pressable>
+                          </View>
                         </View>
                       ) : (
                         <Pressable
@@ -971,15 +990,22 @@ export default function Onboarding() {
                     </Pressable>
                   ) : null}
                 </View>
-                <Pressable
-                  onPress={submit}
-                  disabled={saving || !value.trim()}
-                  className={`h-9 w-9 items-center justify-center rounded-full bg-primary ${
-                    saving || !value.trim() ? "opacity-40" : ""
-                  }`}
-                >
-                  <Send size={16} color="#3e3d39" />
-                </Pressable>
+                <View className="flex-row items-center gap-2">
+                  {!current?.dateInput ? (
+                    <DictateButton
+                      onText={(t) => setValue((v) => (v.trim() ? `${v.trim()} ${t}` : t))}
+                    />
+                  ) : null}
+                  <Pressable
+                    onPress={submit}
+                    disabled={saving || !value.trim()}
+                    className={`h-9 w-9 items-center justify-center rounded-full bg-primary ${
+                      saving || !value.trim() ? "opacity-40" : ""
+                    }`}
+                  >
+                    <Send size={16} color="#3e3d39" />
+                  </Pressable>
+                </View>
               </View>
             </View>
           )}

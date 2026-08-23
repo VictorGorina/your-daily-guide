@@ -1,123 +1,90 @@
-import { authHeaders } from "@/lib/auth-headers";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
-type Recorder = {
-  stop: () => Promise<Blob>;
+export type DictationState = "idle" | "listening";
+
+// La Web Speech API no forma parte de lib.dom.d.ts (no es un estándar, solo la
+// implementan Chrome/Edge/Safari con prefijo webkit); se tipa aquí, local a
+// este módulo, en vez de añadir una declaración global .d.ts para un único uso.
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  [index: number]: { transcript: string };
 };
 
-function encodeWav(chunks: Float32Array[], sampleRate: number): Blob {
-  const target = 16000;
-  const total = chunks.reduce((n, c) => n + c.length, 0);
-  const merged = new Float32Array(total);
-  let offset = 0;
-  for (const c of chunks) {
-    merged.set(c, offset);
-    offset += c.length;
-  }
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
 
-  const ratio = sampleRate / target;
-  const length = Math.floor(total / ratio);
-  const samples = new Int16Array(length);
-  for (let i = 0; i < length; i++) {
-    const v = merged[Math.floor(i * ratio)] ?? 0;
-    const clamped = Math.max(-1, Math.min(1, v));
-    samples[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-  }
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
 
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(buffer);
-  const writeString = (pos: number, s: string) => {
-    for (let i = 0; i < s.length; i++) view.setUint8(pos + i, s.charCodeAt(i));
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
   };
-  writeString(0, "RIFF");
-  view.setUint32(4, 36 + samples.length * 2, true);
-  writeString(8, "WAVE");
-  writeString(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, target, true);
-  view.setUint32(28, target * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, "data");
-  view.setUint32(40, samples.length * 2, true);
-  new Int16Array(buffer, 44).set(samples);
-
-  return new Blob([buffer], { type: "audio/wav" });
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-async function startRecorder(): Promise<Recorder> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const ctx = new AudioContext();
-  const source = ctx.createMediaStreamSource(stream);
-  const node = ctx.createScriptProcessor(4096, 1, 1);
-  const chunks: Float32Array[] = [];
-  node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-  source.connect(node);
-  node.connect(ctx.destination);
-
-  return {
-    stop: async () => {
-      stream.getTracks().forEach((t) => t.stop());
-      node.disconnect();
-      source.disconnect();
-      const blob = encodeWav(chunks, ctx.sampleRate);
-      await ctx.close();
-      return blob;
-    },
-  };
-}
-
-export type DictationState = "idle" | "recording" | "transcribing";
-
+/**
+ * Dictado por voz de "mantener pulsado": usa el reconocimiento de voz nativo
+ * del navegador (Web Speech API), no un servicio propio — así no dependemos
+ * de ningún proveedor de pago ni gateway externo. `start()` en pointerdown,
+ * `stop()` en pointerup/pointercancel. Cada frase que el reconocedor da por
+ * terminada (`isFinal`) se añade con `onText`; las pausas intermedias no
+ * cortan la escucha porque se pide reconocimiento continuo.
+ */
 export function useDictation(onText: (text: string) => void) {
   const [state, setState] = useState<DictationState>("idle");
-  const recorderRef = useRef<Recorder | null>(null);
-  // Bloquea toques repetidos mientras arranca/para la grabación: sin esto, un doble
-  // toque rápido antes de que `state` se actualice puede abrir dos grabaciones a la
-  // vez y dejar la primera (micrófono + AudioContext) sin cerrar nunca.
-  const busyRef = useRef(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const supported = useMemo(() => getSpeechRecognitionCtor() !== null, []);
 
-  const toggle = useCallback(async () => {
-    if (state === "transcribing" || busyRef.current) return;
-    busyRef.current = true;
+  const start = useCallback(() => {
+    if (recognitionRef.current) return;
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
 
-    if (state === "idle") {
-      try {
-        recorderRef.current = await startRecorder();
-        setState("recording");
-      } catch {
-        throw new Error("Necesitamos permiso para usar el micrófono");
-      } finally {
-        busyRef.current = false;
+    const recognition = new Ctor();
+    recognition.lang = "es-ES";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result?.isFinal) {
+          const text = result[0]?.transcript.trim();
+          if (text) onText(text);
+        }
       }
-      return;
-    }
-
-    const recorder = recorderRef.current;
-    recorderRef.current = null;
-    setState("transcribing");
-    try {
-      const blob = await recorder!.stop();
-      if (blob.size < 2048) throw new Error("No hemos oído nada, inténtalo otra vez");
-
-      const form = new FormData();
-      form.append("audio", blob, "recording.wav");
-      const res = await fetch("/api/transcribe", {
-        method: "POST",
-        headers: await authHeaders(),
-        body: form,
-      });
-      if (!res.ok) throw new Error("No hemos podido transcribir el audio");
-      const data = (await res.json()) as { text?: string };
-      const text = (data.text ?? "").trim();
-      if (text) onText(text);
-    } finally {
+    };
+    // "no-speech"/"aborted" son normales al soltar sin haber hablado o al
+    // cortar antes de que arranque; el resto de errores (permiso denegado,
+    // sin red...) ya se reflejan en que no llegue ningún texto.
+    recognition.onerror = () => {};
+    recognition.onend = () => {
+      recognitionRef.current = null;
       setState("idle");
-      busyRef.current = false;
-    }
-  }, [state, onText]);
+    };
 
-  return { state, toggle };
+    recognitionRef.current = recognition;
+    setState("listening");
+    recognition.start();
+  }, [onText]);
+
+  const stop = useCallback(() => {
+    recognitionRef.current?.stop();
+  }, []);
+
+  return { state, supported, start, stop };
 }

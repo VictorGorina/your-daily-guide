@@ -1,13 +1,11 @@
 import { Mic } from "lucide-react";
 import { toast } from "sonner";
 
+import { useDictation } from "@/lib/use-dictation";
 import { cn } from "@/lib/utils";
 
-// El dictado está desactivado temporalmente: transcribía audio a través de un
-// gateway de IA (Whisper) que ya no usamos, y no tenemos otro proveedor de
-// voz-a-texto conectado todavía. El botón queda visible pero inactivo hasta
-// que se elija uno nuevo.
 export function DictateButton({
+  onText,
   className,
   label = "Dictar",
 }: {
@@ -15,22 +13,47 @@ export function DictateButton({
   className?: string;
   label?: string;
 }) {
-  const handle = () => {
-    toast.info("El dictado por voz no está disponible por ahora");
-  };
+  const { state, supported, start, stop } = useDictation(onText);
+  const listening = state === "listening";
+
+  if (!supported) {
+    return (
+      <button
+        type="button"
+        onClick={() => toast.info("El dictado por voz no está disponible en este navegador")}
+        aria-label={`${label} (no disponible en este navegador)`}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-muted-foreground opacity-60 transition-colors",
+          className,
+        )}
+      >
+        <Mic className="h-3.5 w-3.5" />
+        {label}
+      </button>
+    );
+  }
 
   return (
     <button
       type="button"
-      onClick={handle}
-      aria-label={`${label} (no disponible por ahora)`}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start();
+      }}
+      onPointerUp={stop}
+      onPointerCancel={stop}
+      onLostPointerCapture={stop}
+      onContextMenu={(e) => e.preventDefault()}
+      aria-pressed={listening}
+      aria-label={`Mantén pulsado para ${label.toLowerCase()}`}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-muted-foreground opacity-60 transition-colors",
+        "inline-flex touch-none items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors select-none",
+        listening ? "bg-foreground text-background" : "bg-secondary text-muted-foreground",
         className,
       )}
     >
       <Mic className="h-3.5 w-3.5" />
-      {label}
+      {listening ? "Escuchando…" : label}
     </button>
   );
 }
