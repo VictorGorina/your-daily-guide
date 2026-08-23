@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Replace, X } from "lucide-react";
+import { Check, ChevronDown, PencilLine, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -437,7 +437,7 @@ function Hoy() {
                             onClick={() => handleMealStatus(i, "distinto")}
                             className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
                           >
-                            <Replace className="h-[15px] w-[15px]" />
+                            <PencilLine className="h-[15px] w-[15px]" />
                           </button>
                           <button
                             type="button"

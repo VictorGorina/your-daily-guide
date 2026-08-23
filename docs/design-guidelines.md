@@ -142,6 +142,20 @@ teñida.
 Raíl de arena, radio 99px. Macros a 5px en rejilla de cuatro; barras de una sola métrica a 6px.
 Debajo, etiqueta mono versalita y valor mono. El relleno anima 1.1s.
 
+### Tarjeta de objetivo (Historial)
+
+La tarjeta de progreso de peso, arriba del todo en Historial. Cabecera con `align-items: flex-end`
+(el texto y el porcentaje comparten línea de base, no centro): a la izquierda el texto del progreso
+(«3,4 de 6 kg», Figtree 600 13px) y debajo, en mono versalita 10.5px, «meta: DD/MM/AAAA»; a la
+derecha el porcentaje en Outfit 600 24–26px, color de texto normal — nunca naranja, para no sumar
+un segundo acento a la pantalla. Barra de una sola métrica, 8px, relleno **verde `#6DBE7B`**
+(progreso conseguido, no naranja).
+
+Debajo, la tendencia de los últimos pesajes: una polilínea SVG de 96×32 en **naranja `#FF8A3D`**
+(el trazo sí es el acento de marca, porque no compite con ningún botón en esa misma tarjeta), con
+el último peso en DM Mono 500 al lado y el delta («−1,2 kg en tus últimos N pesajes») en Figtree
+debajo. Espaciado: 16px entre la barra y la tendencia, 14px entre el gráfico y el texto.
+
 ### Nav inferior y FAB
 
 Cuatro pestañas, papel al 94% con `blur(12px)`, a 30px del borde. La activa lleva el icono sobre

@@ -1,14 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import {
-  Check,
   CalendarDays,
   CalendarRange,
-  CheckCircle2,
-  Lock,
+  Refrigerator,
   RefreshCw,
   Share2,
   ShoppingBasket,
+  ShoppingCart,
   Sparkles,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -25,6 +24,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { DishRecipe } from "../../components/dish-recipe";
 import { HistorialSection } from "../../components/historial-section";
 import { Dialog } from "../../components/ui/dialog";
 import { apiPost } from "../../lib/api";
@@ -37,12 +37,14 @@ import {
   mealsForDate,
   offListNote,
   ownedTotal,
+  pendingTotal,
   planForDate,
-  shoppingToText,
+  shoppingCategoryColor,
   shoppingTotal,
-  splitOwned,
+  sortByPending,
   tripActualsTotal,
   tripLabel,
+  tripToText,
   type MonthlyPlan,
   type ShoppingCadence,
   type ShoppingItem,
@@ -75,17 +77,8 @@ export default function Plan() {
       Alert.alert(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
   });
 
-  const lock = useMutation({
-    mutationFn: () => apiPost<{ ok: true }>("plan/confirm", { month }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["plan", month] });
-      Alert.alert("Compra confirmada: los ingredientes del mes quedan fijos");
-    },
-    onError: () => Alert.alert("No hemos podido confirmar la compra"),
-  });
-
   const owned = useMutation({
-    mutationFn: (vars: { itemName: string; owned: boolean }) =>
+    mutationFn: (vars: { itemName: string; source: "fridge" | "store" | null }) =>
       apiPost<{ shopping: ShoppingList }>("plan/shopping-owned", { month, ...vars }),
     onSuccess: (res) => {
       qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
@@ -108,7 +101,6 @@ export default function Plan() {
 
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
-  const confirmed = Boolean(planQ.data?.confirmed_at);
   const total = shoppingTotal(shopping);
   const alreadyOwned = ownedTotal(shopping);
   const tripActuals = planQ.data?.trip_actuals ?? {};
@@ -117,15 +109,14 @@ export default function Plan() {
   const activeCadence: ShoppingCadence = cadence ?? cadenceOf(shopping);
   const trips = groupByTrip(shopping);
 
-  // En iOS la hoja de compartir ya incluye "Copiar" y "Guardar en Archivos", así
-  // que un único botón "Compartir" cubre los tres de la web (compartir/copiar/
-  // descargar) de la forma nativa, sin escribir un fichero a mano.
-  const shareList = async () => {
+  // Cada compra es una lista distinta, así que se comparte aparte (no todo el
+  // mes de golpe) — refuerza que "Compra 1" y "Compra 2" no son lo mismo.
+  const shareTrip = async (
+    trip: { groups: { category: string; items: ShoppingItem[] }[] },
+    label: string,
+  ) => {
     try {
-      await Share.share({
-        title: "Lista de la compra",
-        message: shoppingToText(shopping, activeCadence, month),
-      });
+      await Share.share({ title: label, message: tripToText(trip, label) });
     } catch {
       /* el usuario canceló el diálogo de compartir */
     }
@@ -151,7 +142,7 @@ export default function Plan() {
               {monthLabel}
             </Text>
           </View>
-          {plan && !confirmed ? (
+          {plan ? (
             <Pressable
               onPress={() => generate.mutate(undefined)}
               disabled={generate.isPending}
@@ -174,7 +165,7 @@ export default function Plan() {
               Todavía no tienes plan de este mes
             </Text>
             <Text className="mt-1.5 text-center text-sm text-muted-foreground">
-              Un mes de comidas flexibles y su lista de la compra con precios, ajustada a tu
+              Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu
               presupuesto.
             </Text>
             <Pressable
@@ -194,7 +185,7 @@ export default function Plan() {
               {(
                 [
                   ["plan", "Plan", CalendarRange],
-                  ["compra", "Compra", ShoppingBasket],
+                  ["compra", "Ingredientes", ShoppingBasket],
                   ["historial", "Historial", CalendarDays],
                 ] as const
               ).map(([key, label, Icon]) => {
@@ -250,6 +241,8 @@ export default function Plan() {
               <HistorialSection />
             ) : (
               <View className="mt-5 gap-4">
+                <Text className="font-heading text-2xl text-foreground">Ingredientes del mes</Text>
+
                 <View className="rounded-3xl bg-surface p-5">
                   <View className="flex-row items-baseline justify-between gap-3">
                     <View className="min-w-0 flex-1">
@@ -288,7 +281,7 @@ export default function Plan() {
                       {eur(Math.max(0, total - alreadyOwned))}
                     </Text>
                   ) : null}
-                  {confirmed && hasActuals ? (
+                  {hasActuals ? (
                     <Text className="mt-2 text-xs text-muted-foreground">
                       Gasto real hasta ahora:{" "}
                       <Text className="font-sans-semibold text-foreground">{eur(spentSoFar)}</Text>
@@ -307,41 +300,7 @@ export default function Plan() {
                       chat.
                     </Text>
                   ) : null}
-
-                  {confirmed ? (
-                    <View className="mt-4 flex-row items-center gap-2 rounded-xl bg-secondary/60 px-3 py-2.5">
-                      <Lock size={14} color="#83796c" />
-                      <Text className="flex-1 text-xs text-muted-foreground">
-                        Compra confirmada: los ingredientes del mes ya no cambian. Los platos sí
-                        puedo recolocarlos.
-                      </Text>
-                    </View>
-                  ) : (
-                    <Pressable
-                      onPress={() => lock.mutate()}
-                      disabled={lock.isPending}
-                      className="mt-4 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
-                      style={lock.isPending ? { opacity: 0.6 } : undefined}
-                    >
-                      <CheckCircle2 size={16} color="#3e3d39" />
-                      <Text className="text-sm font-sans-semibold text-primary-foreground">
-                        {lock.isPending ? "Confirmando..." : "Ya he comprado esto"}
-                      </Text>
-                    </Pressable>
-                  )}
                 </View>
-
-                {shopping?.length ? (
-                  <Pressable
-                    onPress={() => void shareList()}
-                    className="flex-row items-center justify-center gap-2 rounded-2xl bg-surface py-3.5 active:opacity-80"
-                  >
-                    <Share2 size={16} color="#6dbe7b" />
-                    <Text className="text-sm font-sans-semibold text-foreground">
-                      Compartir la lista
-                    </Text>
-                  </Pressable>
-                ) : null}
 
                 <View className="rounded-3xl bg-surface p-5">
                   <Text className="text-sm font-sans-semibold text-foreground">
@@ -353,7 +312,7 @@ export default function Plan() {
                   <View className="mt-3 flex-row gap-2">
                     {CADENCES.map((c) => {
                       const active = activeCadence === c.key;
-                      const disabled = confirmed || generate.isPending;
+                      const disabled = generate.isPending;
                       return (
                         <Pressable
                           key={c.key}
@@ -379,13 +338,14 @@ export default function Plan() {
                       );
                     })}
                   </View>
-                  {confirmed ? (
-                    <Text className="mt-2 text-xs text-muted-foreground">
-                      La compra está confirmada: la frecuencia ya no se puede cambiar este mes.
-                    </Text>
-                  ) : generate.isPending ? (
+                  {generate.isPending ? (
                     <Text className="mt-2 text-xs text-muted-foreground">
                       Recolocando la compra y los platos...
+                    </Text>
+                  ) : trips.length > 1 ? (
+                    <Text className="mt-2 text-xs text-muted-foreground">
+                      Son {trips.length} compras separadas, cada una con su propia lista: lo que
+                      marques en una no afecta a las demás.
                     </Text>
                   ) : null}
                 </View>
@@ -394,20 +354,21 @@ export default function Plan() {
                   Precios orientativos de supermercado. Ajusta cantidades a tu casa.
                 </Text>
 
-                {trips.map((t) => (
-                  <TripCard
-                    key={t.trip}
-                    trip={t}
-                    label={tripLabel(activeCadence, t.trip)}
-                    confirmed={confirmed}
-                    tripActual={tripActuals[t.trip]}
-                    savingActual={setActual.isPending}
-                    onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
-                    onToggleOwned={(itemName, nextOwned) =>
-                      owned.mutate({ itemName, owned: nextOwned })
-                    }
-                  />
-                ))}
+                {trips.map((t) => {
+                  const label = tripLabel(activeCadence, t.trip);
+                  return (
+                    <TripCard
+                      key={t.trip}
+                      trip={t}
+                      label={label}
+                      onShare={() => void shareTrip(t, label)}
+                      tripActual={tripActuals[t.trip]}
+                      savingActual={setActual.isPending}
+                      onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
+                      onToggleOwned={(itemName, source) => owned.mutate({ itemName, source })}
+                    />
+                  );
+                })}
                 {!shopping?.length ? (
                   <Text className="text-sm text-muted-foreground">
                     Aún no hay lista. Regenera el plan para crearla.
@@ -517,6 +478,7 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
                         <Text className="text-[11px] font-sans-medium text-foreground">{note}</Text>
                       </View>
                     ) : null}
+                    <DishRecipe dish={meal.idea} month={month} />
                   </View>
                 );
               })}
@@ -595,14 +557,17 @@ function TripActualField({
 }
 
 /**
- * Tarjeta de una compra: separa lo pendiente de comprar (arriba, agrupado por
- * categoría como en el súper) de lo ya marcado como "en casa" (abajo, oculto
- * por defecto), para que de un vistazo se sepa qué falta de verdad.
+ * Tarjeta de un tramo de ingredientes: agrupados por categoría como en el
+ * súper, con los ya marcados (nevera o comprados) hundidos al final de cada
+ * grupo para que arriba solo queden los pendientes de comprar — así el
+ * importe junto al título baja según se van marcando (lo que ya tienes en la
+ * nevera te ahorra ese dinero). El botón de compartir va aquí, junto al
+ * nombre del tramo, porque cada uno es una lista aparte (no el mes entero).
  */
 function TripCard({
   trip,
   label,
-  confirmed,
+  onShare,
   tripActual,
   savingActual,
   onSaveActual,
@@ -610,65 +575,93 @@ function TripCard({
 }: {
   trip: { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
   label: string;
-  confirmed: boolean;
+  onShare: () => void;
   tripActual: number | undefined;
   savingActual: boolean;
   onSaveActual: (amount: number | null) => void;
-  onToggleOwned: (itemName: string, owned: boolean) => void;
+  onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
 }) {
-  const [ownedOpen, setOwnedOpen] = useState(false);
-  const tripTotal = shoppingTotal(trip.groups);
-  const { pending, owned } = splitOwned(trip.groups);
-  const pendingCount = pending.reduce((s, g) => s + g.items.length, 0);
-  const ownedCount = owned.reduce((s, g) => s + g.items.length, 0);
+  const tripTotal = pendingTotal(trip.groups);
+  const totalCount = trip.groups.reduce((s, g) => s + g.items.length, 0);
+  const ownedCount = trip.groups.reduce(
+    (s, g) => s + g.items.filter((item) => item.owned).length,
+    0,
+  );
+  const pendingCount = totalCount - ownedCount;
 
   return (
     <View className="rounded-3xl bg-surface p-5">
-      <View className="flex-row items-baseline justify-between gap-3">
-        <Text className="flex-1 text-sm font-sans-semibold text-foreground">{label}</Text>
-        <Text className="text-xs font-sans-semibold text-primary">{eur(tripTotal)}</Text>
-      </View>
-      {ownedCount > 0 ? (
-        <Text className="mt-1 text-xs text-muted-foreground">
-          {pendingCount > 0
-            ? `Te falta comprar ${pendingCount} de ${pendingCount + ownedCount}`
-            : "Ya tienes todo de esta compra"}
-        </Text>
-      ) : null}
-
-      {pending.map((group) => (
-        <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
-      ))}
-
-      {owned.length ? (
-        <View className="mt-4 border-t border-border pt-3">
+      <View className="flex-row items-center justify-between gap-3">
+        <Text className="min-w-0 flex-1 text-sm font-sans-semibold text-foreground">{label}</Text>
+        <View className="flex-row items-center gap-2">
+          <Text className="text-xs font-sans-semibold text-primary">{eur(tripTotal)}</Text>
           <Pressable
-            onPress={() => setOwnedOpen((o) => !o)}
-            className="flex-row items-center justify-between active:opacity-70"
+            onPress={onShare}
+            className="h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
           >
-            <Text className="text-xs font-sans-medium text-muted-foreground">
-              Ya en casa ({ownedCount})
-            </Text>
-            <Text className="text-xs font-sans-medium text-muted-foreground">
-              {ownedOpen ? "ocultar" : "ver"}
-            </Text>
+            <Share2 size={14} color="#83796c" />
           </Pressable>
-          {ownedOpen
-            ? owned.map((group) => (
-                <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
-              ))
-            : null}
         </View>
-      ) : null}
+      </View>
+      <Text className="mt-1 text-xs text-muted-foreground">
+        {totalCount} artículo{totalCount === 1 ? "" : "s"}
+        {ownedCount > 0
+          ? pendingCount > 0
+            ? ` · te falta comprar ${pendingCount}`
+            : " · ya tienes todo"
+          : null}
+      </Text>
 
-      {confirmed ? (
-        <TripActualField
-          value={tripActual}
-          estimated={tripTotal}
-          saving={savingActual}
-          onSave={onSaveActual}
-        />
-      ) : null}
+      <View className="mt-3 gap-3">
+        {trip.groups.map((group) => (
+          <ShoppingGroup key={group.category} group={group} onToggleOwned={onToggleOwned} />
+        ))}
+      </View>
+
+      <TripActualField
+        value={tripActual}
+        estimated={tripTotal}
+        saving={savingActual}
+        onSave={onSaveActual}
+      />
+    </View>
+  );
+}
+
+/**
+ * Toggle "lo tengo en casa" / "lo he comprado" de un artículo: una cápsula con
+ * las dos opciones a la vista (nevera / carrito). Empieza sin ninguna marcada
+ * (ni color) y solo se resalta en verde la que el usuario elige — volver a
+ * tocar la misma la deselecciona. Las dos opciones significan "ya no hace
+ * falta comprarlo"; solo cambian de dónde ha salido.
+ */
+function OwnedToggle({
+  owned,
+  onChange,
+}: {
+  owned: "fridge" | "store" | undefined;
+  onChange: (next: "fridge" | "store" | null) => void;
+}) {
+  return (
+    <View className="flex-row items-center gap-1 rounded-full bg-secondary/70 p-1">
+      <Pressable
+        onPress={() => onChange(owned === "fridge" ? null : "fridge")}
+        hitSlop={10}
+        className={`h-8 w-9 items-center justify-center rounded-full active:opacity-80 ${
+          owned === "fridge" ? "bg-success" : ""
+        }`}
+      >
+        <Refrigerator size={15} color={owned === "fridge" ? "#fbfaf7" : "#83796c"} />
+      </Pressable>
+      <Pressable
+        onPress={() => onChange(owned === "store" ? null : "store")}
+        hitSlop={10}
+        className={`h-8 w-9 items-center justify-center rounded-full active:opacity-80 ${
+          owned === "store" ? "bg-success" : ""
+        }`}
+      >
+        <ShoppingCart size={15} color={owned === "store" ? "#fbfaf7" : "#83796c"} />
+      </Pressable>
     </View>
   );
 }
@@ -678,36 +671,35 @@ function ShoppingGroup({
   onToggleOwned,
 }: {
   group: { category: string; items: ShoppingItem[] };
-  onToggleOwned: (itemName: string, owned: boolean) => void;
+  onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
 }) {
+  const total = pendingTotal([group]);
+  const items = sortByPending(group.items);
   return (
-    <View className="mt-3">
-      <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
-        {group.category}
-      </Text>
-      <View className="mt-1.5 gap-1.5">
-        {group.items.map((item) => (
-          <View key={item.name} className="flex-row items-center gap-2">
-            <Pressable
-              onPress={() => onToggleOwned(item.name, !item.owned)}
-              className={`h-5 w-5 items-center justify-center rounded-full active:opacity-70 ${
-                item.owned ? "bg-primary" : "bg-secondary"
-              }`}
-            >
-              {item.owned ? <Check size={12} color="#3e3d39" /> : null}
-            </Pressable>
-            <Text
-              className={`flex-1 text-sm ${item.owned ? "text-muted-foreground line-through" : "text-foreground"}`}
-            >
-              {item.name}
-              {item.qty ? <Text className="text-muted-foreground"> · {item.qty}</Text> : null}
-              {item.perishable ? (
-                <Text className="text-[11px] font-sans-semibold text-secondary-foreground">
-                  {"  fresco"}
-                </Text>
-              ) : null}
-            </Text>
-            <Text className="text-xs text-muted-foreground">{eur(item.price_eur)}</Text>
+    <View className="rounded-2xl bg-secondary/40 p-3.5">
+      <View className="flex-row items-center justify-between gap-2">
+        <View className="flex-row items-center gap-2">
+          <View
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: shoppingCategoryColor(group.category) }}
+          />
+          <Text className="text-sm font-sans-semibold text-foreground">{group.category}</Text>
+        </View>
+        <Text className="font-mono-medium text-xs text-muted-foreground">{eur(total)}</Text>
+      </View>
+      <View className="mt-3 gap-3">
+        {items.map((item) => (
+          <View key={item.name} className="flex-row items-center justify-between gap-3">
+            <View className="min-w-0 flex-1">
+              <Text className={`text-sm ${item.owned ? "text-success" : "text-foreground"}`}>
+                {item.name}
+              </Text>
+              <Text className="font-mono-medium mt-0.5 text-[11px] text-muted-foreground">
+                {item.qty ? `${item.qty} · ` : ""}
+                {eur(item.price_eur)}
+              </Text>
+            </View>
+            <OwnedToggle owned={item.owned} onChange={(next) => onToggleOwned(item.name, next)} />
           </View>
         ))}
       </View>

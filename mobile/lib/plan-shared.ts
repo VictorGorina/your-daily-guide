@@ -157,8 +157,13 @@ export type ShoppingItem = {
   trip: number;
   /** Alimento fresco (poca vida útil). */
   perishable: boolean;
-  /** Marcado a mano por la persona: ya lo tiene en casa, no hace falta comprarlo. */
-  owned?: boolean;
+  /**
+   * Marcado a mano según de dónde ha salido: "fridge" si ya lo tenía en casa,
+   * "store" si lo ha comprado en el súper. Los dos significan que ya no hace
+   * falta comprarlo — solo cambia el origen, para saber qué icono resaltar.
+   * Sin valor: todavía pendiente, sin decidir.
+   */
+  owned?: "fridge" | "store";
 };
 
 /** Lista de la compra tal como la guarda el plan mensual. */
@@ -180,13 +185,19 @@ export const cadenceOf = (shopping: ShoppingList | null | undefined): ShoppingCa
   return trips >= 4 ? "semanal" : trips >= 2 ? "bisemanal" : "mensual";
 };
 
-/** Etiqueta legible de cada compra según la cadencia (ej. "Compra 2 · días 8-14"). */
+/**
+ * Etiqueta legible de cada tramo de ingredientes según la cadencia (ej.
+ * "Ingredientes de la semana 2 de 4 · días 8-14"). El "de N" deja claro, sobre
+ * todo con semanal/bisemanal, que cada tramo es una lista distinta y no un
+ * trozo de la misma.
+ */
 export const tripLabel = (cadence: ShoppingCadence, trip: number) => {
-  if (cadence === "mensual") return "Compra del mes";
+  if (cadence === "mensual") return "Ingredientes del mes";
+  const trips = CADENCES.find((c) => c.key === cadence)?.trips ?? 1;
   const span = cadence === "semanal" ? 7 : 14;
   const from = trip * span + 1;
   const to = trip * span + span;
-  return `Compra ${trip + 1} · días ${from}-${to}`;
+  return `Ingredientes de la semana ${trip + 1} de ${trips} · días ${from}-${to}`;
 };
 
 /** Agrupa la lista por compra, conservando categorías. */
@@ -201,19 +212,21 @@ export const groupByTrip = (shopping: ShoppingList | null | undefined) => {
 };
 
 /**
- * Separa los grupos de una compra en lo que falta por comprar y lo que ya está
- * en casa, sin categorías vacías en ninguno de los dos lados. Así la pantalla
- * puede mostrar primero, y ordenado por categoría, lo pendiente para el súper,
- * y aparte lo ya marcado como comprado.
+ * Color del punto de categoría en la lista de la compra. Las categorías las
+ * asigna la IA como texto libre ("Verdura y fruta", "Proteína"...), así que
+ * esto es un mapeo por palabra clave, no un enum cerrado — reutiliza los tonos
+ * de food-categories.ts para que la paleta de comida sea consistente en toda
+ * la app.
  */
-export const splitOwned = (groups: { category: string; items: ShoppingItem[] }[]) => ({
-  pending: groups
-    .map((g) => ({ category: g.category, items: g.items.filter((i) => !i.owned) }))
-    .filter((g) => g.items.length),
-  owned: groups
-    .map((g) => ({ category: g.category, items: g.items.filter((i) => i.owned) }))
-    .filter((g) => g.items.length),
-});
+export function shoppingCategoryColor(category: string): string {
+  const c = category.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (c.includes("verdura") || c.includes("fruta")) return "#6dbe7b";
+  if (c.includes("carne") || c.includes("pescado") || c.includes("proteina") || c.includes("ave"))
+    return "#e57373";
+  if (c.includes("lacte")) return "#f5e6c8";
+  if (c.includes("despensa") || c.includes("cereal") || c.includes("legumbre")) return "#d7b58a";
+  return "#83796c";
+}
 
 export const shoppingTotal = (shopping: ShoppingList | null | undefined) =>
   Math.round(
@@ -232,33 +245,41 @@ export const ownedTotal = (shopping: ShoppingList | null | undefined) =>
     ) * 100,
   ) / 100;
 
+/**
+ * Lo que de verdad queda por comprar: el total menos lo ya marcado (nevera o
+ * súper). Es el importe que se muestra junto a cada tramo para que se vea
+ * bajar según marcas ingredientes — tenerlo en la nevera ahorra ese dinero.
+ */
+export const pendingTotal = (shopping: ShoppingList | null | undefined) =>
+  Math.round((shoppingTotal(shopping) - ownedTotal(shopping)) * 100) / 100;
+
+/**
+ * Ordena los artículos con los pendientes primero: los ya marcados (nevera o
+ * comprados) bajan al final del grupo, así al auditar la nevera solo destacan
+ * arriba los que de verdad faltan por comprar.
+ */
+export const sortByPending = (items: ShoppingItem[]): ShoppingItem[] =>
+  [...items].sort((a, b) => Number(Boolean(a.owned)) - Number(Boolean(b.owned)));
+
 export const eur = (n: number) =>
   new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(n);
 
-/** La lista de la compra como texto plano, para compartir/copiar/exportar. */
-export const shoppingToText = (
-  shopping: ShoppingList | null | undefined,
-  cadence: ShoppingCadence,
-  month: string,
+/**
+ * Texto plano de un solo tramo de ingredientes, listo para compartir aparte —
+ * cada tramo es una lista distinta, así que compartirlo no manda todo el mes.
+ */
+export const tripToText = (
+  trip: { groups: { category: string; items: ShoppingItem[] }[] },
+  label: string,
 ) => {
-  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
-    month: "long",
-    year: "numeric",
-  });
-  const lines = [`Lista de la compra · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
-  for (const trip of groupByTrip(shopping)) {
-    lines.push(`${tripLabel(cadence, trip.trip)} — ${eur(shoppingTotal(trip.groups))}`);
-    for (const group of trip.groups) {
-      lines.push(`  ${group.category}`);
-      for (const item of group.items) {
-        const qty = item.qty ? ` (${item.qty})` : "";
-        const fresh = item.perishable ? " · fresco" : "";
-        lines.push(`   - ${item.name}${qty}${fresh} — ${eur(item.price_eur)}`);
-      }
+  const lines = [`${label} — ${eur(pendingTotal(trip.groups))}`, ""];
+  for (const group of trip.groups) {
+    lines.push(group.category);
+    for (const item of group.items) {
+      const qty = item.qty ? ` (${item.qty})` : "";
+      lines.push(`  - ${item.name}${qty} — ${eur(item.price_eur)}`);
     }
-    lines.push("");
   }
-  lines.push(`Total del mes: ${eur(shoppingTotal(shopping))}`);
   return lines.join("\n");
 };
 

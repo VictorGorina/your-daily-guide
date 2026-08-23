@@ -19,6 +19,12 @@ import {
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+// "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
+const formatMetaDate = (isoDate: string) => {
+  const [y, m, d] = isoDate.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : isoDate;
+};
+
 // Contenido de "Historial", extraído a su propio componente para poder vivir
 // como tercera sub-pestaña de Plan en vez de como pestaña de primer nivel.
 export function HistorialSection() {
@@ -39,7 +45,11 @@ export function HistorialSection() {
               ? "Estabilidad"
               : `${progress.done.toFixed(1)} de ${progress.total} kg`
           }
-          caption={profile?.goal_target_date ? `Meta: ${profile.goal_target_date}` : undefined}
+          caption={
+            profile?.goal_target_date
+              ? `meta: ${formatMetaDate(profile.goal_target_date)}`
+              : undefined
+          }
         />
         <WeightTrend logs={logs} />
       </div>
@@ -98,7 +108,7 @@ function WeightTrend({ logs }: { logs: DailyLog[] }) {
   const delta = last - first;
 
   return (
-    <div className="mt-4 flex items-center gap-4 pt-4">
+    <div className="mt-4 flex items-center gap-3.5">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
@@ -116,7 +126,7 @@ function WeightTrend({ logs }: { logs: DailyLog[] }) {
         />
       </svg>
       <div className="min-w-0">
-        <p className="text-sm font-semibold tabular-nums text-foreground">{last} kg</p>
+        <p className="font-num text-sm font-medium tabular-nums text-foreground">{last} kg</p>
         <p className="text-[11px] text-muted-foreground">
           {delta === 0 ? "Sin cambios" : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} kg`} en tus
           últimos {points.length} pesajes

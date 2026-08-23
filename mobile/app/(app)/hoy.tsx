@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { Activity, Check, ChevronDown, MessageCircle, RefreshCw, X } from "lucide-react-native";
+import { Activity, Check, ChevronDown, MessageCircle, PencilLine, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { DishRecipe } from "../../components/dish-recipe";
 import { DishImage } from "../../components/food-category-bg";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
@@ -392,6 +393,7 @@ export default function Hoy() {
                       <Text className="font-mono-medium mt-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">
                         {catInfo.label}
                       </Text>
+                      {planned?.idea ? <DishRecipe dish={dish} month={month} /> : null}
                     </View>
 
                     {/* Acciones */}
@@ -402,7 +404,7 @@ export default function Hoy() {
                             onPress={() => handleMealStatus(i, "distinto")}
                             className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
                           >
-                            <RefreshCw size={14} color="#83796c" />
+                            <PencilLine size={14} color="#83796c" />
                           </Pressable>
                           <Pressable
                             onPress={() => setMealStatus(i, "plan")}
@@ -636,7 +638,13 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
       {meals.length ? (
         <View className="mt-3 gap-2">
           {meals.map((m) => (
-            <Field key={m.slot} label={m.moment} value={m.idea} note={offListNote(m.off)} />
+            <Field
+              key={m.slot}
+              label={m.moment}
+              value={m.idea}
+              note={offListNote(m.off)}
+              recipeMonth={date.slice(0, 7)}
+            />
           ))}
         </View>
       ) : (
@@ -648,7 +656,18 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   );
 }
 
-function Field({ label, value, note }: { label: string; value: string; note?: string | null }) {
+function Field({
+  label,
+  value,
+  note,
+  recipeMonth,
+}: {
+  label: string;
+  value: string;
+  note?: string | null;
+  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes. */
+  recipeMonth?: string;
+}) {
   return (
     <View className="rounded-xl bg-secondary/60 p-3">
       <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
@@ -660,6 +679,7 @@ function Field({ label, value, note }: { label: string; value: string; note?: st
           <Text className="font-body-medium text-[11px] text-foreground">{note}</Text>
         </View>
       ) : null}
+      {recipeMonth ? <DishRecipe dish={value} month={recipeMonth} /> : null}
     </View>
   );
 }
