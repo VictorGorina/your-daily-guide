@@ -88,7 +88,16 @@ export type DailyLog = {
   user_id: string;
   log_date: string;
   weight_kg: number | null;
-  habits: { label: string; done: boolean; status?: MealStatus }[];
+  habits: {
+    label: string;
+    done: boolean;
+    status?: MealStatus;
+    /** Plato que había en el plan antes de que el coach lo cambiara por lo que
+     * de verdad se comió ese momento (ver `cambiar_plato` en
+     * use-coach-actions.ts). Solo se guarda la primera vez que se cambia ese
+     * momento en el día. Mismo criterio que la web (src/lib/daily.ts). */
+    wasIdea?: string;
+  }[];
   guide: DailyGuide | null;
   mood: string | null;
   notes: string | null;

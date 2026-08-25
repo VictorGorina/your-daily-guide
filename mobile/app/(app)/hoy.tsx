@@ -223,8 +223,10 @@ export default function Hoy() {
   const doneCount = habits.filter((h) => h.done).length;
   // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
   // "comí distinto"), no el menú completo del día: así deshacer una comida
-  // la mueve, en vez de quedarse fija en un total del día entero.
-  const doneMacros = sumDoneMacros(guide?.mealMacros, habits);
+  // la mueve, en vez de quedarse fija en un total del día entero. Se muestra
+  // siempre (arrancando en 0) para que se vea cómo se va llenando según se
+  // marcan comidas, en vez de aparecer de golpe con la primera.
+  const doneMacros = sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS;
   const quote = quoteOfTheDay();
 
   const setMealStatus = (index: number, status: MealStatus) => {
@@ -280,13 +282,11 @@ export default function Hoy() {
         </View>
 
         {/* ── Barras de macros ── */}
-        {doneMacros ? (
-          <MacroBars
-            estimate={doneMacros}
-            target={guide?.macroEstimate ?? null}
-            weightKg={profile?.current_weight_kg ?? null}
-          />
-        ) : null}
+        <MacroBars
+          estimate={doneMacros}
+          target={guide?.macroEstimate ?? null}
+          weightKg={profile?.current_weight_kg ?? null}
+        />
 
         {/* ── Guía del coach: solo el rango de calorías del día, sin el resto
             (intro, macros en texto, platos sugeridos, consejos) — se quería
@@ -344,6 +344,10 @@ export default function Hoy() {
                 const cat = classifyDish(dish);
                 const catInfo = FOOD_CATEGORIES[cat];
                 const accent = catInfo.accent;
+                // El coach cambió el plato de este momento hoy (chat o "comí
+                // otra cosa"): plato real en naranja, con el que había antes
+                // tachado debajo — ver `wasIdea` en lib/daily.ts.
+                const wasIdea = h.wasIdea && h.wasIdea !== dish ? h.wasIdea : null;
 
                 return (
                   <View
@@ -388,12 +392,21 @@ export default function Hoy() {
                           fontSize: 16.5,
                           lineHeight: 20,
                           letterSpacing: -0.3,
-                          color: isSkip ? "#83796c" : "#3e3d39",
+                          color: isSkip ? "#83796c" : wasIdea ? "#ff8a3d" : "#3e3d39",
                         }}
                         numberOfLines={2}
                       >
                         {dish}
                       </Text>
+                      {wasIdea ? (
+                        <Text
+                          className="mt-0.5 font-body text-[11.5px] text-muted-foreground"
+                          style={{ textDecorationLine: "line-through" }}
+                          numberOfLines={2}
+                        >
+                          {wasIdea}
+                        </Text>
+                      ) : null}
                       <Text className="font-mono-medium mt-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">
                         {catInfo.label}
                       </Text>
@@ -506,6 +519,7 @@ export default function Hoy() {
           if (!v) setGuidedIndex(null);
         }}
         contextNote={guidedMeal ? `Qué has comido en vez de: ${guidedMeal.label}` : undefined}
+        mealLabel={guidedMeal?.label}
         onSkip={() => {
           if (guidedIndex != null) {
             setMealStatus(guidedIndex, "salteo");
@@ -552,10 +566,12 @@ export default function Hoy() {
  * marcadas como comidas ("comí esto" / "comí distinto"), para que la barra
  * de Hoy refleje solo lo confirmado — no el menú del día entero de golpe.
  * Deshacer una comida la resta de la suma, igual que el contador "x de y".
- * null cuando la guía todavía no trae `mealMacros` (así el caller no muestra
- * la sección en vez de enseñar una barra vacía por falta de datos). Mismo
- * criterio que la web (src/routes/_authenticated/hoy.tsx).
+ * null cuando la guía todavía no trae `mealMacros` — el caller cae entonces a
+ * `ZERO_MACROS` para seguir mostrando la barra (en 0). Mismo criterio que la
+ * web (src/routes/_authenticated/hoy.tsx).
  */
+const ZERO_MACROS: MacroEstimate = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 };
+
 function sumDoneMacros(
   mealMacros: MealMacroEstimate[] | null | undefined,
   habits: DailyLog["habits"],

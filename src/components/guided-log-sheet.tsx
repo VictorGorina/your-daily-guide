@@ -54,6 +54,7 @@ export function GuidedLogSheet({
   trigger = true,
   initialMode = "actividad",
   contextNote,
+  mealLabel,
 }: {
   onSend: (text: string) => void;
   disabled?: boolean;
@@ -65,6 +66,15 @@ export function GuidedLogSheet({
   initialMode?: Mode;
   /** Línea de contexto opcional (p.ej. qué comida se está detallando). */
   contextNote?: string;
+  /**
+   * Nombre de la comida concreta de HOY que se está registrando (p.ej. "Cena"),
+   * cuando el sheet se abre desde "comí otra cosa" en Hoy. Al venir informado,
+   * el mensaje enviado pide explícitamente cambiar ESE plato de hoy (además de
+   * ajustar los días futuros), para que la pantalla de Hoy refleje lo que de
+   * verdad se comió — ver `wasIdea` en daily.ts. Sin ella (registro genérico
+   * desde el FAB del chat, sin comida asociada), hoy sigue quedando fijado.
+   */
+  mealLabel?: string;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = openProp ?? internalOpen;
@@ -126,10 +136,13 @@ export function GuidedLogSheet({
         }
         extra = Math.round(n);
       }
+      const kcalNote = extra ? ` Exceso estimado ~${extra} kcal (kcal_extra ≈ +${extra}).` : "";
       onSend(
-        `Registro de exceso/ajuste de hoy: ${desc}.` +
-          (extra ? ` Exceso estimado ~${extra} kcal (kcal_extra ≈ +${extra}).` : "") +
-          ` Corrige solo los días futuros del plan de forma suave (hoy queda fijado y la compra no cambia) y dime cómo queda mi objetivo.`,
+        mealLabel
+          ? `Esto es lo que de verdad he comido en ${mealLabel.toLowerCase()} de HOY, en vez de lo planeado: ${desc}.${kcalNote} ` +
+              `Cambia el plato de ${mealLabel.toLowerCase()} de hoy a esto exacto y además corrige de forma suave los días futuros del plan (la compra no cambia) y dime cómo queda mi objetivo.`
+          : `Registro de exceso/ajuste de hoy: ${desc}.${kcalNote} ` +
+              `Corrige solo los días futuros del plan de forma suave (hoy queda fijado y la compra no cambia) y dime cómo queda mi objetivo.`,
       );
     }
 
@@ -294,7 +307,9 @@ export function GuidedLogSheet({
             Enviar al coach y ajustar plan
           </Button>
           <p className="text-center text-xs text-muted-foreground">
-            Hoy queda fijado; solo cambian los días futuros y la lista de la compra no varía.
+            {mode === "exceso" && mealLabel
+              ? `Cambio el plato de ${mealLabel.toLowerCase()} de hoy a lo que comiste de verdad; los demás días futuros se ajustan y la compra no varía.`
+              : "Hoy queda fijado; solo cambian los días futuros y la lista de la compra no varía."}
           </p>
         </div>
       </SheetContent>

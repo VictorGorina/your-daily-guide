@@ -77,10 +77,11 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       if (toolName === "cambiar_plato") {
         const fecha = String(input.fecha ?? "");
         const plato = String(input.plato ?? "").trim();
-        const { plan, label, off } = await apiPost<{
+        const { plan, label, off, previousIdea } = await apiPost<{
           plan: MonthlyPlan;
           label: string;
           off: string[];
+          previousIdea: string;
         }>("plan/meal", {
           date: fecha,
           slot: String(input.comida ?? ""),
@@ -96,8 +97,26 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
           const meals = mealsForDate(plan, date)
             .filter((m) => m.idea)
             .map((m) => ({ moment: m.moment, idea: m.idea }));
-          const guide = await apiPost<DailyGuide>("guide", { meals });
-          await updateTodayLog({ guide });
+          const freshGuide = await apiPost<DailyGuide>("guide", { meals });
+          // El objetivo de la barra de macros (`macroEstimate`) se fija la
+          // primera vez que hay guía del día, a partir del plan original — un
+          // cambio de plato después de eso tiene que poder quedar por encima o
+          // por debajo de ese objetivo, no desplazarlo. `mealMacros` sí se
+          // actualiza entero. Mismo criterio que la web (src/lib/use-coach-actions.ts).
+          const currentGuide = getLog()?.guide ?? null;
+          const guide: DailyGuide = {
+            ...freshGuide,
+            macroEstimate: currentGuide?.macroEstimate ?? freshGuide.macroEstimate,
+          };
+          // Guarda qué había antes en ese momento, solo la primera vez que se
+          // cambia hoy — mismo criterio que la web (src/lib/use-coach-actions.ts).
+          const nextHabits =
+            previousIdea && previousIdea !== plato
+              ? habits.map((h) =>
+                  h.label === label ? { ...h, wasIdea: h.wasIdea ?? previousIdea } : h,
+                )
+              : habits;
+          await updateTodayLog({ guide, habits: nextHabits });
         }
         const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha)
           ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-ES", {

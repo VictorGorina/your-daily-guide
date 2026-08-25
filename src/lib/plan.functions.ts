@@ -13,6 +13,7 @@ import {
   coverageRatio,
   daysInMonth,
   ingredientNames,
+  mealsForDate,
   mergeFuturePlan,
   monthCoverage,
   planForDate,
@@ -697,7 +698,13 @@ export const setPlanMeal = createServerFn({ method: "POST" })
     async ({
       data,
       context,
-    }): Promise<{ plan: MonthlyPlan; label: string; dish: string; off: string[] }> => {
+    }): Promise<{
+      plan: MonthlyPlan;
+      label: string;
+      dish: string;
+      off: string[];
+      previousIdea: string;
+    }> => {
       const month = data.date.slice(0, 7);
       const { data: row } = await context.supabase
         .from("monthly_plans")
@@ -709,6 +716,13 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       if (!current) throw new Error(`Todavía no hay plan del mes ${month}`);
       const at = planSlotIndex(current, data.date);
       if (!at) throw new Error("Ese día todavía no tiene menú en el plan");
+
+      // Plato resuelto tal cual se veía en pantalla antes de este cambio (con
+      // la rotación semanal ya aplicada para desayuno/snack si no había un
+      // plato pedido a mano ese día), para que el caller pueda guardarlo como
+      // "lo que había antes" — ver `wasIdea` en daily.ts.
+      const previousIdea =
+        mealsForDate(current, data.date).find((m) => m.slot === data.slot)?.idea ?? "";
 
       const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
       const off = await offShoppingList(data.dish, shopping);
@@ -755,7 +769,13 @@ export const setPlanMeal = createServerFn({ method: "POST" })
         shopping,
       });
 
-      return { plan: next, label: MEAL_SLOT_LABEL[data.slot], dish: data.dish, off };
+      return {
+        plan: next,
+        label: MEAL_SLOT_LABEL[data.slot],
+        dish: data.dish,
+        off,
+        previousIdea,
+      };
     },
   );
 

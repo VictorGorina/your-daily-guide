@@ -261,8 +261,10 @@ function Hoy() {
   const doneCount = habits.filter((h) => h.done).length;
   // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
   // "comí distinto"), no el menú completo del día: así deshacer una comida
-  // la mueve, en vez de quedarse fija en un total del día entero.
-  const doneMacros = sumDoneMacros(guide?.mealMacros, habits);
+  // la mueve, en vez de quedarse fija en un total del día entero. Se muestra
+  // siempre (arrancando en 0) para que se vea cómo se va llenando según se
+  // marcan comidas, en vez de aparecer de golpe con la primera.
+  const doneMacros = sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS;
 
   const quote = quoteOfTheDay();
   const dateLabel = new Date(`${today0}T00:00:00`)
@@ -337,13 +339,11 @@ function Hoy() {
         </div>
       </header>
 
-      {doneMacros ? (
-        <MacroBars
-          estimate={doneMacros}
-          target={guide?.macroEstimate ?? null}
-          weightKg={profile?.current_weight_kg ?? null}
-        />
-      ) : null}
+      <MacroBars
+        estimate={doneMacros}
+        target={guide?.macroEstimate ?? null}
+        weightKg={profile?.current_weight_kg ?? null}
+      />
 
       <section className="animate-rise mt-6">
         <div className="flex items-baseline justify-between gap-2.5">
@@ -374,6 +374,12 @@ function Hoy() {
               const isExpanded = expandedMeal === i;
               const note = offListNote(planned?.off);
               const shared = sharedWith(h.label);
+              // El coach cambió el plato de este momento hoy (desde el chat o
+              // desde "comí otra cosa"): se muestra el plato real en naranja,
+              // con el que había antes tachado debajo — ver `wasIdea` en
+              // daily.ts. Si el cambio acaba coincidiendo otra vez con lo que
+              // había (p.ej. se revierte), deja de contar como editado.
+              const wasIdea = h.wasIdea && h.wasIdea !== idea ? h.wasIdea : null;
 
               return (
                 <div
@@ -417,13 +423,22 @@ function Hoy() {
                         className={`mt-1.5 block font-title tracking-[-0.02em] text-pretty ${
                           idea
                             ? `text-[16.5px] font-medium leading-tight ${
-                                isSkip ? "text-muted-foreground line-through" : "text-foreground"
+                                isSkip
+                                  ? "text-muted-foreground line-through"
+                                  : wasIdea
+                                    ? "text-primary"
+                                    : "text-foreground"
                               }`
                             : "text-[13px] leading-snug text-muted-foreground"
                         }`}
                       >
                         {idea || "Sin menú todavía"}
                       </span>
+                      {wasIdea ? (
+                        <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground line-through">
+                          {wasIdea}
+                        </span>
+                      ) : null}
                       {classifyDish(idea) !== "otro" ? (
                         <span className="mt-1.5 block font-num text-[9.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                           {cat.label}
@@ -662,6 +677,7 @@ function Hoy() {
           if (!v) setGuidedIndex(null);
         }}
         contextNote={guidedMeal ? `Qué has comido en vez de: ${guidedMeal.label}` : undefined}
+        mealLabel={guidedMeal?.label}
         onSend={(text) => {
           setPendingChatMessage(text);
           setGuidedIndex(null);
@@ -685,13 +701,18 @@ function Hoy() {
   );
 }
 
+/** Punto de partida de la barra de macros mientras no hay nada que sumar
+ * todavía (guía sin cargar o ninguna comida marcada): la sección se muestra
+ * igual, en 0, en vez de esperar a la primera comida confirmada. */
+const ZERO_MACROS: MacroEstimate = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 };
+
 /**
  * Suma las estimaciones por plato (`mealMacros`) de las comidas que ya están
  * marcadas como comidas ("comí esto" / "comí distinto"), para que la barra
  * de Hoy refleje solo lo confirmado — no el menú del día entero de golpe.
  * Deshacer una comida la resta de la suma, igual que el contador "x de y".
- * null cuando la guía todavía no trae `mealMacros` (así el caller no muestra
- * la sección en vez de enseñar una barra vacía por falta de datos).
+ * null cuando la guía todavía no trae `mealMacros` — el caller cae entonces a
+ * `ZERO_MACROS` para seguir mostrando la barra (en 0) en vez de ocultarla.
  */
 function sumDoneMacros(
   mealMacros: MealMacroEstimate[] | null | undefined,

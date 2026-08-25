@@ -50,6 +50,7 @@ export function GuidedLogSheet({
   onOpenChange,
   mode = "meal",
   contextNote,
+  mealLabel,
 }: {
   onSend: (text: string) => void;
   /** Se llama cuando el usuario pulsa "Me lo salté" dentro del sheet de comida. */
@@ -61,6 +62,13 @@ export function GuidedLogSheet({
   mode?: "meal" | "activity";
   /** Línea de contexto opcional (p.ej. qué comida se está detallando). */
   contextNote?: string;
+  /**
+   * Nombre de la comida concreta de HOY que se está registrando (p.ej. "Cena").
+   * Al venir informado, el mensaje pide explícitamente cambiar ESE plato de hoy
+   * (además de ajustar los días futuros) — ver `wasIdea` en lib/daily.ts. Mismo
+   * criterio que la web (src/components/guided-log-sheet.tsx).
+   */
+  mealLabel?: string;
 }) {
   // Actividad
   const [activity, setActivity] = useState(ACTIVITIES[0]!.label);
@@ -113,10 +121,13 @@ export function GuidedLogSheet({
         }
         extra = Math.round(n);
       }
+      const kcalNote = extra ? ` Exceso estimado ~${extra} kcal (kcal_extra ≈ +${extra}).` : "";
       onSend(
-        `Registro de exceso/ajuste de hoy: ${desc}.` +
-          (extra ? ` Exceso estimado ~${extra} kcal (kcal_extra ≈ +${extra}).` : "") +
-          ` Corrige solo los días futuros del plan de forma suave (hoy queda fijado y la compra no cambia) y dime cómo queda mi objetivo.`,
+        mealLabel
+          ? `Esto es lo que de verdad he comido en ${mealLabel.toLowerCase()} de HOY, en vez de lo planeado: ${desc}.${kcalNote} ` +
+              `Cambia el plato de ${mealLabel.toLowerCase()} de hoy a esto exacto y además corrige de forma suave los días futuros del plan (la compra no cambia) y dime cómo queda mi objetivo.`
+          : `Registro de exceso/ajuste de hoy: ${desc}.${kcalNote} ` +
+              `Corrige solo los días futuros del plan de forma suave (hoy queda fijado y la compra no cambia) y dime cómo queda mi objetivo.`,
       );
     }
 
@@ -254,7 +265,9 @@ export function GuidedLogSheet({
           </Text>
         </Pressable>
         <Text className="text-center text-xs text-muted-foreground">
-          Hoy queda fijado; solo cambian los días futuros y la lista de la compra no varía.
+          {mode === "meal" && mealLabel
+            ? `Cambio el plato de ${mealLabel.toLowerCase()} de hoy a lo que comiste de verdad; los demás días futuros se ajustan y la compra no varía.`
+            : "Hoy queda fijado; solo cambian los días futuros y la lista de la compra no varía."}
         </Text>
       </View>
     </Sheet>
