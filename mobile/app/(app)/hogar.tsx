@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
 import {
   Baby,
-  ChevronLeft,
   Copy,
   LogOut,
   Plus,
@@ -59,7 +57,6 @@ const syncSharedPlan = () =>
   apiPost<{ synced: number }>("household/sync", { month: monthISO(), today: todayISO() });
 
 export default function Hogar() {
-  const router = useRouter();
   const qc = useQueryClient();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
@@ -223,16 +220,7 @@ export default function Hogar() {
         contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-28 pt-4"
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.navigate("/ajustes"))}
-          className="flex-row items-center gap-1 self-start active:opacity-70"
-          hitSlop={8}
-        >
-          <ChevronLeft size={16} color="#83796c" />
-          <Text className="text-xs font-sans-medium text-muted-foreground">Ajustes</Text>
-        </Pressable>
-
-        <Text className="mt-3 font-heading text-3xl text-foreground">Tu hogar</Text>
+        <Text className="font-heading text-3xl text-foreground">Tu hogar</Text>
         <Text className="mt-2 text-sm text-muted-foreground">
           Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder tu
           propio plan.
