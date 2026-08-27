@@ -124,7 +124,7 @@ async function enforceBudget(
 
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string; cadence?: ShoppingCadence }) => {
+  .validator((input: { month: string; cadence?: ShoppingCadence }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
     const cadence: ShoppingCadence =
       input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
@@ -325,7 +325,7 @@ async function reassignTripsByDishes(
  */
 export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string; cadence?: ShoppingCadence }) => {
+  .validator((input: { month: string; cadence?: ShoppingCadence }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
     const cadence: ShoppingCadence =
       input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
@@ -385,7 +385,7 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
  */
 export const toggleShoppingOwned = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     (input: {
       month: string;
       itemName: string;
@@ -442,7 +442,7 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
  */
 export const setTripActual = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string; trip: number; amount: number | null }) => {
+  .validator((input: { month: string; trip: number; amount: number | null }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
     const trip = Number(input?.trip);
     if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
@@ -486,7 +486,7 @@ export const setTripActual = createServerFn({ method: "POST" })
  */
 export const setTripConfirmed = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string; trip: number; confirmed: boolean }) => {
+  .validator((input: { month: string; trip: number; confirmed: boolean }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
     const trip = Number(input?.trip);
     if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
@@ -531,7 +531,7 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
 
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     (input: { month: string; note: string; today?: string; kcalDelta?: number | null }) => {
       if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
       const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
@@ -679,7 +679,7 @@ async function offShoppingList(dish: string, shopping: ShoppingList): Promise<st
  */
 export const setPlanMeal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { date: string; slot: string; dish: string; today?: string }) => {
+  .validator((input: { date: string; slot: string; dish: string; today?: string }) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? "")) throw new Error("Fecha no válida");
     if (!MEAL_SLOTS.includes(input?.slot as MealSlot)) throw new Error("Comida no válida");
     const dish = String(input?.dish ?? "")
@@ -782,7 +782,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
 /** Calcula cómo afecta lo ocurrido al objetivo y propone acortar el plazo o ser más laxo. */
 export const goalImpact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { note: string; today?: string }) => ({
+  .validator((input: { note: string; today?: string }) => ({
     note: String(input?.note ?? "").slice(0, 1500),
     today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
       ? input.today!
@@ -835,7 +835,7 @@ export const goalImpact = createServerFn({ method: "POST" })
 
 export const welcomeBriefing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string }) => ({ month: String(input?.month ?? "") }))
+  .validator((input: { month: string }) => ({ month: String(input?.month ?? "") }))
   .handler(async ({ data, context }): Promise<{ text: string }> => {
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
@@ -877,7 +877,7 @@ export type DishRecipe = { ingredients: string[]; steps: string[] };
  */
 export const dishRecipe = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { dish: string; month?: string }) => {
+  .validator((input: { dish: string; month?: string }) => {
     const dish = String(input?.dish ?? "")
       .trim()
       .slice(0, 200);

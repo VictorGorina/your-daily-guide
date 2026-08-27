@@ -57,7 +57,7 @@ const date = (v: unknown) => {
 
 export const parseOnboarding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { transcript: string }) => ({
+  .validator((input: { transcript: string }) => ({
     transcript: String(input?.transcript ?? "").slice(0, 12000),
   }))
   .handler(async ({ data }): Promise<OnboardingDraft> => {

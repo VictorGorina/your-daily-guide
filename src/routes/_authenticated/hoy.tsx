@@ -99,6 +99,36 @@ function onAccent(hex: string) {
   return lum > 0.45 ? "#3e3d39" : "#fbfaf7";
 }
 
+// Ventana mínima entre intentos automáticos de generar el plan del mes,
+// persistida en localStorage (a diferencia de `autoPlanTriedRef`, que solo
+// protege dentro de un mismo montaje) para que sobreviva a que la persona
+// cierre y reabra la app. Sin esto, cerrar y reabrir varias veces por
+// impaciencia mientras la IA todavía está generando el plan anterior podría
+// lanzar una llamada a IA nueva en cada apertura. Es una heurística, no una
+// garantía: la generación real puede tardar más o menos que esta ventana.
+const AUTO_PLAN_MIN_INTERVAL_MS = 60_000;
+const autoPlanAttemptKey = (month: string) => `ydg:autoPlanAttempt:${month}`;
+
+/** ms desde el último intento (de cualquier apertura de la app), o null si no hay uno registrado. */
+function msSinceLastAutoPlanAttempt(month: string): number | null {
+  try {
+    const raw = localStorage.getItem(autoPlanAttemptKey(month));
+    const at = raw ? Number(raw) : NaN;
+    return Number.isFinite(at) ? Date.now() - at : null;
+  } catch {
+    return null;
+  }
+}
+
+function markAutoPlanAttempt(month: string) {
+  try {
+    localStorage.setItem(autoPlanAttemptKey(month), String(Date.now()));
+  } catch {
+    // Modo privado u otro bloqueo de storage: sin memoria entre relanzamientos,
+    // pero no bloquea la generación de este montaje.
+  }
+}
+
 function Hoy() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -112,6 +142,7 @@ function Hoy() {
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
   const autoPlanTriedRef = useRef(false);
+  const [autoPlanThrottled, setAutoPlanThrottled] = useState(false);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -138,7 +169,19 @@ function Hoy() {
   useEffect(() => {
     if (!profileQ.data?.onboarding_completed || !noPlanYet || autoPlanTriedRef.current) return;
     autoPlanTriedRef.current = true;
-    autoPlan.mutate();
+    // Si ya hay una marca reciente (de otra apertura de la app), se espera el
+    // resto de la ventana en vez de lanzar otra generación en paralelo. Solo se
+    // marca en el primer intento para que relanzamientos de en medio no alarguen
+    // la espera indefinidamente.
+    const elapsed = msSinceLastAutoPlanAttempt(month);
+    if (elapsed == null) markAutoPlanAttempt(month);
+    const wait = elapsed == null ? 0 : Math.max(0, AUTO_PLAN_MIN_INTERVAL_MS - elapsed);
+    if (wait > 0) setAutoPlanThrottled(true);
+    const timer = setTimeout(() => {
+      setAutoPlanThrottled(false);
+      autoPlan.mutate();
+    }, wait);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
@@ -358,11 +401,28 @@ function Hoy() {
         </div>
 
         {!habits.length ? (
-          <p className="mt-3.5 animate-pulse text-sm text-muted-foreground">
-            {autoPlan.isPending
-              ? "Preparando tu menú del mes..."
-              : "Preparando las comidas de hoy..."}
-          </p>
+          autoPlan.isError || todayQ.isError ? (
+            // Mismo patrón que el fallback de "Guía del coach": si la generación
+            // falla (o el registro de hoy no carga), se ofrece un reintento en vez
+            // de dejar el texto de "preparando" colgado para siempre.
+            <button
+              type="button"
+              onClick={() => (autoPlan.isError ? autoPlan.mutate() : todayQ.refetch())}
+              className="mt-3.5 text-sm font-medium text-primary"
+            >
+              {autoPlan.isError
+                ? "No hemos podido preparar tu menú del mes. Reintentar"
+                : "No hemos podido preparar las comidas de hoy. Reintentar"}
+            </button>
+          ) : (
+            <p className="mt-3.5 animate-pulse text-sm text-muted-foreground">
+              {autoPlanThrottled
+                ? "Ya se está preparando tu menú del mes..."
+                : autoPlan.isPending
+                  ? "Preparando tu menú del mes..."
+                  : "Preparando las comidas de hoy..."}
+            </p>
+          )
         ) : (
           <div className="mt-3.5 flex flex-col gap-2.5">
             {dayStrip.map(({ h, i }) => {

@@ -66,7 +66,7 @@ const num = (v: unknown): number => {
 
 export const generateDailyGuide = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input?: { meals?: { moment: string; idea: string }[] }) => ({
+  .validator((input?: { meals?: { moment: string; idea: string }[] }) => ({
     // Los platos reales del plan de hoy (no los que la guía se inventa en su
     // propio campo "meals"), para que la estimación de macros parta de lo que
     // la persona va a comer de verdad. Como mucho 6: es contexto, no una lista

@@ -10,7 +10,7 @@ import { cleanPlan, cleanShopping } from "@/lib/plan-shared";
  */
 export const syncHouseholdPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string; today?: string }) => {
+  .validator((input: { month: string; today?: string }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
     return {
       month: input.month,
