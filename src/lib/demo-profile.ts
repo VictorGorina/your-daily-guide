@@ -62,6 +62,30 @@ export function randomDemoProfile(): Partial<Profile> {
     tone: pick(["relajado", "neutro"]),
     morning_time: "08:00",
     evening_time: "22:00",
+    pregnancy_status: null,
+    menstrual_cycle:
+      sex === "mujer" ? pick([null, "Los días antes de la regla me apetece picar más"]) : null,
+    ed_history: "no",
+    alcohol: pick(["nunca", "ocasional", "frecuente"]),
+    allergy_severity: pick([null, "La del marisco es grave, el resto las llevo bien"]),
+    disliked_foods: pick(["El cilantro y el hígado", "El pescado azul", null]),
+    cuisine_preference: pick([
+      "Mediterránea, casera de siempre",
+      "Asiática y mediterránea",
+      "Un poco de todo",
+    ]),
+    portions_per_meal: pick(["2 raciones entre semana, 4 el finde", "2 raciones siempre"]),
+    meals_to_plan: pick(["Comida y cena", "Desayuno, comida y cena"]),
+    kitchen_equipment: pick(["Horno y air fryer", "Horno, olla lenta y microondas"]),
+    cooking_skill: pick(["básico", "cómodo", "avanzado"]),
+    strength_training_experience: goal === "ganar" ? pick(["menos de 1 año", "1-3 años"]) : null,
+    supplements: pick([null, "Proteína en polvo"]),
+    smoking: pick(["no", "no", "ocasionalmente"]),
+    tracking_experience: pick([
+      "Ha usado MyFitnessPal antes y acabó obsesionado con las cifras",
+      "No ha contado calorías nunca",
+    ]),
+    weigh_in_cadence: pick(["semanal", "quincenal"]),
     onboarding_completed: true,
   };
 }

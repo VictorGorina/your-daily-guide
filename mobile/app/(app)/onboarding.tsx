@@ -51,8 +51,16 @@ type Question = {
   /** Pide la respuesta como fecha DD/MM/AAAA en vez de texto libre. */
   dateInput?: boolean;
   validate?: (text: string) => string | null;
+  /** Pregunta que se inserta justo después de esta si `test` devuelve true sobre la
+   * respuesta dada — no consume un "step" del flujo fijo (ver PARTNER_APP_Q, el
+   * primer caso de este patrón). */
+  followUp?: { test: (answerText: string) => boolean; question: Question };
 };
 type Screen = { title: string; subtitle: string; questions: Question[] };
+
+/** Detecta una respuesta con contenido real frente a un "no"/"ninguna"/"nada"
+ * (se usa para follow-ups condicionales: alergias -> gravedad). */
+const mentionsSomething = (t: string) => !/^\s*(ning[uú]n[ao]?s?|no|nada)\b/i.test(t.trim());
 
 const num = (t: string) => t.replace(",", ".");
 
@@ -148,6 +156,97 @@ const parseDatePretty = (pretty: string): string | null => {
   return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
 };
 
+// --- Preguntas "hoja" (sin follow-up propio), usadas como follow-up de otras o
+// insertadas directamente en SCREENS. Van primero porque BIO_Q, LIVES_WITH_Q y la
+// pregunta de objetivo las referencian en su propio `followUp`. Port 1:1 de la web
+// — ver "Radiografía del onboarding" para el porqué de cada una.
+
+const ALLERGY_SEVERITY_Q: Question = {
+  q: "De esas alergias o intolerancias, ¿alguna es grave (tipo anafilaxia) o son más llevaderas?",
+  hint: "Ej.: el marisco es grave, la lactosa la llevo bien",
+  optional: true,
+};
+
+const MENSTRUAL_CYCLE_Q: Question = {
+  q: "¿Notas que tu ciclo menstrual te afecta al apetito, la energía o los antojos?",
+  hint: "Ej.: los días antes de la regla me apetece picar más (o 'no lo noto' / 'prefiero no decirlo')",
+  optional: true,
+};
+
+const PREGNANCY_Q: Question = {
+  q: "¿Estás embarazada o en periodo de lactancia ahora mismo?",
+  hint: "Cambia lo que es seguro recomendarte",
+  chips: ["Sí, embarazada", "Sí, en lactancia", "No", "Prefiero no decirlo"],
+  followUp: { test: (t) => !/embarazad|lactancia/i.test(t), question: MENSTRUAL_CYCLE_Q },
+};
+
+const ED_HISTORY_Q: Question = {
+  q: "Antes de seguir: ¿tienes ahora, o has tenido antes, una relación muy difícil con la comida — atracones, restricción muy estricta, purgas? Te lo pregunto para acompañarte mejor, nunca para juzgarte.",
+  hint: "Sin filtros, aquí no se juzga nada",
+  chips: ["Sí, ahora", "Sí, en el pasado", "No", "Prefiero no decirlo"],
+};
+
+const ALCOHOL_Q: Question = {
+  q: "¿Sueles tomar alcohol?",
+  chips: ["Nunca", "De vez en cuando", "Con bastante frecuencia"],
+};
+
+const DISLIKED_FOODS_Q: Question = {
+  q: "¿Hay ingredientes que no quieres ver en tus platos?",
+  hint: "Ej.: cilantro, hígado, pescado azul (si no hay ninguno, dime 'ninguno')",
+};
+
+const CUISINE_Q: Question = {
+  q: "¿Qué tipo de comida te gusta más?",
+  chips: [
+    "Mediterránea",
+    "Casera de siempre",
+    "Asiática",
+    "Mexicana",
+    "Italiana",
+    "Un poco de todo",
+  ],
+  multi: true,
+};
+
+const MEALS_TO_PLAN_Q: Question = {
+  q: "¿Qué comidas quieres que te planifique y te incluya en la compra?",
+  chips: ["Desayuno", "Comida", "Cena", "Snacks"],
+  multi: true,
+};
+
+const KITCHEN_EQUIPMENT_Q: Question = {
+  q: "¿Con qué cuentas en la cocina?",
+  chips: ["Horno", "Air fryer", "Olla lenta", "Robot de cocina", "Solo fuego", "Microondas"],
+  multi: true,
+};
+
+const COOKING_SKILL_Q: Question = {
+  q: "¿Cómo te llevas con la cocina?",
+  chips: ["Me apaño con lo básico", "Cocino bien", "Se me da genial"],
+};
+
+const TRAINING_EXPERIENCE_Q: Question = {
+  q: "Como tu objetivo es ganar músculo: ¿cuánta experiencia tienes entrenando fuerza?",
+  chips: ["Ninguna", "Menos de 1 año", "1-3 años", "Más de 3 años"],
+};
+
+const SMOKING_Q: Question = {
+  q: "¿Fumas?",
+  chips: ["No", "Ocasionalmente", "Sí"],
+};
+
+const WEIGH_IN_CADENCE_Q: Question = {
+  q: "¿Cada cuánto quieres registrar tu peso?",
+  chips: ["Cada semana", "Cada dos semanas", "Te aviso yo cuando quiera"],
+};
+
+const PARTNER_APP_Q: Question = {
+  q: "¿Tu pareja también va a usar Peppers? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
+  hint: "Así sé si el presupuesto que me des luego es solo tuyo o el de los dos",
+  chips: ["Sí, también la usará", "No, de momento no"],
+};
+
 const BIRTHDATE_Q: Question = {
   q: "¿Cuál es tu fecha de nacimiento? Así ajusto tu edad sola con el tiempo y adapto el menú según vas cumpliendo años.",
   hint: "Escríbela como DD/MM/AAAA",
@@ -159,22 +258,18 @@ const BIO_Q: Question = {
   q: "Encantado. Cuéntame tu sexo biológico, peso actual y altura.",
   hint: "Ej.: hombre, 78 kg, 172 cm",
   validate: validateBiometrics,
+  followUp: { test: (t) => /\bmujer\b/i.test(t), question: PREGNANCY_Q },
 };
 
 const LIVES_WITH_Q: Question = {
   q: "¿Con quién vives? Dime si compartes las comidas con alguien y cuáles (por ejemplo, cenáis siempre juntos).",
   hint: "Ej.: vivo con mi pareja, cenamos juntos todos los días",
+  followUp: { test: (t) => /\bpareja\b/i.test(t), question: PARTNER_APP_Q },
 };
 
 const BUDGET_Q: Question = {
   q: "¿Cuánto tiempo tienes para cocinar al día y cuánto te quieres gastar en comida al mes?",
   hint: "Ej.: 20 min al día y unos 250 € al mes",
-};
-
-const PARTNER_APP_Q: Question = {
-  q: "¿Tu pareja también va a usar Peppers? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
-  hint: "Así sé si el presupuesto que me des luego es solo tuyo o el de los dos",
-  chips: ["Sí, también la usará", "No, de momento no"],
 };
 
 const SCREENS: Screen[] = [
@@ -194,13 +289,15 @@ const SCREENS: Screen[] = [
         optional: true,
       },
       {
-        q: "¿Tomas algún medicamento que afecte al apetito, metabolismo o energía?",
+        q: "¿Tomas algún medicamento que afecte al apetito, metabolismo o energía? Aprovecho también para preguntarte por suplementos: proteína, creatina, vitaminas...",
         hint: "Opcional",
         optional: true,
       },
+      SMOKING_Q,
       {
         q: "¿Tienes alergias o intolerancias alimentarias?",
         hint: "Si no hay ninguna, dime 'ninguna'",
+        followUp: { test: mentionsSomething, question: ALLERGY_SEVERITY_Q },
       },
     ],
   },
@@ -229,6 +326,7 @@ const SCREENS: Screen[] = [
         chips: ["2", "3", "4", "5"],
         validate: validateMeals,
       },
+      MEALS_TO_PLAN_Q,
     ],
   },
   {
@@ -239,19 +337,33 @@ const SCREENS: Screen[] = [
         q: "¿Cocinas tú habitualmente o comes fuera y pides con frecuencia? Concreta qué días y comidas.",
         hint: "Ej.: cocino de lunes a viernes por la noche, como fuera al mediodía",
       },
+      KITCHEN_EQUIPMENT_Q,
+      COOKING_SKILL_Q,
       {
         q: "¿Sigues algún patrón alimentario?",
-        chips: ["Omnívoro", "Vegetariano", "Vegano", "Sin gluten"],
+        chips: [
+          "Omnívoro",
+          "Flexitariano / poca carne roja",
+          "Vegetariano",
+          "Vegano",
+          "Pescetariano",
+          "Sin gluten",
+        ],
+        multi: true,
       },
       {
         q: "¿Hay algún alimento que no estés dispuesto a eliminar bajo ningún concepto?",
         hint: "Ej.: mi café con leche de la mañana y el chocolate del finde",
       },
+      DISLIKED_FOODS_Q,
+      CUISINE_Q,
+      ALCOHOL_Q,
       {
         q: "¿Cómo describirías tu relación con la comida hoy en día?",
         hint: "Sin filtros, aquí no se juzga nada",
         chips: ["Tranquila", "Ansiosa", "Sin tiempo para pensarlo"],
       },
+      ED_HISTORY_Q,
     ],
   },
   {
@@ -269,6 +381,10 @@ const SCREENS: Screen[] = [
         hint: "Opcional",
         optional: true,
       },
+      {
+        q: "¿Para cuántas raciones cocinas normalmente cada comida?",
+        hint: "Ej.: 2 entre semana, 4 el sábado — puede variar",
+      },
     ],
   },
   {
@@ -284,6 +400,7 @@ const SCREENS: Screen[] = [
           "Mejorar hábitos",
           "Más energía y sueño",
         ],
+        followUp: { test: (t) => /ganar masa muscular/i.test(t), question: TRAINING_EXPERIENCE_Q },
       },
       {
         q: "Si tu objetivo es de peso, ¿cuánto y en qué plazo te gustaría lograrlo? Sin presión, solo para orientarnos.",
@@ -294,9 +411,10 @@ const SCREENS: Screen[] = [
         hint: "Ej.: dejar de picar entre horas, beber más agua",
       },
       {
-        q: "¿Qué es lo que más te ha costado mantener en intentos anteriores?",
+        q: "¿Qué es lo que más te ha costado mantener en intentos anteriores? Y de paso: ¿has probado antes a contar calorías o macros, o con otras dietas? ¿Te ayudó o te obsesionó?",
         hint: "Saberlo me ayuda a no repetir lo que no te funciona",
       },
+      WEIGH_IN_CADENCE_Q,
       BUDGET_Q,
     ],
   },
@@ -451,6 +569,22 @@ export default function Onboarding() {
         tone: d.tone ?? "relajado",
         morning_time: d.morning_time ?? "08:00",
         evening_time: d.evening_time ?? "22:00",
+        pregnancy_status: d.pregnancy_status,
+        menstrual_cycle: d.menstrual_cycle,
+        ed_history: d.ed_history,
+        alcohol: d.alcohol,
+        allergy_severity: d.allergy_severity,
+        disliked_foods: d.disliked_foods,
+        cuisine_preference: d.cuisine_preference,
+        portions_per_meal: d.portions_per_meal,
+        meals_to_plan: d.meals_to_plan,
+        kitchen_equipment: d.kitchen_equipment,
+        cooking_skill: d.cooking_skill,
+        strength_training_experience: d.strength_training_experience,
+        supplements: d.supplements,
+        smoking: d.smoking,
+        tracking_experience: d.tracking_experience,
+        weigh_in_cadence: d.weigh_in_cadence,
         onboarding_completed: true,
       });
 
@@ -585,28 +719,52 @@ export default function Onboarding() {
   };
 
   const answerPending = (text: string) => {
-    const hasApp = /^\s*s[ií]\b/i.test(text) ? true : /^\s*no\b/i.test(text) ? false : null;
-    setPartnerHasApp(hasApp);
+    const q = pending;
+    if (!q) return;
+    const isPartnerQ = q === PARTNER_APP_Q;
+    const hasApp = isPartnerQ
+      ? /^\s*s[ií]\b/i.test(text)
+        ? true
+        : /^\s*no\b/i.test(text)
+          ? false
+          : null
+      : null;
+    if (isPartnerQ) setPartnerHasApp(hasApp);
+
     setAnswers((prev) => [
       ...prev,
+      // `prev.length` (no fija en `step`) desambigua encadenados: PREGNANCY_Q y
+      // MENSTRUAL_CYCLE_Q comparten el mismo `step` porque el segundo no lo
+      // incrementa (no consume hueco del flujo fijo), así que `step` solo no basta.
       {
-        key: `${screen}-partner-app`,
-        q: PARTNER_APP_Q.q,
+        key: `${screen}-followup-${step}-${prev.length}`,
+        q: q.q,
         section: SCREENS[screen]!.title,
         a: text,
       },
     ]);
     setValue("");
     setError(null);
-    setPending(null);
 
     const next: Turn[] = [...turns, { role: "me", text }];
-    const note =
-      hasApp === true
+    const note = isPartnerQ
+      ? hasApp === true
         ? "Genial, cuando termines podéis uniros en Tu hogar (dentro de Ajustes) para compartir comidas y compra. "
         : hasApp === false
           ? "Entendido, más adelante te pido el presupuesto total de la casa para que la compra os cubra a los dos. "
-          : "";
+          : ""
+      : "";
+
+    // La pregunta insertada puede tener su propio follow-up encadenado (p.ej.
+    // PREGNANCY_Q -> MENSTRUAL_CYCLE_Q): si aplica, sustituye a `pending` en vez
+    // de retomar ya el flujo fijo.
+    const chained = q.followUp?.test(text) ? q.followUp.question : null;
+    if (chained) {
+      setTurns([...next, { role: "coach", text: note + chained.q }]);
+      setPending(chained);
+      return;
+    }
+    setPending(null);
 
     const following = SCREENS[screen]!.questions[step];
     if (following) {
@@ -651,10 +809,11 @@ export default function Onboarding() {
     setAnswers(nextAnswers);
     setValue("");
 
-    if (current === LIVES_WITH_Q && /\bpareja\b/i.test(text)) {
-      setTurns([...next, { role: "coach", text: PARTNER_APP_Q.q }]);
+    const fu = current?.followUp;
+    if (fu && fu.test(text)) {
+      setTurns([...next, { role: "coach", text: fu.question.q }]);
       setStep(step + 1);
-      setPending(PARTNER_APP_Q);
+      setPending(fu.question);
       return;
     }
 

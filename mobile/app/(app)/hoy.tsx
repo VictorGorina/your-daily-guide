@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Activity, Check, ChevronDown, MessageCircle, PencilLine, X } from "lucide-react-native";
@@ -77,6 +78,38 @@ function tintBg(accent: string, pct: number): string {
   return `rgba(${r}, ${g}, ${b}, ${pct / 100})`;
 }
 
+// Ventana mínima entre intentos automáticos de generar el plan del mes,
+// persistida en AsyncStorage (a diferencia de `autoPlanTriedRef`, que solo
+// protege dentro de un mismo montaje) para que sobreviva a que la persona
+// cierre y reabra la app. Sin esto, matar y reabrir la app varias veces por
+// impaciencia mientras la IA todavía está generando el plan anterior podría
+// lanzar una llamada a IA nueva en cada apertura. Es una heurística, no una
+// garantía: la generación real puede tardar más o menos que esta ventana.
+// Misma lógica que la web (src/routes/_authenticated/hoy.tsx), con la clave
+// homónima; allí es localStorage síncrono y aquí AsyncStorage asíncrono.
+const AUTO_PLAN_MIN_INTERVAL_MS = 60_000;
+const autoPlanAttemptKey = (month: string) => `ydg:autoPlanAttempt:${month}`;
+
+/** ms desde el último intento (de cualquier apertura de la app), o null si no hay uno registrado. */
+async function msSinceLastAutoPlanAttempt(month: string): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(autoPlanAttemptKey(month));
+    const at = raw ? Number(raw) : NaN;
+    return Number.isFinite(at) ? Date.now() - at : null;
+  } catch {
+    return null;
+  }
+}
+
+async function markAutoPlanAttempt(month: string) {
+  try {
+    await AsyncStorage.setItem(autoPlanAttemptKey(month), String(Date.now()));
+  } catch {
+    // Almacenamiento bloqueado: sin memoria entre relanzamientos, pero no
+    // bloquea la generación de este montaje.
+  }
+}
+
 export default function Hoy() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -87,6 +120,7 @@ export default function Hoy() {
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
   const autoPlanTriedRef = useRef(false);
+  const [autoPlanThrottled, setAutoPlanThrottled] = useState(false);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -114,7 +148,27 @@ export default function Hoy() {
   useEffect(() => {
     if (!profileQ.data?.onboarding_completed || !noPlanYet || autoPlanTriedRef.current) return;
     autoPlanTriedRef.current = true;
-    autoPlan.mutate();
+    // Si ya hay una marca reciente (de otra apertura de la app), se espera el
+    // resto de la ventana en vez de lanzar otra generación en paralelo. Solo se
+    // marca en el primer intento para que relanzamientos de en medio no alarguen
+    // la espera indefinidamente.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    void (async () => {
+      const elapsed = await msSinceLastAutoPlanAttempt(month);
+      if (cancelled) return;
+      if (elapsed == null) void markAutoPlanAttempt(month);
+      const wait = elapsed == null ? 0 : Math.max(0, AUTO_PLAN_MIN_INTERVAL_MS - elapsed);
+      if (wait > 0) setAutoPlanThrottled(true);
+      timer = setTimeout(() => {
+        setAutoPlanThrottled(false);
+        autoPlan.mutate();
+      }, wait);
+    })();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
@@ -326,11 +380,28 @@ export default function Hoy() {
 
           {!habits.length ? (
             <View className="rounded-[20px] bg-surface p-4">
-              <Text className="font-body text-sm text-muted-foreground">
-                {autoPlan.isPending
-                  ? "Preparando tu menú del mes..."
-                  : "Preparando las comidas de hoy..."}
-              </Text>
+              {autoPlan.isError || todayQ.isError ? (
+                // Mismo patrón que "Guía del coach": si la generación falla (o el
+                // registro de hoy no carga), se ofrece reintentar en vez de dejar
+                // el texto de "preparando" colgado para siempre.
+                <Pressable
+                  onPress={() => (autoPlan.isError ? autoPlan.mutate() : todayQ.refetch())}
+                >
+                  <Text className="font-body-medium text-sm text-primary">
+                    {autoPlan.isError
+                      ? "No hemos podido preparar tu menú del mes. Reintentar"
+                      : "No hemos podido preparar las comidas de hoy. Reintentar"}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text className="font-body text-sm text-muted-foreground">
+                  {autoPlanThrottled
+                    ? "Ya se está preparando tu menú del mes..."
+                    : autoPlan.isPending
+                      ? "Preparando tu menú del mes..."
+                      : "Preparando las comidas de hoy..."}
+                </Text>
+              )}
             </View>
           ) : (
             <View className="gap-2.5">

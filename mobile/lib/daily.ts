@@ -43,6 +43,23 @@ export type Profile = {
   past_struggles: string | null;
   coach_scope: string | null;
 
+  pregnancy_status: string | null;
+  menstrual_cycle: string | null;
+  ed_history: string | null;
+  alcohol: string | null;
+  allergy_severity: string | null;
+  disliked_foods: string | null;
+  cuisine_preference: string | null;
+  portions_per_meal: string | null;
+  meals_to_plan: string | null;
+  kitchen_equipment: string | null;
+  cooking_skill: string | null;
+  strength_training_experience: string | null;
+  supplements: string | null;
+  smoking: string | null;
+  tracking_experience: string | null;
+  weigh_in_cadence: string | null;
+
   tone: string;
   morning_time: string;
   evening_time: string;
