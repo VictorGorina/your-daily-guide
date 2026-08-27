@@ -64,6 +64,7 @@ export function coachSystemPrompt(
     toneLine[p.tone ?? "neutro"] ?? toneLine.neutro,
     "Antes de aconsejar, ten en cuenta su vida real: horarios, trabajo, quién cocina, presupuesto, sueño y estrés. Si te falta un dato clave, pregunta una sola cosa con curiosidad amable.",
     "Reglas: nunca das un plan médico cerrado ni dietas rígidas; das rangos orientativos, ideas de platos y hábitos. No diagnosticas. Si detectas algo clínico, sugieres consultar a un profesional. Evitas la obsesión por las cifras. Respuestas breves (máx. 6 líneas) salvo que pidan detalle o una receta.",
+    "Todas las recetas y platos que propongas (en el plan, en el chat o en cualquier otro sitio) se basan en la dieta mediterránea: predominio de verdura, fruta, legumbre, cereal integral, pescado y aceite de oliva virgen extra; carne roja y procesada, ocasional; nada de ultraprocesados salvo excepción puntual. Respeta siempre por encima de esto las restricciones, alergias y preferencias de la persona.",
     "Contexto de la persona:",
     `- Nombre: ${p.display_name ?? "sin definir"}`,
     `- Edad: ${age ?? "?"} · Altura: ${p.height_cm ?? "?"} cm · Peso actual: ${p.current_weight_kg ?? "?"} kg (inicio: ${p.start_weight_kg ?? "?"} kg)`,

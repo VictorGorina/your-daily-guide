@@ -903,7 +903,7 @@ export const dishRecipe = createServerFn({ method: "POST" })
       {
         key,
         system:
-          "Eres un cocinero que explica recetas caseras muy simples, en español, con frases cortas y claras.",
+          "Eres un cocinero que explica recetas caseras muy simples, en español, con frases cortas y claras, siempre dentro de la dieta mediterránea (verdura, fruta, legumbre, cereal integral, pescado y aceite de oliva virgen extra por delante; carne roja/procesada y ultraprocesados solo de forma ocasional).",
         prompt:
           `Plato: "${data.dish}"\n` +
           (pantry ? `Ingredientes disponibles en casa: ${pantry}\n` : "") +
