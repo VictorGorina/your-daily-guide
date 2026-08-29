@@ -13,12 +13,22 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://tocmrlmxrwylyniyjtlv.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvY21ybG14cnd5bHluaXlqdGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NjA2NzgsImV4cCI6MjEwMjMzNjY3OH0.D_-GpNvm_-DfUzSIS5ugY6-VqJF3UfEe9jeGr0MxwJw",
+        "EXPO_PUBLIC_API_URL": "https://your-daily-guide-topaz.vercel.app"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://tocmrlmxrwylyniyjtlv.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvY21ybG14cnd5bHluaXlqdGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NjA2NzgsImV4cCI6MjEwMjMzNjY3OH0.D_-GpNvm_-DfUzSIS5ugY6-VqJF3UfEe9jeGr0MxwJw",
+        "EXPO_PUBLIC_API_URL": "https://your-daily-guide-topaz.vercel.app"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }
