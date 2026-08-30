@@ -23,10 +23,15 @@ bun run dev       # servidor de desarrollo, http://localhost:8080
 bun run build     # build de producción (preset Vercel vía Nitro)
 bun run preview   # sirve el build de producción en local
 bun run lint      # ESLint
+bun run typecheck # tsc del código de app (los *.test.ts van aparte, ver docs/agents/testing.md)
+bun run test      # suite de lógica pura con el runner de Bun
 bun run format    # Prettier --write
 ```
 
-No hay suite de tests en este repo (ni `bun run test` ni configuración de Vitest/Playwright).
+`bun run test` cubre la lógica pura donde un bug pasa desapercibido — plan, compra, fechas,
+parsers de la salida de la IA — con el runner de Bun (sin dependencias nuevas). Ver
+[docs/agents/testing.md](docs/agents/testing.md). No hay tests de componentes ni E2E todavía;
+Vitest es el siguiente escalón cuando hagan falta.
 
 Necesitas un `.env` con tus propias claves (Supabase + `OPENROUTER_API_KEY` para el coach; VAPID y
 `CRON_SECRET` para las notificaciones push — ver la lista completa de variables en `.env` o en
@@ -121,3 +126,16 @@ Issues y specs viven como markdown en `.scratch/`. Ver `docs/agents/issue-tracke
 
 Documentación de dominio en modo single-context (`CONTEXT.md` + `docs/adr/` en la raíz). Ver
 `docs/agents/domain.md`.
+
+### Verificación
+
+Cómo se demuestra que un cambio funciona en este repo: puertas estáticas (`lint`, `typecheck`,
+`test`), preview del navegador con perfil demo para cualquier cosa que mute datos, y sin base
+de datos local. Ver `docs/agents/verification.md` y `docs/agents/testing.md`.
+
+### Code review
+
+Checklist de convenciones e invariantes específicas del proyecto (idioma, frontera
+cliente/servidor, espejo `/api/v1`, invariantes de plan y compra, paridad web/móvil), más allá
+del `/code-review` genérico. La aplica la skill `/senda-review`. Ver
+`docs/agents/code-review.md`.
