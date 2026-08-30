@@ -1,26 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import {
-  CalendarClock,
   CalendarDays,
   CalendarRange,
-  ChevronDown,
-  ChevronUp,
-  Lock,
-  Refrigerator,
+  CalendarSync,
+  Carrot,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Egg,
+  Fish,
+  Lightbulb,
   RefreshCw,
-  Share2,
   ShoppingBasket,
   ShoppingCart,
   Sparkles,
+  Wheat,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
-  Share,
   Text,
   TextInput,
   View,
@@ -36,8 +38,8 @@ import { fetchMonthlyPlan, fetchProfile, monthISO, todayISO } from "../../lib/da
 import {
   boughtTotal,
   cadenceOf,
-  cadenceScopeLabel,
   CADENCES,
+  coverageRatio,
   eur,
   groupByTrip,
   homeTotal,
@@ -45,24 +47,24 @@ import {
   offListNote,
   pendingTotal,
   planForDate,
-  shoppingCategoryColor,
   shoppingTotal,
-  splitTripByStatus,
   tripActualsTotal,
-  tripLabel,
+  tripDayRange,
   tripsOfCadence,
   tripTiming,
-  tripToText,
   type MonthlyPlan,
+  type PlanCoverage,
   type ShoppingCadence,
   type ShoppingItem,
   type ShoppingList,
   type TripActuals,
-  type TripConfirmations,
-  type TripTiming,
 } from "../../lib/plan-shared";
 
 type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList };
+
+type TripGroups = { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
+
+const FULL_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
 export default function Plan() {
   const qc = useQueryClient();
@@ -125,17 +127,6 @@ export default function Plan() {
     onError: () => Alert.alert("No hemos podido guardar el gasto"),
   });
 
-  const confirmTrip = useMutation({
-    mutationFn: (vars: { trip: number; confirmed: boolean }) =>
-      apiPost<{ confirmed_trips: TripConfirmations }>("plan/trip-confirm", { month, ...vars }),
-    onSuccess: (res) => {
-      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
-        prev ? { ...prev, confirmed_trips: res.confirmed_trips } : prev,
-      );
-    },
-    onError: () => Alert.alert("No hemos podido fijar los ingredientes"),
-  });
-
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
   const total = shoppingTotal(shopping);
@@ -145,36 +136,50 @@ export default function Plan() {
   const tripActuals = planQ.data?.trip_actuals ?? {};
   const spentSoFar = tripActualsTotal(tripActuals);
   const hasActuals = Object.keys(tripActuals).length > 0;
-  const confirmedTrips = planQ.data?.confirmed_trips ?? {};
-  const activeCadence: ShoppingCadence = cadence ?? cadenceOf(shopping);
+  const coverage = plan?.coverage;
+  const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
   const tripsTotal = tripsOfCadence(activeCadence);
   const trips = groupByTrip(shopping, tripsTotal);
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
-  // Cada compra es una lista distinta, así que se comparte aparte (no todo el
-  // mes de golpe) — refuerza que "Compra 1" y "Compra 2" no son lo mismo.
-  const shareTrip = async (
-    trip: { groups: { category: string; items: ShoppingItem[] }[] },
-    label: string,
-  ) => {
-    try {
-      await Share.share({ title: label, message: tripToText(trip, label) });
-    } catch {
-      /* el usuario canceló el diálogo de compartir */
+  // Compra seleccionada: por defecto la que toca hoy (current) o la primera
+  // "future" si no hay ninguna "current" (puede pasar a fin de mes).
+  const [selectedTrip, setSelectedTrip] = useState<number>(() => {
+    for (let i = 0; i < tripsTotal; i++) {
+      if (tripTiming(tripsTotal, i, todayDayOfMonth, coverage) === "current") return i;
     }
-  };
+    for (let i = 0; i < tripsTotal; i++) {
+      if (tripTiming(tripsTotal, i, todayDayOfMonth, coverage) === "future") return i;
+    }
+    return 0;
+  });
+  // Filtro de ingredientes: "need" (falta), "have" (ya lo tengo), "all"
+  const [filter, setFilter] = useState<"need" | "have" | "all">("need");
+  // Modo compra a pantalla completa
+  const [shopMode, setShopMode] = useState(false);
+
+  const clampedTrip = Math.min(selectedTrip, Math.max(0, tripsTotal - 1));
+  const currentTrip = trips[clampedTrip] ?? trips[0];
 
   const budget = Number(profileQ.data?.budget_month_eur ?? 0);
-  const overBudget = budget > 0 && total > budget;
-  const budgetRatio = budget > 0 ? Math.min(100, (total / budget) * 100) : 0;
+  // Si el plan empieza a media de mes, el presupuesto que aplica es la parte
+  // proporcional del mes que cubre, no el mes entero.
+  const periodBudget =
+    budget > 0 && coverage ? Math.round(budget * coverageRatio(coverage, month)) : budget;
+  const overBudget = periodBudget > 0 && total > periodBudget;
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "long",
     year: "numeric",
   });
 
+  const needCount =
+    currentTrip?.groups.reduce((s, g) => s + g.items.filter((i) => !i.owned).length, 0) ?? 0;
+  const showShopCta =
+    Boolean(plan) && tab === "compra" && !shopMode && (shopping?.length ?? 0) > 0 && needCount > 0;
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6">
+      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-40 pt-6">
         <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
             <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
@@ -202,7 +207,7 @@ export default function Plan() {
 
         {!plan ? (
           <View className="mt-8 items-center rounded-3xl bg-surface p-6">
-            <CalendarRange size={28} color="#6dbe7b" />
+            <CalendarRange size={28} color="#ff8a3d" />
             <Text className="mt-3 text-sm font-sans-semibold text-foreground">
               Todavía no tienes plan de este mes
             </Text>
@@ -240,7 +245,7 @@ export default function Plan() {
                       active ? "bg-surface" : ""
                     }`}
                   >
-                    <Icon size={14} color={active ? "#6dbe7b" : "#83796c"} />
+                    <Icon size={14} color={active ? "#ff8a3d" : "#83796c"} />
                     <Text
                       className={`text-xs font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
                     >
@@ -255,7 +260,7 @@ export default function Plan() {
               <View className="mt-5 gap-5">
                 <View className="rounded-3xl bg-surface p-5">
                   <View className="flex-row items-center gap-2">
-                    <Sparkles size={16} color="#6dbe7b" />
+                    <Sparkles size={16} color="#ff8a3d" />
                     <Text className="text-sm font-sans-semibold text-foreground">
                       Cómo enfocamos el mes
                     </Text>
@@ -281,174 +286,66 @@ export default function Plan() {
               </View>
             ) : tab === "historial" ? (
               <HistorialSection />
+            ) : shopMode ? (
+              <ShopModeView
+                trip={currentTrip}
+                coverage={coverage}
+                tripsTotal={tripsTotal}
+                selectedTrip={clampedTrip}
+                month={month}
+                onToggle={(itemName, next) =>
+                  owned.mutate({ itemName, trip: clampedTrip, source: next })
+                }
+                onClose={() => setShopMode(false)}
+                tripActual={tripActuals[clampedTrip]}
+                savingActual={setActual.isPending}
+                onSaveActual={(amount) => setActual.mutate({ trip: clampedTrip, amount })}
+              />
             ) : (
-              <View className="mt-5 gap-4">
-                <Text className="font-heading text-2xl text-foreground">Ingredientes del mes</Text>
-
-                <View className="rounded-3xl bg-surface p-5">
-                  <View className="flex-row items-baseline justify-between gap-3">
-                    <View className="min-w-0 flex-1">
-                      <Text className="text-sm font-sans-semibold text-foreground">
-                        Total orientativo del mes
-                      </Text>
-                      <Text className="mt-1 text-xs text-muted-foreground">
-                        {budget > 0
-                          ? `Tu presupuesto: ${eur(budget)}`
-                          : "Sin presupuesto definido en tu perfil"}
-                      </Text>
-                    </View>
-                    <Text
-                      className={`font-heading text-2xl tabular-nums ${overBudget ? "text-destructive" : "text-primary"}`}
-                    >
-                      {eur(total)}
-                    </Text>
-                  </View>
-                  {budget > 0 ? (
-                    <View className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
-                      <View
-                        className={`h-full rounded-full ${
-                          overBudget
-                            ? "bg-danger"
-                            : total / budget >= 0.85
-                              ? "bg-warning"
-                              : "bg-success"
-                        }`}
-                        style={{ width: `${budgetRatio}%` }}
-                      />
-                    </View>
-                  ) : null}
-                  {alreadyHome > 0 || alreadyBought > 0 ? (
-                    <View className="mt-3 gap-1.5">
-                      {alreadyHome > 0 ? (
-                        <View className="flex-row items-center justify-between">
-                          <Text className="text-xs text-muted-foreground">Ya tienes en casa</Text>
-                          <Text className="font-mono-medium text-xs text-foreground">
-                            {eur(alreadyHome)}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {alreadyBought > 0 ? (
-                        <View className="flex-row items-center justify-between">
-                          <Text className="text-xs text-muted-foreground">Coste de la compra</Text>
-                          <Text className="font-mono-medium text-xs text-foreground">
-                            {eur(alreadyBought)}
-                          </Text>
-                        </View>
-                      ) : null}
-                      <View className="flex-row items-center justify-between">
-                        <Text className="text-xs text-muted-foreground">Te falta comprar</Text>
-                        <Text className="font-mono-medium text-xs text-primary">
-                          {eur(stillPending)}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
-                  {hasActuals ? (
-                    <Text className="mt-2 text-xs text-muted-foreground">
-                      Gasto real hasta ahora:{" "}
-                      <Text className="font-sans-semibold text-foreground">{eur(spentSoFar)}</Text>
-                      {spentSoFar !== total ? (
-                        <Text className={spentSoFar > total ? "text-destructive" : "text-success"}>
-                          {" "}
-                          ({spentSoFar > total ? "+" : ""}
-                          {eur(spentSoFar - total)} vs. lo estimado)
-                        </Text>
-                      ) : null}
-                    </Text>
-                  ) : null}
-                  {overBudget ? (
-                    <Text className="mt-2 text-xs text-destructive">
-                      Se pasa de tu presupuesto. Puedo ajustarlo: regenera el plan o dímelo en el
-                      chat.
-                    </Text>
-                  ) : null}
-                </View>
-
-                <View className="rounded-3xl bg-surface p-5">
-                  <Text className="text-sm font-sans-semibold text-foreground">
-                    Cada cuánto compras
-                  </Text>
-                  <Text className="mt-1 text-xs text-muted-foreground">
-                    Reparto los frescos entre compras para que nada se eche a perder.
-                  </Text>
-                  <View className="mt-3 flex-row gap-2">
-                    {CADENCES.map((c) => {
-                      const active = activeCadence === c.key;
-                      const disabled = recadence.isPending;
-                      return (
-                        <Pressable
-                          key={c.key}
-                          onPress={() => {
-                            if (disabled) return;
-                            setCadence(c.key);
-                            if (c.key !== activeCadence) recadence.mutate(c.key);
-                          }}
-                          disabled={disabled}
-                          className={`flex-1 items-center rounded-2xl px-2 py-2.5 active:opacity-80 ${
-                            active ? "bg-primary" : "bg-secondary"
-                          }`}
-                          style={disabled ? { opacity: 0.6 } : undefined}
-                        >
-                          <Text
-                            className={`text-xs font-sans-semibold ${
-                              active ? "text-primary-foreground" : "text-muted-foreground"
-                            }`}
-                          >
-                            {c.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  {recadence.isPending ? (
-                    <Text className="mt-2 text-xs text-muted-foreground">
-                      Repartiendo la compra...
-                    </Text>
-                  ) : trips.length > 1 ? (
-                    <Text className="mt-2 text-xs text-muted-foreground">
-                      Son {trips.length} compras separadas, cada una con su propia lista: lo que
-                      marques en una no afecta a las demás.
-                    </Text>
-                  ) : null}
-                </View>
-
-                <Text className="px-1 text-xs text-muted-foreground">
-                  Precios orientativos de supermercado. Ajusta cantidades a tu casa.
-                </Text>
-
-                {trips.map((t) => {
-                  const label = tripLabel(activeCadence, t.trip);
-                  const timing = tripTiming(activeCadence, t.trip, todayDayOfMonth);
-                  return (
-                    <TripCard
-                      key={t.trip}
-                      trip={t}
-                      label={label}
-                      timing={timing}
-                      cadence={activeCadence}
-                      onShare={() => void shareTrip(t, label)}
-                      tripActual={tripActuals[t.trip]}
-                      savingActual={setActual.isPending}
-                      onSaveActual={(amount) => setActual.mutate({ trip: t.trip, amount })}
-                      onToggleOwned={(itemName, source) =>
-                        owned.mutate({ itemName, trip: t.trip, source })
-                      }
-                      confirmedAt={confirmedTrips[t.trip]}
-                      confirming={confirmTrip.isPending}
-                      onConfirm={(confirmed) => confirmTrip.mutate({ trip: t.trip, confirmed })}
-                    />
-                  );
-                })}
-                {!shopping?.length ? (
-                  <Text className="text-sm text-muted-foreground">
-                    Aún no hay lista. Regenera el plan para crearla.
-                  </Text>
-                ) : null}
-              </View>
+              <IngredientsTab
+                shopping={shopping}
+                currentTrip={currentTrip}
+                tripsTotal={tripsTotal}
+                activeCadence={activeCadence}
+                coverage={coverage}
+                todayDayOfMonth={todayDayOfMonth}
+                selectedTrip={clampedTrip}
+                setSelectedTrip={setSelectedTrip}
+                filter={filter}
+                setFilter={setFilter}
+                recadence={recadence}
+                setCadence={setCadence}
+                onToggle={(itemName, next) =>
+                  owned.mutate({ itemName, trip: clampedTrip, source: next })
+                }
+                month={month}
+                total={total}
+                alreadyHome={alreadyHome}
+                alreadyBought={alreadyBought}
+                stillPending={stillPending}
+                spentSoFar={spentSoFar}
+                hasActuals={hasActuals}
+                periodBudget={periodBudget}
+                overBudget={overBudget}
+              />
             )}
           </>
         )}
       </ScrollView>
+
+      {showShopCta ? (
+        <View className="absolute inset-x-0 bottom-[96px] px-5">
+          <Pressable
+            onPress={() => setShopMode(true)}
+            className="mx-auto w-full max-w-lg flex-row items-center justify-center gap-2 rounded-[20px] bg-primary py-4 active:opacity-90"
+          >
+            <ShoppingCart size={17} color="#fbfaf7" />
+            <Text className="text-sm font-sans-bold text-primary-foreground">
+              Ir a comprar · {needCount} art.
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <BottomNav />
     </SafeAreaView>
@@ -564,393 +461,577 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
   );
 }
 
-/**
- * Campo para anotar lo que se ha gastado de verdad en un viaje de compra, aparte
- * del precio estimado por la IA. Guarda al perder el foco (no en cada tecla) y
- * muestra la diferencia contra lo estimado cuando hay un importe guardado.
- */
-function TripActualField({
-  value,
-  estimated,
-  saving,
-  onSave,
+// ---------------------------------------------------------------------------
+// Icono por categoría de supermercado. Las categorías las escribe la IA como
+// texto libre ("Frutas y verduras", "Pescado y carne"...), así que el match es
+// por palabra clave, no por nombre exacto.
+// ---------------------------------------------------------------------------
+const CATEGORY_MATCHERS: [RegExp, typeof Carrot][] = [
+  [/verdura|fruta|hortaliza/i, Carrot],
+  [/pescado|carne|proteín|pollo|ternera/i, Fish],
+  [/despensa|conserva|cereal|legumbre|pasta|arroz|aceite/i, Wheat],
+  [/lácteo|huevo|leche|yogur|queso/i, Egg],
+];
+
+function CategoryIcon({
+  category,
+  size = 15,
+  color = "#ff8a3d",
 }: {
-  value: number | undefined;
-  estimated: number;
-  saving: boolean;
-  onSave: (amount: number | null) => void;
+  category: string;
+  size?: number;
+  color?: string;
 }) {
-  const [text, setText] = useState(value != null ? String(value) : "");
+  const match = CATEGORY_MATCHERS.find(([re]) => re.test(category));
+  if (!match) return null;
+  const Icon = match[1];
+  return <Icon size={size} color={color} />;
+}
 
-  useEffect(() => {
-    setText(value != null ? String(value) : "");
-  }, [value]);
+// ---------------------------------------------------------------------------
+// Pestaña Ingredientes — una compra a la vez, un solo gesto por ingrediente y
+// filtros por chip. Portada del rediseño web (src/routes/_authenticated/plan.tsx).
+// ---------------------------------------------------------------------------
+function IngredientsTab({
+  shopping,
+  currentTrip,
+  tripsTotal,
+  activeCadence,
+  coverage,
+  todayDayOfMonth,
+  selectedTrip,
+  setSelectedTrip,
+  filter,
+  setFilter,
+  recadence,
+  setCadence,
+  onToggle,
+  month,
+  total,
+  alreadyHome,
+  alreadyBought,
+  stillPending,
+  spentSoFar,
+  hasActuals,
+  periodBudget,
+  overBudget,
+}: {
+  shopping: ShoppingList | null;
+  currentTrip: TripGroups | undefined;
+  tripsTotal: number;
+  activeCadence: ShoppingCadence;
+  coverage: PlanCoverage | undefined;
+  todayDayOfMonth: number;
+  selectedTrip: number;
+  setSelectedTrip: (t: number) => void;
+  filter: "need" | "have" | "all";
+  setFilter: (f: "need" | "have" | "all") => void;
+  recadence: { isPending: boolean; mutate: (c: ShoppingCadence) => void };
+  setCadence: (c: ShoppingCadence) => void;
+  onToggle: (itemName: string, next: "fridge" | "store" | null) => void;
+  month: string;
+  total: number;
+  alreadyHome: number;
+  alreadyBought: number;
+  stillPending: number;
+  spentSoFar: number;
+  hasActuals: boolean;
+  periodBudget: number;
+  overBudget: boolean;
+}) {
+  const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
+  const editable = timing === "current";
 
-  const commit = () => {
-    const trimmed = text.trim().replace(",", ".");
-    if (!trimmed) {
-      if (value != null) onSave(null);
-      return;
-    }
-    const n = Number(trimmed);
-    if (Number.isFinite(n) && n >= 0 && n !== value) onSave(Math.round(n * 100) / 100);
-  };
+  // Items de esta compra, filtrados por el chip activo
+  const filteredGroups = useMemo(() => {
+    if (!currentTrip) return [];
+    return currentTrip.groups
+      .map((g) => ({
+        category: g.category,
+        items: g.items.filter((i) => {
+          if (filter === "need") return !i.owned;
+          if (filter === "have") return !!i.owned;
+          return true;
+        }),
+      }))
+      .filter((g) => g.items.length);
+  }, [currentTrip, filter]);
 
-  const diff = value != null ? Math.round((value - estimated) * 100) / 100 : null;
+  const totalItems = currentTrip?.groups.reduce((s, g) => s + g.items.length, 0) ?? 0;
+  const needCount =
+    currentTrip?.groups.reduce((s, g) => s + g.items.filter((i) => !i.owned).length, 0) ?? 0;
+  const haveCount = totalItems - needCount;
+  const pctResolved = totalItems > 0 ? Math.round((haveCount / totalItems) * 100) : 0;
+
+  const tripRange = tripDayRange(coverage ?? FULL_COVERAGE, tripsTotal, selectedTrip);
+  const monthShort = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
+    month: "short",
+  });
+
+  const barHome = total > 0 ? (alreadyHome / total) * 100 : 0;
+  const barBought = total > 0 ? (alreadyBought / total) * 100 : 0;
 
   return (
-    <View className="mt-3 flex-row items-center gap-2 rounded-2xl bg-secondary/40 px-3 py-2.5">
-      <Text className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</Text>
-      <View className="flex-row items-center gap-1">
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          onBlur={commit}
-          placeholder={eur(estimated)}
-          keyboardType="decimal-pad"
-          editable={!saving}
-          className="w-20 rounded-lg bg-surface px-2 py-1.5 text-right text-sm text-foreground"
-          style={saving ? { opacity: 0.6 } : undefined}
-        />
-        <Text className="text-xs text-muted-foreground">€</Text>
-      </View>
-      {diff != null && diff !== 0 ? (
-        <Text
-          className={`text-xs font-sans-semibold ${diff > 0 ? "text-destructive" : "text-success"}`}
-        >
-          {diff > 0 ? "+" : ""}
-          {eur(diff)}
+    <View className="mt-5 gap-2.5">
+      {/* Cadencia */}
+      <View className="rounded-3xl bg-surface px-4 py-3.5">
+        <View className="flex-row items-center gap-2">
+          <CalendarSync size={15} color="#ff8a3d" />
+          <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
+            Cada cuánto compras
+          </Text>
+        </View>
+        <View className="mt-2.5 flex-row gap-1 rounded-full bg-secondary/70 p-1">
+          {CADENCES.map((c) => {
+            const active = activeCadence === c.key;
+            return (
+              <Pressable
+                key={c.key}
+                onPress={() => {
+                  if (recadence.isPending) return;
+                  setCadence(c.key);
+                  if (c.key !== activeCadence) recadence.mutate(c.key);
+                }}
+                disabled={recadence.isPending}
+                className={`flex-1 items-center rounded-full py-2.5 active:opacity-80 ${
+                  active ? "bg-foreground" : ""
+                }`}
+                style={recadence.isPending ? { opacity: 0.6 } : undefined}
+              >
+                <Text
+                  className={`text-[11.5px] font-sans-semibold ${
+                    active ? "text-background" : "text-muted-foreground"
+                  }`}
+                >
+                  {c.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
+          {recadence.isPending
+            ? "Repartiendo la compra..."
+            : tripsTotal > 1
+              ? `${tripsTotal} compras separadas, cada una con su lista.`
+              : "1 sola compra: menos frescos, más despensa."}
         </Text>
+      </View>
+
+      {/* Navegador de compra ← → */}
+      {tripsTotal > 1 ? (
+        <View className="flex-row items-center gap-2 rounded-full bg-secondary/60 p-1">
+          <Pressable
+            onPress={() => setSelectedTrip(Math.max(0, selectedTrip - 1))}
+            disabled={selectedTrip === 0}
+            className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-70"
+            style={selectedTrip === 0 ? { opacity: 0.4 } : undefined}
+          >
+            <ChevronLeft size={14} color="#83796c" />
+          </Pressable>
+          <View className="min-w-0 flex-1 items-center">
+            <Text className="text-[12.5px] font-sans-semibold text-foreground">
+              {activeCadence === "mensual"
+                ? "Compra única del mes"
+                : `Compra ${selectedTrip + 1} de ${tripsTotal}`}
+              {timing === "current" ? " · esta semana" : ""}
+            </Text>
+            <Text className="font-mono text-[10px] text-muted-foreground">
+              {tripRange.from} – {tripRange.to} {monthShort}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setSelectedTrip(Math.min(tripsTotal - 1, selectedTrip + 1))}
+            disabled={selectedTrip === tripsTotal - 1}
+            className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-70"
+            style={selectedTrip === tripsTotal - 1 ? { opacity: 0.4 } : undefined}
+          >
+            <ChevronRight size={14} color="#83796c" />
+          </Pressable>
+        </View>
       ) : null}
+
+      {/* Resumen "Te falta comprar" */}
+      <View className="rounded-3xl bg-surface p-5">
+        <Text className="text-xs font-sans-semibold text-muted-foreground">Te falta comprar</Text>
+        <View className="mt-0.5 flex-row items-baseline gap-2">
+          <Text className="font-heading text-4xl tabular-nums text-primary">
+            {eur(stillPending)}
+          </Text>
+          <Text className="text-xs text-muted-foreground">
+            {needCount} artículo{needCount === 1 ? "" : "s"}
+          </Text>
+        </View>
+        <View className="mt-3.5 h-2 flex-row overflow-hidden rounded-full bg-secondary">
+          <View className="h-full bg-success" style={{ width: `${barHome}%` }} />
+          <View className="h-full bg-success/50" style={{ width: `${barBought}%` }} />
+        </View>
+        <View className="mt-2.5 flex-row flex-wrap gap-3">
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-[7px] w-[7px] rounded-full bg-success" />
+            <Text className="text-[11.5px] text-muted-foreground">En casa {eur(alreadyHome)}</Text>
+          </View>
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-[7px] w-[7px] rounded-full bg-success/50" />
+            <Text className="text-[11.5px] text-muted-foreground">
+              Comprado {eur(alreadyBought)}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-[7px] w-[7px] rounded-full bg-secondary" />
+            <Text className="text-[11.5px] text-muted-foreground">Total {eur(total)}</Text>
+          </View>
+        </View>
+        {hasActuals ? (
+          <Text className="mt-2 text-xs text-muted-foreground">
+            Gasto real hasta ahora:{" "}
+            <Text className="font-sans-semibold text-foreground">{eur(spentSoFar)}</Text>
+            {spentSoFar !== total ? (
+              <Text className={spentSoFar > total ? "text-destructive" : "text-success"}>
+                {" "}
+                ({spentSoFar > total ? "+" : ""}
+                {eur(spentSoFar - total)} vs. lo estimado)
+              </Text>
+            ) : null}
+          </Text>
+        ) : null}
+        {overBudget ? (
+          <Text className="mt-2 text-xs text-destructive">
+            Se pasa de tu presupuesto ({eur(periodBudget)}). Puedo ajustarlo: regenera el plan o
+            dímelo en el chat.
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Cabecera + filtros */}
+      <View className="mt-1 flex-row items-center justify-between gap-2.5 px-0.5">
+        <Text className="font-heading text-xl text-foreground">Ingredientes</Text>
+        <Text className="text-[11.5px] text-muted-foreground">{pctResolved}% ya resuelto</Text>
+      </View>
+      <Text className="px-0.5 text-xs leading-relaxed text-muted-foreground">
+        Toca un ingrediente para marcarlo como que ya lo tienes en casa. Lo que quede sin marcar es
+        tu lista del súper.
+      </Text>
+
+      <View className="flex-row gap-1.5">
+        {(
+          [
+            ["need", "Falta comprar", needCount],
+            ["have", "Ya lo tengo", haveCount],
+            ["all", "Todo", totalItems],
+          ] as const
+        ).map(([key, chipLabel, count]) => {
+          const active = filter === key;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setFilter(key)}
+              className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 active:opacity-80 ${
+                active ? "bg-foreground" : "bg-secondary"
+              }`}
+            >
+              <Text
+                className={`text-xs font-sans-semibold ${
+                  active ? "text-background" : "text-muted-foreground"
+                }`}
+              >
+                {chipLabel}
+              </Text>
+              <Text
+                className={`font-mono text-[11px] ${active ? "text-background" : "text-muted-foreground"}`}
+              >
+                {count}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Grupos de categoría */}
+      <View className="gap-2.5">
+        {filteredGroups.map((g) => (
+          <View key={g.category} className="rounded-3xl bg-surface px-4 pb-1.5 pt-3.5">
+            <View className="flex-row items-center gap-2 pb-1.5">
+              <CategoryIcon category={g.category} />
+              <Text className="flex-1 text-[11px] font-sans-bold uppercase tracking-wide text-muted-foreground">
+                {g.category}
+              </Text>
+              <Text className="font-mono text-[11px] text-muted-foreground">{g.items.length}</Text>
+            </View>
+            {g.items.map((item) => {
+              const have = !!item.owned;
+              return (
+                <Pressable
+                  key={item.name}
+                  onPress={() => {
+                    if (!editable) return;
+                    onToggle(item.name, item.owned ? null : "fridge");
+                  }}
+                  className={`flex-row items-center gap-3 border-t border-secondary py-2.5 ${
+                    editable ? "active:opacity-60" : ""
+                  }`}
+                >
+                  <View
+                    className={`h-[26px] w-[26px] items-center justify-center rounded-full ${
+                      have ? "bg-success" : "border-[1.5px] border-border"
+                    }`}
+                  >
+                    {have ? <Check size={14} color="#fbfaf7" /> : null}
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text
+                      className={`text-[14.5px] font-sans-medium ${
+                        have ? "text-muted-foreground line-through" : "text-foreground"
+                      }`}
+                    >
+                      {item.name}
+                    </Text>
+                    {item.qty ? (
+                      <Text className="font-mono text-[10.5px] text-muted-foreground">
+                        {item.qty}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View className="items-end">
+                    <Text className="font-mono text-xs text-muted-foreground">
+                      {eur(item.price_eur)}
+                    </Text>
+                    {have ? (
+                      <Text className="text-[10px] font-sans-semibold text-success">
+                        {item.owned === "store" ? "Comprado" : "En casa"}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+        {!shopping?.length ? (
+          <Text className="text-sm text-muted-foreground">
+            Aún no hay lista. Regenera el plan para crearla.
+          </Text>
+        ) : filteredGroups.length === 0 ? (
+          <Text className="px-0.5 text-sm text-muted-foreground">
+            {filter === "need"
+              ? "No te falta nada de esta compra. 🎉"
+              : filter === "have"
+                ? "Todavía no has marcado nada como que ya lo tienes."
+                : "Esta compra no tiene ingredientes."}
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Tip de persistencia */}
+      <View className="mt-1 flex-row items-start gap-2.5 rounded-3xl bg-primary/10 px-4 py-3.5">
+        <Lightbulb size={15} color="#ff8a3d" style={{ marginTop: 2 }} />
+        <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
+          Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
+          volveré a pedir mientras te dure.
+        </Text>
+      </View>
     </View>
   );
 }
 
-/**
- * Tarjeta de un tramo de ingredientes, en tres zonas: pendientes (agrupados
- * por categoría como en el súper), "Ingredientes en casa" (nevera) e
- * "Ingredientes comprados" (súper) — marcar un artículo lo mueve de la
- * primera a una de las otras dos, cada una con su propio subtotal. Solo el
- * tramo que toca hoy va abierto y se puede marcar; los pasados y los futuros
- * empiezan comprimidos (se despliegan al tocar la cabecera, solo para
- * consultar) y llevan un color distinto para que se note que están
- * bloqueados: gris apagado si ya pasaron, punteado si todavía no toca. El
- * botón de compartir va aquí, junto al nombre del tramo, porque cada uno es
- * una lista aparte (no el mes entero).
- */
-function TripCard({
+// ---------------------------------------------------------------------------
+// Modo compra — pantalla completa solo con lo que falta coger en el súper.
+// ---------------------------------------------------------------------------
+function ShopModeView({
   trip,
-  label,
-  timing,
-  cadence,
-  onShare,
+  coverage,
+  tripsTotal,
+  selectedTrip,
+  month,
+  onToggle,
+  onClose,
   tripActual,
   savingActual,
   onSaveActual,
-  onToggleOwned,
-  confirmedAt,
-  confirming,
-  onConfirm,
 }: {
-  trip: { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
-  label: string;
-  timing: TripTiming;
-  cadence: ShoppingCadence;
-  onShare: () => void;
+  trip: TripGroups | undefined;
+  coverage: PlanCoverage | undefined;
+  tripsTotal: number;
+  selectedTrip: number;
+  month: string;
+  onToggle: (itemName: string, next: "store" | null) => void;
+  onClose: () => void;
   tripActual: number | undefined;
   savingActual: boolean;
   onSaveActual: (amount: number | null) => void;
-  onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
-  confirmedAt: string | undefined;
-  confirming: boolean;
-  onConfirm: (confirmed: boolean) => void;
 }) {
-  const [open, setOpen] = useState(timing === "current");
-  const tripTotal = pendingTotal(trip.groups);
-  const totalCount = trip.groups.reduce((s, g) => s + g.items.length, 0);
-  const { pending, home, bought } = splitTripByStatus(trip.groups);
-  const isPast = timing === "past";
-  const isFuture = timing === "future";
-  const editable = timing === "current";
-  const canConfirm = home.length + bought.length > 0;
+  const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
+
+  // El modo compra no muestra lo que ya se tenía en casa (nevera): solo lo que
+  // hay que coger o lo que se acaba de meter en el carro en esta sesión.
+  const shopGroups = useMemo(() => {
+    if (!trip) return [];
+    return trip.groups
+      .map((g) => ({
+        category: g.category,
+        items: g.items.filter((i) => i.owned !== "fridge"),
+      }))
+      .filter((g) => g.items.length);
+  }, [trip]);
+
+  const allItems = shopGroups.flatMap((g) => g.items);
+  const leftItems = allItems.filter((i) => !i.owned);
+  const leftTotal = Math.round(leftItems.reduce((s, i) => s + i.price_eur, 0) * 100) / 100;
+  const doneTotal =
+    Math.round(
+      allItems.filter((i) => i.owned === "store").reduce((s, i) => s + i.price_eur, 0) * 100,
+    ) / 100;
+  const pct = allItems.length ? ((allItems.length - leftItems.length) / allItems.length) * 100 : 0;
+  const allDone = allItems.length > 0 && leftItems.length === 0;
+
+  const tripRange = tripDayRange(coverage ?? FULL_COVERAGE, tripsTotal, selectedTrip);
+  const monthShort = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
+    month: "short",
+  });
+
+  const commitActual = () => {
+    const trimmed = text.trim().replace(",", ".");
+    if (!trimmed) {
+      if (tripActual != null) onSaveActual(null);
+      return;
+    }
+    const n = Number(trimmed);
+    if (Number.isFinite(n) && n >= 0 && n !== tripActual) onSaveActual(Math.round(n * 100) / 100);
+  };
 
   return (
-    <View
-      className={`rounded-3xl p-5 ${
-        isPast
-          ? "bg-secondary/50"
-          : isFuture
-            ? "border border-dashed border-border bg-transparent"
-            : "bg-surface"
-      }`}
-      style={isPast ? { opacity: 0.6 } : undefined}
-    >
-      <View className="flex-row items-center justify-between gap-3">
+    <View className="mt-5">
+      {/* Cabecera modo compra */}
+      <View className="flex-row items-center gap-3">
         <Pressable
-          onPress={() => setOpen((o) => !o)}
-          className="min-w-0 flex-1 flex-row items-center gap-1.5"
+          onPress={onClose}
+          className="h-9 w-9 items-center justify-center rounded-full bg-surface active:opacity-70"
         >
-          {isPast ? <Lock size={13} color="#83796c" /> : null}
-          {isFuture ? <CalendarClock size={13} color="#83796c" /> : null}
-          <Text className="min-w-0 flex-1 text-sm font-sans-semibold text-foreground">{label}</Text>
-          {open ? (
-            <ChevronUp size={16} color="#83796c" />
-          ) : (
-            <ChevronDown size={16} color="#83796c" />
-          )}
+          <ChevronLeft size={16} color="#83796c" />
         </Pressable>
-        <View className="flex-row items-center gap-2">
-          <Text className="text-xs font-sans-semibold text-primary">{eur(tripTotal)}</Text>
-          <Pressable
-            onPress={onShare}
-            className="h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
-          >
-            <Share2 size={14} color="#83796c" />
-          </Pressable>
+        <View className="min-w-0 flex-1">
+          <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
+            Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to} {monthShort}
+          </Text>
+          <Text className="font-heading text-2xl text-foreground">En el súper</Text>
         </View>
       </View>
-      <Text className="mt-1 text-xs text-muted-foreground">
-        {isPast ? "Ya ha pasado · no se puede modificar · " : null}
-        {isFuture ? "Aún no toca · se activa cuando llegue el día · " : null}
-        {totalCount} artículo{totalCount === 1 ? "" : "s"}
-        {!open ? " · toca para ver" : null}
-      </Text>
 
-      {open ? (
-        <>
-          <View className="mt-3 gap-3">
-            {pending.map((group) => (
-              <ShoppingGroup
-                key={group.category}
-                group={group}
-                onToggleOwned={onToggleOwned}
-                editable={editable}
-              />
-            ))}
+      {/* Resumen compra */}
+      <View className="mt-4 rounded-3xl bg-surface p-5">
+        <View className="flex-row items-end justify-between gap-3">
+          <View className="min-w-0">
+            <Text className="text-xs font-sans-semibold text-muted-foreground">
+              Queda por coger
+            </Text>
+            <Text className="mt-0.5 font-heading text-3xl tabular-nums text-primary">
+              {eur(leftTotal)}
+            </Text>
           </View>
-
-          <OwnedSection
-            title="Ingredientes en casa"
-            items={home}
-            subtotal={homeTotal(trip.groups)}
-            onToggleOwned={onToggleOwned}
-            editable={editable}
-          />
-          <OwnedSection
-            title="Ingredientes comprados"
-            items={bought}
-            subtotal={boughtTotal(trip.groups)}
-            onToggleOwned={onToggleOwned}
-            editable={editable}
-          />
-
-          {canConfirm || confirmedAt ? (
-            <FijarTripButton
-              cadence={cadence}
-              confirmedAt={confirmedAt}
-              confirming={confirming}
-              onConfirm={onConfirm}
-              editable={editable}
-            />
-          ) : null}
-
-          <TripActualField
-            value={tripActual}
-            estimated={tripTotal}
-            saving={savingActual}
-            onSave={onSaveActual}
-          />
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-/**
- * Zona plana de ingredientes ya resueltos (en casa o comprados): sin
- * categorías, porque lo que importa aquí es de dónde han salido, no dónde
- * están en el súper. Se puede seguir tocando el toggle para cambiar de origen
- * o desmarcar, y entonces el artículo vuelve a subir a pendientes.
- */
-function OwnedSection({
-  title,
-  items,
-  subtotal,
-  onToggleOwned,
-  editable,
-}: {
-  title: string;
-  items: ShoppingItem[];
-  subtotal: number;
-  onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
-  editable: boolean;
-}) {
-  if (!items.length) return null;
-  return (
-    <View className="mt-3 rounded-2xl bg-success/10 p-3.5">
-      <View className="flex-row items-center justify-between gap-2">
-        <Text className="text-sm font-sans-semibold text-foreground">{title}</Text>
-        <Text className="font-mono-medium text-xs text-success">{eur(subtotal)}</Text>
+          <View className="items-end">
+            <Text className="font-mono text-[11px] text-muted-foreground">en el carro</Text>
+            <Text className="mt-0.5 font-mono-medium text-[15px] text-success">
+              {eur(doneTotal)}
+            </Text>
+          </View>
+        </View>
+        <View className="mt-3.5 h-2 overflow-hidden rounded-full bg-secondary">
+          <View className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
+        </View>
+        <Text className="mt-2 text-[11.5px] text-muted-foreground">
+          {leftItems.length} de {allItems.length} por coger · lo que ya tienes en casa no aparece
+          aquí
+        </Text>
       </View>
-      <View className="mt-3 gap-3">
-        {items.map((item) => (
-          <View key={item.name} className="flex-row items-center justify-between gap-3">
-            <View className="min-w-0 flex-1">
-              <Text className="text-sm text-success">{item.name}</Text>
-              <Text className="font-mono-medium mt-0.5 text-[11px] text-muted-foreground">
-                {item.qty ? `${item.qty} · ` : ""}
-                {eur(item.price_eur)}
+
+      {/* Lista de ingredientes agrupados */}
+      <View className="mt-3.5 gap-4">
+        {shopGroups.map((g) => (
+          <View key={g.category}>
+            <View className="flex-row items-center gap-2 px-1 pb-2">
+              <CategoryIcon category={g.category} />
+              <Text className="text-[11px] font-sans-bold uppercase tracking-wide text-muted-foreground">
+                {g.category}
               </Text>
             </View>
-            <OwnedToggle
-              owned={item.owned}
-              onChange={(next) => onToggleOwned(item.name, next)}
-              disabled={!editable}
-            />
+            <View className="gap-1.5">
+              {g.items.map((item) => {
+                const done = item.owned === "store";
+                return (
+                  <Pressable
+                    key={item.name}
+                    onPress={() => onToggle(item.name, done ? null : "store")}
+                    className={`flex-row items-center gap-3.5 rounded-2xl px-4 py-3.5 active:opacity-80 ${
+                      done ? "bg-secondary/50" : "bg-surface"
+                    }`}
+                  >
+                    <View
+                      className={`h-7 w-7 items-center justify-center rounded-[9px] ${
+                        done ? "bg-success" : "border-[1.5px] border-border"
+                      }`}
+                    >
+                      {done ? <Check size={16} color="#fbfaf7" /> : null}
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text
+                        className={`text-base font-sans-semibold ${
+                          done ? "text-muted-foreground line-through" : "text-foreground"
+                        }`}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text className="font-mono text-[11px] text-muted-foreground">
+                        {item.qty ? `${item.qty} · ` : ""}
+                        {eur(item.price_eur)}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         ))}
-      </View>
-    </View>
-  );
-}
-
-/**
- * Botón para "fijar" los ingredientes del tramo (marcar ese periodo como
- * resuelto), o la confirmación de que ya lo está con opción a deshacer. Solo
- * aparece cuando hay algo marcado (en casa o comprado) — antes de eso no hay
- * nada que fijar. Fuera del tramo en curso no se puede fijar ni deshacer (ya
- * no hay nada que marcar); si ya estaba fijado de cuando sí era el tramo
- * activo, se sigue viendo la marca pero sin el botón de deshacer.
- */
-function FijarTripButton({
-  cadence,
-  confirmedAt,
-  confirming,
-  onConfirm,
-  editable,
-}: {
-  cadence: ShoppingCadence;
-  confirmedAt: string | undefined;
-  confirming: boolean;
-  onConfirm: (confirmed: boolean) => void;
-  editable: boolean;
-}) {
-  const scope = cadenceScopeLabel(cadence);
-  if (confirmedAt) {
-    return (
-      <View className="mt-3 flex-row items-center justify-between gap-2 rounded-2xl bg-success/15 px-3.5 py-3">
-        <Text className="flex-1 text-xs font-sans-medium text-success">
-          Ingredientes {scope} fijados
-        </Text>
-        {editable ? (
-          <Pressable onPress={() => onConfirm(false)} disabled={confirming} hitSlop={8}>
-            <Text className="text-xs font-sans-semibold text-muted-foreground">Deshacer</Text>
-          </Pressable>
+        {shopGroups.length === 0 ? (
+          <Text className="px-1 text-sm text-muted-foreground">
+            Nada que coger en esta compra: ya lo tienes todo en casa o comprado.
+          </Text>
         ) : null}
       </View>
-    );
-  }
-  if (!editable) return null;
-  return (
-    <Pressable
-      onPress={() => onConfirm(true)}
-      disabled={confirming}
-      className="mt-3 items-center rounded-2xl bg-secondary py-3 active:opacity-80"
-      style={confirming ? { opacity: 0.6 } : undefined}
-    >
-      <Text className="text-xs font-sans-semibold text-foreground">
-        {confirming ? "Fijando..." : `Fijar ingredientes ${scope}`}
-      </Text>
-    </Pressable>
-  );
-}
 
-/**
- * Toggle "lo tengo en casa" / "lo he comprado" de un artículo: una cápsula con
- * las dos opciones a la vista (nevera / carrito). Empieza sin ninguna marcada
- * (ni color) y solo se resalta en verde la que el usuario elige — volver a
- * tocar la misma la deselecciona. Las dos opciones significan "ya no hace
- * falta comprarlo"; solo cambian de dónde ha salido. Fuera del tramo en curso
- * (`disabled`) se ve la marca pero no se puede tocar.
- */
-function OwnedToggle({
-  owned,
-  onChange,
-  disabled = false,
-}: {
-  owned: "fridge" | "store" | undefined;
-  onChange: (next: "fridge" | "store" | null) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <View
-      className="flex-row items-center gap-1 rounded-full bg-secondary/70 p-1"
-      style={disabled ? { opacity: 0.5 } : undefined}
-    >
-      <Pressable
-        onPress={() => onChange(owned === "fridge" ? null : "fridge")}
-        disabled={disabled}
-        hitSlop={10}
-        className={`h-8 w-9 items-center justify-center rounded-full active:opacity-80 ${
-          owned === "fridge" ? "bg-success" : ""
-        }`}
-      >
-        <Refrigerator size={15} color={owned === "fridge" ? "#fbfaf7" : "#83796c"} />
-      </Pressable>
-      <Pressable
-        onPress={() => onChange(owned === "store" ? null : "store")}
-        disabled={disabled}
-        hitSlop={10}
-        className={`h-8 w-9 items-center justify-center rounded-full active:opacity-80 ${
-          owned === "store" ? "bg-success" : ""
-        }`}
-      >
-        <ShoppingCart size={15} color={owned === "store" ? "#fbfaf7" : "#83796c"} />
-      </Pressable>
-    </View>
-  );
-}
-
-function ShoppingGroup({
-  group,
-  onToggleOwned,
-  editable,
-}: {
-  group: { category: string; items: ShoppingItem[] };
-  onToggleOwned: (itemName: string, source: "fridge" | "store" | null) => void;
-  editable: boolean;
-}) {
-  const total = pendingTotal([group]);
-  return (
-    <View className="rounded-2xl bg-secondary/40 p-3.5">
-      <View className="flex-row items-center justify-between gap-2">
-        <View className="flex-row items-center gap-2">
-          <View
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: shoppingCategoryColor(group.category) }}
-          />
-          <Text className="text-sm font-sans-semibold text-foreground">{group.category}</Text>
-        </View>
-        <Text className="font-mono-medium text-xs text-muted-foreground">{eur(total)}</Text>
-      </View>
-      <View className="mt-3 gap-3">
-        {group.items.map((item) => (
-          <View key={item.name} className="flex-row items-center justify-between gap-3">
-            <View className="min-w-0 flex-1">
-              <Text className="text-sm text-foreground">{item.name}</Text>
-              <Text className="font-mono-medium mt-0.5 text-[11px] text-muted-foreground">
-                {item.qty ? `${item.qty} · ` : ""}
-                {eur(item.price_eur)}
-              </Text>
-            </View>
-            <OwnedToggle
-              owned={item.owned}
-              onChange={(next) => onToggleOwned(item.name, next)}
-              disabled={!editable}
+      {/* Cierre de la compra */}
+      {allDone ? (
+        <View className="mt-6 gap-3">
+          <View className="flex-row items-center gap-2 rounded-2xl bg-surface px-4 py-3">
+            <Text className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</Text>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              onBlur={commitActual}
+              placeholder={eur(leftTotal)}
+              keyboardType="decimal-pad"
+              editable={!savingActual}
+              className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm text-foreground"
+              style={savingActual ? { opacity: 0.6 } : undefined}
             />
+            <Text className="text-xs text-muted-foreground">€</Text>
           </View>
-        ))}
-      </View>
+          <Pressable
+            onPress={onClose}
+            className="items-center rounded-2xl bg-success py-4 active:opacity-90"
+          >
+            <Text className="text-sm font-sans-bold text-success-foreground">
+              Compra completa · guardar gasto
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          onPress={onClose}
+          className="mt-6 items-center rounded-2xl bg-foreground py-4 active:opacity-90"
+        >
+          <Text className="text-sm font-sans-bold text-background">Terminar compra</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

@@ -32,6 +32,13 @@ export type PlanDay = {
   extras?: Partial<Record<MealSlot, string[]>>;
 };
 
+/**
+ * Días del mes que cubre el plan. Un plan creado a media de mes solo cubre de
+ * hoy a fin de mes (ver `monthCoverage`), y de ahí salen tanto la prorrata del
+ * presupuesto como los rangos de días de cada compra.
+ */
+export type PlanCoverage = { fromDay: number; toDay: number };
+
 export type MonthlyPlan = {
   intro: string;
   focus: string[];
@@ -42,6 +49,10 @@ export type MonthlyPlan = {
     snacks: string[];
     days: PlanDay[];
   }[];
+  /** Rango de días del mes que cubre este plan (ausente en planes antiguos = mes completo). */
+  coverage?: PlanCoverage;
+  /** Cada cuánto se compra. Fuente de verdad de la cadencia; el reparto de `trip` la refleja. */
+  cadence?: ShoppingCadence;
 };
 
 const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -212,43 +223,89 @@ export const cadenceScopeLabel = (cadence: ShoppingCadence) =>
       ? "de las dos semanas"
       : "del mes";
 
-/** Rango de días [from, to] del mes que cubre un tramo, según la cadencia. */
-export const tripDayRange = (cadence: ShoppingCadence, trip: number) => {
-  if (cadence === "mensual") return { from: 1, to: 31 };
-  const span = cadence === "semanal" ? 7 : 14;
-  return { from: trip * span + 1, to: trip * span + span };
+/** Número de días de un mes "YYYY-MM". */
+export const daysInMonth = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y ?? 1970, m ?? 1, 0).getDate();
 };
 
 /**
- * Etiqueta legible de cada tramo de ingredientes según la cadencia (ej.
- * "Ingredientes de la semana 2 de 4 · días 8-14"). El "de N" deja claro, sobre
- * todo con semanal/bisemanal, que cada tramo es una lista distinta y no un
- * trozo de la misma.
+ * Días del mes que cubre un plan según cuándo se crea: de hoy a fin de mes si
+ * es el mes en curso, y el mes entero si es un mes futuro.
  */
-export const tripLabel = (cadence: ShoppingCadence, trip: number) => {
-  if (cadence === "mensual") return "Ingredientes del mes";
-  const trips = tripsOfCadence(cadence);
-  const { from, to } = tripDayRange(cadence, trip);
-  return `Ingredientes de la semana ${trip + 1} de ${trips} · días ${from}-${to}`;
+export const monthCoverage = (month: string, today: string): PlanCoverage => {
+  const toDay = daysInMonth(month);
+  const fromDay =
+    today.slice(0, 7) === month ? Math.min(Math.max(Number(today.slice(8, 10)) || 1, 1), toDay) : 1;
+  return { fromDay, toDay };
+};
+
+/** Proporción del mes que cubre el plan (para prorratear el presupuesto). */
+export const coverageRatio = (coverage: PlanCoverage, month: string) => {
+  const covered = Math.max(1, coverage.toDay - coverage.fromDay + 1);
+  return Math.min(1, covered / daysInMonth(month));
+};
+
+const FULL_MONTH_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
+
+/**
+ * Rango de días [from, to] del mes que cubre una compra dentro de la cobertura
+ * del plan. Reparte los días lo más igual posible entre tramos (los primeros se
+ * llevan el día de más si no divide exacto) para que un plan creado a media de
+ * mes muestre rangos coherentes y el último tramo no desborde el mes.
+ */
+export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number) => {
+  const total = Math.max(1, coverage.toDay - coverage.fromDay + 1);
+  const t = Math.max(1, trips);
+  const base = Math.floor(total / t);
+  const extra = total % t;
+  const start = trip * base + Math.min(trip, extra);
+  const size = base + (trip < extra ? 1 : 0);
+  const from = Math.min(coverage.toDay, coverage.fromDay + start);
+  const to = Math.max(from, Math.min(coverage.toDay, from + size - 1));
+  return { from, to };
 };
 
 /**
  * Cuándo cae un tramo respecto a hoy: "past" si sus días ya han pasado (ya no
  * toca, se muestra en gris), "current" si hoy cae dentro de su rango (es el
  * que toca ahora, va abierto), o "future" si todavía no le toca (se muestra
- * comprimido).
+ * comprimido). Se apoya en `tripDayRange`, así que respeta la cobertura real
+ * del plan igual que las etiquetas.
  */
 export type TripTiming = "past" | "current" | "future";
 
 export const tripTiming = (
-  cadence: ShoppingCadence,
+  trips: number,
   trip: number,
   todayDayOfMonth: number,
+  coverage: PlanCoverage = FULL_MONTH_COVERAGE,
 ): TripTiming => {
-  const { from, to } = tripDayRange(cadence, trip);
+  const { from, to } = tripDayRange(coverage, trips, trip);
   if (todayDayOfMonth > to) return "past";
   if (todayDayOfMonth < from) return "future";
   return "current";
+};
+
+/**
+ * Etiqueta legible de cada tramo de ingredientes con los días que comprende
+ * (ej. "Ingredientes de la semana 2 de 4 · días 8-14"), calculada a partir de
+ * la cobertura real del plan para que un plan creado a media de mes muestre los
+ * días correctos. El "de N" deja claro, sobre todo con semanal/bisemanal, que
+ * cada tramo es una lista distinta y no un trozo de la misma.
+ */
+export const tripLabel = (
+  cadence: ShoppingCadence,
+  trip: number,
+  coverage: PlanCoverage = FULL_MONTH_COVERAGE,
+  trips = tripsOfCadence(cadence),
+) => {
+  const { from, to } = tripDayRange(coverage, trips, trip);
+  const prefix =
+    cadence === "mensual"
+      ? "Ingredientes del mes"
+      : `Ingredientes de la semana ${trip + 1} de ${trips}`;
+  return `${prefix} · días ${from}-${to}`;
 };
 
 /**
