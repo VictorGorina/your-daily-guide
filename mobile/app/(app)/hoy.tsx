@@ -419,106 +419,125 @@ export default function Hoy() {
                 // otra cosa"): plato real en naranja, con el que había antes
                 // tachado debajo — ver `wasIdea` en lib/daily.ts.
                 const wasIdea = h.wasIdea && h.wasIdea !== dish ? h.wasIdea : null;
+                const note = offListNote(planned?.off);
+                const shared = sharedWith(h.label);
 
                 return (
                   <View
                     key={h.label}
-                    className="flex-row items-center rounded-[20px] px-3.5 py-3"
+                    className="rounded-[20px] px-3.5 py-3"
                     style={{
                       backgroundColor: isSkip ? "#f0ede7" : tintBg(accent, isNext ? 22 : 13),
                       opacity: isSkip ? 0.55 : 1,
-                      columnGap: 12,
                     }}
                   >
-                    {/* Icono de categoría: ilustración SVG del ingrediente si hay
-                        plato reconocible, si no el emoji de la categoría. */}
-                    <View
-                      className="h-10 w-10 items-center justify-center overflow-hidden rounded-full"
-                      style={{ backgroundColor: tintBg(accent, 20) }}
-                    >
-                      {dishAsset(dish) ? <DishImage dish={dish} size={40} /> : null}
-                    </View>
-
-                    {/* Info */}
-                    <View className="min-w-0 flex-1">
-                      <View className="flex-row items-baseline gap-1.5">
-                        <Text className="font-body-semibold text-[11.5px] text-foreground">
-                          {h.label}
-                        </Text>
-                        {planned ? (
-                          <Text className="font-mono text-[10.5px] text-muted-foreground">
-                            {MOMENT_RANK[h.label] === 0
-                              ? "8:30"
-                              : MOMENT_RANK[h.label] === 1
-                                ? "14:00"
-                                : MOMENT_RANK[h.label] === 3
-                                  ? "20:30"
-                                  : "17:00"}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <Text
-                        className="font-heading-medium mt-1 text-foreground"
-                        style={{
-                          fontSize: 16.5,
-                          lineHeight: 20,
-                          letterSpacing: -0.3,
-                          color: isSkip ? "#83796c" : wasIdea ? "#ff8a3d" : "#3e3d39",
-                        }}
-                        numberOfLines={2}
+                    <View className="flex-row items-center" style={{ columnGap: 12 }}>
+                      {/* Icono de categoría: ilustración SVG del ingrediente si hay
+                          plato reconocible, si no el emoji de la categoría. */}
+                      <View
+                        className="h-10 w-10 items-center justify-center overflow-hidden rounded-full"
+                        style={{ backgroundColor: tintBg(accent, 20) }}
                       >
-                        {dish}
-                      </Text>
-                      {wasIdea ? (
+                        {dishAsset(dish) ? <DishImage dish={dish} size={40} /> : null}
+                      </View>
+
+                      {/* Info */}
+                      <View className="min-w-0 flex-1">
+                        <View className="flex-row items-baseline gap-1.5">
+                          <Text className="font-body-semibold text-[11.5px] text-foreground">
+                            {h.label}
+                          </Text>
+                          {planned ? (
+                            <Text className="font-mono text-[10.5px] text-muted-foreground">
+                              {MOMENT_RANK[h.label] === 0
+                                ? "8:30"
+                                : MOMENT_RANK[h.label] === 1
+                                  ? "14:00"
+                                  : MOMENT_RANK[h.label] === 3
+                                    ? "20:30"
+                                    : "17:00"}
+                            </Text>
+                          ) : null}
+                        </View>
                         <Text
-                          className="mt-0.5 font-body text-[11.5px] text-muted-foreground"
-                          style={{ textDecorationLine: "line-through" }}
+                          className="font-heading-medium mt-1 text-foreground"
+                          style={{
+                            fontSize: 16.5,
+                            lineHeight: 20,
+                            letterSpacing: -0.3,
+                            color: isSkip ? "#83796c" : wasIdea ? "#ff8a3d" : "#3e3d39",
+                          }}
                           numberOfLines={2}
                         >
-                          {wasIdea}
+                          {dish}
                         </Text>
-                      ) : null}
-                      <Text className="font-mono-medium mt-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">
-                        {catInfo.label}
-                      </Text>
-                      {planned?.idea ? <DishRecipe dish={dish} month={month} /> : null}
-                    </View>
-
-                    {/* Acciones */}
-                    <View className="flex-row items-center gap-1.5">
-                      {isPending ? (
-                        <>
-                          <Pressable
-                            onPress={() => handleMealStatus(i, "distinto")}
-                            className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
+                        {wasIdea ? (
+                          <Text
+                            className="mt-0.5 font-body text-[11.5px] text-muted-foreground"
+                            style={{ textDecorationLine: "line-through" }}
+                            numberOfLines={2}
                           >
-                            <PencilLine size={14} color="#83796c" />
-                          </Pressable>
+                            {wasIdea}
+                          </Text>
+                        ) : null}
+                        <Text className="font-mono-medium mt-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">
+                          {catInfo.label}
+                        </Text>
+                      </View>
+
+                      {/* Acciones */}
+                      <View className="flex-row items-center gap-1.5">
+                        {isPending ? (
+                          <>
+                            <Pressable
+                              onPress={() => handleMealStatus(i, "distinto")}
+                              className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
+                            >
+                              <PencilLine size={14} color="#83796c" />
+                            </Pressable>
+                            <Pressable
+                              onPress={() => setMealStatus(i, "plan")}
+                              className="h-[34px] w-[34px] items-center justify-center rounded-full active:opacity-80"
+                              style={{ backgroundColor: accent }}
+                            >
+                              <Check size={17} color="#fbfaf7" strokeWidth={2.6} />
+                            </Pressable>
+                          </>
+                        ) : isDone ? (
                           <Pressable
-                            onPress={() => setMealStatus(i, "plan")}
-                            className="h-[34px] w-[34px] items-center justify-center rounded-full active:opacity-80"
+                            onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
+                            className="h-[34px] w-[34px] items-center justify-center rounded-full"
                             style={{ backgroundColor: accent }}
                           >
                             <Check size={17} color="#fbfaf7" strokeWidth={2.6} />
                           </Pressable>
-                        </>
-                      ) : isDone ? (
-                        <Pressable
-                          onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
-                          className="h-[34px] w-[34px] items-center justify-center rounded-full"
-                          style={{ backgroundColor: accent }}
-                        >
-                          <Check size={17} color="#fbfaf7" strokeWidth={2.6} />
-                        </Pressable>
-                      ) : isSkip ? (
-                        <Pressable
-                          onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
-                          className="h-[34px] w-[34px] items-center justify-center rounded-full bg-secondary"
-                        >
-                          <X size={15} color="#83796c" strokeWidth={2.2} />
-                        </Pressable>
-                      ) : null}
+                        ) : isSkip ? (
+                          <Pressable
+                            onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
+                            className="h-[34px] w-[34px] items-center justify-center rounded-full bg-secondary"
+                          >
+                            <X size={15} color="#83796c" strokeWidth={2.2} />
+                          </Pressable>
+                        ) : null}
+                      </View>
                     </View>
+
+                    {/* Aviso de fuera de compra, base compartida y receta van
+                        siempre a la vista, no tras un toque oculto — igual que en
+                        la web. La receta es un disclosure con su propio
+                        abrir/cerrar y carga perezosa (DishRecipe). */}
+                    {note ? (
+                      <View className="mt-3 self-start rounded-full bg-warning/20 px-2 py-0.5">
+                        <Text className="font-body-medium text-[11px] text-foreground">{note}</Text>
+                      </View>
+                    ) : null}
+                    {shared ? (
+                      <Text className="font-body mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                        Base común con {shared} · marca “Comí otra cosa” si tu ración se sale de
+                        eso.
+                      </Text>
+                    ) : null}
+                    {planned?.idea ? <DishRecipe dish={dish} month={month} /> : null}
                   </View>
                 );
               })}

@@ -18,7 +18,6 @@ import {
   fetchMonthlyPlan,
   fetchProfile,
   impulsoFrom,
-  MEAL_STATUS_LABEL,
   monthISO,
   todayISO,
   updateTodayLog,
@@ -137,7 +136,6 @@ function Hoy() {
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
-  const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
@@ -431,7 +429,6 @@ function Hoy() {
               const cat = FOOD_CATEGORIES[classifyDish(idea)];
               const isNext = i === nextIndex;
               const isSkip = h.status === "salteo";
-              const isExpanded = expandedMeal === i;
               const note = offListNote(planned?.off);
               const shared = sharedWith(h.label);
               // El coach cambió el plato de este momento hoy (desde el chat o
@@ -460,12 +457,7 @@ function Hoy() {
                       {dishAsset(idea) ? <DishImage dish={idea} size={40} /> : null}
                     </span>
 
-                    <button
-                      type="button"
-                      onClick={() => setExpandedMeal((prev) => (prev === i ? null : i))}
-                      aria-expanded={isExpanded}
-                      className="min-w-0 text-left"
-                    >
+                    <div className="min-w-0">
                       <span className="flex items-baseline gap-[7px]">
                         <span className="text-[11.5px] font-semibold tracking-[0.01em]">
                           {h.label}
@@ -504,7 +496,7 @@ function Hoy() {
                           {cat.label}
                         </span>
                       ) : null}
-                    </button>
+                    </div>
 
                     <div className="flex items-center gap-1.5">
                       {h.status == null ? (
@@ -566,56 +558,21 @@ function Hoy() {
                     </div>
                   </div>
 
-                  {isExpanded ? (
-                    <div className="animate-sheet-up mt-3 pt-3">
-                      {note ? (
-                        <span className="mb-2 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
-                          {note}
-                        </span>
-                      ) : null}
-                      {shared ? (
-                        <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
-                          Base común con {shared} · marca “Comí otra cosa” si tu ración se sale de
-                          eso.
-                        </p>
-                      ) : null}
-                      {idea ? (
-                        <>
-                          <FoodCategoryBadge dish={idea} />
-                          <DishRecipe dish={idea} month={month} />
-                        </>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground">
-                          Crea el menú del mes en la pestaña Plan para ver aquí el plato.
-                        </p>
-                      )}
-                      {h.status != null ? (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
-                            <button
-                              key={s}
-                              type="button"
-                              onClick={() => handleMealStatus(i, s)}
-                              className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors active:scale-95 ${
-                                h.status === s
-                                  ? "bg-foreground text-background"
-                                  : "bg-surface text-muted-foreground"
-                              }`}
-                            >
-                              {MEAL_STATUS_LABEL[s]}
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => clearMealStatus(i)}
-                            className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-destructive bg-destructive/10 transition-colors active:scale-95"
-                          >
-                            Deshacer
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                  {/* Aviso, base compartida y receta van siempre a la vista, no
+                      tras un toque oculto sin pista — como en la app móvil. La
+                      receta es un disclosure con su propio abrir/cerrar y carga
+                      perezosa (DishRecipe). */}
+                  {note ? (
+                    <span className="mt-3 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                      {note}
+                    </span>
                   ) : null}
+                  {shared ? (
+                    <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                      Base común con {shared} · marca “Comí otra cosa” si tu ración se sale de eso.
+                    </p>
+                  ) : null}
+                  {idea ? <DishRecipe dish={idea} month={month} /> : null}
                 </div>
               );
             })}
