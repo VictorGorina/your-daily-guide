@@ -26,6 +26,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import "../global.css";
 import { AuthProvider } from "../lib/auth-context";
+// Importado aquí a propósito: empieza a escuchar deep links desde el arranque,
+// antes de cualquier navegación, para que /restablecer no se pierda el
+// fragmento del enlace de recuperación. Ver lib/deep-link.ts.
+import "../lib/deep-link";
 
 // Un único QueryClient para toda la app, igual que la web: las pantallas
 // comparten caché por `queryKey` (["profile"], ["today"], ["logs"]...) para no

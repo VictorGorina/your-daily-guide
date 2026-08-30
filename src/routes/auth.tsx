@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { requestPasswordReset } from "@/lib/auth.functions";
 import { saveProfile } from "@/lib/daily";
 import { randomDemoProfile } from "@/lib/demo-profile";
 import { safeInternalPath } from "@/lib/safe-next";
@@ -61,21 +62,18 @@ function AuthPage() {
   }, [navigate, next]);
 
   const forgotPassword = async () => {
-    if (!email.trim()) {
-      toast.error("Necesito tu correo para enviarte el enlace");
+    if (!email.trim().includes("@")) {
+      toast.error("Necesito tu correo entero para enviarte el enlace");
       return;
     }
     setLoading(true);
     try {
-      // Mismo criterio que emailRedirectTo en signUp: hay que apuntar a una URL
-      // pública y estable. Esta también debe estar en la allowlist de Redirect
-      // URLs del panel de Supabase (Authentication → URL Configuration).
-      const base =
-        (import.meta.env.VITE_PUBLIC_URL as string | undefined) || window.location.origin;
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${base}/restablecer${next ? `?next=${encodeURIComponent(next)}` : ""}`,
-      });
-      if (error) throw error;
+      // El correo lo manda nuestro backend, no el SMTP de Supabase Auth: así el
+      // motivo de un fallo de envío queda en nuestros logs en vez de perderse en
+      // un `unexpected_failure` genérico, y la plantilla es nuestra. La URL de
+      // destino la decide el servidor a partir de `platform` — ver
+      // requestPasswordReset en src/lib/auth.functions.ts.
+      await requestPasswordReset({ data: { email: email.trim(), platform: "web" } });
       setSent(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No hemos podido enviar el enlace");
@@ -94,11 +92,10 @@ function AuthPage() {
       if (mode === "up") {
         // El enlace del correo debe apuntar a una URL pública y estable, no a
         // localhost ni al esquema de la app nativa (un correo se abre en otro
-        // sitio). Se toma de VITE_PUBLIC_URL si está definida; sólo cae al origin
-        // actual como último recurso en desarrollo. Esa URL + /confirmado tiene
-        // que estar en la allowlist de Redirect URLs del panel de Supabase.
-        const base =
-          (import.meta.env.VITE_PUBLIC_URL as string | undefined) || window.location.origin;
+        // sitio). En producción el origin ya es peppersfam.es; en local cae a
+        // localhost. Esa URL + /confirmado tiene que estar en la allowlist de
+        // Redirect URLs del panel de Supabase.
+        const base = window.location.origin;
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,

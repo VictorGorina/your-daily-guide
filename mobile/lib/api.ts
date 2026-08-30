@@ -33,15 +33,11 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiPost<TOutput>(path: string, body?: unknown): Promise<TOutput> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new ApiError("No hay sesión", 401);
-
+async function post<TOutput>(path: string, body: unknown, token: string | null): Promise<TOutput> {
   const response = await fetch(`${BASE_URL}/api/v1/${path}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body ?? {}),
@@ -56,4 +52,20 @@ export async function apiPost<TOutput>(path: string, body?: unknown): Promise<TO
   }
 
   return (await response.json()) as TOutput;
+}
+
+export async function apiPost<TOutput>(path: string, body?: unknown): Promise<TOutput> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new ApiError("No hay sesión", 401);
+  return post<TOutput>(path, body, token);
+}
+
+/**
+ * Como `apiPost` pero sin sesión, para las operaciones que se piden justamente
+ * cuando no se puede entrar: hoy solo recuperar la contraseña. Úsala únicamente
+ * con rutas pensadas para ser públicas.
+ */
+export async function apiPostPublic<TOutput>(path: string, body?: unknown): Promise<TOutput> {
+  return post<TOutput>(path, body, null);
 }

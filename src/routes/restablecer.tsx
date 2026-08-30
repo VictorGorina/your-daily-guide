@@ -40,28 +40,23 @@ function RestablecerPage() {
   const [status, setStatus] = useState<"waiting" | "ready" | "done" | "error">(
     error_description ? "error" : "waiting",
   );
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(
-    error_description ? decodeURIComponent(error_description.replace(/\+/g, " ")) : undefined,
-  );
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    // Cuando el enlace ha caducado o ya se ha usado, Supabase añade el
-    // motivo a la URL — pero según el caso lo pone en la query string
-    // (?error_description=...) o en el fragmento (#error=...&error_description=...,
-    // el mismo sitio donde van los tokens del flujo implícito). El router
-    // sólo nos da la query string, así que miramos también el hash antes de
-    // quedarnos esperando un evento que ya no va a llegar.
-    // (URLSearchParams ya decodifica %XX y "+" al leerlo, a diferencia del
-    // error_description de la query string, que llega crudo.)
+    // Cuando el enlace ha caducado o ya se ha usado, Supabase añade el motivo a
+    // la URL — según el caso en la query string (?error_description=...) o en el
+    // fragmento (#error=...&error_description=..., el mismo sitio donde van los
+    // tokens del flujo implícito). El router sólo nos da la query string, así
+    // que miramos también el hash antes de quedarnos esperando un evento que ya
+    // no va a llegar. No enseñamos ese texto (Supabase lo manda en inglés): el
+    // estado de error ya explica en español qué hacer, igual que en móvil
+    // (mobile/app/restablecer.tsx).
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const hashError = hashParams.get("error_description") || hashParams.get("error");
-    const initialError =
-      (error_description && decodeURIComponent(error_description.replace(/\+/g, " "))) || hashError;
-    if (initialError) {
-      setErrorMessage(initialError);
+    const hasUrlError =
+      Boolean(error_description) || hashParams.has("error_description") || hashParams.has("error");
+    if (hasUrlError) {
       setStatus("error");
       return;
     }
@@ -180,8 +175,7 @@ function RestablecerPage() {
               Este enlace ya no funciona
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {errorMessage ||
-                "Puede haber caducado o usarse ya. Pide un enlace nuevo desde la pantalla de entrar."}
+              Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar.
             </p>
             <button
               onClick={() => navigate({ to: "/auth" })}

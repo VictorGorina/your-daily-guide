@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { apiPostPublic } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { supabase } from "../lib/supabase";
 
@@ -35,7 +36,7 @@ const redirectTo = makeRedirectUri({ scheme: "dailyguide" });
  */
 export default function Auth() {
   const { session } = useAuth();
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up" | "forgot">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -94,6 +95,30 @@ export default function Auth() {
     }
   };
 
+  // Envía el correo con el enlace para crear una contraseña nueva. Supabase
+  // responde igual exista o no una cuenta con ese correo (no filtra qué correos
+  // están registrados), así que siempre mostramos la pantalla de "revisa tu
+  // buzón".
+  const forgotPassword = async () => {
+    if (!email.trim().includes("@")) {
+      Alert.alert("Falta tu correo", "Escríbelo entero y te enviamos el enlace.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await apiPostPublic("auth/reset", { email: email.trim(), platform: "mobile" });
+      setSent(true);
+    } catch (error) {
+      Alert.alert(
+        "No hemos podido enviar el enlace",
+        error instanceof Error ? error.message : "Inténtalo otra vez.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async () => {
     if (!email.trim() || !password) {
       Alert.alert("Faltan datos", "Escribe tu correo y tu contraseña.");
@@ -143,19 +168,73 @@ export default function Auth() {
           keyboardShouldPersistTaps="handled"
         >
           <Text className="text-4xl font-display text-foreground">
-            {mode === "in" ? "Bienvenido de vuelta" : "Empecemos"}
+            {mode === "in"
+              ? "Bienvenido de vuelta"
+              : mode === "up"
+                ? "Empecemos"
+                : "Recupera tu acceso"}
           </Text>
           <Text className="mt-2 text-sm text-muted-foreground">
             {mode === "in"
               ? "Entra con tu correo y sigue donde lo dejaste."
-              : "Crea tu cuenta y tu coach te acompaña desde hoy."}
+              : mode === "up"
+                ? "Crea tu cuenta y tu coach te acompaña desde hoy."
+                : "Te enviamos un enlace a tu correo para crear una contraseña nueva."}
           </Text>
 
           {sent ? (
-            <View className="mt-8 rounded-2xl border border-primary bg-primary-soft px-4 py-4">
-              <Text className="text-sm text-foreground">
-                Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar.
-              </Text>
+            <View className="mt-8 gap-3">
+              <View className="rounded-2xl border border-primary bg-primary-soft px-4 py-4">
+                <Text className="text-sm text-foreground">
+                  {mode === "forgot"
+                    ? "Te hemos enviado un correo con un enlace para restablecer tu contraseña. Ábrelo y crea una nueva."
+                    : "Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar."}
+                </Text>
+              </View>
+              {mode === "forgot" && (
+                <Pressable
+                  onPress={() => {
+                    setSent(false);
+                    setMode("in");
+                  }}
+                  className="w-full py-2"
+                >
+                  <Text className="text-center text-xs text-muted-foreground">Volver a entrar</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : mode === "forgot" ? (
+            <View className="mt-8 gap-3">
+              <TextInput
+                className="h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="tu@correo.com"
+                placeholderTextColor="#83796c"
+              />
+
+              <Pressable
+                onPress={forgotPassword}
+                disabled={loading}
+                className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
+              >
+                {loading ? (
+                  <ActivityIndicator color="#3e3d39" />
+                ) : (
+                  <Text className="text-sm font-sans-semibold text-primary-foreground">
+                    Enviar enlace
+                  </Text>
+                )}
+              </Pressable>
+
+              <Pressable onPress={() => setMode("in")} className="w-full py-2">
+                <Text className="text-center text-xs text-muted-foreground">
+                  Ya me acuerdo, quiero entrar
+                </Text>
+              </Pressable>
             </View>
           ) : (
             <View className="mt-8 gap-3">
@@ -179,6 +258,14 @@ export default function Auth() {
                 placeholder="Contraseña"
                 placeholderTextColor="#83796c"
               />
+
+              {mode === "in" && (
+                <Pressable onPress={() => setMode("forgot")} className="w-full py-1">
+                  <Text className="text-right text-xs text-muted-foreground">
+                    ¿Has olvidado tu contraseña?
+                  </Text>
+                </Pressable>
+              )}
 
               <Pressable
                 onPress={submit}
@@ -204,7 +291,13 @@ export default function Auth() {
                     : "Ya tengo cuenta, quiero entrar"}
                 </Text>
               </Pressable>
+            </View>
+          )}
 
+          {/* Google y perfil demo salen en todos los modos, igual que en la web:
+              si te has quedado fuera, entrar con Google es una salida directa. */}
+          {!sent && (
+            <>
               <View className="my-3 flex-row items-center gap-3">
                 <View className="h-px flex-1 bg-border" />
                 <Text className="text-xs text-muted-foreground">o</Text>
@@ -234,7 +327,7 @@ export default function Auth() {
                   {demoLoading ? "Creando perfil..." : "Probar con un perfil aleatorio"}
                 </Text>
               </Pressable>
-            </View>
+            </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
