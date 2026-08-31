@@ -7,12 +7,12 @@ import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { DishRecipe } from "@/components/dish-recipe";
-import { DishImage, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
+import { DishCategoryIcon, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MacroBars } from "@/components/macro-bars";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
-import { classifyDish, dishAsset, FOOD_CATEGORIES } from "@/lib/food-categories";
+import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
 import {
   ensureTodayLog,
   fetchLogs,
@@ -475,10 +475,10 @@ function Hoy() {
                 >
                   <div className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-x-3">
                     <span
-                      className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-base"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full"
                       style={{ backgroundColor: tint(cat.accent, 20) }}
                     >
-                      {dishAsset(idea) ? <DishImage dish={idea} size={40} /> : null}
+                      {idea ? <DishCategoryIcon dish={idea} size={18} /> : null}
                     </span>
 
                     <div className="min-w-0">
@@ -731,7 +731,7 @@ function Field({
   return (
     <div className="rounded-xl bg-secondary/60 p-3" style={bgStyle}>
       <div className="flex items-start gap-2.5">
-        {recipeMonth ? <DishImage dish={value} size={32} /> : null}
+        {recipeMonth ? <DishCategoryIcon dish={value} size={16} className="mt-0.5" /> : null}
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">

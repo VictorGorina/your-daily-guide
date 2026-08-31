@@ -1,4 +1,6 @@
-import { classifyDish, dishAsset, FOOD_CATEGORIES } from "@/lib/food-categories";
+import { Apple, Bean, Beef, Carrot, Drumstick, Fish, Milk, Wheat } from "lucide-react";
+
+import { classifyDish, dishAsset, FOOD_CATEGORIES, type FoodCategory } from "@/lib/food-categories";
 
 /**
  * Inline style for food-category contextual backgrounds.
@@ -45,6 +47,52 @@ export function DishImage({
       height={size}
       className={`shrink-0 rounded-full ${className ?? ""}`}
       style={{ width: size, height: size }}
+    />
+  );
+}
+
+/**
+ * Icono Lucide por categoría de comida — la misma familia que los iconos de
+ * categoría de la subpestaña Ingredientes (Plan). Sustituye al dibujo de
+ * ingrediente (`DishImage`) en las filas de comida de Hoy: un glifo de sistema
+ * se lee mejor a 40px y no depende de tener un SVG propio para cada plato.
+ * `otro` no dibuja nada (guideline §6: sin glifo de relleno para lo que no
+ * cae en una categoría) — el hueco se queda con solo el tinte, como antes.
+ */
+const CATEGORY_ICON: Partial<Record<FoodCategory, typeof Carrot>> = {
+  verdura: Carrot,
+  fruta: Apple,
+  pescado: Fish,
+  carne: Beef,
+  pollo: Drumstick,
+  pasta: Wheat,
+  lacteo: Milk,
+  legumbre: Bean,
+};
+
+export function DishCategoryIcon({
+  dish,
+  size = 18,
+  className,
+}: {
+  dish: string;
+  size?: number;
+  className?: string;
+}) {
+  const cat = classifyDish(dish);
+  const Icon = CATEGORY_ICON[cat];
+  if (!Icon) return null;
+  return (
+    <Icon
+      size={size}
+      className={`shrink-0 ${className ?? ""}`}
+      // Mismo criterio que `FoodCategoryBadge`: mayormente el color de texto del
+      // tema, teñido por la categoría, para que siga legible con acentos muy
+      // claros (lácteos, cereales) sobre el tinte suave del círculo.
+      style={{
+        color: `color-mix(in oklab, ${FOOD_CATEGORIES[cat].accent} 40%, var(--color-foreground))`,
+      }}
+      aria-hidden
     />
   );
 }

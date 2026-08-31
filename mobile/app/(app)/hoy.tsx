@@ -8,12 +8,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
 import { DishRecipe } from "../../components/dish-recipe";
-import { DishImage } from "../../components/food-category-bg";
+import { DishCategoryIcon } from "../../components/food-category-bg";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { MacroBars } from "../../components/macro-bars";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
 import { WeekStrip } from "../../components/week-strip";
-import { classifyDish, dishAsset, FOOD_CATEGORIES } from "../../lib/food-categories";
+import { classifyDish, FOOD_CATEGORIES } from "../../lib/food-categories";
 import { apiPost } from "../../lib/api";
 import {
   ensureTodayLog,
@@ -432,13 +432,14 @@ export default function Hoy() {
                     }}
                   >
                     <View className="flex-row items-center" style={{ columnGap: 12 }}>
-                      {/* Icono de categoría: ilustración SVG del ingrediente si hay
-                          plato reconocible, si no el emoji de la categoría. */}
+                      {/* Icono de categoría de comida (familia Lucide, igual que
+                          la subpestaña Ingredientes). Sin plato aún o categoría
+                          "otro" → círculo solo con el tinte. */}
                       <View
                         className="h-10 w-10 items-center justify-center overflow-hidden rounded-full"
                         style={{ backgroundColor: tintBg(accent, 20) }}
                       >
-                        {dishAsset(dish) ? <DishImage dish={dish} size={40} /> : null}
+                        {planned?.idea ? <DishCategoryIcon dish={dish} size={18} /> : null}
                       </View>
 
                       {/* Info */}

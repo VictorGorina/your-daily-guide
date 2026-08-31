@@ -1,7 +1,13 @@
+import { Apple, Bean, Beef, Carrot, Drumstick, Fish, Milk, Wheat } from "lucide-react-native";
 import { Image } from "react-native";
 import { SvgXml } from "react-native-svg";
 
-import { dishAsset } from "../lib/food-categories";
+import {
+  classifyDish,
+  dishAsset,
+  FOOD_CATEGORIES,
+  type FoodCategory,
+} from "../lib/food-categories";
 import { FOOD_SVGS } from "../lib/food-svg-data";
 
 // `dishAsset()` devuelve rutas al estilo web ("/food/icon-salmon.svg",
@@ -48,4 +54,40 @@ export function DishImage({ dish, size = 40 }: { dish: string; size?: number }) 
       resizeMode="cover"
     />
   );
+}
+
+// Mezcla dos hex de 6 dígitos (t=0 → a, t=1 → b). RN no tiene `color-mix`.
+function mixHex(a: string, b: string, t: number): string {
+  const ch = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  const c = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
+  return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+const CATEGORY_ICON: Partial<Record<FoodCategory, typeof Carrot>> = {
+  verdura: Carrot,
+  fruta: Apple,
+  pescado: Fish,
+  carne: Beef,
+  pollo: Drumstick,
+  pasta: Wheat,
+  lacteo: Milk,
+  legumbre: Bean,
+};
+
+/**
+ * Icono Lucide por categoría de comida — la misma familia que los iconos de la
+ * subpestaña Ingredientes (`CategoryIcon` en app/(app)/plan.tsx) y que la web
+ * (src/components/food-category-bg.tsx). Sustituye a `DishImage` en las filas
+ * de comida de Hoy: un glifo de sistema se lee mejor a 40px y no depende de
+ * tener un SVG propio para cada plato. `otro` no dibuja nada (guideline §6:
+ * sin glifo de relleno), el hueco se queda con solo el tinte.
+ */
+export function DishCategoryIcon({ dish, size = 18 }: { dish: string; size?: number }) {
+  const cat = classifyDish(dish);
+  const Icon = CATEGORY_ICON[cat];
+  if (!Icon) return null;
+  // Mismo criterio que `FoodCategoryBadge` en la web: el acento teñido hacia el
+  // color de texto para que siga legible con acentos muy claros (lácteos,
+  // cereales) sobre el tinte suave del círculo.
+  return <Icon size={size} color={mixHex(FOOD_CATEGORIES[cat].accent, "#3e3d39", 0.6)} />;
 }
