@@ -53,9 +53,24 @@ tu compra: ...") en Hoy y en el calendario del plan. Quién falta lo decide el m
 (`offShoppingList`), porque casar texto libre con la lista a ojo no funciona ("pechuga de pollo" lo
 cubre "pollo"); si esa comprobación falla no se marca nada, mejor no avisar que avisar en falso.
 
+**Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y
+que la lista de la compra no incluye: los añade a mano en la pestaña Ingredientes (`setPantryExtra`)
+o salen del escaneo de un tiquet (`scanTripReceipt`, solo los que encajan con sus objetivos; el
+resto se descartan con motivo). Es un conjunto **paralelo** a `shopping` — nunca se fusiona con la
+lista de la compra — que `adjustMonthlyPlan`, `setPlanMeal`/`offShoppingList` y `coachPlanContext`
+tratan como también disponible al recolocar. No dispara regeneración: solo cuenta la próxima vez
+que se recoloca. El importe real del tiquet se guarda en `trip_actuals` (misma columna que el gasto
+a mano) y su resumen en `trip_receipts`; de ahí sale la tarjeta "Gasto en comida" del historial
+(`MonthSpendSummary`). La foto del tiquet no se guarda: se manda al modelo de visión y se descarta.
+
+Cambiar de cadencia (`recadenceMonthlyPlan`) rehace el reparto de `trip` y puede trocear un
+perecedero en varias filas; `carryOwnedByName` (`plan-shared.ts`) reaplica el estado
+"en casa"/"comprado" por nombre de ingrediente para que las marcas no se pierdan.
+
 Para que el coach pueda proponer platos con lo ya comprado, cada mensaje del chat lleva la lista de
-ingredientes y el menú de los próximos días (`coachPlanContext`), además de la fecha de hoy — sin
-ella el modelo no puede convertir "mañana" en la fecha que necesita la herramienta.
+ingredientes, la despensa extra y el menú de los próximos días (`coachPlanContext`), además de la
+fecha de hoy — sin ella el modelo no puede convertir "mañana" en la fecha que necesita la
+herramienta.
 
 ## Push notifications
 

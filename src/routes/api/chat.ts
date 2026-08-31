@@ -101,6 +101,7 @@ export const Route = createFileRoute("/api/chat")({
           actions?: boolean;
           today?: string;
           compra?: { confirmada: boolean; ingredientes: string[] } | null;
+          despensa_extra?: string[];
           proximos?: Record<string, string>[];
         };
         if (!Array.isArray(body.messages)) {
@@ -126,6 +127,9 @@ export const Route = createFileRoute("/api/chat")({
               (body.compra.confirmada
                 ? " La compra está confirmada: no se puede añadir nada a la lista."
                 : " La compra aún no está confirmada.")
+            : "") +
+          (body.despensa_extra?.length
+            ? `\nAdemás dice tener en casa (fuera de la lista de la compra, no lo añadas a la lista pero puedes proponer platos con ello): ${body.despensa_extra.join(", ")}.`
             : "") +
           (body.proximos?.length
             ? `\nMenú de los próximos días: ${JSON.stringify(body.proximos)}`

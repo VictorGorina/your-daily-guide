@@ -11,11 +11,14 @@ import {
   Fish,
   Lightbulb,
   Lock,
+  Plus,
+  Receipt,
   RefreshCw,
   ShoppingBasket,
   ShoppingCart,
   Sparkles,
   Wheat,
+  X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -34,6 +37,7 @@ import { BottomNav } from "../../components/bottom-nav";
 import { DayDetailSheet } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
 import { GoalWeightSummary } from "../../components/goal-weight-summary";
+import { MonthSpendSummary } from "../../components/month-spend-summary";
 import { Dialog } from "../../components/ui/dialog";
 import { apiPost } from "../../lib/api";
 import {
@@ -68,15 +72,26 @@ import {
   tripsOfCadence,
   tripTiming,
   type MonthlyPlan,
+  type PantryExtra,
   type PlanCoverage,
   type PlanMonthStatus,
   type ShoppingCadence,
   type ShoppingItem,
   type ShoppingList,
   type TripActuals,
+  type TripReceipts,
 } from "../../lib/plan-shared";
 
 type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList };
+
+type ReceiptScanResult = {
+  trip_actuals: TripActuals;
+  pantry_extras: PantryExtra[];
+  trip_receipts: TripReceipts;
+  total: number;
+  added: string[];
+  discarded: { name: string; reason: string }[];
+};
 
 type TripGroups = { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
 
@@ -93,7 +108,10 @@ export default function Plan() {
       : today.slice(0, 7),
   );
   const month = selectedMonth;
-  const [cadence, setCadence] = useState<ShoppingCadence | null>(null);
+  // Solo para resaltar el botón mientras el servidor reparte la compra; la
+  // cadencia real sale de `plan.cadence` hasta que llega la respuesta (así
+  // `groupByTrip` no corre con un nº de compras que aún no coincide).
+  const [pendingCadence, setPendingCadence] = useState<ShoppingCadence | null>(null);
 
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
@@ -113,7 +131,7 @@ export default function Plan() {
     mutationFn: (nextCadence?: ShoppingCadence) =>
       apiPost<GenerateResult>("plan/generate", {
         month,
-        cadence: nextCadence ?? cadence ?? "mensual",
+        cadence: nextCadence ?? "mensual",
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
     onError: (e) =>
@@ -122,18 +140,54 @@ export default function Plan() {
 
   // Cambiar la cadencia solo reparte la misma compra en más o menos viajes según
   // los platos reales de cada semana, sin regenerar el plan por IA (ver AGENTS.md).
+  // Las marcas "en casa"/"comprado" se conservan por nombre en el servidor.
   const recadence = useMutation({
     mutationFn: (nextCadence: ShoppingCadence) =>
       apiPost<GenerateResult>("plan/recadence", { month, cadence: nextCadence }),
     onSuccess: (res) => {
+      setPendingCadence(null);
       qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
         prev ? { ...prev, plan: res.plan, shopping: res.shopping } : prev,
       );
     },
     onError: (e) => {
-      setCadence(null);
+      setPendingCadence(null);
       Alert.alert(e instanceof Error ? e.message : "No hemos podido cambiar la frecuencia");
     },
+  });
+
+  const pantry = useMutation({
+    mutationFn: (vars: { name: string; qty?: string; remove?: boolean }) =>
+      apiPost<{ pantry_extras: PantryExtra[] }>("plan/pantry-extra", { month, ...vars }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, pantry_extras: res.pantry_extras } : prev,
+      );
+    },
+    onError: () => Alert.alert("No hemos podido guardar el ingrediente"),
+  });
+
+  const receipt = useMutation({
+    mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
+      apiPost<ReceiptScanResult>("plan/receipt", { month, ...vars }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev
+          ? {
+              ...prev,
+              trip_actuals: res.trip_actuals,
+              trip_receipts: res.trip_receipts,
+              pantry_extras: res.pantry_extras,
+            }
+          : prev,
+      );
+      const parts = [`Gasto guardado: ${eur(res.total)}`];
+      if (res.added.length) parts.push(`Añadí a tu despensa: ${res.added.join(", ")}`);
+      if (res.discarded.length)
+        parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
+      Alert.alert("Tiquet leído", parts.join("\n"));
+    },
+    onError: (e) => Alert.alert(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
   });
 
   const owned = useMutation({
@@ -165,8 +219,10 @@ export default function Plan() {
   // IngredientsTab (ver diseño 1c).
   const monthTotal = shoppingTotal(shopping);
   const tripActuals = planQ.data?.trip_actuals ?? {};
+  const tripReceipts: TripReceipts = planQ.data?.trip_receipts ?? {};
+  const pantryExtras: PantryExtra[] = planQ.data?.pantry_extras ?? [];
   const coverage = plan?.coverage;
-  const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
+  const activeCadence: ShoppingCadence = plan?.cadence ?? cadenceOf(shopping);
   const tripsTotal = tripsOfCadence(activeCadence);
   const trips = groupByTrip(shopping, tripsTotal);
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
@@ -182,8 +238,9 @@ export default function Plan() {
     }
     return 0;
   });
-  // Filtro de ingredientes: "need" (falta), "have" (ya lo tengo), "all"
-  const [filter, setFilter] = useState<"need" | "have" | "all">("need");
+  // Abre mostrando TODO (auditoría): marcas lo que ya tienes y "Ir a comprar"
+  // te lleva al modo súper solo con lo que falta.
+  const [filter, setFilter] = useState<"need" | "have" | "all">("all");
   // Modo compra a pantalla completa
   const [shopMode, setShopMode] = useState(false);
 
@@ -247,6 +304,10 @@ export default function Plan() {
           tripActual={tripActuals[clampedTrip]}
           savingActual={setActual.isPending}
           onSaveActual={(amount) => setActual.mutate({ trip: clampedTrip, amount })}
+          onScanReceipt={(imageBase64, mime) =>
+            receipt.mutate({ trip: clampedTrip, imageBase64, mime })
+          }
+          scanningReceipt={receipt.isPending}
         />
       </SafeAreaView>
     );
@@ -254,7 +315,7 @@ export default function Plan() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-40 pt-6">
+      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-52 pt-6">
         <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
             <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
@@ -375,6 +436,15 @@ export default function Plan() {
               <View className="mt-5 gap-5">
                 <GoalWeightSummary logs={globalLogsQ.data ?? []} profile={profileQ.data ?? null} />
 
+                <MonthSpendSummary
+                  shopping={shopping}
+                  tripActuals={tripActuals}
+                  tripReceipts={tripReceipts}
+                  periodBudget={periodBudget}
+                  partialMonth={Boolean(coverage && coverage.fromDay > 1)}
+                  monthStatus={monthStatus}
+                />
+
                 {plan ? (
                   <View className="rounded-3xl bg-surface p-5">
                     <View className="flex-row items-center gap-2">
@@ -424,6 +494,7 @@ export default function Plan() {
                 currentTrip={currentTrip}
                 tripsTotal={tripsTotal}
                 activeCadence={activeCadence}
+                pendingCadence={pendingCadence}
                 coverage={coverage}
                 todayDayOfMonth={todayDayOfMonth}
                 selectedTrip={clampedTrip}
@@ -431,10 +502,12 @@ export default function Plan() {
                 filter={filter}
                 setFilter={setFilter}
                 recadence={recadence}
-                setCadence={setCadence}
+                setPendingCadence={setPendingCadence}
                 onToggle={(itemName, next) =>
                   owned.mutate({ itemName, trip: clampedTrip, source: next })
                 }
+                pantryExtras={pantryExtras}
+                pantry={pantry}
                 month={month}
                 monthStatus={monthStatus}
                 readOnly={readOnlyMonth}
@@ -456,7 +529,7 @@ export default function Plan() {
       />
 
       {showShopCta ? (
-        <View className="absolute inset-x-0 bottom-[96px] px-5">
+        <View className="absolute inset-x-0 bottom-[124px] px-5">
           <Pressable
             onPress={() => setShopMode(true)}
             className="mx-auto w-full max-w-lg flex-row items-center justify-center gap-2 rounded-[20px] bg-primary py-4 active:opacity-90"
@@ -689,6 +762,83 @@ function ProgressFill({ pct, color, rounded }: { pct: number; color: string; rou
   );
 }
 
+/**
+ * Tarjeta "Ya lo tengo en casa (fuera del plan)": la persona añade ingredientes
+ * que ya tiene y que la lista de la compra no incluye. El planificador los
+ * cuenta como disponibles al recolocar (no se añaden a la compra). Copia del
+ * `PantryExtrasCard` de la web.
+ */
+function PantryExtrasCard({
+  extras,
+  pantry,
+}: {
+  extras: PantryExtra[];
+  pantry: {
+    isPending: boolean;
+    mutate: (v: { name: string; qty?: string; remove?: boolean }) => void;
+  };
+}) {
+  const [name, setName] = useState("");
+  const add = () => {
+    const trimmed = name.trim();
+    if (!trimmed || pantry.isPending) return;
+    pantry.mutate({ name: trimmed });
+    setName("");
+  };
+  return (
+    <View className="mt-1 rounded-3xl bg-surface px-4 py-3.5">
+      <View className="flex-row items-center gap-2">
+        <Carrot size={15} color="#ff8a3d" />
+        <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
+          Ya lo tengo en casa · fuera del plan
+        </Text>
+      </View>
+      <Text className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
+        Si tienes algo que la lista no incluye, dímelo y lo tendré en cuenta al recolocar los
+        próximos días. No se añade a la compra.
+      </Text>
+      <View className="mt-2.5 flex-row gap-1.5">
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          onSubmitEditing={add}
+          placeholder="p. ej. lentejas, espinacas..."
+          placeholderTextColor="#a89f92"
+          className="min-w-0 flex-1 rounded-full bg-secondary px-3.5 py-2 text-xs text-foreground"
+        />
+        <Pressable
+          onPress={add}
+          disabled={pantry.isPending || !name.trim()}
+          className="h-9 w-9 items-center justify-center rounded-full bg-foreground active:opacity-80"
+          style={pantry.isPending || !name.trim() ? { opacity: 0.4 } : undefined}
+        >
+          <Plus size={16} color="#f3f1ed" />
+        </Pressable>
+      </View>
+      {extras.length ? (
+        <View className="mt-2.5 flex-row flex-wrap gap-1.5">
+          {extras.map((e) => (
+            <View
+              key={e.name}
+              className="flex-row items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1"
+            >
+              <Text className="text-[11.5px] text-foreground">{e.name}</Text>
+              {e.source === "receipt" ? <Receipt size={12} color="#83796c" /> : null}
+              <Pressable
+                onPress={() => pantry.mutate({ name: e.name, remove: true })}
+                disabled={pantry.isPending}
+                hitSlop={6}
+              >
+                <X size={12} color="#83796c" />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Pestaña Ingredientes — una compra a la vez, un solo gesto por ingrediente y
 // filtros por chip. Portada del rediseño web (src/routes/_authenticated/plan.tsx).
@@ -705,8 +855,11 @@ function IngredientsTab({
   filter,
   setFilter,
   recadence,
-  setCadence,
+  pendingCadence,
+  setPendingCadence,
   onToggle,
+  pantryExtras,
+  pantry,
   month,
   monthStatus,
   readOnly,
@@ -718,6 +871,7 @@ function IngredientsTab({
   currentTrip: TripGroups | undefined;
   tripsTotal: number;
   activeCadence: ShoppingCadence;
+  pendingCadence: ShoppingCadence | null;
   coverage: PlanCoverage | undefined;
   todayDayOfMonth: number;
   selectedTrip: number;
@@ -725,8 +879,13 @@ function IngredientsTab({
   filter: "need" | "have" | "all";
   setFilter: (f: "need" | "have" | "all") => void;
   recadence: { isPending: boolean; mutate: (c: ShoppingCadence) => void };
-  setCadence: (c: ShoppingCadence) => void;
+  setPendingCadence: (c: ShoppingCadence) => void;
   onToggle: (itemName: string, next: "fridge" | "store" | null) => void;
+  pantryExtras: PantryExtra[];
+  pantry: {
+    isPending: boolean;
+    mutate: (v: { name: string; qty?: string; remove?: boolean }) => void;
+  };
   month: string;
   monthStatus: PlanMonthStatus;
   readOnly: boolean;
@@ -737,8 +896,12 @@ function IngredientsTab({
 }) {
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
   // Mes que viene desbloqueado: la compra se hace entera ahora. Mes pasado: solo
-  // lectura. Mes en curso: solo la compra "current".
-  const editable = readOnly ? false : monthStatus === "next-unlocked" || timing === "current";
+  // lectura. Mes en curso: cualquier compra que no haya pasado ya (puedes
+  // auditar la nevera para la semana que viene por adelantado); las compras ya
+  // pasadas quedan bloqueadas.
+  const editable = readOnly
+    ? false
+    : monthStatus === "next-unlocked" || (monthStatus === "current" && timing !== "past");
 
   // Cifras de la tarjeta "Te falta comprar": de la compra seleccionada, no del
   // mes (diseño 1c: "el número con el que sales de casa").
@@ -796,14 +959,14 @@ function IngredientsTab({
           </View>
           <View className="mt-2.5 flex-row gap-1 rounded-full bg-secondary/70 p-1">
             {CADENCES.map((c) => {
-              const active = activeCadence === c.key;
+              const active = (pendingCadence ?? activeCadence) === c.key;
               return (
                 <Pressable
                   key={c.key}
                   onPress={() => {
-                    if (recadence.isPending) return;
-                    setCadence(c.key);
-                    if (c.key !== activeCadence) recadence.mutate(c.key);
+                    if (recadence.isPending || c.key === activeCadence) return;
+                    setPendingCadence(c.key);
+                    recadence.mutate(c.key);
                   }}
                   disabled={recadence.isPending}
                   className={`flex-1 items-center rounded-full py-2.5 active:opacity-80 ${
@@ -927,16 +1090,16 @@ function IngredientsTab({
         <Text className="text-[11.5px] text-muted-foreground">{pctResolved}% ya resuelto</Text>
       </View>
       <Text className="px-0.5 text-xs leading-relaxed text-muted-foreground">
-        Toca un ingrediente para marcarlo como que ya lo tienes en casa. Lo que quede sin marcar es
-        tu lista del súper.
+        Marca lo que ya tengas en casa; lo que quede sin marcar es tu lista del súper. Cuando
+        termines, pulsa Ir a comprar.
       </Text>
 
       <View className="flex-row gap-1.5">
         {(
           [
+            ["all", "Todo", totalItems],
             ["need", "Falta comprar", needCount],
             ["have", "Ya lo tengo", haveCount],
-            ["all", "Todo", totalItems],
           ] as const
         ).map(([key, chipLabel, count]) => {
           const active = filter === key;
@@ -1034,13 +1197,16 @@ function IngredientsTab({
         ) : filteredGroups.length === 0 ? (
           <Text className="px-0.5 text-sm text-muted-foreground">
             {filter === "need"
-              ? "No te falta nada de esta compra. 🎉"
+              ? "No te falta nada de esta compra."
               : filter === "have"
                 ? "Todavía no has marcado nada como que ya lo tienes."
                 : "Esta compra no tiene ingredientes."}
           </Text>
         ) : null}
       </View>
+
+      {/* Ya tengo en casa fuera del plan */}
+      {readOnly ? null : <PantryExtrasCard extras={pantryExtras} pantry={pantry} />}
 
       {/* Tip de persistencia */}
       {readOnly ? null : (
@@ -1070,6 +1236,8 @@ function ShopModeView({
   tripActual,
   savingActual,
   onSaveActual,
+  onScanReceipt,
+  scanningReceipt,
 }: {
   trip: TripGroups | undefined;
   coverage: PlanCoverage | undefined;
@@ -1081,8 +1249,39 @@ function ShopModeView({
   tripActual: number | undefined;
   savingActual: boolean;
   onSaveActual: (amount: number | null) => void;
+  onScanReceipt: (imageBase64: string, mime: string) => void;
+  scanningReceipt: boolean;
 }) {
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
+
+  // Deja elegir foto (galería o cámara), la reescala a ~1280 px JPEG y la manda
+  // al servidor como base64. Necesita el módulo nativo `expo-image-picker`: hasta
+  // el próximo build nativo el botón avisa en vez de fallar.
+  const pickReceipt = async () => {
+    try {
+      const ImagePicker = await import("expo-image-picker");
+      const ImageManipulator = await import("expo-image-manipulator");
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Necesito acceso a tus fotos para leer el tiquet");
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 1,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      const shrunk = await ImageManipulator.manipulateAsync(
+        res.assets[0].uri,
+        [{ resize: { width: 1280 } }],
+        { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (shrunk.base64) onScanReceipt(shrunk.base64, "image/jpeg");
+    } catch (e) {
+      Alert.alert("El escaneo de tiquets estará disponible en la próxima versión de la app.");
+      console.warn("pickReceipt", e);
+    }
+  };
 
   // El modo compra no muestra lo que ya se tenía en casa (nevera): solo lo que
   // hay que coger o lo que se acaba de meter en el carro en esta sesión.
@@ -1252,6 +1451,20 @@ function ShopModeView({
                 />
                 <Text className="text-xs text-muted-foreground">€</Text>
               </View>
+              <Pressable
+                onPress={pickReceipt}
+                disabled={scanningReceipt}
+                className="flex-row items-center justify-center gap-2 rounded-2xl border border-secondary py-3 active:opacity-80"
+                style={scanningReceipt ? { opacity: 0.6 } : undefined}
+              >
+                <Receipt size={16} color="#83796c" />
+                <Text className="text-xs font-sans-semibold text-muted-foreground">
+                  {scanningReceipt ? "Leyendo el tiquet..." : "Escanear tiquet y calcularlo"}
+                </Text>
+              </Pressable>
+              <Text className="text-[10.5px] leading-relaxed text-muted-foreground">
+                La foto se usa solo para leer el total y los productos; no se guarda.
+              </Text>
               <Pressable
                 onPress={() => {
                   // El botón "guardar gasto" no puede fiarse solo del onBlur del

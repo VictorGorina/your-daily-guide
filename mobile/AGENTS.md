@@ -50,6 +50,13 @@ fallo duro, no un aviso.
 `Unable to resolve module <x>` aunque el módulo esté instalado y el pod compilado. Reinicia
 Metro con `npx expo start --clear` (mata antes el Metro que deja `expo run:ios` en el 8081).
 
+**`expo-image-picker` / `expo-image-manipulator`** (escaneo del tiquet de la compra en
+`app/(app)/plan.tsx`, `ShopModeView`) están en `package.json` y en `plugins` de `app.json`, pero
+**necesitan un prebuild + build nativo** para funcionar: hasta entonces el botón "Escanear tiquet"
+avisa ("estará disponible en la próxima versión") en vez de fallar, porque la carga del módulo va
+en un `import()` dinámico envuelto en try/catch. La web ya lleva la función completa (usa
+`<input type="file">` + canvas).
+
 ## Desarrollo
 
 ```sh

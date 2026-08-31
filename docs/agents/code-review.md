@@ -55,8 +55,11 @@ Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
 - [ ] **La lista de la compra nunca cambia** por un cambio de plan. Si un plato pide algo no
       comprado, se guarda igual y los ingredientes que faltan quedan en `PlanDay.extras`
       como aviso.
-- [ ] El emparejamiento de un `ShoppingItem` al marcarlo "comprado" es por `name` + `trip`
-      juntos, nunca solo por `name`.
+- [ ] El emparejamiento de un `ShoppingItem` al marcarlo "comprado" (`toggleShoppingOwned`)
+      es por `name` + `trip` juntos, nunca solo por `name`. **Excepción deliberada:**
+      `carryOwnedByName` (al cambiar de cadencia) empareja **solo por `name`** a propósito —
+      el reparto de `trip` se rehace de cero y sus números viejos ya no significan nada, y
+      "en casa" es un estado de mes.
 - [ ] Los tramos de compra (`tripDayRange`, `groupByTrip`) se calculan con `tripsOfCadence`,
       no escaneando los datos: un tramo sin artículos sigue apareciendo vacío.
 - [ ] El estado de una comida es **por usuario**, nunca se sincroniza al hogar.

@@ -5,10 +5,13 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
 import {
   cadenceOf,
+  carryOwnedByName,
+  cleanPantryExtras,
   cleanPlan,
   cleanShopping,
   cleanTripActuals,
   cleanTripConfirmations,
+  cleanTripReceipts,
   completePlan,
   coverageRatio,
   daysInMonth,
@@ -31,12 +34,15 @@ import {
   planCursor,
   planSlotIndex,
   shoppingTotal,
+  normName,
   type MealSlot,
   type MonthlyPlan,
+  type PantryExtra,
   type PlanDay,
   type ShoppingList,
   type TripActuals,
   type TripConfirmations,
+  type TripReceipts,
 } from "@/lib/plan-shared";
 import { madridTodayISO } from "@/lib/madrid-date";
 
@@ -314,7 +320,7 @@ async function reassignTripsByDishes(
         "Si solo hace falta en una, ponle ese 'trip' sin más. " +
         "Si un plato se repite en varias compras (es habitual, no pasa nada) y por eso el mismo ingrediente perecedero hace falta en más de una, NO lo dejes en una sola fila: duplica esa fila una vez por cada compra en la que se necesita (mismo name/category/perishable, distinto trip), y reparte entre esas copias la cantidad ('qty') y el precio ('price_eur') de forma proporcional a cuántas veces se usa en cada una — la SUMA de 'price_eur' de todas las copias de un mismo ingrediente debe seguir siendo igual a su precio original (no dupliques el gasto). Así cada compra se lleva solo lo suyo, no el mes entero. " +
         "En la compra 0 deja sin duplicar lo que de verdad es despensa (conservas, legumbre seca, congelados, especias, aceite): esas filas se quedan enteras ahí. " +
-        "No cambies name/category/perishable de ningún ingrediente ni inventes ingredientes nuevos. " +
+        "No cambies name/category/perishable de ningún ingrediente ni inventes ingredientes nuevos. Conserva el campo 'owned' de cada ítem si lo tiene. " +
         'Devuelve solo JSON: {"shopping": [...]}',
     });
     const parsed = (parseJsonLoose(text) ?? {}) as { shopping?: unknown };
@@ -362,13 +368,20 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
 
     const current = cleanPlan(typed?.plan);
     if (!current) throw new Error("Todavía no hay plan de este mes");
-    const shopping = await reassignTripsByDishes(
-      key,
-      coachSystemPrompt(profile as never, null),
-      current,
-      cleanShopping(typed?.shopping),
-      data.cadence,
-      data.month,
+    const prevShopping = cleanShopping(typed?.shopping);
+    // Reasignar `trip` rehace el reparto (y puede trocear perecederos en varias
+    // filas); `carryOwnedByName` vuelve a poner el "en casa"/"comprado" por
+    // nombre de ingrediente para que cambiar de cadencia no borre las marcas.
+    const shopping = carryOwnedByName(
+      prevShopping,
+      await reassignTripsByDishes(
+        key,
+        coachSystemPrompt(profile as never, null),
+        current,
+        prevShopping,
+        data.cadence,
+        data.month,
+      ),
     );
     const plan: MonthlyPlan = { ...current, cadence: data.cadence };
 
@@ -490,6 +503,287 @@ export const setTripActual = createServerFn({ method: "POST" })
   });
 
 /**
+ * Añade o quita un ingrediente de la "despensa extra" del mes: cosas que la
+ * persona ya tiene en casa y NO salen de la lista de la compra (añadidas a mano
+ * o detectadas al escanear un tiquet). El planificador las trata como
+ * disponibles al recolocar los días futuros; la lista de la compra (`shopping`)
+ * no se toca nunca por esto. El emparejamiento al quitar es por nombre
+ * normalizado (`normName`), no por igualdad exacta.
+ */
+export const setPantryExtra = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { month: string; name: string; qty?: string; remove?: boolean }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    const name = String(input?.name ?? "")
+      .trim()
+      .slice(0, 80);
+    if (!name) throw new Error("Falta el ingrediente");
+    const qty = String(input?.qty ?? "")
+      .trim()
+      .slice(0, 40);
+    return { month: input.month, name, qty, remove: Boolean(input?.remove) };
+  })
+  .handler(async ({ data, context }): Promise<{ pantry_extras: PantryExtra[] }> => {
+    const { data: row } = await context.supabase
+      .from("monthly_plans")
+      .select("pantry_extras")
+      .eq("month", data.month)
+      .maybeSingle();
+    const current = cleanPantryExtras((row as { pantry_extras?: unknown } | null)?.pantry_extras);
+    const key = normName(data.name);
+    const withoutIt = current.filter((e) => normName(e.name) !== key);
+    const next: PantryExtra[] = data.remove
+      ? withoutIt
+      : [
+          ...withoutIt,
+          {
+            name: data.name,
+            ...(data.qty ? { qty: data.qty } : {}),
+            source: "manual" as const,
+            addedAt: new Date().toISOString(),
+          },
+        ].slice(0, 40);
+
+    const { error } = await context.supabase
+      .from("monthly_plans")
+      .update({ pantry_extras: next as never } as never)
+      .eq("month", data.month)
+      .eq("user_id", context.userId);
+    if (error) {
+      console.error("setPantryExtra", error);
+      throw new Error("No hemos podido guardar el ingrediente");
+    }
+
+    return { pantry_extras: next };
+  });
+
+export type ReceiptScan = {
+  trip_actuals: TripActuals;
+  pantry_extras: PantryExtra[];
+  trip_receipts: TripReceipts;
+  total: number;
+  itemCount: number;
+  added: string[];
+  discarded: { name: string; reason: string }[];
+};
+
+/**
+ * Lee la foto de un tiquet de compra con el modelo de visión y hace dos cosas
+ * sin tocar nunca la lista de la compra (`shopping`):
+ *  1. Guarda el importe real de la compra en `trip_actuals[trip]` (misma columna
+ *     que el gasto a mano) y un resumen en `trip_receipts[trip]`.
+ *  2. De los productos del tiquet que NO estén ya cubiertos por la compra ni por
+ *     la despensa extra, añade a `pantry_extras` los que encajan en los
+ *     objetivos y la dieta de la persona (`source: "receipt"`) y descarta el
+ *     resto devolviendo el motivo, para enseñarlo en pantalla.
+ * La imagen no se guarda: se manda al modelo y se descarta.
+ */
+export const scanTripReceipt = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { month: string; trip: number; imageBase64: string; mime?: string }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    const trip = Number(input?.trip);
+    if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
+    const imageBase64 = String(input?.imageBase64 ?? "").trim();
+    if (!imageBase64) throw new Error("Falta la foto del tiquet");
+    if (imageBase64.length > 4_500_000) {
+      throw new Error("La foto es demasiado grande: baja la calidad e inténtalo otra vez");
+    }
+    const mime = /^image\/(jpeg|png|webp|heic)$/.test(input?.mime ?? "")
+      ? input!.mime!
+      : "image/jpeg";
+    return { month: input.month, trip: Math.round(trip), imageBase64, mime };
+  })
+  .handler(async ({ data, context }): Promise<ReceiptScan> => {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) throw new Error("Falta la clave de IA");
+
+    const [{ data: profile }, { data: row }] = await Promise.all([
+      context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
+      context.supabase
+        .from("monthly_plans")
+        .select("shopping, pantry_extras, trip_actuals, trip_receipts")
+        .eq("month", data.month)
+        .maybeSingle(),
+    ]);
+    const typed = row as {
+      shopping?: unknown;
+      pantry_extras?: unknown;
+      trip_actuals?: unknown;
+      trip_receipts?: unknown;
+    } | null;
+    const shopping = cleanShopping(typed?.shopping);
+    const pantryExtras = cleanPantryExtras(typed?.pantry_extras);
+    const tripActuals = cleanTripActuals(typed?.trip_actuals);
+    const tripReceipts = cleanTripReceipts(typed?.trip_receipts);
+
+    const ai = createAiProvider(key);
+    const dataUrl = `data:${data.mime};base64,${data.imageBase64}`;
+
+    // 1) Leer el tiquet (visión).
+    const receipt = await (async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const { text } = await generateText({
+            model: ai(COACH_MODEL),
+            temperature: 0,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Esta es la foto de un tiquet de compra de supermercado en España. " +
+                      "Extrae el importe total pagado y la lista de productos con su precio. " +
+                      "Ignora descuentos, puntos, IVA desglosado y medios de pago. " +
+                      'Devuelve SOLO JSON: {"total_eur": number, "store": string, "items": [{"name": string (producto, en minúsculas y sin marca si se puede), "price_eur": number}]}. ' +
+                      "Sin markdown ni texto alrededor.",
+                  },
+                  { type: "image", image: dataUrl },
+                ],
+              },
+            ],
+          });
+          const parsed = (parseJsonLoose(text) ?? {}) as {
+            total_eur?: unknown;
+            store?: unknown;
+            items?: unknown;
+          };
+          const total = Number(parsed.total_eur);
+          const items = (Array.isArray(parsed.items) ? parsed.items : [])
+            .map((it) => {
+              const o = (it ?? {}) as Record<string, unknown>;
+              const name = String(o.name ?? "")
+                .trim()
+                .toLowerCase()
+                .slice(0, 80);
+              const price = Number(o.price_eur);
+              return name
+                ? { name, price_eur: Number.isFinite(price) && price >= 0 ? price : 0 }
+                : null;
+            })
+            .filter((x): x is { name: string; price_eur: number } => Boolean(x))
+            .slice(0, 80);
+          if (Number.isFinite(total) && total >= 0) {
+            return {
+              total: Math.round(total * 100) / 100,
+              store: String(parsed.store ?? ""),
+              items,
+            };
+          }
+        } catch (e) {
+          console.error("scanTripReceipt vision", e);
+        }
+      }
+      throw new Error("No hemos podido leer el tiquet. Prueba con una foto más nítida.");
+    })();
+
+    // 2) Quitar lo que ya está cubierto (mismo nombre exacto) y clasificar el
+    // resto: el modelo decide, viendo la lista de la compra, si un producto ya
+    // lo tiene por un equivalente ("tomate pera" lo cubre "tomate triturado"),
+    // si encaja con sus objetivos, o si se descarta.
+    const availableNames = new Set([
+      ...shopping.flatMap((g) => g.items.map((i) => normName(i.name))),
+      ...pantryExtras.map((e) => normName(e.name)),
+    ]);
+    const candidateItems = receipt.items.filter((i) => !availableNames.has(normName(i.name)));
+    const boughtList = ingredientNames(shopping);
+
+    let added: string[] = [];
+    const discarded: { name: string; reason: string }[] = [];
+
+    if (candidateItems.length) {
+      try {
+        const { text } = await generateText({
+          model: ai(COACH_MODEL),
+          system: coachSystemPrompt(profile as never),
+          temperature: 0.2,
+          prompt:
+            `Ingredientes que ya tiene comprados este mes: ${boughtList || "ninguno"}\n\n` +
+            `Productos del tiquet a clasificar: ${JSON.stringify(candidateItems.map((i) => i.name))}\n\n` +
+            "Para cada producto elige una opción:\n" +
+            '- "cubierto": ya lo tiene por un equivalente de la lista de arriba (p. ej. "tomate pera" lo cubre "tomate triturado", "aceite oliva 1l" lo cubre "aceite de oliva virgen extra").\n' +
+            '- "encaja": es nuevo y sirve para sus platos (base mediterránea; respeta sus restricciones, alergias, patrón de alimentación y objetivo).\n' +
+            '- "descartar": es un ultraprocesado, un capricho o choca con sus restricciones o su objetivo.\n' +
+            'Devuelve SOLO JSON: {"decisiones": [{"name": string (igual que te lo doy), "estado": "cubierto"|"encaja"|"descartar", "motivo": string (máx. 8 palabras, solo si "descartar")}]}. Sin markdown.',
+        });
+        const parsed = (parseJsonLoose(text) ?? {}) as { decisiones?: unknown };
+        const decisions = new Map<string, { estado: string; motivo: string }>();
+        for (const d of Array.isArray(parsed.decisiones) ? parsed.decisiones : []) {
+          const o = (d ?? {}) as Record<string, unknown>;
+          const name = String(o.name ?? "")
+            .trim()
+            .toLowerCase();
+          if (name) {
+            decisions.set(normName(name), {
+              estado: String(o.estado ?? "encaja"),
+              motivo: String(o.motivo ?? "").trim(),
+            });
+          }
+        }
+        for (const item of candidateItems) {
+          const d = decisions.get(normName(item.name));
+          if (d?.estado === "cubierto") continue;
+          if (d?.estado === "descartar") {
+            discarded.push({ name: item.name, reason: d.motivo || "no encaja con tu objetivo" });
+          } else {
+            added.push(item.name);
+          }
+        }
+      } catch (e) {
+        // Si la clasificación falla, no inventamos: se descartan todos con un
+        // motivo genérico en vez de meter cosas raras en la despensa.
+        console.error("scanTripReceipt classify", e);
+        for (const item of candidateItems) {
+          discarded.push({ name: item.name, reason: "no se pudo comprobar" });
+        }
+        added = [];
+      }
+    }
+
+    // 3) Persistir: importe real + resumen del tiquet + extras que encajan.
+    const nextActuals: TripActuals = { ...tripActuals, [data.trip]: receipt.total };
+    const nextReceipts: TripReceipts = {
+      ...tripReceipts,
+      [data.trip]: {
+        total: receipt.total,
+        itemCount: receipt.items.length,
+        scannedAt: new Date().toISOString(),
+      },
+    };
+    const nowIso = new Date().toISOString();
+    const nextPantry = cleanPantryExtras([
+      ...pantryExtras,
+      ...added.map((name) => ({ name, source: "receipt" as const, addedAt: nowIso })),
+    ]);
+
+    const { error } = await context.supabase
+      .from("monthly_plans")
+      .update({
+        trip_actuals: nextActuals as never,
+        trip_receipts: nextReceipts as never,
+        pantry_extras: nextPantry as never,
+      } as never)
+      .eq("month", data.month)
+      .eq("user_id", context.userId);
+    if (error) {
+      console.error("scanTripReceipt save", error);
+      throw new Error("Hemos leído el tiquet pero no hemos podido guardarlo. Inténtalo otra vez.");
+    }
+
+    return {
+      trip_actuals: nextActuals,
+      pantry_extras: nextPantry,
+      trip_receipts: nextReceipts,
+      total: receipt.total,
+      itemCount: receipt.items.length,
+      added,
+      discarded,
+    };
+  });
+
+/**
  * "Fija" (o deshace) los ingredientes de un tramo de compra: la persona
  * confirma que ese tramo ya está resuelto (comprado o en casa) y deja de
  * pedir más marcas. Cuando quedan fijados TODOS los tramos del mes, también
@@ -565,11 +859,14 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
 
     const { data: row } = await context.supabase
       .from("monthly_plans")
-      .select("plan, shopping")
+      .select("plan, shopping, pantry_extras")
       .eq("month", data.month)
       .maybeSingle();
     const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
     const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+    const pantryExtras = cleanPantryExtras(
+      (row as { pantry_extras?: unknown } | null)?.pantry_extras,
+    );
     if (!current) throw new Error("Todavía no hay plan de este mes");
 
     const [{ data: profile }, { data: logs }] = await Promise.all([
@@ -604,12 +901,15 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
         prompt:
           `Plan actual del mes ${data.month}:\n${JSON.stringify(current)}\n\n` +
           `Ingredientes ya comprados (no pueden cambiar): ${ingredientNames(shopping)}\n\n` +
+          (pantryExtras.length
+            ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => e.name).join(", ")}\n\n`
+            : "") +
           `${goalLine}\n` +
           `Últimos días reales registrados: ${JSON.stringify(logs ?? [])}\n\n` +
           `Hoy es ${data.today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
           `Lo que ha pasado / lo que cuenta la persona: ${data.note}\n\n` +
           `REGLA 1: el día de hoy y los días anteriores YA ESTÁN FIJADOS: devuélvelos exactamente igual. Cambia sólo los días POSTERIORES a hoy.\n` +
-          `REGLA 2: usa SOLO los ingredientes ya comprados (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos.\n` +
+          `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
           `REGLA 3: ${kcalLine}\n` +
           "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
           "Actualiza 'intro' con 1-2 frases explicando en lenguaje sencillo qué has recolocado y por qué. " +
@@ -651,8 +951,14 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
  * "tomate"). Si la comprobación falla no se marca nada: preferimos no avisar
  * antes que avisar en falso de algo que la persona sí tiene en casa.
  */
-async function offShoppingList(dish: string, shopping: ShoppingList): Promise<string[]> {
-  const names = ingredientNames(shopping);
+async function offShoppingList(
+  dish: string,
+  shopping: ShoppingList,
+  pantryExtras: PantryExtra[] = [],
+): Promise<string[]> {
+  const bought = ingredientNames(shopping);
+  const extra = pantryExtras.map((e) => e.name).join(", ");
+  const names = [bought, extra].filter(Boolean).join(", ");
   const key = process.env.OPENROUTER_API_KEY;
   if (!names || !key) return [];
 
@@ -662,9 +968,9 @@ async function offShoppingList(dish: string, shopping: ShoppingList): Promise<st
       model: ai(COACH_MODEL),
       temperature: 0,
       prompt:
-        `Lista de la compra ya hecha: ${names}\n` +
+        `Ingredientes disponibles (comprados y los que dice tener en casa): ${names}\n` +
         `Plato: "${dish}"\n\n` +
-        "¿Qué ingredientes necesarios para ese plato NO están en la lista? " +
+        "¿Qué ingredientes necesarios para ese plato NO están disponibles? " +
         "Da por disponibles la sal, el aceite, el vinagre, el agua y las especias básicas. " +
         "Cuenta como cubierto todo ingrediente equivalente aunque el nombre no sea idéntico " +
         "(p. ej. 'pechuga de pollo' lo cubre 'pollo'; 'tomate cherry' lo cubre 'tomate'). " +
@@ -721,7 +1027,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       const month = data.date.slice(0, 7);
       const { data: row } = await context.supabase
         .from("monthly_plans")
-        .select("plan, shopping")
+        .select("plan, shopping, pantry_extras")
         .eq("month", month)
         .maybeSingle();
 
@@ -738,7 +1044,10 @@ export const setPlanMeal = createServerFn({ method: "POST" })
         mealsForDate(current, data.date).find((m) => m.slot === data.slot)?.idea ?? "";
 
       const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
-      const off = await offShoppingList(data.dish, shopping);
+      const pantryExtras = cleanPantryExtras(
+        (row as { pantry_extras?: unknown } | null)?.pantry_extras,
+      );
+      const off = await offShoppingList(data.dish, shopping, pantryExtras);
       const field = MEAL_SLOT_FIELD[data.slot];
 
       const next: MonthlyPlan = {

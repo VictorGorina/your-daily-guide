@@ -93,6 +93,15 @@ sobre la rotación semanal por defecto; una recolocación automática posterior 
 pisa (`mergeFuturePlan`). La lista de la compra nunca cambia — si un plato pide algo no comprado,
 se guarda igual y aparece como aviso en `PlanDay.extras`.
 
+**Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y
+que la compra no incluye: los añade a mano en Ingredientes (`setPantryExtra`) o salen del escaneo de
+un tiquet (`scanTripReceipt`, se guardan solo los que encajan con sus objetivos). Es un conjunto
+paralelo a `shopping`, nunca se fusiona con la lista; `adjustMonthlyPlan`/`setPlanMeal`/
+`coachPlanContext` lo tratan como disponible al recolocar, sin disparar regeneración. El importe
+real del tiquet va a `trip_actuals`; la tarjeta "Gasto en comida" del historial lo muestra
+(`MonthSpendSummary`). Cambiar de cadencia conserva las marcas "en casa"/"comprado" por nombre de
+ingrediente (`carryOwnedByName`), no por `name`+`trip`.
+
 **Pantalla Plan — navegación de meses y unificación de Historial.** La pantalla tiene dos
 subpestañas (Plan e Ingredientes; ya no hay "Historial") y un selector `‹ mes ›` en la cabecera
 que gobierna toda la pantalla. El calendario del mes es el navegador del historial: los días

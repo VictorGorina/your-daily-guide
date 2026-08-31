@@ -131,6 +131,73 @@ export const cleanTripConfirmations = (raw: unknown): TripConfirmations => {
   return out;
 };
 
+/**
+ * Ingrediente que la persona ya tiene en casa y NO sale de la lista de la
+ * compra del mes: añadido a mano ("manual") o detectado al escanear un tiquet
+ * ("receipt"). El planificador lo cuenta como disponible al recolocar los días
+ * futuros; la lista de la compra (`shopping`) nunca se toca por esto.
+ */
+export type PantryExtra = {
+  name: string;
+  qty?: string;
+  source: "manual" | "receipt";
+  addedAt: string;
+};
+
+/** Resumen del tiquet escaneado por compra (índice de `trip` → total y nº de líneas). */
+export type TripReceipts = Record<number, { total: number; itemCount: number; scannedAt: string }>;
+
+/** Normaliza un nombre de ingrediente para comparar (minúsculas, sin acentos, sin espacios sobrantes). */
+export const normName = (s: string) =>
+  String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export const cleanPantryExtras = (raw: unknown): PantryExtra[] => {
+  const list = Array.isArray(raw) ? raw : [];
+  const seen = new Set<string>();
+  const out: PantryExtra[] = [];
+  for (const entry of list.slice(0, 60)) {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    const name = String(o.name ?? "")
+      .trim()
+      .slice(0, 80);
+    if (!name) continue;
+    const key = normName(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const qty = String(o.qty ?? "")
+      .trim()
+      .slice(0, 40);
+    const source = o.source === "receipt" ? "receipt" : "manual";
+    const addedAt = String(o.addedAt ?? "").trim() || new Date().toISOString();
+    out.push({ name, ...(qty ? { qty } : {}), source, addedAt });
+  }
+  return out.slice(0, 40);
+};
+
+export const cleanTripReceipts = (raw: unknown): TripReceipts => {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: TripReceipts = {};
+  for (const [key, value] of Object.entries(o)) {
+    const trip = Number(key);
+    const v = (value ?? {}) as Record<string, unknown>;
+    const total = Number(v.total);
+    const itemCount = Number(v.itemCount);
+    const scannedAt = String(v.scannedAt ?? "").trim();
+    if (!Number.isFinite(trip) || trip < 0 || !Number.isFinite(total) || total < 0) continue;
+    out[Math.round(trip)] = {
+      total: Math.round(total * 100) / 100,
+      itemCount: Number.isFinite(itemCount) && itemCount >= 0 ? Math.round(itemCount) : 0,
+      scannedAt: scannedAt || new Date().toISOString(),
+    };
+  }
+  return out;
+};
+
 export const tripCount = (shopping: ShoppingList | null | undefined) =>
   Math.max(1, ...((shopping ?? []).flatMap((g) => g.items.map((i) => i.trip + 1)) || [1]));
 
@@ -350,6 +417,38 @@ export const groupByTrip = (shopping: ShoppingList | null | undefined, trips: nu
       .map((g) => ({ category: g.category, items: g.items.filter((i) => i.trip === t) }))
       .filter((g) => g.items.length),
   }));
+
+/**
+ * Reaplica el estado `owned` de una lista de la compra a otra recién repartida,
+ * emparejando por NOMBRE de ingrediente (no por name + trip). Cambiar de
+ * cadencia rehace el reparto de `trip` y puede trocear un perecedero en varias
+ * filas: si el emparejamiento fuese por trip, se perderían todas las marcas. Un
+ * ingrediente marcado "en casa" lo está para todo el mes ("no te lo volveré a
+ * pedir mientras te dure") y lo ya comprado sigue comprado, así que si tenía
+ * alguna fila `owned` en la lista previa, todas sus filas nuevas quedan `owned`
+ * ("fridge" gana a "store").
+ */
+export const carryOwnedByName = (
+  prev: ShoppingList | null | undefined,
+  next: ShoppingList,
+): ShoppingList => {
+  const byName = new Map<string, "fridge" | "store">();
+  for (const group of prev ?? []) {
+    for (const item of group.items) {
+      if (!item.owned) continue;
+      const key = normName(item.name);
+      if (item.owned === "fridge" || !byName.has(key)) byName.set(key, item.owned);
+    }
+  }
+  if (!byName.size) return next;
+  return next.map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => {
+      const carried = byName.get(normName(item.name));
+      return carried ? { ...item, owned: carried } : item;
+    }),
+  }));
+};
 
 const asItem = (raw: unknown): ShoppingItem | null => {
   const o = (raw ?? {}) as Record<string, unknown>;
@@ -803,17 +902,26 @@ export function upcomingMeals(plan: MonthlyPlan | null, today: string, days = 7)
  */
 export function coachPlanContext(
   row:
-    | { plan: MonthlyPlan | null; shopping: ShoppingList | null; confirmed_at: string | null }
+    | {
+        plan: MonthlyPlan | null;
+        shopping: ShoppingList | null;
+        confirmed_at: string | null;
+        pantry_extras?: PantryExtra[] | null;
+      }
     | null
     | undefined,
   today: string,
 ) {
-  if (!row?.plan) return { compra: null, proximos: [] };
+  if (!row?.plan) return { compra: null, proximos: [], despensa_extra: [] };
   return {
     compra: {
       confirmada: Boolean(row.confirmed_at),
       ingredientes: (row.shopping ?? []).flatMap((g) => g.items.map((i) => i.name)),
     },
+    // Ingredientes que la persona dice tener en casa fuera de la lista de la
+    // compra: el coach puede proponer platos con ellos, pero no cuentan como
+    // "comprados" ni entran en la lista.
+    despensa_extra: (row.pantry_extras ?? []).map((e) => e.name),
     proximos: upcomingMeals(row.plan, today),
   };
 }

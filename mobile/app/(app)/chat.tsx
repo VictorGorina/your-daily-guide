@@ -112,6 +112,7 @@ export default function Chat() {
                       plan: ctx.current.plan.plan,
                       shopping: (ctx.current.plan.shopping as ShoppingList | null) ?? null,
                       confirmed_at: ctx.current.plan.confirmed_at,
+                      pantry_extras: ctx.current.plan.pantry_extras,
                     }
                   : null,
                 todayISO(),

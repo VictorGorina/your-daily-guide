@@ -203,6 +203,22 @@ export const tripActualsTotal = (actuals: TripActuals | null | undefined) =>
  */
 export type TripConfirmations = Record<number, string>;
 
+/**
+ * Ingrediente que la persona ya tiene en casa y NO sale de la lista de la
+ * compra del mes: añadido a mano ("manual") o detectado al escanear un tiquet
+ * ("receipt"). El planificador lo cuenta como disponible al recolocar; la lista
+ * de la compra nunca se toca por esto. Copia de `src/lib/plan-shared.ts`.
+ */
+export type PantryExtra = {
+  name: string;
+  qty?: string;
+  source: "manual" | "receipt";
+  addedAt: string;
+};
+
+/** Resumen del tiquet escaneado por compra (índice de `trip` → total y nº de líneas). */
+export type TripReceipts = Record<number, { total: number; itemCount: number; scannedAt: string }>;
+
 export const tripCount = (shopping: ShoppingList | null | undefined) =>
   Math.max(1, ...((shopping ?? []).flatMap((g) => g.items.map((i) => i.trip + 1)) || [1]));
 
@@ -545,17 +561,26 @@ export function upcomingMeals(plan: MonthlyPlan | null, today: string, days = 7)
  */
 export function coachPlanContext(
   row:
-    | { plan: MonthlyPlan | null; shopping: ShoppingList | null; confirmed_at: string | null }
+    | {
+        plan: MonthlyPlan | null;
+        shopping: ShoppingList | null;
+        confirmed_at: string | null;
+        pantry_extras?: PantryExtra[] | null;
+      }
     | null
     | undefined,
   today: string,
 ) {
-  if (!row?.plan) return { compra: null, proximos: [] };
+  if (!row?.plan) return { compra: null, proximos: [], despensa_extra: [] };
   return {
     compra: {
       confirmada: Boolean(row.confirmed_at),
       ingredientes: (row.shopping ?? []).flatMap((g) => g.items.map((i) => i.name)),
     },
+    // Ingredientes que la persona dice tener en casa fuera de la lista de la
+    // compra: el coach puede proponer platos con ellos, pero no cuentan como
+    // "comprados" ni entran en la lista.
+    despensa_extra: (row.pantry_extras ?? []).map((e) => e.name),
     proximos: upcomingMeals(row.plan, today),
   };
 }

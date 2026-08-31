@@ -3,9 +3,12 @@ import { describe, expect, it } from "bun:test";
 import {
   addMonths,
   cadenceOf,
+  carryOwnedByName,
+  cleanPantryExtras,
   cleanPlan,
   cleanShopping,
   cleanTripActuals,
+  cleanTripReceipts,
   coverageRatio,
   daysLeftInMonth,
   groupByTrip,
@@ -265,6 +268,70 @@ describe("groupByTrip", () => {
   });
 });
 
+describe("carryOwnedByName", () => {
+  const prev: ShoppingList = [
+    {
+      category: "Fruta",
+      items: [
+        { name: "Plátano", qty: "", price_eur: 1.5, trip: 0, perishable: true, owned: "fridge" },
+        { name: "Manzana", qty: "", price_eur: 1, trip: 0, perishable: true },
+      ],
+    },
+    {
+      category: "Despensa",
+      items: [
+        { name: "Arroz", qty: "", price_eur: 1.2, trip: 0, perishable: false, owned: "store" },
+      ],
+    },
+  ];
+
+  it("reaplica 'owned' por nombre aunque el ingrediente se haya troceado en varias compras", () => {
+    const next: ShoppingList = [
+      {
+        category: "Fruta",
+        items: [
+          { name: "plátano", qty: "", price_eur: 0.75, trip: 0, perishable: true },
+          { name: "plátano", qty: "", price_eur: 0.75, trip: 1, perishable: true },
+          { name: "Manzana", qty: "", price_eur: 1, trip: 0, perishable: true },
+        ],
+      },
+      {
+        category: "Despensa",
+        items: [{ name: "Arroz", qty: "", price_eur: 1.2, trip: 0, perishable: false }],
+      },
+    ];
+    const out = carryOwnedByName(prev, next);
+    const platano = out[0]!.items.filter((i) => i.name === "plátano");
+    expect(platano.every((i) => i.owned === "fridge")).toBe(true);
+    expect(out[0]!.items.find((i) => i.name === "Manzana")!.owned).toBeUndefined();
+    expect(out[1]!.items[0]!.owned).toBe("store");
+  });
+
+  it("'fridge' gana a 'store' si el mismo nombre aparecía con los dos", () => {
+    const mixed: ShoppingList = [
+      {
+        category: "X",
+        items: [
+          { name: "Tomate", qty: "", price_eur: 1, trip: 0, perishable: true, owned: "store" },
+          { name: "Tomate", qty: "", price_eur: 1, trip: 1, perishable: true, owned: "fridge" },
+        ],
+      },
+    ];
+    const next: ShoppingList = [
+      {
+        category: "X",
+        items: [{ name: "Tomate", qty: "", price_eur: 2, trip: 0, perishable: true }],
+      },
+    ];
+    expect(carryOwnedByName(mixed, next)[0]!.items[0]!.owned).toBe("fridge");
+  });
+
+  it("sin marcas previas devuelve la lista nueva tal cual", () => {
+    const next = shopping();
+    expect(carryOwnedByName([], next)).toBe(next);
+  });
+});
+
 // --- dinero -------------------------------------------------------------
 
 describe("totales de la compra", () => {
@@ -295,6 +362,50 @@ describe("cleanTripActuals / tripActualsTotal", () => {
   it("suma lo realmente gastado", () => {
     expect(tripActualsTotal({ 0: 12.5, 1: 8 })).toBe(20.5);
     expect(tripActualsTotal(null)).toBe(0);
+  });
+});
+
+describe("cleanPantryExtras", () => {
+  it("descarta entradas sin nombre y deduplica por nombre normalizado", () => {
+    const out = cleanPantryExtras([
+      { name: "Lentejas", source: "manual", addedAt: "2026-09-01T00:00:00Z" },
+      { name: " lentejas ", source: "receipt" },
+      { name: "", source: "manual" },
+      { name: "Espinacas", qty: "1 bolsa" },
+      "basura",
+    ]);
+    expect(out.map((e) => e.name)).toEqual(["Lentejas", "Espinacas"]);
+    expect(out[0]!.source).toBe("manual");
+    expect(out[1]!.qty).toBe("1 bolsa");
+    expect(out[1]!.source).toBe("manual"); // por defecto
+  });
+
+  it("trata un valor no-array como lista vacía y recorta a 40", () => {
+    expect(cleanPantryExtras(null)).toEqual([]);
+    const many = Array.from({ length: 60 }, (_, i) => ({ name: `item ${i}` }));
+    expect(cleanPantryExtras(many)).toHaveLength(40);
+  });
+});
+
+describe("cleanTripReceipts", () => {
+  it("descarta tramos y totales inválidos y redondea a céntimos", () => {
+    const out = cleanTripReceipts({
+      "0": { total: 47.305, itemCount: 12, scannedAt: "2026-09-01T10:00:00Z" },
+      "-1": { total: 5 },
+      x: { total: 3 },
+      "2": { total: -4 },
+      "3": { total: "no" },
+    });
+    expect(Object.keys(out)).toEqual(["0"]);
+    expect(out[0]).toEqual({ total: 47.31, itemCount: 12, scannedAt: "2026-09-01T10:00:00Z" });
+  });
+
+  it("trata null como objeto vacío y rellena itemCount/scannedAt ausentes", () => {
+    expect(cleanTripReceipts(null)).toEqual({});
+    const out = cleanTripReceipts({ "0": { total: 10 } });
+    expect(out[0]!.total).toBe(10);
+    expect(out[0]!.itemCount).toBe(0);
+    expect(typeof out[0]!.scannedAt).toBe("string");
   });
 });
 

@@ -36,7 +36,9 @@ import { Route as ApiV1PlanAdjustRouteImport } from './routes/api/v1/plan/adjust
 import { Route as ApiV1PlanGenerateRouteImport } from './routes/api/v1/plan/generate'
 import { Route as ApiV1PlanGoalImpactRouteImport } from './routes/api/v1/plan/goal-impact'
 import { Route as ApiV1PlanMealRouteImport } from './routes/api/v1/plan/meal'
+import { Route as ApiV1PlanPantryExtraRouteImport } from './routes/api/v1/plan/pantry-extra'
 import { Route as ApiV1PlanRecadenceRouteImport } from './routes/api/v1/plan/recadence'
+import { Route as ApiV1PlanReceiptRouteImport } from './routes/api/v1/plan/receipt'
 import { Route as ApiV1PlanRecipeRouteImport } from './routes/api/v1/plan/recipe'
 import { Route as ApiV1PlanShoppingOwnedRouteImport } from './routes/api/v1/plan/shopping-owned'
 import { Route as ApiV1PlanTripActualRouteImport } from './routes/api/v1/plan/trip-actual'
@@ -177,9 +179,19 @@ const ApiV1PlanMealRoute = ApiV1PlanMealRouteImport.update({
   path: '/api/v1/plan/meal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlanPantryExtraRoute = ApiV1PlanPantryExtraRouteImport.update({
+  id: '/api/v1/plan/pantry-extra',
+  path: '/api/v1/plan/pantry-extra',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1PlanRecadenceRoute = ApiV1PlanRecadenceRouteImport.update({
   id: '/api/v1/plan/recadence',
   path: '/api/v1/plan/recadence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlanReceiptRoute = ApiV1PlanReceiptRouteImport.update({
+  id: '/api/v1/plan/receipt',
+  path: '/api/v1/plan/receipt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1PlanRecipeRoute = ApiV1PlanRecipeRouteImport.update({
@@ -235,7 +247,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/pantry-extra': typeof ApiV1PlanPantryExtraRoute
   '/api/v1/plan/recadence': typeof ApiV1PlanRecadenceRoute
+  '/api/v1/plan/receipt': typeof ApiV1PlanReceiptRoute
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
@@ -269,7 +283,9 @@ export interface FileRoutesByTo {
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/pantry-extra': typeof ApiV1PlanPantryExtraRoute
   '/api/v1/plan/recadence': typeof ApiV1PlanRecadenceRoute
+  '/api/v1/plan/receipt': typeof ApiV1PlanReceiptRoute
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
@@ -305,7 +321,9 @@ export interface FileRoutesById {
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
+  '/api/v1/plan/pantry-extra': typeof ApiV1PlanPantryExtraRoute
   '/api/v1/plan/recadence': typeof ApiV1PlanRecadenceRoute
+  '/api/v1/plan/receipt': typeof ApiV1PlanReceiptRoute
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
@@ -341,7 +359,9 @@ export interface FileRouteTypes {
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
+    | '/api/v1/plan/pantry-extra'
     | '/api/v1/plan/recadence'
+    | '/api/v1/plan/receipt'
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
@@ -375,7 +395,9 @@ export interface FileRouteTypes {
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
+    | '/api/v1/plan/pantry-extra'
     | '/api/v1/plan/recadence'
+    | '/api/v1/plan/receipt'
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
@@ -410,7 +432,9 @@ export interface FileRouteTypes {
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
+    | '/api/v1/plan/pantry-extra'
     | '/api/v1/plan/recadence'
+    | '/api/v1/plan/receipt'
     | '/api/v1/plan/recipe'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
@@ -438,7 +462,9 @@ export interface RootRouteChildren {
   ApiV1PlanGenerateRoute: typeof ApiV1PlanGenerateRoute
   ApiV1PlanGoalImpactRoute: typeof ApiV1PlanGoalImpactRoute
   ApiV1PlanMealRoute: typeof ApiV1PlanMealRoute
+  ApiV1PlanPantryExtraRoute: typeof ApiV1PlanPantryExtraRoute
   ApiV1PlanRecadenceRoute: typeof ApiV1PlanRecadenceRoute
+  ApiV1PlanReceiptRoute: typeof ApiV1PlanReceiptRoute
   ApiV1PlanRecipeRoute: typeof ApiV1PlanRecipeRoute
   ApiV1PlanShoppingOwnedRoute: typeof ApiV1PlanShoppingOwnedRoute
   ApiV1PlanTripActualRoute: typeof ApiV1PlanTripActualRoute
@@ -637,11 +663,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanMealRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plan/pantry-extra': {
+      id: '/api/v1/plan/pantry-extra'
+      path: '/api/v1/plan/pantry-extra'
+      fullPath: '/api/v1/plan/pantry-extra'
+      preLoaderRoute: typeof ApiV1PlanPantryExtraRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/plan/recadence': {
       id: '/api/v1/plan/recadence'
       path: '/api/v1/plan/recadence'
       fullPath: '/api/v1/plan/recadence'
       preLoaderRoute: typeof ApiV1PlanRecadenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plan/receipt': {
+      id: '/api/v1/plan/receipt'
+      path: '/api/v1/plan/receipt'
+      fullPath: '/api/v1/plan/receipt'
+      preLoaderRoute: typeof ApiV1PlanReceiptRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/plan/recipe': {
@@ -727,7 +767,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanGenerateRoute: ApiV1PlanGenerateRoute,
   ApiV1PlanGoalImpactRoute: ApiV1PlanGoalImpactRoute,
   ApiV1PlanMealRoute: ApiV1PlanMealRoute,
+  ApiV1PlanPantryExtraRoute: ApiV1PlanPantryExtraRoute,
   ApiV1PlanRecadenceRoute: ApiV1PlanRecadenceRoute,
+  ApiV1PlanReceiptRoute: ApiV1PlanReceiptRoute,
   ApiV1PlanRecipeRoute: ApiV1PlanRecipeRoute,
   ApiV1PlanShoppingOwnedRoute: ApiV1PlanShoppingOwnedRoute,
   ApiV1PlanTripActualRoute: ApiV1PlanTripActualRoute,

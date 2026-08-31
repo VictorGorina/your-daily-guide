@@ -40,6 +40,13 @@
           "microphonePermission": "Peppers usa el micrófono para el dictado por voz.",
           "speechRecognitionPermission": "Peppers transcribe lo que dices para el dictado por voz."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Peppers usa tus fotos para leer el tiquet de la compra.",
+          "cameraPermission": "Peppers usa la cámara para escanear el tiquet de la compra."
+        }
       ]
     ],
     "scheme": "dailyguide"

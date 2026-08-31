@@ -84,6 +84,8 @@ export type MonthlyPlanRow = {
   confirmed_at: string | null;
   trip_actuals: import("@/lib/plan-shared").TripActuals | null;
   confirmed_trips: import("@/lib/plan-shared").TripConfirmations | null;
+  pantry_extras: import("@/lib/plan-shared").PantryExtra[] | null;
+  trip_receipts: import("@/lib/plan-shared").TripReceipts | null;
 };
 
 export const monthISO = () => todayISO().slice(0, 7);
@@ -91,16 +93,18 @@ export const monthISO = () => todayISO().slice(0, 7);
 export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
   const { data, error } = await supabase
     .from("monthly_plans")
-    .select("id, month, plan, shopping, confirmed_at, trip_actuals, confirmed_trips")
+    .select(
+      "id, month, plan, shopping, confirmed_at, trip_actuals, confirmed_trips, pantry_extras, trip_receipts",
+    )
     .eq("month", month)
     .maybeSingle();
 
   if (error) {
-    // Compatibilidad hacia atrás: si la migración de confirmed_trips todavía
-    // no se ha aplicado en la base de datos, esa columna no existe y esta
-    // consulta falla entera. Reintenta sin ella para no tumbar toda la
-    // pestaña Plan mientras tanto; en cuanto la migración esté aplicada, el
-    // primer intento vuelve a funcionar solo.
+    // Compatibilidad hacia atrás: si alguna migración reciente (confirmed_trips,
+    // pantry_extras, trip_receipts) todavía no se ha aplicado en la base de
+    // datos, esa columna no existe y la consulta falla entera. Reintenta con el
+    // set mínimo seguro para no tumbar toda la pestaña Plan mientras tanto; en
+    // cuanto las migraciones estén aplicadas, el primer intento vuelve solo.
     const retry = await supabase
       .from("monthly_plans")
       .select("id, month, plan, shopping, confirmed_at, trip_actuals")
@@ -108,7 +112,12 @@ export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | 
       .maybeSingle();
     if (retry.error) throw retry.error;
     return retry.data
-      ? { ...(retry.data as unknown as MonthlyPlanRow), confirmed_trips: null }
+      ? {
+          ...(retry.data as unknown as MonthlyPlanRow),
+          confirmed_trips: null,
+          pantry_extras: null,
+          trip_receipts: null,
+        }
       : null;
   }
   return (data as unknown as MonthlyPlanRow | null) ?? null;
