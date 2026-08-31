@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, PencilLine, X } from "lucide-react";
+import { Activity, Check, ChevronDown, PencilLine, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -136,7 +136,7 @@ function Hoy() {
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
   const autoPlanTriedRef = useRef(false);
@@ -386,6 +386,32 @@ function Hoy() {
         weightKg={profile?.current_weight_kg ?? null}
       />
 
+      {/* Guía del coach: solo el rango de calorías del día, en una fila, sin
+          tarjeta expandible (intro, macros en texto, platos sugeridos,
+          consejos) — se quería menos información. Igual que en la app móvil,
+          y va justo aquí, antes de las comidas. */}
+      <section className="animate-rise mt-6">
+        <div className="flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3.5">
+          <span className="block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
+            {generating || (!guide && todayQ.isLoading)
+              ? "Preparando tu guía del día..."
+              : guide
+                ? `Guía del coach · ${guide.calories}`
+                : "Guía del coach"}
+          </span>
+          {!guide && !generating && !todayQ.isLoading ? (
+            <button
+              type="button"
+              onClick={requestGuide}
+              className="shrink-0 text-xs font-medium text-primary"
+            >
+              Generar
+            </button>
+          ) : null}
+        </div>
+      </section>
+
       <section className="animate-rise mt-6">
         <div className="flex items-baseline justify-between gap-2.5">
           <h2 className="font-title text-[21px] font-semibold leading-none tracking-[-0.02em]">
@@ -512,15 +538,6 @@ function Hoy() {
                           </button>
                           <button
                             type="button"
-                            title="Me lo salté"
-                            aria-label={`${h.label}: me lo salté`}
-                            onClick={() => setMealStatus(i, "salteo")}
-                            className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
                             title="Comí esto"
                             aria-label={`${h.label}: comí esto`}
                             onClick={() => setMealStatus(i, "plan")}
@@ -580,89 +597,16 @@ function Hoy() {
         )}
       </section>
 
-      <section className="mt-4">
-        <button
-          type="button"
-          onClick={() => setGuideOpen((o) => !o)}
-          aria-expanded={guideOpen}
-          className="flex w-full items-center justify-between gap-2.5 rounded-2xl bg-surface px-4 py-3.5 text-left"
-        >
-          <span className="flex min-w-0 items-center gap-2.5 text-xs font-medium text-muted-foreground">
-            <span className="block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-            {/* `calories` es una frase entera del coach, no una cifra: se recorta
-                a una línea para que la fila siga siendo una fila. */}
-            <span className="truncate">
-              Guía del coach{guide?.calories ? ` · ${guide.calories}` : ""}
-            </span>
-          </span>
-          <span className="font-num text-[11px] font-medium text-muted-foreground">
-            {guideOpen ? "cerrar" : "ver"}
-          </span>
-        </button>
-        {guideOpen ? (
-          <div className="surface-card animate-sheet-up mt-2 p-5">
-            {generating || (!guide && todayQ.isLoading) ? (
-              <p className="animate-pulse text-sm text-muted-foreground">
-                Preparando tu guía del día...
-              </p>
-            ) : guide ? (
-              <div className="space-y-3 text-sm">
-                <p className="hyphens-auto text-justify leading-relaxed text-foreground">
-                  {guide.intro}
-                </p>
-                <div className="grid gap-2">
-                  <Field label="Energía" value={guide.calories} />
-                  <Field label="Macros" value={guide.macros} />
-                </div>
-                {guide.meals?.length ? (
-                  <div className="space-y-2 pt-1">
-                    <span className="font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                      Platos sugeridos
-                    </span>
-                    {guide.meals.map((m) => (
-                      <div
-                        key={m.moment}
-                        className="flex items-center gap-3 rounded-xl p-3"
-                        style={foodBgStyle(m.idea)}
-                      >
-                        <DishImage dish={m.idea} size={36} />
-                        <span className="shrink-0 text-xs font-semibold text-primary">
-                          {m.moment}
-                        </span>
-                        <div className="min-w-0">
-                          <span className="text-sm text-foreground">{m.idea}</span>
-                          <div className="mt-1">
-                            <FoodCategoryBadge dish={m.idea} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {guide.tips?.length ? (
-                  <div className="space-y-1.5 pt-1">
-                    <span className="font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                      Consejos de nutrición
-                    </span>
-                    <ul className="space-y-1.5">
-                      {guide.tips.map((t) => (
-                        <li key={t} className="flex gap-2 text-sm text-foreground">
-                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                          <span className="min-w-0">{t}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <button onClick={requestGuide} className="text-sm font-medium text-primary">
-                Generar guía
-              </button>
-            )}
-          </div>
-        ) : null}
-      </section>
+      {/* Registrar deporte: pegado encima de la tira de la semana, como en la
+          app móvil. Abre el registro guiado en modo actividad. */}
+      <button
+        type="button"
+        onClick={() => setActivityOpen(true)}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3.5 text-sm font-semibold text-foreground transition-transform active:scale-[0.99]"
+      >
+        <Activity className="h-4 w-4" aria-hidden />
+        Registrar deporte
+      </button>
 
       <section className="animate-rise mt-6">
         <WeekStrip
@@ -695,9 +639,27 @@ function Hoy() {
         }}
         contextNote={guidedMeal ? `Qué has comido en vez de: ${guidedMeal.label}` : undefined}
         mealLabel={guidedMeal?.label}
+        onSkip={() => {
+          if (guidedIndex != null) setMealStatus(guidedIndex, "salteo");
+          setGuidedIndex(null);
+        }}
         onSend={(text) => {
           setPendingChatMessage(text);
           setGuidedIndex(null);
+          navigate({ to: "/chat" });
+        }}
+      />
+
+      {/* Registrar deporte: mismo sheet, modo actividad, abierto desde el botón
+          de encima de la tira de la semana. Igual que en la app móvil. */}
+      <GuidedLogSheet
+        trigger={false}
+        initialMode="actividad"
+        open={activityOpen}
+        onOpenChange={setActivityOpen}
+        onSend={(text) => {
+          setPendingChatMessage(text);
+          setActivityOpen(false);
           navigate({ to: "/chat" });
         }}
       />

@@ -1,4 +1,4 @@
-import { Activity, ClipboardList, UtensilsCrossed } from "lucide-react";
+import { Activity, ClipboardList, UtensilsCrossed, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { DictateButton } from "@/components/dictate-button";
@@ -48,6 +48,7 @@ function chipClass(active: boolean) {
 
 export function GuidedLogSheet({
   onSend,
+  onSkip,
   disabled,
   open: openProp,
   onOpenChange,
@@ -57,6 +58,8 @@ export function GuidedLogSheet({
   mealLabel,
 }: {
   onSend: (text: string) => void;
+  /** Se llama al pulsar "Me lo salté" dentro del sheet de comida (modo exceso). */
+  onSkip?: () => void;
   disabled?: boolean;
   /** Apertura controlada desde fuera (p.ej. hoy.tsx). Si se omite, el sheet gestiona su propio estado. */
   open?: boolean;
@@ -175,41 +178,54 @@ export function GuidedLogSheet({
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
-            Registro guiado
+            {trigger
+              ? "Registro guiado"
+              : mode === "actividad"
+                ? "Registrar actividad"
+                : "Comí distinto"}
           </SheetTitle>
           <SheetDescription>
-            Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan.
+            {trigger
+              ? "Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan."
+              : mode === "actividad"
+                ? "Apunta tu actividad física y ajusto los días futuros del plan."
+                : "Cuéntame qué has comido y ajusto los días futuros del plan."}
           </SheetDescription>
           {contextNote ? <p className="text-xs font-medium text-primary">{contextNote}</p> : null}
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-8">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("actividad")}
-              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
-                mode === "actividad"
-                  ? "bg-primary/10 text-foreground"
-                  : "bg-secondary text-muted-foreground"
-              }`}
-            >
-              <Activity className="size-4" aria-hidden />
-              Actividad
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("exceso")}
-              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
-                mode === "exceso"
-                  ? "bg-primary/10 text-foreground"
-                  : "bg-secondary text-muted-foreground"
-              }`}
-            >
-              <UtensilsCrossed className="size-4" aria-hidden />
-              Exceso o ajuste
-            </button>
-          </div>
+          {/* El selector de modo solo aparece en el registro guiado suelto (chat).
+              Cuando el sheet se abre desde Hoy (comida o "Registrar deporte") el
+              modo ya está fijado y se enseña solo ese formulario, como en móvil. */}
+          {trigger ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("actividad")}
+                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
+                  mode === "actividad"
+                    ? "bg-primary/10 text-foreground"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                <Activity className="size-4" aria-hidden />
+                Actividad
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("exceso")}
+                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
+                  mode === "exceso"
+                    ? "bg-primary/10 text-foreground"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                <UtensilsCrossed className="size-4" aria-hidden />
+                Exceso o ajuste
+              </button>
+            </div>
+          ) : null}
 
           {mode === "actividad" ? (
             <>
@@ -260,8 +276,30 @@ export function GuidedLogSheet({
             </>
           ) : (
             <>
+              {onSkip ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSkip();
+                    reset();
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-secondary/60 px-4 py-3 text-left transition-opacity active:opacity-80"
+                >
+                  <X className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground">Me lo salté</span>
+                    <span className="block text-xs text-muted-foreground">
+                      No he comido nada en esta comida
+                    </span>
+                  </span>
+                </button>
+              ) : null}
+
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">¿Qué ha pasado?</Label>
+                <Label className="text-xs text-muted-foreground">
+                  {trigger ? "¿Qué ha pasado?" : "¿Qué has comido?"}
+                </Label>
                 <div className="flex flex-wrap gap-2">
                   {EXCESS_PRESETS.map((p) => (
                     <button
