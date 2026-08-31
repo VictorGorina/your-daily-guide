@@ -1,8 +1,10 @@
 /**
- * Subconjunto de `src/lib/plan-shared.ts` de la web que necesita la pantalla
- * Hoy: leer del plan mensual las comidas de una fecha. Es una copia, no código
- * compartido (ver AGENTS.md). Cuando se porte la pantalla Plan se traerá el
- * resto (lista de la compra, cadencias, merge de planes...).
+ * Subconjunto de `src/lib/plan-shared.ts` de la web que necesitan las pantallas
+ * Hoy y Plan: leer el plan mensual, cadencias y proyección de la compra por
+ * compra (`projectTrips`). Es una copia, no código compartido (ver AGENTS.md):
+ * si cambia allí, hay que replicarlo aquí. Lo que NO está portado es el saneado
+ * de datos de la IA (`cleanShopping`/`cleanPlan`) ni el merge de planes — la app
+ * nativa recibe datos ya saneados de `/api/v1/*`.
  */
 
 /** Las cuatro comidas que se pueden cambiar una a una desde el chat. */
@@ -160,32 +162,77 @@ export const CADENCES: { key: ShoppingCadence; label: string; trips: number }[] 
   { key: "mensual", label: "Mensual", trips: 1 },
 ];
 
+/** Unidad canónica de una cantidad de compra. Todo se normaliza a estas tres. */
+export type QtyUnit = "g" | "ml" | "ud";
+
+/** Nº de semanas que tiene siempre un plan mensual. */
+export const WEEK_COUNT = 4;
+
+/**
+ * Un artículo de la lista de la compra. Tiene dos formas (copia de la web, ver
+ * AGENTS.md de la raíz):
+ *
+ * - **Canónica** (lo que guarda el backend): una fila por ingrediente con `unit`
+ *   (`g`/`ml`/`ud`) + `weekQty` (cuánto piden los platos de cada semana del plan)
+ *   + `weekPrice`. `trip` es 0; las marcas de "comprado" viven en `ownedTrips`.
+ *   `qty`/`price_eur` son el total del mes, derivados. Es canónica si trae `weekQty`.
+ * - **Proyectada** (lo que consume la UI, vía `projectTrips`): una fila por
+ *   compra, con `qty`/`qtyValue`/`price_eur` recortados a los días de esa compra
+ *   y `owned` resuelto para ese `trip`.
+ *
+ * Las listas antiguas (sin `weekQty`) siguen valiendo con la forma proyectada de
+ * siempre: una fila por `name` + `trip`.
+ */
 export type ShoppingItem = {
   name: string;
   qty: string;
   price_eur: number;
-  /**
-   * Compra a la que pertenece (0 = primera). Si un ingrediente hace falta en
-   * platos de más de una compra (el mismo plato se repite en semanas
-   * distintas), puede aparecer varias veces con el mismo `name` y distinto
-   * `trip` — una fila por compra, cada una solo con la cantidad y el precio
-   * de esa compra. El emparejamiento al marcar "comprado" es por `name` +
-   * `trip` juntos, nunca solo por `name` (ver AGENTS.md).
-   */
   trip: number;
   /** Alimento fresco (poca vida útil). */
   perishable: boolean;
   /**
-   * Marcado a mano según de dónde ha salido: "fridge" si ya lo tenía en casa,
-   * "store" si lo ha comprado en el súper. Los dos significan que ya no hace
-   * falta comprarlo — solo cambia el origen, para saber qué icono resaltar.
-   * Sin valor: todavía pendiente, sin decidir.
+   * "fridge" si ya lo tenía en casa, "store" si lo compró. Los dos = ya no hace
+   * falta comprarlo. En la forma canónica no se usa (ver `ownedTrips`); lo pone
+   * `projectTrips` en cada fila proyectada.
    */
   owned?: "fridge" | "store";
+  /** Unidad de `weekQty`/`qtyValue`. */
+  unit?: QtyUnit;
+  /** Cantidad numérica en `unit` de la fila proyectada (para sumar sin re-parsear `qty`). */
+  qtyValue?: number;
+  /** Cantidad en `unit` que piden los platos de cada semana del plan (longitud `WEEK_COUNT`). */
+  weekQty?: number[];
+  /** € por semana, array paralelo a `weekQty` (forma canónica). */
+  weekPrice?: number[];
+  /** Por compra: de dónde salió lo de ese `trip` (forma canónica). */
+  ownedTrips?: Record<number, "fridge" | "store">;
 };
 
 /** Lista de la compra tal como la guarda el plan mensual. */
 export type ShoppingList = { category: string; items: ShoppingItem[] }[];
+
+/** Normaliza un nombre para comparar (minúsculas, sin acentos, sin espacios sobrantes). */
+export const normName = (s: string) =>
+  String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** Una lista es canónica si sus artículos traen el desglose por semana (`weekQty`). */
+export const isCanonicalShopping = (shopping: ShoppingList | null | undefined): boolean =>
+  !!shopping && shopping.some((g) => g.items.some((i) => Array.isArray(i.weekQty)));
+
+/** Cantidad legible en español a partir del valor canónico y su unidad. */
+export const formatQty = (value: number, unit: QtyUnit): string => {
+  const v = Math.max(0, Number(value) || 0);
+  const num = (n: number, digits: number) =>
+    n.toLocaleString("es-ES", { maximumFractionDigits: digits });
+  if (unit === "g") return v >= 1000 ? `${num(v / 1000, 2)} kg` : `${num(Math.round(v), 0)} g`;
+  if (unit === "ml") return v >= 1000 ? `${num(v / 1000, 2)} l` : `${num(Math.round(v), 0)} ml`;
+  return `${num(Math.round(v), 0)} ud`;
+};
 
 /** Gasto real por viaje de compra (índice de `trip` → euros), a mano tras comprar. */
 export type TripActuals = Record<number, number>;
@@ -412,6 +459,92 @@ export const groupByTrip = (shopping: ShoppingList | null | undefined, trips: nu
       .map((g) => ({ category: g.category, items: g.items.filter((i) => i.trip === t) }))
       .filter((g) => g.items.length),
   }));
+
+export type TripGroups = {
+  trip: number;
+  groups: { category: string; items: ShoppingItem[] }[];
+};
+
+const weekOfDay = (day: number, weekCount: number) =>
+  Math.min(Math.max(Math.floor((day - 1) / 7), 0), Math.max(1, weekCount) - 1);
+
+/**
+ * Cuántos días cubiertos por el plan caen en cada semana. La última "semana" de
+ * un mes de 30-31 días arrastra 9-10 días (no 7), así que repartir la cantidad
+ * de esa semana entre SUS días —y no siempre entre 7— es lo que hace que cada
+ * compra sume exactamente lo suyo y Σ compras = total del mes.
+ */
+export const weekDayCounts = (coverage: PlanCoverage, weekCount: number): number[] => {
+  const counts = new Array(Math.max(1, weekCount)).fill(0);
+  for (let d = coverage.fromDay; d <= coverage.toDay; d++) counts[weekOfDay(d, weekCount)] += 1;
+  return counts;
+};
+
+/**
+ * Proyecta la lista canónica sobre las compras de una cadencia: cada compra suma
+ * la parte de `weekQty`/`weekPrice` de los días que cubre (rango de
+ * `tripDayRange`). Una lista antigua (sin `weekQty`) cae en `groupByTrip`.
+ */
+export const projectTrips = (
+  shopping: ShoppingList | null | undefined,
+  cadence: ShoppingCadence,
+  coverage: PlanCoverage,
+  weekCount: number = WEEK_COUNT,
+): TripGroups[] => {
+  const trips = tripsOfCadence(cadence);
+  if (!isCanonicalShopping(shopping)) return groupByTrip(shopping, trips);
+
+  const wc = Math.max(1, weekCount);
+  const counts = weekDayCounts(coverage, wc);
+
+  return Array.from({ length: Math.max(1, trips) }, (_, t) => {
+    const { from, to } = tripDayRange(coverage, trips, t);
+    const groups = (shopping ?? [])
+      .map((group) => ({
+        category: group.category,
+        items: group.items
+          .map((item) => projectItemForTrip(item, from, to, wc, counts, t))
+          .filter((i): i is ShoppingItem => i !== null),
+      }))
+      .filter((group) => group.items.length);
+    return { trip: t, groups };
+  });
+};
+
+const projectItemForTrip = (
+  item: ShoppingItem,
+  from: number,
+  to: number,
+  weekCount: number,
+  weekDays: number[],
+  trip: number,
+): ShoppingItem | null => {
+  if (!Array.isArray(item.weekQty)) return item.trip === trip ? item : null;
+
+  const weekPrice = item.weekPrice ?? [];
+  let qty = 0;
+  let price = 0;
+  for (let d = from; d <= to; d++) {
+    const w = weekOfDay(d, weekCount);
+    const share = weekDays[w] || 1;
+    qty += (item.weekQty[w] ?? 0) / share;
+    price += (weekPrice[w] ?? 0) / share;
+  }
+  if (qty <= 0.0001) return null;
+
+  const unit = item.unit ?? "ud";
+  const source = item.ownedTrips?.[trip];
+  return {
+    name: item.name,
+    qty: formatQty(qty, unit),
+    qtyValue: Math.round(qty * 100) / 100,
+    price_eur: Math.round(price * 100) / 100,
+    trip,
+    perishable: item.perishable,
+    unit,
+    ...(source ? { owned: source } : {}),
+  };
+};
 
 /**
  * Color del punto de categoría en la lista de la compra. Las categorías las

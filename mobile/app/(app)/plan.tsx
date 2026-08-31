@@ -55,8 +55,8 @@ import {
   cadenceOf,
   CADENCES,
   coverageRatio,
+  daysInMonth,
   eur,
-  groupByTrip,
   homeTotal,
   isBeforeAppStart,
   isMonthActionable,
@@ -67,10 +67,12 @@ import {
   planForDate,
   planMonthStatus,
   planNavBounds,
+  projectTrips,
   shoppingTotal,
   tripDayRange,
   tripsOfCadence,
   tripTiming,
+  WEEK_COUNT,
   type MonthlyPlan,
   type PantryExtra,
   type PlanCoverage,
@@ -81,6 +83,7 @@ import {
   type TripActuals,
   type TripReceipts,
 } from "../../lib/plan-shared";
+import { freshRiskNames, freshRisksForTrip } from "../../lib/perishability";
 
 type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList };
 
@@ -108,9 +111,9 @@ export default function Plan() {
       : today.slice(0, 7),
   );
   const month = selectedMonth;
-  // Solo para resaltar el botón mientras el servidor reparte la compra; la
+  // Solo para resaltar el botón mientras el servidor guarda la cadencia; la
   // cadencia real sale de `plan.cadence` hasta que llega la respuesta (así
-  // `groupByTrip` no corre con un nº de compras que aún no coincide).
+  // `projectTrips` no corre con un nº de compras que aún no coincide).
   const [pendingCadence, setPendingCadence] = useState<ShoppingCadence | null>(null);
 
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
@@ -138,9 +141,9 @@ export default function Plan() {
       Alert.alert(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
   });
 
-  // Cambiar la cadencia solo reparte la misma compra en más o menos viajes según
-  // los platos reales de cada semana, sin regenerar el plan por IA (ver AGENTS.md).
-  // Las marcas "en casa"/"comprado" se conservan por nombre en el servidor.
+  // Cambiar la cadencia no llama a la IA: la lista canónica guarda el desglose
+  // por semana, así que solo cambia cómo se agrupa en pantalla (`projectTrips`).
+  // El servidor guarda la nueva cadencia y devuelve el plan y la compra al día.
   const recadence = useMutation({
     mutationFn: (nextCadence: ShoppingCadence) =>
       apiPost<GenerateResult>("plan/recadence", { month, cadence: nextCadence }),
@@ -224,7 +227,15 @@ export default function Plan() {
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = plan?.cadence ?? cadenceOf(shopping);
   const tripsTotal = tripsOfCadence(activeCadence);
-  const trips = groupByTrip(shopping, tripsTotal);
+  // Cada compra suma lo que piden los platos de las semanas que cubre
+  // (`projectTrips`); cambiar de cadencia solo re-trocea el mismo total del mes.
+  const projCoverage = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
+  const trips = projectTrips(
+    shopping,
+    activeCadence,
+    projCoverage,
+    plan?.weeks.length ?? WEEK_COUNT,
+  );
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   // Compra seleccionada: por defecto la que toca hoy (current) o la primera
@@ -937,6 +948,15 @@ function IngredientsTab({
     month: "short",
   });
 
+  // Frescos que esta compra no cubre sin que se estropeen: no cambia la lista,
+  // solo avisa de comprarlos más cerca de cuando se cocinan.
+  const freshRisks = freshRisksForTrip(
+    tripGroups,
+    coverage ?? FULL_COVERAGE,
+    tripsTotal,
+    selectedTrip,
+  );
+
   const barHome = total > 0 ? (alreadyHome / total) * 100 : 0;
   const barBought = total > 0 ? (alreadyBought / total) * 100 : 0;
 
@@ -987,10 +1007,10 @@ function IngredientsTab({
           </View>
           <Text className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
             {recadence.isPending
-              ? "Repartiendo la compra..."
+              ? "Actualizando…"
               : tripsTotal > 1
-                ? `${tripsTotal} compras separadas, cada una con su lista.`
-                : "1 sola compra: menos frescos, más despensa."}
+                ? `${tripsTotal} compras separadas, cada una con lo de sus semanas.`
+                : "1 sola compra: apóyate en despensa y congelados; los frescos, sobre la marcha."}
           </Text>
         </View>
       )}
@@ -1083,6 +1103,17 @@ function IngredientsTab({
           </Text>
         ) : null}
       </View>
+
+      {/* Aviso de frescura: frescos que no aguantan los días de esta compra. */}
+      {freshRisks.length ? (
+        <View className="rounded-3xl bg-warning/20 px-4 py-3">
+          <Text className="text-xs leading-relaxed text-foreground">
+            {freshRiskNames(freshRisks)} {freshRisks.length === 1 ? "no aguanta" : "no aguantan"}{" "}
+            los {tripRange.to - tripRange.from + 1} días de esta compra. Cómpralo
+            {freshRisks.length === 1 ? "" : "s"} más cerca de cuando los vayas a cocinar.
+          </Text>
+        </View>
+      ) : null}
 
       {/* Cabecera + filtros */}
       <View className="mt-1 flex-row items-center justify-between gap-2.5 px-0.5">
@@ -1306,6 +1337,9 @@ function ShopModeView({
   const allDone = allItems.length > 0 && leftItems.length === 0;
 
   const tripRange = tripDayRange(coverage ?? FULL_COVERAGE, tripsTotal, selectedTrip);
+  const freshRisks = trip
+    ? freshRisksForTrip(trip.groups, coverage ?? FULL_COVERAGE, tripsTotal, selectedTrip)
+    : [];
   const monthShort = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "short",
   });
@@ -1376,6 +1410,16 @@ function ShopModeView({
             aquí
           </Text>
         </View>
+
+        {freshRisks.length ? (
+          <View className="mt-3.5 rounded-2xl bg-warning/20 px-4 py-3">
+            <Text className="text-xs leading-relaxed text-foreground">
+              {freshRiskNames(freshRisks)} {freshRisks.length === 1 ? "no aguanta" : "no aguantan"}{" "}
+              los {tripRange.to - tripRange.from + 1} días hasta la próxima compra. Cógelo
+              {freshRisks.length === 1 ? "" : "s"} justo para los primeros platos.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Lista de ingredientes agrupados */}
         <View className="mt-3.5 gap-4">

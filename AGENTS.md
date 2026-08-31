@@ -53,6 +53,28 @@ tu compra: ...") en Hoy y en el calendario del plan. Quién falta lo decide el m
 (`offShoppingList`), porque casar texto libre con la lista a ojo no funciona ("pechuga de pollo" lo
 cubre "pollo"); si esa comprobación falla no se marca nada, mejor no avisar que avisar en falso.
 
+**Cantidades — modelo canónico por semana.** El problema antiguo: `qty` era texto libre que la IA
+inventaba fila a fila, sin que nadie lo sumara ni validara, así que la misma comida podía pedir
+1 kg de cebolla en una cadencia y 1,5 kg (troceado) en otra, y el reparto de emergencia
+(`repartitionTrips`) movía filas enteras sin tocar la cantidad. Ahora `generateMonthlyPlan` guarda
+`shopping` en forma **canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`), `weekQty`
+(cantidad que piden los platos de cada una de las 4 semanas del plan) y `weekPrice`. La IA no
+asigna compras ni escribe `qty`. `projectTrips` ([plan-shared.ts](src/lib/plan-shared.ts)) deriva
+la vista por compra: para cada compra suma la parte de `weekQty`/`weekPrice` de los días que cubre
+(`tripDayRange`, repartiendo la cantidad de cada semana entre SUS días reales vía `weekDayCounts` —
+la última semana de un mes de 31 días arrastra 10 días, no 7). Invariante: **Σ de todas las compras
+= lo que necesita el mes**, y cambiar de cadencia solo re-trocea ese total. La forma proyectada
+lleva además `qtyValue` (número, para sumar sin re-parsear `qty`). Reglas al tocar esto: no vuelvas
+a meter aritmética de cantidades en el prompt, no escales `price_eur` sin escalar la cantidad, y
+mantén el test de invariante en `plan-shared.test.ts`.
+
+**Perecederos — sesgar y avisar, no reestructurar.** Un fresco no se puede comprar de golpe para
+todo un mes. `shelfLifeDays` ([perishability.ts](src/lib/perishability.ts)) da la vida útil por
+palabra clave/categoría; `freshRisksForTrip` marca los frescos de una compra cuyo tramo de días la
+supera, y la UI lo pinta como aviso `bg-warning/20` ("cómpralos más cerca de cuando los cocines").
+El prompt de cadencia mensual sesga hacia ingredientes de larga vida. Decisión deliberada: **no**
+se añade una compra extra de frescos a media de mes ni se cambia la lista — solo se avisa.
+
 **Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y
 que la lista de la compra no incluye: los añade a mano en la pestaña Ingredientes (`setPantryExtra`)
 o salen del escaneo de un tiquet (`scanTripReceipt`, solo los que encajan con sus objetivos; el
@@ -63,9 +85,11 @@ que se recoloca. El importe real del tiquet se guarda en `trip_actuals` (misma c
 a mano) y su resumen en `trip_receipts`; de ahí sale la tarjeta "Gasto en comida" del historial
 (`MonthSpendSummary`). La foto del tiquet no se guarda: se manda al modelo de visión y se descarta.
 
-Cambiar de cadencia (`recadenceMonthlyPlan`) rehace el reparto de `trip` y puede trocear un
-perecedero en varias filas; `carryOwnedByName` (`plan-shared.ts`) reaplica el estado
-"en casa"/"comprado" por nombre de ingrediente para que las marcas no se pierdan.
+Cambiar de cadencia (`recadenceMonthlyPlan`) en una lista **canónica** no llama a la IA ni toca
+`shopping`: solo guarda la nueva cadencia y la UI re-proyecta. En una lista **antigua** sí rehace
+el reparto de `trip` (`repartitionTrips`) y puede trocear un perecedero en varias filas;
+`carryOwnedByName` (`plan-shared.ts`) reaplica "en casa"/"comprado" por nombre para que las marcas
+no se pierdan. Las listas antiguas se convierten a canónicas al regenerar el plan.
 
 Para que el coach pueda proponer platos con lo ya comprado, cada mensaje del chat lleva la lista de
 ingredientes, la despensa extra y el menú de los próximos días (`coachPlanContext`), además de la

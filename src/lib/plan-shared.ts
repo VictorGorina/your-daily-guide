@@ -65,18 +65,36 @@ export const CADENCES: { key: ShoppingCadence; label: string; trips: number }[] 
   { key: "mensual", label: "Mensual", trips: 1 },
 ];
 
+/** Unidad canónica de una cantidad de compra. Todo se normaliza a estas tres. */
+export type QtyUnit = "g" | "ml" | "ud";
+
+/** Nº de semanas que tiene siempre un plan mensual tras `completePlan`. */
+export const WEEK_COUNT = 4;
+
+/**
+ * Un artículo de la lista de la compra. Tiene dos formas:
+ *
+ * - **Canónica** (lo que se guarda hoy): una sola fila por ingrediente, con
+ *   `unit` + `weekQty` (cuánto piden los platos de cada semana del plan) +
+ *   `weekPrice`. `trip` es 0 y se ignora; las marcas de "comprado" viven en
+ *   `ownedTrips`. `qty`/`price_eur` son el total del mes, derivados de los
+ *   arrays. Es "canónica" si trae `weekQty`.
+ * - **Proyectada** (lo que consume la UI, vía `projectTrips`): una fila por
+ *   compra en la que el ingrediente hace falta, con `qty`/`qtyValue`/`price_eur`
+ *   ya recortados a los días de esa compra y `owned` resuelto para ese `trip`.
+ *
+ * Las listas antiguas (sin `weekQty`) siguen siendo válidas con la forma
+ * proyectada de siempre: una fila por `name` + `trip`.
+ */
 export type ShoppingItem = {
   name: string;
+  /** Total legible ("1,5 kg", "300 g", "2 ud"). Derivado en la forma canónica. */
   qty: string;
   price_eur: number;
   /**
-   * Compra a la que pertenece (0 = primera). Si un ingrediente hace falta en
-   * platos de más de una compra (el mismo plato se repite en semanas
-   * distintas), puede aparecer varias veces con el mismo `name` y distinto
-   * `trip` — una fila por compra, cada una solo con la cantidad y el precio
-   * de esa compra — en vez de una única fila con el total del mes. El
-   * emparejamiento al marcar "comprado" es por `name` + `trip` juntos, nunca
-   * solo por `name`.
+   * Compra a la que pertenece la fila proyectada (0 = primera). En la forma
+   * canónica siempre es 0. El emparejamiento al marcar "comprado" en una lista
+   * antigua es por `name` + `trip` juntos, nunca solo por `name`.
    */
   trip: number;
   /** Alimento fresco (poca vida útil). */
@@ -85,11 +103,76 @@ export type ShoppingItem = {
    * Marcado a mano según de dónde ha salido: "fridge" si ya lo tenía en casa,
    * "store" si lo ha comprado en el súper. Los dos significan que ya no hace
    * falta comprarlo — solo cambia el origen, para saber qué icono resaltar.
-   * Sin valor: todavía pendiente, sin decidir.
+   * Sin valor: todavía pendiente, sin decidir. En la forma canónica no se usa
+   * (ver `ownedTrips`); lo pone `projectTrips` en cada fila proyectada.
    */
   owned?: "fridge" | "store";
+  /** Unidad de `weekQty`/`qtyValue` (formas canónica y proyectada). */
+  unit?: QtyUnit;
+  /** Cantidad numérica en `unit` de la fila proyectada (para sumar sin re-parsear `qty`). */
+  qtyValue?: number;
+  /**
+   * Cantidad en `unit` que piden los platos de cada semana del plan (longitud
+   * `WEEK_COUNT`; 0 si esa semana no se usa). Fuente de verdad de las
+   * cantidades: cada compra suma lo de las semanas que cubre, así Σ entre
+   * compras = lo que necesita el mes y cambiar de cadencia solo re-trocea.
+   */
+  weekQty?: number[];
+  /** € por semana, array paralelo a `weekQty` (forma canónica). */
+  weekPrice?: number[];
+  /** Por compra: de dónde salió lo de ese `trip` (forma canónica). */
+  ownedTrips?: Record<number, "fridge" | "store">;
 };
 export type ShoppingList = { category: string; items: ShoppingItem[] }[];
+
+/** Una lista es canónica si sus artículos traen el desglose por semana (`weekQty`). */
+export const isCanonicalShopping = (shopping: ShoppingList | null | undefined): boolean =>
+  !!shopping && shopping.some((g) => g.items.some((i) => Array.isArray(i.weekQty)));
+
+/**
+ * Lleva una unidad escrita por la IA (o de una lista antigua) a la canónica
+ * `g`/`ml`/`ud` con el factor para convertir la cantidad. "1 kg" → factor 1000
+ * y unidad `g`; "medio litro" no se entiende y cae en `ud`. Manojos, latas y
+ * botes se cuentan como unidades.
+ */
+export const normalizeUnit = (raw: string): { unit: QtyUnit; factor: number } => {
+  const u = String(raw ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f.]/g, "")
+    .trim();
+  if (/^(kg|kilo|kilos|kilogramo|kilogramos)$/.test(u)) return { unit: "g", factor: 1000 };
+  if (/^(g|gr|grs|gramo|gramos)$/.test(u)) return { unit: "g", factor: 1 };
+  if (/^(l|lt|litro|litros)$/.test(u)) return { unit: "ml", factor: 1000 };
+  if (/^(ml|mililitro|mililitros|cl)$/.test(u)) return { unit: "ml", factor: u === "cl" ? 10 : 1 };
+  return { unit: "ud", factor: 1 };
+};
+
+/** Cantidad legible en español a partir del valor canónico y su unidad. */
+export const formatQty = (value: number, unit: QtyUnit): string => {
+  const v = Math.max(0, Number(value) || 0);
+  const num = (n: number, digits: number) =>
+    n.toLocaleString("es-ES", { maximumFractionDigits: digits });
+  if (unit === "g") return v >= 1000 ? `${num(v / 1000, 2)} kg` : `${num(Math.round(v), 0)} g`;
+  if (unit === "ml") return v >= 1000 ? `${num(v / 1000, 2)} l` : `${num(Math.round(v), 0)} ml`;
+  return `${num(Math.round(v), 0)} ud`;
+};
+
+/**
+ * Interpreta el `qty` de texto libre de una lista antigua ("2 kg", "500 g",
+ * "1,5 l", "3 unidades") como valor canónico. Devuelve `null` si no hay un
+ * número reconocible.
+ */
+export const parseQtyLegacy = (qty: string): { value: number; unit: QtyUnit } | null => {
+  const m = String(qty ?? "")
+    .trim()
+    .match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-Záéíóúñ]+)?/);
+  if (!m) return null;
+  const value = Number(m[1]!.replace(",", "."));
+  if (!Number.isFinite(value)) return null;
+  const { unit, factor } = normalizeUnit(m[2] ?? "ud");
+  return { value: value * factor, unit };
+};
 
 /** Gasto real por viaje de compra (índice de `trip` → euros), a mano tras comprar. */
 export type TripActuals = Record<number, number>;
@@ -418,6 +501,100 @@ export const groupByTrip = (shopping: ShoppingList | null | undefined, trips: nu
       .filter((g) => g.items.length),
   }));
 
+export type TripGroups = {
+  trip: number;
+  groups: { category: string; items: ShoppingItem[] }[];
+};
+
+/** Semana del plan (0..weekCount-1) en la que cae un día del mes. */
+const weekOfDay = (day: number, weekCount: number) =>
+  Math.min(Math.max(Math.floor((day - 1) / 7), 0), Math.max(1, weekCount) - 1);
+
+/**
+ * Cuántos días cubiertos por el plan caen en cada semana. La última "semana"
+ * de un mes de 30-31 días arrastra 9-10 días (no 7), así que repartir la
+ * cantidad de esa semana a partes iguales entre SUS días —y no siempre entre
+ * 7— es lo que hace que cada compra sume exactamente lo suyo y Σ compras =
+ * total del mes.
+ */
+export const weekDayCounts = (coverage: PlanCoverage, weekCount: number): number[] => {
+  const counts = new Array(Math.max(1, weekCount)).fill(0);
+  for (let d = coverage.fromDay; d <= coverage.toDay; d++) counts[weekOfDay(d, weekCount)] += 1;
+  return counts;
+};
+
+/**
+ * Proyecta la lista canónica sobre las compras de una cadencia: para cada
+ * compra suma, ingrediente a ingrediente, la parte de `weekQty`/`weekPrice` de
+ * los días que esa compra cubre (rango de `tripDayRange`). El resultado es la
+ * forma que consume la UI — una fila por compra con `qty`/`price_eur` ya
+ * recortados y `owned` resuelto para ese `trip`.
+ *
+ * Una lista antigua (sin `weekQty`) no se puede recalcular: se cae al reparto
+ * de siempre (`groupByTrip`), que respeta el `trip` que ya trae cada fila.
+ */
+export const projectTrips = (
+  shopping: ShoppingList | null | undefined,
+  cadence: ShoppingCadence,
+  coverage: PlanCoverage,
+  weekCount: number = WEEK_COUNT,
+): TripGroups[] => {
+  const trips = tripsOfCadence(cadence);
+  if (!isCanonicalShopping(shopping)) return groupByTrip(shopping, trips);
+
+  const wc = Math.max(1, weekCount);
+  const counts = weekDayCounts(coverage, wc);
+
+  return Array.from({ length: Math.max(1, trips) }, (_, t) => {
+    const { from, to } = tripDayRange(coverage, trips, t);
+    const groups = (shopping ?? [])
+      .map((group) => ({
+        category: group.category,
+        items: group.items
+          .map((item) => projectItemForTrip(item, from, to, wc, counts, t))
+          .filter((i): i is ShoppingItem => i !== null),
+      }))
+      .filter((group) => group.items.length);
+    return { trip: t, groups };
+  });
+};
+
+const projectItemForTrip = (
+  item: ShoppingItem,
+  from: number,
+  to: number,
+  weekCount: number,
+  weekDays: number[],
+  trip: number,
+): ShoppingItem | null => {
+  // Fila antigua colada en una lista canónica: se queda si es su propia compra.
+  if (!Array.isArray(item.weekQty)) return item.trip === trip ? item : null;
+
+  const weekPrice = item.weekPrice ?? [];
+  let qty = 0;
+  let price = 0;
+  for (let d = from; d <= to; d++) {
+    const w = weekOfDay(d, weekCount);
+    const share = weekDays[w] || 1;
+    qty += (item.weekQty[w] ?? 0) / share;
+    price += (weekPrice[w] ?? 0) / share;
+  }
+  if (qty <= 0.0001) return null;
+
+  const unit = item.unit ?? "ud";
+  const source = item.ownedTrips?.[trip];
+  return {
+    name: item.name,
+    qty: formatQty(qty, unit),
+    qtyValue: Math.round(qty * 100) / 100,
+    price_eur: Math.round(price * 100) / 100,
+    trip,
+    perishable: item.perishable,
+    unit,
+    ...(source ? { owned: source } : {}),
+  };
+};
+
 /**
  * Reaplica el estado `owned` de una lista de la compra a otra recién repartida,
  * emparejando por NOMBRE de ingrediente (no por name + trip). Cambiar de
@@ -450,21 +627,72 @@ export const carryOwnedByName = (
   }));
 };
 
+/** Array de `len` números ≥ 0 (rellena con 0, recorta lo que sobre). */
+const numArray = (raw: unknown, len: number): number[] =>
+  Array.from({ length: len }, (_, i) => {
+    const n = Number((Array.isArray(raw) ? raw[i] : undefined) ?? 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  });
+
+const asOwnedSource = (raw: unknown): "fridge" | "store" | undefined =>
+  // Compatible con datos antiguos donde "owned" era un booleano sin origen.
+  raw === "store" ? "store" : raw ? "fridge" : undefined;
+
+const asOwnedTrips = (raw: unknown): Record<number, "fridge" | "store"> | undefined => {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: Record<number, "fridge" | "store"> = {};
+  for (const [key, value] of Object.entries(o)) {
+    const t = Number(key);
+    const source = asOwnedSource(value);
+    if (Number.isFinite(t) && t >= 0 && source) out[Math.round(t)] = source;
+  }
+  return Object.keys(out).length ? out : undefined;
+};
+
 const asItem = (raw: unknown): ShoppingItem | null => {
   const o = (raw ?? {}) as Record<string, unknown>;
   const name = String(o.name ?? "").trim();
   if (!name) return null;
+  const perishable = Boolean(o.perishable);
+
+  // Forma canónica: la IA da `weekQty` (cantidad por semana del plan). El `qty`
+  // legible y el `price_eur` del mes se derivan de los arrays, no se guardan a mano.
+  if (Array.isArray(o.weekQty)) {
+    const { unit, factor } = normalizeUnit(String(o.unit ?? "ud"));
+    const weekQty = numArray(o.weekQty, WEEK_COUNT).map((n) => n * factor);
+    const rawPrice = numArray(o.weekPrice, WEEK_COUNT);
+    const totalQty = weekQty.reduce((s, n) => s + n, 0);
+    // Si no vino `weekPrice`, reparte el `price_eur` del mes en proporción a la
+    // cantidad de cada semana (y si tampoco hay precio, queda a 0).
+    const monthPrice = Number(o.price_eur);
+    const weekPrice =
+      rawPrice.some((n) => n > 0) || !Number.isFinite(monthPrice) || monthPrice <= 0
+        ? rawPrice
+        : weekQty.map((q) => (totalQty > 0 ? (monthPrice * q) / totalQty : 0));
+    const ownedTrips = asOwnedTrips(o.ownedTrips);
+    return {
+      name,
+      qty: formatQty(totalQty, unit),
+      price_eur: Math.round(weekPrice.reduce((s, n) => s + n, 0) * 100) / 100,
+      trip: 0,
+      perishable,
+      unit,
+      weekQty,
+      weekPrice,
+      ...(ownedTrips ? { ownedTrips } : {}),
+    };
+  }
+
+  // Forma antigua: una fila por `name` + `trip`, con `qty` de texto libre.
   const price = Number(o.price_eur);
   const trip = Number(o.trip);
-  // Compatible con datos antiguos donde "owned" era un booleano sin origen:
-  // se trata como "fridge" para no perder la marca ya guardada.
-  const owned = o.owned === "store" ? "store" : o.owned ? "fridge" : undefined;
+  const owned = asOwnedSource(o.owned);
   return {
     name,
     qty: String(o.qty ?? "").trim(),
     price_eur: Number.isFinite(price) && price >= 0 ? Math.round(price * 100) / 100 : 0,
     trip: Number.isFinite(trip) && trip > 0 ? Math.min(Math.round(trip), 3) : 0,
-    perishable: Boolean(o.perishable),
+    perishable,
     ...(owned ? { owned } : {}),
   };
 };
@@ -939,7 +1167,8 @@ export const shoppingToText = (
   });
   const lines = [`Ingredientes del mes · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
   const trips = tripsOfCadence(cadence);
-  for (const trip of groupByTrip(shopping, trips)) {
+  const cov = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
+  for (const trip of projectTrips(shopping, cadence, cov)) {
     lines.push(
       `${tripLabel(cadence, trip.trip, coverage, trips)} — ${eur(pendingTotal(trip.groups))}`,
     );

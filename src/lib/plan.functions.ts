@@ -15,7 +15,9 @@ import {
   completePlan,
   coverageRatio,
   daysInMonth,
+  formatQty,
   ingredientNames,
+  isCanonicalShopping,
   isNextMonthUnlocked,
   mealsForDate,
   mergeFuturePlan,
@@ -83,9 +85,10 @@ async function askForJson<T>(
 
 /**
  * Garantiza que la lista no supere el presupuesto. Primero pide al modelo que la
- * recorte con números concretos; si aun así se pasa, escala los precios de forma
- * proporcional como último recurso para que el total mostrado nunca exceda el
- * tope. Es best-effort: si el recorte por IA falla, no rompe la generación.
+ * recorte con números concretos; si aun así se pasa, escala la compra de forma
+ * proporcional como último recurso (`scaleShoppingToBudget`: cantidad y precio a
+ * la vez) para que el total nunca exceda el tope. Es best-effort: si el recorte
+ * por IA falla, no rompe la generación.
  */
 async function enforceBudget(
   key: string,
@@ -105,8 +108,8 @@ async function enforceBudget(
       prompt:
         `Lista de la compra actual (JSON): ${JSON.stringify(shopping)}\n` +
         `Suma ${shoppingTotal(shopping)} € y el tope es ${target} €.\n` +
-        `Recórtala hasta NO superar ${target} €: baja cantidades y precios, elige alternativas más baratas y quita lo prescindible, manteniendo una compra equilibrada. ` +
-        "Conserva EXACTAMENTE la misma estructura (mismas claves category/items/name/qty/price_eur/trip/perishable) y no cambies el valor de 'trip' de cada ítem. " +
+        `Recórtala hasta NO superar ${target} €: baja "weekQty" y "weekPrice" a la vez, elige alternativas más baratas y quita lo prescindible, manteniendo una compra equilibrada y platos cocinables. ` +
+        "Conserva EXACTAMENTE la misma estructura (claves category/items/name/unit/weekQty/weekPrice/perishable; weekQty y weekPrice son arrays de 4, uno por semana). " +
         'Devuelve solo JSON: {"shopping": [...]}',
     });
     const parsed = (parseJsonLoose(text) ?? {}) as { shopping?: unknown };
@@ -118,17 +121,38 @@ async function enforceBudget(
 
   const total = shoppingTotal(result);
   if (total > target && total > 0) {
-    const factor = target / total;
-    result = result.map((g) => ({
-      ...g,
-      items: g.items.map((i) => ({
-        ...i,
-        price_eur: Math.round(i.price_eur * factor * 100) / 100,
-      })),
-    }));
+    result = scaleShoppingToBudget(result, target / total);
   }
   return result;
 }
+
+/**
+ * Último recurso si el recorte por IA no bastó: escala la compra por un factor
+ * < 1. En la lista canónica baja `weekQty` y `weekPrice` juntos (bajar solo el
+ * precio dejaría cantidad y coste contradiciéndose); en una lista antigua solo
+ * puede tocar el precio.
+ */
+const scaleShoppingToBudget = (shopping: ShoppingList, factor: number): ShoppingList =>
+  shopping.map((g) => ({
+    ...g,
+    items: g.items.map((i) => {
+      if (Array.isArray(i.weekQty)) {
+        const weekQty = i.weekQty.map((n) => Math.round(n * factor * 100) / 100);
+        const weekPrice = (i.weekPrice ?? []).map((n) => Math.round(n * factor * 100) / 100);
+        return {
+          ...i,
+          weekQty,
+          weekPrice,
+          qty: formatQty(
+            weekQty.reduce((s, n) => s + n, 0),
+            i.unit ?? "ud",
+          ),
+          price_eur: Math.round(weekPrice.reduce((s, n) => s + n, 0) * 100) / 100,
+        };
+      }
+      return { ...i, price_eur: Math.round(i.price_eur * factor * 100) / 100 };
+    }),
+  }));
 
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -187,12 +211,17 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const trips = tripsOfCadence(data.cadence);
     const tripRanges = Array.from({ length: trips }, (_, t) => {
       const { from, to } = tripDayRange(coverage, trips, t);
-      return `trip ${t} = días ${from}-${to}`;
+      return `días ${from}-${to}`;
     });
     const cadenceLine =
       trips === 1
-        ? `La compra es MENSUAL: una sola compra al principio (trip siempre 0, ${tripRanges[0]}). Por frescura, prioriza alimentos que aguanten (congelados, conservas, legumbre seca, huevos, tubérculos, fruta y verdura resistente) y reserva la verdura y el pescado muy perecederos para los primeros días.`
-        : `La compra se divide en ${trips} compras: ${tripRanges.join(", ")}. Cada compra lleva los frescos de sus días (verdura de hoja, pescado, carne fresca, fruta madura, lácteos abiertos) y la despensa y congelados van sobre todo en la primera. Reparte los perecederos entre compras para que no se echen a perder.`;
+        ? "COMPRA MENSUAL: la persona hará UNA sola compra para todo el periodo. Apóyate en despensa, congelados, conservas, legumbre seca, huevos, tubérculos y verdura resistente. Puedes incluir algún fresco, pero el que no aguante ~2 semanas se comprará aparte sobre la marcha (se le avisa en pantalla), así que no cargues la compra de pescado, verdura de hoja ni fruta blanda."
+        : `COMPRA REPARTIDA en ${trips} compras (${tripRanges.join(" / ")}). No asignes compras a mano: con el "weekQty" por semana basta, el sistema calcula cuánto lleva cada compra. Reparte los frescos por las semanas en que se usan para que no se acumulen.`;
+
+    const coveredWeeksNote =
+      coverage.fromDay > 1
+        ? `Pon 0 en "weekQty"/"weekPrice" de las semanas del mes anteriores al día ${coverage.fromDay} (este plan no las cubre). `
+        : "";
 
     const { plan: rawPlan, shopping: rawShopping } = await askForJson(
       {
@@ -201,20 +230,19 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
         prompt:
           `Crea el plan del mes ${data.month} y su lista de la compra. Devuelve solo JSON válido:\n` +
           '{"shopping": [objetos {"category": "Verdura y fruta"|"Proteína"|"Despensa"|"Lácteos"|"Otros", ' +
-          '"items": [{"name": string (ingrediente), "qty": string (cantidad, ej. "2 kg"), "price_eur": number (precio orientativo de supermercado en España para esa cantidad), "trip": number (índice de la compra, 0..' +
-          String(trips - 1) +
-          '), "perishable": boolean (true si es fresco y aguanta pocos días)}]}], ' +
+          '"items": [{"name": string (ingrediente), "unit": "g"|"ml"|"ud" (g para sólidos, ml para líquidos, ud para piezas/manojos/latas), ' +
+          '"weekQty": [4 números] (cantidad en "unit" que piden los platos de CADA semana del mes para las raciones del hogar; 0 si esa semana no se usa), ' +
+          '"weekPrice": [4 números] (€ orientativo de supermercado en España para la cantidad de cada semana), ' +
+          '"perishable": boolean (true si es fresco y aguanta pocos días)}]}], ' +
           '"plan": {"intro": string (2 frases motivadoras y comprensivas), "focus": [3 focos del mes, cortos], ' +
           '"weeks": [4 objetos {"label": "Semana 1".."Semana 4", "focus": string corto, "breakfasts": [2 ideas de desayuno], "snacks": [2 ideas de snack], ' +
           '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato}]}]}}\n' +
           "REGLA CLAVE: todos los platos, desayunos y snacks del plan deben poder prepararse ÚNICAMENTE con los ingredientes de la lista de la compra (más sal, aceite, agua y especias básicas). No menciones ningún alimento que no esté en la lista. " +
-          `${coverageLine} ` +
+          'CANTIDADES: cada número de "weekQty" es lo que de verdad piden los platos de esa semana, ni de más ni de menos. Si un plato se repite en varias semanas, refleja su parte en el "weekQty" de cada una. ' +
+          `${coverageLine} ${coveredWeeksNote}` +
           `${budgetLine} ` +
           `${cadenceLine} ` +
-          "FRESCURA: cada ingrediente debe consumirse en los días que cubre su compra; no planifiques platos con alimentos frescos comprados muchos días antes. Marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
-          (trips > 1
-            ? "REPETICIÓN ENTRE COMPRAS: puedes repetir un plato en varias semanas, pero si eso hace que un ingrediente perecedero haga falta en más de una compra, NO lo pongas todo en una sola fila — inclúyelo una vez por cada compra en la que se necesita (mismo name, distinto trip), cada fila solo con la cantidad y el precio de esa compra (no la suma de todas), para que cada semana compre sus propios frescos en vez de acumularlos en la primera. La despensa/congelados/conservas sí van en una sola fila en la compra 0, sin repetir. "
-            : "") +
+          "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
           "Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: en las comidas fuera de casa propón una opción de menú o restaurante y no cuentes sus ingredientes en la compra. " +
           "Si convive con más personas o hay niños, las comidas compartidas deben ser platos que sirvan para todos (sin sus alérgenos) y la compra debe cubrir esas raciones extra. " +
           "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
@@ -266,81 +294,11 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
   });
 
 /**
- * Reasigna el campo 'trip' de cada ingrediente a la compra que de verdad lo
- * necesita, viendo los platos reales de los días de cada tramo bajo la nueva
- * cadencia — a diferencia del reparto ciego de `repartitionTrips`
- * (round-robin sin mirar qué días usan cada ingrediente), que aquí solo actúa
- * como red de seguridad si la IA falla. Con una sola compra (mensual) no hace
- * falta preguntarle a nadie: todo va al tramo 0.
- */
-async function reassignTripsByDishes(
-  key: string,
-  system: string,
-  plan: MonthlyPlan,
-  shopping: ShoppingList,
-  cadence: ShoppingCadence,
-  month: string,
-): Promise<ShoppingList> {
-  const trips = tripsOfCadence(cadence);
-  if (trips === 1) return repartitionTrips(shopping, cadence);
-
-  // Mismo rango de días por tramo que ve la persona en pantalla (tripLabel/
-  // tripTiming): NO el índice crudo de `plan.weeks`, que siempre empieza en
-  // "Semana 1 = días 1-7" aunque el plan arranque a media de mes — usar ese
-  // índice directamente desalinea qué platos caen en cada compra.
-  const coverage = plan.coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
-  const tripBlocks = Array.from({ length: trips }, (_, t) => {
-    const { from, to } = tripDayRange(coverage, trips, t);
-    const lines: string[] = [];
-    for (let day = from; day <= to; day++) {
-      const date = `${month}-${String(day).padStart(2, "0")}`;
-      const d = planForDate(plan, date)?.day;
-      if (!d || (!d.lunch && !d.dinner)) continue;
-      lines.push(
-        `Día ${day}: comida ${d.lunch || "—"}; cena ${d.dinner || "—"}` +
-          (d.breakfast ? `; desayuno ${d.breakfast}` : "") +
-          (d.snack ? `; snack ${d.snack}` : ""),
-      );
-    }
-    return `Compra ${t} (días ${from}-${to}):\n${lines.length ? lines.join("\n") : "(sin platos con ingredientes frescos propios)"}`;
-  });
-
-  const originalTotal = shoppingTotal(shopping);
-
-  try {
-    const ai = createAiProvider(key);
-    const { text } = await generateText({
-      model: ai(COACH_MODEL),
-      system,
-      temperature: 0.2,
-      prompt:
-        `Lista de la compra actual (JSON, ignora su 'trip' actual): ${JSON.stringify(shopping)}\n\n` +
-        `Estos son los platos de cada compra bajo la nueva frecuencia:\n\n${tripBlocks.join("\n\n")}\n\n` +
-        `Para cada ingrediente, decide en qué compra(s) hace falta según qué platos lo usan (0..${trips - 1}). ` +
-        "Si solo hace falta en una, ponle ese 'trip' sin más. " +
-        "Si un plato se repite en varias compras (es habitual, no pasa nada) y por eso el mismo ingrediente perecedero hace falta en más de una, NO lo dejes en una sola fila: duplica esa fila una vez por cada compra en la que se necesita (mismo name/category/perishable, distinto trip), y reparte entre esas copias la cantidad ('qty') y el precio ('price_eur') de forma proporcional a cuántas veces se usa en cada una — la SUMA de 'price_eur' de todas las copias de un mismo ingrediente debe seguir siendo igual a su precio original (no dupliques el gasto). Así cada compra se lleva solo lo suyo, no el mes entero. " +
-        "En la compra 0 deja sin duplicar lo que de verdad es despensa (conservas, legumbre seca, congelados, especias, aceite): esas filas se quedan enteras ahí. " +
-        "No cambies name/category/perishable de ningún ingrediente ni inventes ingredientes nuevos. Conserva el campo 'owned' de cada ítem si lo tiene. " +
-        'Devuelve solo JSON: {"shopping": [...]}',
-    });
-    const parsed = (parseJsonLoose(text) ?? {}) as { shopping?: unknown };
-    const cleaned = cleanShopping(parsed.shopping ?? parsed);
-    // Red de seguridad: si la IA se fue de precio al repartir (duplicó importes
-    // en vez de partirlos, o se dejó ingredientes fuera), el total del mes no
-    // puede cambiar — mejor el reparto ciego que un presupuesto que ya no cuadra.
-    const driftedTotal = cleaned.length && Math.abs(shoppingTotal(cleaned) - originalTotal) > 0.5;
-    if (cleaned.length && !driftedTotal) return cleaned;
-  } catch (e) {
-    console.error("reassignTripsByDishes", e);
-  }
-  return repartitionTrips(shopping, cadence);
-}
-
-/**
- * Cambia la cadencia de compra (semanal/bisemanal/mensual): reparte los
- * mismos ingredientes entre más o menos compras según los platos reales de
- * cada semana (`reassignTripsByDishes`), así el tramo mostrado encaja con lo
- * que se cocina esos días. No regenera el plan ni sus platos.
+ * Cambia la cadencia de compra (semanal/bisemanal/mensual). No regenera el plan
+ * ni llama a la IA: la lista canónica ya guarda el desglose por semana, así que
+ * cambiar de cadencia solo cambia cómo se agrupa en pantalla (`projectTrips`).
+ * Una lista antigua (sin desglose) se reparte con `repartitionTrips` como antes,
+ * y `carryOwnedByName` conserva las marcas "en casa"/"comprado".
  */
 export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -351,14 +309,6 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     return { month: input.month, cadence };
   })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
-
-    const { data: profile } = await context.supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", context.userId)
-      .maybeSingle();
     const { data: row } = await context.supabase
       .from("monthly_plans")
       .select("plan, shopping")
@@ -369,20 +319,9 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     const current = cleanPlan(typed?.plan);
     if (!current) throw new Error("Todavía no hay plan de este mes");
     const prevShopping = cleanShopping(typed?.shopping);
-    // Reasignar `trip` rehace el reparto (y puede trocear perecederos en varias
-    // filas); `carryOwnedByName` vuelve a poner el "en casa"/"comprado" por
-    // nombre de ingrediente para que cambiar de cadencia no borre las marcas.
-    const shopping = carryOwnedByName(
-      prevShopping,
-      await reassignTripsByDishes(
-        key,
-        coachSystemPrompt(profile as never, null),
-        current,
-        prevShopping,
-        data.cadence,
-        data.month,
-      ),
-    );
+    const shopping = isCanonicalShopping(prevShopping)
+      ? prevShopping
+      : carryOwnedByName(prevShopping, repartitionTrips(prevShopping, data.cadence));
     const plan: MonthlyPlan = { ...current, cadence: data.cadence };
 
     const { error } = await context.supabase
@@ -401,13 +340,11 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
 /**
  * Marca un ingrediente como comprado ("fridge": ya lo tenía en casa, "store":
  * lo ha comprado en el súper) o lo deja sin decidir (source null) — no cambia
- * la lista de la compra en sí (los ítems y su precio siguen igual), solo anota
- * de dónde ha salido cada uno. Ir marcando ingrediente a ingrediente es lo que
- * antes hacía de golpe el botón "Ya he comprado esto": no hace falta un paso
- * de confirmación aparte. El emparejamiento es por nombre Y compra (`trip`),
- * no solo por nombre: un mismo ingrediente puede aparecer repartido en varias
- * compras (una fila por semana en la que hace falta, cada una con su cantidad),
- * y marcar la fila de una no debe marcar también la de las demás.
+ * la lista en sí (cantidades y precio siguen igual), solo anota de dónde ha
+ * salido cada uno. La marca es por ingrediente Y compra: un mismo fresco puede
+ * hacer falta en varias compras y marcar una no marca las demás. En la lista
+ * canónica eso vive en `ownedTrips[trip]`; en una lista antigua, en el `owned`
+ * de la fila de ese `trip`.
  */
 export const toggleShoppingOwned = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -439,7 +376,15 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
     const shopping: ShoppingList = current.map((group) => ({
       category: group.category,
       items: group.items.map((item) => {
-        if (item.name !== data.itemName || item.trip !== data.trip) return item;
+        if (item.name !== data.itemName) return item;
+        if (Array.isArray(item.weekQty)) {
+          const ownedTrips = { ...(item.ownedTrips ?? {}) };
+          if (data.source) ownedTrips[data.trip] = data.source;
+          else delete ownedTrips[data.trip];
+          const { ownedTrips: _drop, ...rest } = item;
+          return Object.keys(ownedTrips).length ? { ...rest, ownedTrips } : rest;
+        }
+        if (item.trip !== data.trip) return item;
         if (!data.source) {
           const { owned: _owned, ...rest } = item;
           return rest;

@@ -93,14 +93,31 @@ sobre la rotación semanal por defecto; una recolocación automática posterior 
 pisa (`mergeFuturePlan`). La lista de la compra nunca cambia — si un plato pide algo no comprado,
 se guarda igual y aparece como aviso en `PlanDay.extras`.
 
+**Cantidades de la compra — modelo canónico por semana.** `generateMonthlyPlan` guarda `shopping`
+en **forma canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`) + `weekQty` (cuánto
+piden los platos de cada una de las 4 semanas del plan) + `weekPrice`. La IA ya no inventa un `qty`
+de texto ni asigna compras. `projectTrips` ([src/lib/plan-shared.ts](src/lib/plan-shared.ts))
+deriva la vista por compra: cada compra suma la parte de `weekQty`/`weekPrice` de los días que
+cubre (`tripDayRange` × `weekDayCounts`), así **Σ entre compras = lo que necesita el mes** y
+cambiar de cadencia solo re-trocea el mismo total. `recadenceMonthlyPlan` ya no llama a la IA: solo
+guarda la nueva cadencia y la UI re-proyecta. Las listas antiguas (sin `weekQty`) siguen válidas y
+caen en el reparto de siempre (`groupByTrip`/`repartitionTrips`); se corrigen al regenerar. Las
+marcas "comprado" canónicas viven en `ShoppingItem.ownedTrips[trip]`.
+
+**Perecederos — se sesga el plan y se avisa, no se reestructura.** `shelfLifeDays`
+([src/lib/perishability.ts](src/lib/perishability.ts)) da la vida útil por palabra clave/categoría;
+`freshRisksForTrip` marca los frescos de una compra cuyo tramo de días supera esa vida útil y la UI
+lo muestra como aviso ("cómpralos más cerca de cuando los cocines"). El prompt de cadencia mensual
+sesga hacia larga vida. La lista de la compra en sí no cambia y no hay compras extra.
+
 **Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y
 que la compra no incluye: los añade a mano en Ingredientes (`setPantryExtra`) o salen del escaneo de
 un tiquet (`scanTripReceipt`, se guardan solo los que encajan con sus objetivos). Es un conjunto
 paralelo a `shopping`, nunca se fusiona con la lista; `adjustMonthlyPlan`/`setPlanMeal`/
 `coachPlanContext` lo tratan como disponible al recolocar, sin disparar regeneración. El importe
 real del tiquet va a `trip_actuals`; la tarjeta "Gasto en comida" del historial lo muestra
-(`MonthSpendSummary`). Cambiar de cadencia conserva las marcas "en casa"/"comprado" por nombre de
-ingrediente (`carryOwnedByName`), no por `name`+`trip`.
+(`MonthSpendSummary`). Cambiar de cadencia en una lista antigua conserva las marcas
+"en casa"/"comprado" por nombre de ingrediente (`carryOwnedByName`), no por `name`+`trip`.
 
 **Pantalla Plan — navegación de meses y unificación de Historial.** La pantalla tiene dos
 subpestañas (Plan e Ingredientes; ya no hay "Historial") y un selector `‹ mes ›` en la cabecera

@@ -11,8 +11,10 @@ import {
   cleanTripReceipts,
   coverageRatio,
   daysLeftInMonth,
+  formatQty,
   groupByTrip,
   isBeforeAppStart,
+  isCanonicalShopping,
   isMonthActionable,
   isNextMonthUnlocked,
   mealsForDate,
@@ -20,7 +22,9 @@ import {
   type MonthlyPlan,
   monthCoverage,
   nextMonthISO,
+  normalizeUnit,
   parseJsonLoose,
+  parseQtyLegacy,
   planMonthStatus,
   planNavBounds,
   boughtTotal,
@@ -28,12 +32,14 @@ import {
   ownedTotal,
   pendingTotal,
   planForDate,
+  projectTrips,
   repartitionTrips,
   shoppingTotal,
   type ShoppingList,
   tripActualsTotal,
   tripCount,
   tripDayRange,
+  weekDayCounts,
 } from "./plan-shared";
 
 // --- helpers ---------------------------------------------------------------
@@ -555,5 +561,187 @@ describe("mergeFuturePlan", () => {
 
     // día 1 de la semana 0 (di=1 <= cursor.dayIndex=2) queda intacto
     expect(merged.weeks[0]!.days[1]!.lunch).toBe("Comida S0D1");
+  });
+});
+
+// --- cantidades: unidades y desglose por semana --------------------------
+
+describe("normalizeUnit / formatQty / parseQtyLegacy", () => {
+  it("normaliza la unidad y su factor a g/ml/ud", () => {
+    expect(normalizeUnit("kg")).toEqual({ unit: "g", factor: 1000 });
+    expect(normalizeUnit("gramos")).toEqual({ unit: "g", factor: 1 });
+    expect(normalizeUnit("L")).toEqual({ unit: "ml", factor: 1000 });
+    expect(normalizeUnit("manojo")).toEqual({ unit: "ud", factor: 1 });
+    expect(normalizeUnit("")).toEqual({ unit: "ud", factor: 1 });
+  });
+
+  it("formatea el total en español, subiendo a kg/l cuando toca", () => {
+    expect(formatQty(500, "g")).toBe("500 g");
+    expect(formatQty(1500, "g")).toBe("1,5 kg");
+    expect(formatQty(2000, "g")).toBe("2 kg");
+    expect(formatQty(250, "ml")).toBe("250 ml");
+    expect(formatQty(1000, "ml")).toBe("1 l");
+    expect(formatQty(3, "ud")).toBe("3 ud");
+  });
+
+  it("interpreta el qty de texto libre de una lista antigua", () => {
+    expect(parseQtyLegacy("2 kg")).toEqual({ value: 2000, unit: "g" });
+    expect(parseQtyLegacy("1,5 l")).toEqual({ value: 1500, unit: "ml" });
+    expect(parseQtyLegacy("3 unidades")).toEqual({ value: 3, unit: "ud" });
+    expect(parseQtyLegacy("al gusto")).toBeNull();
+  });
+});
+
+describe("weekDayCounts", () => {
+  it("la última semana de un mes de 30 días arrastra los días de más", () => {
+    expect(weekDayCounts({ fromDay: 1, toDay: 30 }, 4)).toEqual([7, 7, 7, 9]);
+  });
+
+  it("un plan a media de mes deja en 0 las semanas que no cubre", () => {
+    expect(weekDayCounts({ fromDay: 15, toDay: 31 }, 4)).toEqual([0, 0, 7, 10]);
+  });
+});
+
+// Lista canónica: una fila por ingrediente con weekQty (g/ml/ud) por semana.
+const canonical = (): ShoppingList => [
+  {
+    category: "Verdura y fruta",
+    items: [
+      {
+        name: "Cebolla",
+        qty: "2 kg",
+        price_eur: 2,
+        trip: 0,
+        perishable: true,
+        unit: "g",
+        weekQty: [500, 500, 500, 500],
+        weekPrice: [0.5, 0.5, 0.5, 0.5],
+      },
+      {
+        name: "Espinaca",
+        qty: "400 g",
+        price_eur: 2,
+        trip: 0,
+        perishable: true,
+        unit: "g",
+        weekQty: [200, 0, 200, 0],
+        weekPrice: [1, 0, 1, 0],
+      },
+    ],
+  },
+  {
+    category: "Despensa",
+    items: [
+      {
+        name: "Arroz",
+        qty: "1 kg",
+        price_eur: 1.2,
+        trip: 0,
+        perishable: false,
+        unit: "g",
+        weekQty: [1000, 0, 0, 0],
+        weekPrice: [1.2, 0, 0, 0],
+      },
+    ],
+  },
+];
+
+const septiembre = { fromDay: 1, toDay: 30 };
+
+const totalQtyOf = (trips: ReturnType<typeof projectTrips>, name: string) =>
+  trips
+    .flatMap((t) => t.groups.flatMap((g) => g.items))
+    .filter((i) => i.name === name)
+    .reduce((sum, i) => sum + (i.qtyValue ?? 0), 0);
+
+describe("isCanonicalShopping", () => {
+  it("distingue la lista canónica de la antigua", () => {
+    expect(isCanonicalShopping(canonical())).toBe(true);
+    expect(isCanonicalShopping(shopping())).toBe(false);
+    expect(isCanonicalShopping(null)).toBe(false);
+  });
+});
+
+describe("projectTrips", () => {
+  it("con compra mensual cada ingrediente suma su total del mes", () => {
+    const [trip] = projectTrips(canonical(), "mensual", septiembre);
+    const byName = Object.fromEntries(
+      trip!.groups.flatMap((g) => g.items).map((i) => [i.name, i.qty]),
+    );
+    expect(byName["Cebolla"]).toBe("2 kg");
+    expect(byName["Espinaca"]).toBe("400 g");
+    expect(byName["Arroz"]).toBe("1 kg");
+  });
+
+  it("reparte cada compra según las semanas que cubre, sin perder ni inventar cantidad", () => {
+    const bi = projectTrips(canonical(), "bisemanal", septiembre);
+    expect(bi).toHaveLength(2);
+    // Σ de las dos compras = total del mes (2000 g de cebolla), salvo redondeo
+    expect(Math.abs(totalQtyOf(bi, "Cebolla") - 2000)).toBeLessThan(1);
+    // la primera compra (días 1-15) se lleva algo más de la mitad
+    const t0 = bi[0]!.groups.flatMap((g) => g.items).find((i) => i.name === "Cebolla")!;
+    expect(t0.qtyValue).toBeGreaterThan(900);
+    expect(t0.qtyValue).toBeLessThan(1200);
+  });
+
+  it("cambiar de cadencia no mueve el total mensual de ningún ingrediente", () => {
+    for (const name of ["Cebolla", "Espinaca", "Arroz"]) {
+      const mensual = totalQtyOf(projectTrips(canonical(), "mensual", septiembre), name);
+      const bisemanal = totalQtyOf(projectTrips(canonical(), "bisemanal", septiembre), name);
+      const semanal = totalQtyOf(projectTrips(canonical(), "semanal", septiembre), name);
+      expect(Math.abs(bisemanal - mensual)).toBeLessThan(2);
+      expect(Math.abs(semanal - mensual)).toBeLessThan(2);
+    }
+  });
+
+  it("resuelve owned por compra desde ownedTrips", () => {
+    const list = canonical();
+    list[0]!.items[0]!.ownedTrips = { 1: "store" };
+    const bi = projectTrips(list, "bisemanal", septiembre);
+    const t0 = bi[0]!.groups.flatMap((g) => g.items).find((i) => i.name === "Cebolla")!;
+    const t1 = bi[1]!.groups.flatMap((g) => g.items).find((i) => i.name === "Cebolla")!;
+    expect(t0.owned).toBeUndefined();
+    expect(t1.owned).toBe("store");
+  });
+
+  it("una lista antigua cae en el reparto de siempre (groupByTrip)", () => {
+    const legacy = shopping();
+    expect(projectTrips(legacy, "bisemanal", septiembre)).toEqual(groupByTrip(legacy, 2));
+  });
+});
+
+describe("cleanShopping · forma canónica", () => {
+  it("convierte la unidad de la IA a g/ml/ud y deriva qty y price del mes", () => {
+    const out = cleanShopping([
+      {
+        category: "Verdura y fruta",
+        items: [
+          {
+            name: "Tomate",
+            unit: "kg",
+            weekQty: [2, 1, 0, 0],
+            weekPrice: [2.4, 1.2, 0, 0],
+            perishable: true,
+          },
+        ],
+      },
+    ]);
+    const item = out[0]!.items[0]!;
+    expect(item.weekQty).toEqual([2000, 1000, 0, 0]);
+    expect(item.qty).toBe("3 kg");
+    expect(item.price_eur).toBe(3.6);
+    expect(item.trip).toBe(0);
+  });
+
+  it("si no viene weekPrice, reparte el price_eur del mes en proporción a la cantidad", () => {
+    const out = cleanShopping([
+      {
+        category: "Despensa",
+        items: [{ name: "Lentejas", unit: "g", weekQty: [600, 200, 0, 0], price_eur: 4 }],
+      },
+    ]);
+    const item = out[0]!.items[0]!;
+    expect(item.weekPrice).toEqual([3, 1, 0, 0]);
+    expect(item.price_eur).toBe(4);
   });
 });
