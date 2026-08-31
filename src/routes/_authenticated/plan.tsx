@@ -18,7 +18,7 @@ import {
   Sparkle,
   Wheat,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -33,12 +33,9 @@ import {
   eur,
   groupByTrip,
   homeTotal,
-  ownedTotal,
   pendingTotal,
   shoppingToText,
-  tripActualsTotal,
   tripDayRange,
-  tripLabel,
   tripsOfCadence,
   tripTiming,
   tripToText,
@@ -155,13 +152,11 @@ function PlanPage() {
 
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
-  const total = shoppingTotal(shopping);
-  const alreadyHome = homeTotal(shopping);
-  const alreadyBought = boughtTotal(shopping);
-  const stillPending = pendingTotal(shopping);
+  // Total del mes: solo para el aviso de presupuesto. Las cifras de la tarjeta
+  // "Te falta comprar" son de la compra seleccionada y se calculan dentro de
+  // IngredientsTab (diseño 1c).
+  const monthTotal = shoppingTotal(shopping);
   const tripActuals = planQ.data?.trip_actuals ?? {};
-  const spentSoFar = tripActualsTotal(tripActuals);
-  const hasActuals = Object.keys(tripActuals).length > 0;
   const confirmedTrips = planQ.data?.confirmed_trips ?? {};
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
@@ -215,7 +210,7 @@ function PlanPage() {
   const partialMonth = Boolean(coverage && coverage.fromDay > 1);
   const periodBudget =
     budget > 0 && coverage ? Math.round(budget * coverageRatio(coverage, month)) : budget;
-  const overBudget = periodBudget > 0 && total > periodBudget;
+  const overBudget = periodBudget > 0 && monthTotal > periodBudget;
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "long",
     year: "numeric",
@@ -315,10 +310,10 @@ function PlanPage() {
           ) : shopMode ? (
             <ShopModeView
               trip={trips[selectedTrip]}
-              label={tripLabel(activeCadence, selectedTrip, coverage, tripsTotal)}
               coverage={coverage}
               tripsTotal={tripsTotal}
               selectedTrip={selectedTrip}
+              month={month}
               onToggle={(itemName) =>
                 owned.mutate({ itemName, trip: selectedTrip, source: "store" })
               }
@@ -349,12 +344,6 @@ function PlanPage() {
               onEnterShopMode={() => setShopMode(true)}
               onShareTrip={(trip, label) => void shareTrip(trip, label)}
               month={month}
-              total={total}
-              alreadyHome={alreadyHome}
-              alreadyBought={alreadyBought}
-              stillPending={stillPending}
-              spentSoFar={spentSoFar}
-              hasActuals={hasActuals}
               periodBudget={periodBudget}
               partialMonth={partialMonth}
               overBudget={overBudget}
@@ -363,7 +352,8 @@ function PlanPage() {
         </>
       )}
 
-      <BottomNav />
+      {/* En Modo compra la pantalla es completa (diseño 1b): sin barra de nav. */}
+      {shopMode ? null : <BottomNav />}
     </main>
   );
 }
@@ -411,12 +401,6 @@ function IngredientsTab({
   onEnterShopMode,
   onShareTrip,
   month,
-  total,
-  alreadyHome,
-  alreadyBought,
-  stillPending,
-  spentSoFar,
-  hasActuals,
   periodBudget,
   partialMonth,
   overBudget,
@@ -446,12 +430,6 @@ function IngredientsTab({
     label: string,
   ) => void;
   month: string;
-  total: number;
-  alreadyHome: number;
-  alreadyBought: number;
-  stillPending: number;
-  spentSoFar: number;
-  hasActuals: boolean;
   periodBudget: number;
   partialMonth: boolean;
   overBudget: boolean;
@@ -459,7 +437,15 @@ function IngredientsTab({
   const currentTrip = trips[selectedTrip] ?? trips[0];
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
   const editable = timing === "current";
-  const tripPending = pendingTotal(currentTrip?.groups);
+
+  // Cifras de la tarjeta "Te falta comprar": de la compra seleccionada, no del
+  // mes (diseño 1c: "el número con el que sales de casa").
+  const tripGroups = currentTrip?.groups ?? [];
+  const total = shoppingTotal(tripGroups);
+  const alreadyHome = homeTotal(tripGroups);
+  const alreadyBought = boughtTotal(tripGroups);
+  const stillPending = pendingTotal(tripGroups);
+  const tripActual: number | undefined = tripActuals[selectedTrip];
 
   // Items de esta compra, filtrados por el chip activo
   const filteredGroups = useMemo(() => {
@@ -526,6 +512,16 @@ function IngredientsTab({
               : "1 sola compra: menos frescos, más despensa."}
         </p>
       </div>
+
+      {/* Aviso de presupuesto: es del mes entero, no de una compra. */}
+      {overBudget ? (
+        <div className="rounded-[20px] bg-destructive/10 px-4 py-3">
+          <p className="text-xs leading-relaxed text-destructive">
+            El mes se pasa de tu presupuesto ({eur(periodBudget)}). Puedo ajustarlo: regenera el
+            plan o dímelo en el chat.
+          </p>
+        </div>
+      ) : null}
 
       {/* Navegador de compra ← → */}
       {tripsTotal > 1 ? (
@@ -596,21 +592,15 @@ function IngredientsTab({
             Total {eur(total)}
           </span>
         </div>
-        {hasActuals ? (
+        {tripActual != null ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Gasto real hasta ahora: <span className="font-semibold">{eur(spentSoFar)}</span>{" "}
-            {spentSoFar !== total ? (
-              <span className={spentSoFar > total ? "text-destructive" : "text-success"}>
-                ({spentSoFar > total ? "+" : ""}
-                {eur(spentSoFar - total)} vs. lo estimado)
+            Gastaste en esta compra: <span className="font-semibold">{eur(tripActual)}</span>{" "}
+            {tripActual !== total ? (
+              <span className={tripActual > total ? "text-destructive" : "text-success"}>
+                ({tripActual > total ? "+" : ""}
+                {eur(tripActual - total)} vs. lo estimado)
               </span>
             ) : null}
-          </p>
-        ) : null}
-        {overBudget ? (
-          <p className="mt-2 text-xs text-destructive">
-            Se pasa de tu presupuesto ({eur(periodBudget)}). Puedo ajustarlo: regenera el plan o
-            dímelo en el chat.
           </p>
         ) : null}
       </div>
@@ -659,11 +649,11 @@ function IngredientsTab({
               <span className="font-mono text-[11px] text-muted-foreground">{g.items.length}</span>
             </div>
             <ul className="m-0 list-none p-0">
-              {g.items.map((item) => {
+              {g.items.map((item, i) => {
                 const have = !!item.owned;
                 return (
                   <li
-                    key={item.name}
+                    key={`${item.name}-${i}`}
                     onClick={() => {
                       if (!editable) return;
                       // Un solo gesto: toca para alternar "ya lo tengo en casa"
@@ -753,10 +743,10 @@ function IngredientsTab({
 // ---------------------------------------------------------------------------
 function ShopModeView({
   trip,
-  label,
   coverage,
   tripsTotal,
   selectedTrip,
+  month,
   onToggle,
   onClose,
   tripActual,
@@ -764,10 +754,10 @@ function ShopModeView({
   onSaveActual,
 }: {
   trip: { trip: number; groups: { category: string; items: ShoppingItem[] }[] } | undefined;
-  label: string;
   coverage: { fromDay: number; toDay: number } | undefined;
   tripsTotal: number;
   selectedTrip: number;
+  month: string;
   onToggle: (itemName: string) => void;
   onClose: () => void;
   tripActual: number | undefined;
@@ -808,120 +798,140 @@ function ShopModeView({
   const tripRange = coverage
     ? tripDayRange(coverage, tripsTotal, selectedTrip)
     : { from: 1, to: 31 };
+  const monthShort = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
+    month: "short",
+  });
 
+  // Último importe enviado, para que `commitActual` no repita la misma mutación
+  // cuando lo disparan seguidos el onBlur del campo y el onClick del botón.
+  const savedActual = useRef<number | null | undefined>(tripActual);
   const commitActual = () => {
     const trimmed = text.trim().replace(",", ".");
     if (!trimmed) {
-      if (tripActual != null) onSaveActual(null);
+      if (savedActual.current != null) {
+        savedActual.current = null;
+        onSaveActual(null);
+      }
       return;
     }
     const n = Number(trimmed);
-    if (Number.isFinite(n) && n >= 0 && n !== tripActual) onSaveActual(Math.round(n * 100) / 100);
+    if (Number.isFinite(n) && n >= 0 && n !== savedActual.current) {
+      const rounded = Math.round(n * 100) / 100;
+      savedActual.current = rounded;
+      onSaveActual(rounded);
+    }
   };
 
   return (
-    <section className="mt-5 pb-32">
-      {/* Cabecera modo compra */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to} ago
-          </p>
-          <h1 className="font-title text-2xl font-semibold tracking-[-0.02em] leading-tight">
-            En el súper
-          </h1>
-        </div>
-      </div>
-
-      {/* Resumen compra */}
-      <div className="mt-4 surface-card p-5">
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-muted-foreground">Queda por coger</p>
-            <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary">
-              {eur(Math.round(leftTotal * 100) / 100)}
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="font-mono text-[11px] text-muted-foreground">en el carro</p>
-            <p className="mt-0.5 font-mono text-[15px] font-medium text-success">
-              {eur(Math.round(doneTotal * 100) / 100)}
-            </p>
-          </div>
-        </div>
-        <div className="mt-3.5 h-2 w-full overflow-hidden rounded-full bg-secondary">
-          <div
-            className="h-full rounded-full bg-success transition-[width] duration-500"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <p className="mt-2 text-[11.5px] text-muted-foreground">
-          {leftItems.length} de {allItems.length} por coger · lo que ya tienes en casa no aparece
-          aquí
-        </p>
-      </div>
-
-      {/* Lista de ingredientes agrupados */}
-      <div className="mt-3.5 flex flex-col gap-4">
-        {shopGroups.map((g) => (
-          <div key={g.category}>
-            <div className="flex items-center gap-2 px-1 pb-2">
-              <CategoryIcon category={g.category} className="h-[15px] w-[15px] text-primary" />
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                {g.category}
-              </h3>
+    // Modo compra: pantalla completa enfocada (diseño 1b). El overlay tapa la
+    // barra de navegación y la burbuja del coach; se sale con la flecha ←.
+    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+      <div className="flex-1 overflow-y-auto px-5 pb-6 pt-12">
+        <div className="mx-auto max-w-lg">
+          {/* Cabecera modo compra */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to}{" "}
+                {monthShort}
+              </p>
+              <h1 className="font-title text-2xl font-semibold tracking-[-0.02em] leading-tight">
+                En el súper
+              </h1>
             </div>
-            <ul className="flex flex-col gap-1.5 p-0">
-              {g.items.map((item) => {
-                const done = item.owned === "store";
-                return (
-                  <li
-                    key={item.name}
-                    onClick={() => {
-                      // En modo compra, tocar alterna "store" (comprado)
-                      onToggle(item.name);
-                    }}
-                    className={`flex cursor-pointer items-center gap-3.5 rounded-[18px] px-4 py-3.5 transition-colors active:scale-[0.99] ${
-                      done ? "bg-secondary/45" : "bg-surface"
-                    }`}
-                  >
-                    {/* Checkbox cuadrado redondeado */}
-                    <span
-                      className={`grid h-7 w-7 shrink-0 place-items-center rounded-[9px] transition-colors ${
-                        done
-                          ? "bg-success text-success-foreground"
-                          : "border-[1.5px] border-border text-transparent"
-                      }`}
-                    >
-                      <Check className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={`block text-base font-semibold tracking-[-0.01em] ${done ? "text-muted-foreground line-through" : ""}`}
-                      >
-                        {item.name}
-                      </span>
-                      <span className="block font-mono text-[11px] text-muted-foreground">
-                        {item.qty} · {eur(item.price_eur)}
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
           </div>
-        ))}
+
+          {/* Resumen compra */}
+          <div className="mt-4 surface-card p-5">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-muted-foreground">Queda por coger</p>
+                <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary">
+                  {eur(Math.round(leftTotal * 100) / 100)}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="font-mono text-[11px] text-muted-foreground">en el carro</p>
+                <p className="mt-0.5 font-mono text-[15px] font-medium text-success">
+                  {eur(Math.round(doneTotal * 100) / 100)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3.5 h-2 w-full overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-success transition-[width] duration-500"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[11.5px] text-muted-foreground">
+              {leftItems.length} de {allItems.length} por coger · lo que ya tienes en casa no
+              aparece aquí
+            </p>
+          </div>
+
+          {/* Lista de ingredientes agrupados */}
+          <div className="mt-3.5 flex flex-col gap-4">
+            {shopGroups.map((g) => (
+              <div key={g.category}>
+                <div className="flex items-center gap-2 px-1 pb-2">
+                  <CategoryIcon category={g.category} className="h-[15px] w-[15px] text-primary" />
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    {g.category}
+                  </h3>
+                </div>
+                <ul className="flex flex-col gap-1.5 p-0">
+                  {g.items.map((item, i) => {
+                    const done = item.owned === "store";
+                    return (
+                      <li
+                        key={`${item.name}-${i}`}
+                        onClick={() => {
+                          // En modo compra, tocar alterna "store" (comprado)
+                          onToggle(item.name);
+                        }}
+                        className={`flex cursor-pointer items-center gap-3.5 rounded-[18px] px-4 py-3.5 transition-colors active:scale-[0.99] ${
+                          done ? "bg-secondary/45" : "bg-surface"
+                        }`}
+                      >
+                        {/* Checkbox cuadrado redondeado */}
+                        <span
+                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-[9px] transition-colors ${
+                            done
+                              ? "bg-success text-success-foreground"
+                              : "border-[1.5px] border-border text-transparent"
+                          }`}
+                        >
+                          <Check className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={`block text-base font-semibold tracking-[-0.01em] ${done ? "text-muted-foreground line-through" : ""}`}
+                          >
+                            {item.name}
+                          </span>
+                          <span className="block font-mono text-[11px] text-muted-foreground">
+                            {item.qty} · {eur(item.price_eur)}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Botón fijo fondo */}
-      <div className="fixed inset-x-0 bottom-5 z-20 px-5">
+      {/* Botón fijo al fondo (diseño 1b) */}
+      <div className="border-t border-secondary bg-background px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto max-w-lg">
           {allDone ? (
             <div className="space-y-3">
@@ -933,7 +943,7 @@ function ShopModeView({
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onBlur={commitActual}
-                  placeholder={eur(Math.round(leftTotal * 100) / 100)}
+                  placeholder={eur(Math.round(doneTotal * 100) / 100)}
                   disabled={savingActual}
                   className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
                 />
@@ -941,7 +951,12 @@ function ShopModeView({
               </div>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => {
+                  // "guardar gasto" tiene que guardar aunque el foco siga en el
+                  // campo (Enter, o clic sin que dispare el onBlur antes).
+                  commitActual();
+                  onClose();
+                }}
                 className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-success py-[17px] text-sm font-bold text-success-foreground"
               >
                 Compra completa · guardar gasto
@@ -958,6 +973,6 @@ function ShopModeView({
           )}
         </div>
       </div>
-    </section>
+    </div>
   );
 }

@@ -17,10 +17,11 @@ import {
   Sparkles,
   Wheat,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Pressable,
   ScrollView,
   Text,
@@ -48,7 +49,6 @@ import {
   pendingTotal,
   planForDate,
   shoppingTotal,
-  tripActualsTotal,
   tripDayRange,
   tripsOfCadence,
   tripTiming,
@@ -129,13 +129,11 @@ export default function Plan() {
 
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
-  const total = shoppingTotal(shopping);
-  const alreadyHome = homeTotal(shopping);
-  const alreadyBought = boughtTotal(shopping);
-  const stillPending = pendingTotal(shopping);
+  // Total del mes: solo para el aviso de presupuesto. Las cifras de la tarjeta
+  // "Te falta comprar" son de la compra seleccionada y se calculan dentro de
+  // IngredientsTab (ver diseño 1c).
+  const monthTotal = shoppingTotal(shopping);
   const tripActuals = planQ.data?.trip_actuals ?? {};
-  const spentSoFar = tripActualsTotal(tripActuals);
-  const hasActuals = Object.keys(tripActuals).length > 0;
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = cadence ?? plan?.cadence ?? cadenceOf(shopping);
   const tripsTotal = tripsOfCadence(activeCadence);
@@ -166,7 +164,7 @@ export default function Plan() {
   // proporcional del mes que cubre, no el mes entero.
   const periodBudget =
     budget > 0 && coverage ? Math.round(budget * coverageRatio(coverage, month)) : budget;
-  const overBudget = periodBudget > 0 && total > periodBudget;
+  const overBudget = periodBudget > 0 && monthTotal > periodBudget;
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "long",
     year: "numeric",
@@ -176,6 +174,28 @@ export default function Plan() {
     currentTrip?.groups.reduce((s, g) => s + g.items.filter((i) => !i.owned).length, 0) ?? 0;
   const showShopCta =
     Boolean(plan) && tab === "compra" && !shopMode && (shopping?.length ?? 0) > 0 && needCount > 0;
+
+  // Modo compra: pantalla completa enfocada (diseño 1b). Sustituye toda la
+  // pantalla — sin cabecera del plan, sin pestañas, sin barra de navegación —
+  // y se sale con la flecha ← de su cabecera.
+  if (plan && tab === "compra" && shopMode) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+        <ShopModeView
+          trip={currentTrip}
+          coverage={coverage}
+          tripsTotal={tripsTotal}
+          selectedTrip={clampedTrip}
+          month={month}
+          onToggle={(itemName, next) => owned.mutate({ itemName, trip: clampedTrip, source: next })}
+          onClose={() => setShopMode(false)}
+          tripActual={tripActuals[clampedTrip]}
+          savingActual={setActual.isPending}
+          onSaveActual={(amount) => setActual.mutate({ trip: clampedTrip, amount })}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -286,21 +306,6 @@ export default function Plan() {
               </View>
             ) : tab === "historial" ? (
               <HistorialSection />
-            ) : shopMode ? (
-              <ShopModeView
-                trip={currentTrip}
-                coverage={coverage}
-                tripsTotal={tripsTotal}
-                selectedTrip={clampedTrip}
-                month={month}
-                onToggle={(itemName, next) =>
-                  owned.mutate({ itemName, trip: clampedTrip, source: next })
-                }
-                onClose={() => setShopMode(false)}
-                tripActual={tripActuals[clampedTrip]}
-                savingActual={setActual.isPending}
-                onSaveActual={(amount) => setActual.mutate({ trip: clampedTrip, amount })}
-              />
             ) : (
               <IngredientsTab
                 shopping={shopping}
@@ -319,12 +324,7 @@ export default function Plan() {
                   owned.mutate({ itemName, trip: clampedTrip, source: next })
                 }
                 month={month}
-                total={total}
-                alreadyHome={alreadyHome}
-                alreadyBought={alreadyBought}
-                stillPending={stillPending}
-                spentSoFar={spentSoFar}
-                hasActuals={hasActuals}
+                tripActual={tripActuals[clampedTrip]}
                 periodBudget={periodBudget}
                 overBudget={overBudget}
               />
@@ -488,6 +488,29 @@ function CategoryIcon({
   return <Icon size={size} color={color} />;
 }
 
+const clampPct = (n: number) => Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));
+
+// Relleno de barra de progreso que anima su ancho al cambiar, para igualar la
+// transición `duration-500` de la web (React Native no anima cambios de estilo
+// por sí solo). `Animated` clásico basta: nada de anchura por native driver.
+function ProgressFill({ pct, color, rounded }: { pct: number; color: string; rounded?: boolean }) {
+  const target = clampPct(pct);
+  const w = useRef(new Animated.Value(target)).current;
+  useEffect(() => {
+    Animated.timing(w, { toValue: target, duration: 500, useNativeDriver: false }).start();
+  }, [target, w]);
+  return (
+    <Animated.View
+      style={{
+        height: "100%",
+        backgroundColor: color,
+        borderRadius: rounded ? 999 : 0,
+        width: w.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }),
+      }}
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Pestaña Ingredientes — una compra a la vez, un solo gesto por ingrediente y
 // filtros por chip. Portada del rediseño web (src/routes/_authenticated/plan.tsx).
@@ -507,12 +530,7 @@ function IngredientsTab({
   setCadence,
   onToggle,
   month,
-  total,
-  alreadyHome,
-  alreadyBought,
-  stillPending,
-  spentSoFar,
-  hasActuals,
+  tripActual,
   periodBudget,
   overBudget,
 }: {
@@ -530,17 +548,21 @@ function IngredientsTab({
   setCadence: (c: ShoppingCadence) => void;
   onToggle: (itemName: string, next: "fridge" | "store" | null) => void;
   month: string;
-  total: number;
-  alreadyHome: number;
-  alreadyBought: number;
-  stillPending: number;
-  spentSoFar: number;
-  hasActuals: boolean;
+  /** Gasto real registrado para la compra seleccionada (o undefined). */
+  tripActual: number | undefined;
   periodBudget: number;
   overBudget: boolean;
 }) {
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
   const editable = timing === "current";
+
+  // Cifras de la tarjeta "Te falta comprar": de la compra seleccionada, no del
+  // mes (diseño 1c: "el número con el que sales de casa").
+  const tripGroups = currentTrip?.groups ?? [];
+  const total = shoppingTotal(tripGroups);
+  const alreadyHome = homeTotal(tripGroups);
+  const alreadyBought = boughtTotal(tripGroups);
+  const stillPending = pendingTotal(tripGroups);
 
   // Items de esta compra, filtrados por el chip activo
   const filteredGroups = useMemo(() => {
@@ -618,6 +640,16 @@ function IngredientsTab({
         </Text>
       </View>
 
+      {/* Aviso de presupuesto: es del mes entero, no de una compra. */}
+      {overBudget ? (
+        <View className="rounded-3xl bg-destructive/10 px-4 py-3">
+          <Text className="text-xs leading-relaxed text-destructive">
+            El mes se pasa de tu presupuesto ({eur(periodBudget)}). Puedo ajustarlo: regenera el
+            plan o dímelo en el chat.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Navegador de compra ← → */}
       {tripsTotal > 1 ? (
         <View className="flex-row items-center gap-2 rounded-full bg-secondary/60 p-1">
@@ -663,8 +695,8 @@ function IngredientsTab({
           </Text>
         </View>
         <View className="mt-3.5 h-2 flex-row overflow-hidden rounded-full bg-secondary">
-          <View className="h-full bg-success" style={{ width: `${barHome}%` }} />
-          <View className="h-full bg-success/50" style={{ width: `${barBought}%` }} />
+          <ProgressFill pct={barHome} color="#4cae64" />
+          <ProgressFill pct={barBought} color="rgba(76,174,100,0.5)" />
         </View>
         <View className="mt-2.5 flex-row flex-wrap gap-3">
           <View className="flex-row items-center gap-1.5">
@@ -682,23 +714,17 @@ function IngredientsTab({
             <Text className="text-[11.5px] text-muted-foreground">Total {eur(total)}</Text>
           </View>
         </View>
-        {hasActuals ? (
+        {tripActual != null ? (
           <Text className="mt-2 text-xs text-muted-foreground">
-            Gasto real hasta ahora:{" "}
-            <Text className="font-sans-semibold text-foreground">{eur(spentSoFar)}</Text>
-            {spentSoFar !== total ? (
-              <Text className={spentSoFar > total ? "text-destructive" : "text-success"}>
+            Gastaste en esta compra:{" "}
+            <Text className="font-sans-semibold text-foreground">{eur(tripActual)}</Text>
+            {tripActual !== total ? (
+              <Text className={tripActual > total ? "text-destructive" : "text-success"}>
                 {" "}
-                ({spentSoFar > total ? "+" : ""}
-                {eur(spentSoFar - total)} vs. lo estimado)
+                ({tripActual > total ? "+" : ""}
+                {eur(tripActual - total)} vs. lo estimado)
               </Text>
             ) : null}
-          </Text>
-        ) : null}
-        {overBudget ? (
-          <Text className="mt-2 text-xs text-destructive">
-            Se pasa de tu presupuesto ({eur(periodBudget)}). Puedo ajustarlo: regenera el plan o
-            dímelo en el chat.
           </Text>
         ) : null}
       </View>
@@ -758,11 +784,11 @@ function IngredientsTab({
               </Text>
               <Text className="font-mono text-[11px] text-muted-foreground">{g.items.length}</Text>
             </View>
-            {g.items.map((item) => {
+            {g.items.map((item, i) => {
               const have = !!item.owned;
               return (
                 <Pressable
-                  key={item.name}
+                  key={`${item.name}-${i}`}
                   onPress={() => {
                     if (!editable) return;
                     onToggle(item.name, item.owned ? null : "fridge");
@@ -889,149 +915,172 @@ function ShopModeView({
     month: "short",
   });
 
+  // Último importe enviado, para que `commitActual` no repita la misma mutación
+  // cuando lo disparan seguidos el onBlur del campo y el onPress del botón.
+  const savedActual = useRef<number | null | undefined>(tripActual);
   const commitActual = () => {
     const trimmed = text.trim().replace(",", ".");
     if (!trimmed) {
-      if (tripActual != null) onSaveActual(null);
+      if (savedActual.current != null) {
+        savedActual.current = null;
+        onSaveActual(null);
+      }
       return;
     }
     const n = Number(trimmed);
-    if (Number.isFinite(n) && n >= 0 && n !== tripActual) onSaveActual(Math.round(n * 100) / 100);
+    if (Number.isFinite(n) && n >= 0 && n !== savedActual.current) {
+      const rounded = Math.round(n * 100) / 100;
+      savedActual.current = rounded;
+      onSaveActual(rounded);
+    }
   };
 
   return (
-    <View className="mt-5">
-      {/* Cabecera modo compra */}
-      <View className="flex-row items-center gap-3">
-        <Pressable
-          onPress={onClose}
-          className="h-9 w-9 items-center justify-center rounded-full bg-surface active:opacity-70"
-        >
-          <ChevronLeft size={16} color="#83796c" />
-        </Pressable>
-        <View className="min-w-0 flex-1">
-          <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
-            Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to} {monthShort}
-          </Text>
-          <Text className="font-heading text-2xl text-foreground">En el súper</Text>
-        </View>
-      </View>
-
-      {/* Resumen compra */}
-      <View className="mt-4 rounded-3xl bg-surface p-5">
-        <View className="flex-row items-end justify-between gap-3">
-          <View className="min-w-0">
-            <Text className="text-xs font-sans-semibold text-muted-foreground">
-              Queda por coger
-            </Text>
-            <Text className="mt-0.5 font-heading text-3xl tabular-nums text-primary">
-              {eur(leftTotal)}
-            </Text>
-          </View>
-          <View className="items-end">
-            <Text className="font-mono text-[11px] text-muted-foreground">en el carro</Text>
-            <Text className="mt-0.5 font-mono-medium text-[15px] text-success">
-              {eur(doneTotal)}
-            </Text>
-          </View>
-        </View>
-        <View className="mt-3.5 h-2 overflow-hidden rounded-full bg-secondary">
-          <View className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
-        </View>
-        <Text className="mt-2 text-[11.5px] text-muted-foreground">
-          {leftItems.length} de {allItems.length} por coger · lo que ya tienes en casa no aparece
-          aquí
-        </Text>
-      </View>
-
-      {/* Lista de ingredientes agrupados */}
-      <View className="mt-3.5 gap-4">
-        {shopGroups.map((g) => (
-          <View key={g.category}>
-            <View className="flex-row items-center gap-2 px-1 pb-2">
-              <CategoryIcon category={g.category} />
-              <Text className="text-[11px] font-sans-bold uppercase tracking-wide text-muted-foreground">
-                {g.category}
-              </Text>
-            </View>
-            <View className="gap-1.5">
-              {g.items.map((item) => {
-                const done = item.owned === "store";
-                return (
-                  <Pressable
-                    key={item.name}
-                    onPress={() => onToggle(item.name, done ? null : "store")}
-                    className={`flex-row items-center gap-3.5 rounded-2xl px-4 py-3.5 active:opacity-80 ${
-                      done ? "bg-secondary/50" : "bg-surface"
-                    }`}
-                  >
-                    <View
-                      className={`h-7 w-7 items-center justify-center rounded-[9px] ${
-                        done ? "bg-success" : "border-[1.5px] border-border"
-                      }`}
-                    >
-                      {done ? <Check size={16} color="#fbfaf7" /> : null}
-                    </View>
-                    <View className="min-w-0 flex-1">
-                      <Text
-                        className={`text-base font-sans-semibold ${
-                          done ? "text-muted-foreground line-through" : "text-foreground"
-                        }`}
-                      >
-                        {item.name}
-                      </Text>
-                      <Text className="font-mono text-[11px] text-muted-foreground">
-                        {item.qty ? `${item.qty} · ` : ""}
-                        {eur(item.price_eur)}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ))}
-        {shopGroups.length === 0 ? (
-          <Text className="px-1 text-sm text-muted-foreground">
-            Nada que coger en esta compra: ya lo tienes todo en casa o comprado.
-          </Text>
-        ) : null}
-      </View>
-
-      {/* Cierre de la compra */}
-      {allDone ? (
-        <View className="mt-6 gap-3">
-          <View className="flex-row items-center gap-2 rounded-2xl bg-surface px-4 py-3">
-            <Text className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</Text>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              onBlur={commitActual}
-              placeholder={eur(leftTotal)}
-              keyboardType="decimal-pad"
-              editable={!savingActual}
-              className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm text-foreground"
-              style={savingActual ? { opacity: 0.6 } : undefined}
-            />
-            <Text className="text-xs text-muted-foreground">€</Text>
-          </View>
+    <View className="flex-1">
+      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pt-6 pb-40">
+        {/* Cabecera modo compra */}
+        <View className="flex-row items-center gap-3">
           <Pressable
             onPress={onClose}
-            className="items-center rounded-2xl bg-success py-4 active:opacity-90"
+            className="h-9 w-9 items-center justify-center rounded-full bg-surface active:opacity-70"
           >
-            <Text className="text-sm font-sans-bold text-success-foreground">
-              Compra completa · guardar gasto
-            </Text>
+            <ChevronLeft size={16} color="#83796c" />
           </Pressable>
+          <View className="min-w-0 flex-1">
+            <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
+              Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to}{" "}
+              {monthShort}
+            </Text>
+            <Text className="font-heading text-2xl text-foreground">En el súper</Text>
+          </View>
         </View>
-      ) : (
-        <Pressable
-          onPress={onClose}
-          className="mt-6 items-center rounded-2xl bg-foreground py-4 active:opacity-90"
-        >
-          <Text className="text-sm font-sans-bold text-background">Terminar compra</Text>
-        </Pressable>
-      )}
+
+        {/* Resumen compra */}
+        <View className="mt-4 rounded-3xl bg-surface p-5">
+          <View className="flex-row items-end justify-between gap-3">
+            <View className="min-w-0">
+              <Text className="text-xs font-sans-semibold text-muted-foreground">
+                Queda por coger
+              </Text>
+              <Text className="mt-0.5 font-heading text-3xl tabular-nums text-primary">
+                {eur(leftTotal)}
+              </Text>
+            </View>
+            <View className="items-end">
+              <Text className="font-mono text-[11px] text-muted-foreground">en el carro</Text>
+              <Text className="mt-0.5 font-mono-medium text-[15px] text-success">
+                {eur(doneTotal)}
+              </Text>
+            </View>
+          </View>
+          <View className="mt-3.5 h-2 overflow-hidden rounded-full bg-secondary">
+            <ProgressFill pct={pct} color="#4cae64" rounded />
+          </View>
+          <Text className="mt-2 text-[11.5px] text-muted-foreground">
+            {leftItems.length} de {allItems.length} por coger · lo que ya tienes en casa no aparece
+            aquí
+          </Text>
+        </View>
+
+        {/* Lista de ingredientes agrupados */}
+        <View className="mt-3.5 gap-4">
+          {shopGroups.map((g) => (
+            <View key={g.category}>
+              <View className="flex-row items-center gap-2 px-1 pb-2">
+                <CategoryIcon category={g.category} />
+                <Text className="text-[11px] font-sans-bold uppercase tracking-wide text-muted-foreground">
+                  {g.category}
+                </Text>
+              </View>
+              <View className="gap-1.5">
+                {g.items.map((item, i) => {
+                  const done = item.owned === "store";
+                  return (
+                    <Pressable
+                      key={`${item.name}-${i}`}
+                      onPress={() => onToggle(item.name, done ? null : "store")}
+                      className={`flex-row items-center gap-3.5 rounded-2xl px-4 py-3.5 active:opacity-80 ${
+                        done ? "bg-secondary/50" : "bg-surface"
+                      }`}
+                    >
+                      <View
+                        className={`h-7 w-7 items-center justify-center rounded-[9px] ${
+                          done ? "bg-success" : "border-[1.5px] border-border"
+                        }`}
+                      >
+                        {done ? <Check size={16} color="#fbfaf7" /> : null}
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text
+                          className={`text-base font-sans-semibold ${
+                            done ? "text-muted-foreground line-through" : "text-foreground"
+                          }`}
+                        >
+                          {item.name}
+                        </Text>
+                        <Text className="font-mono text-[11px] text-muted-foreground">
+                          {item.qty ? `${item.qty} · ` : ""}
+                          {eur(item.price_eur)}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+          {shopGroups.length === 0 ? (
+            <Text className="px-1 text-sm text-muted-foreground">
+              Nada que coger en esta compra: ya lo tienes todo en casa o comprado.
+            </Text>
+          ) : null}
+        </View>
+      </ScrollView>
+
+      {/* Cierre de la compra — botón fijo al fondo (diseño 1b) */}
+      <View className="absolute inset-x-0 bottom-0 border-t border-secondary bg-background px-5 pb-8 pt-3">
+        <View className="mx-auto w-full max-w-lg">
+          {allDone ? (
+            <View className="gap-3">
+              <View className="flex-row items-center gap-2 rounded-2xl bg-surface px-4 py-3">
+                <Text className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</Text>
+                <TextInput
+                  value={text}
+                  onChangeText={setText}
+                  onBlur={commitActual}
+                  placeholder={eur(doneTotal)}
+                  keyboardType="decimal-pad"
+                  editable={!savingActual}
+                  className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm text-foreground"
+                  style={savingActual ? { opacity: 0.6 } : undefined}
+                />
+                <Text className="text-xs text-muted-foreground">€</Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  // El botón "guardar gasto" no puede fiarse solo del onBlur del
+                  // campo: si se pulsa con el teclado abierto, RN cierra la
+                  // pantalla antes de que el blur guarde. Confirmamos aquí.
+                  commitActual();
+                  onClose();
+                }}
+                className="items-center rounded-2xl bg-success py-4 active:opacity-90"
+              >
+                <Text className="text-sm font-sans-bold text-success-foreground">
+                  Compra completa · guardar gasto
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPress={onClose}
+              className="items-center rounded-2xl bg-foreground py-4 active:opacity-90"
+            >
+              <Text className="text-sm font-sans-bold text-background">Terminar compra</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
