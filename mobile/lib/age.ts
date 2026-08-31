@@ -13,3 +13,10 @@ export function ageFromDOB(dob: string | null | undefined): number | null {
 
   return age >= 0 ? age : null;
 }
+
+/** Fecha de nacimiento ISO aproximada para una edad dada (usada en datos de demo). */
+export function dobFromAge(age: number): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - age);
+  return d.toISOString().slice(0, 10);
+}

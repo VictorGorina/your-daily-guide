@@ -18,6 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { apiPostPublic } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { saveProfile } from "../lib/daily";
+import { randomDemoProfile } from "../lib/demo-profile";
 import { supabase } from "../lib/supabase";
 
 // Cierra la pestaña de auth que quedara abierta de un intento anterior.
@@ -44,13 +46,20 @@ export default function Auth() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  // Sesión anónima, igual que el "perfil aleatorio" de la web: sirve para
-  // probar la app sin dar de alta una cuenta real.
+  // Sesión anónima + perfil aleatorio con el onboarding ya dado por completado,
+  // igual que el "perfil aleatorio" de la web (src/routes/auth.tsx): entra
+  // directo al dashboard sin responder las preguntas. `demoLoading` mantiene
+  // el Redirect de abajo en pausa hasta que el perfil está guardado, para que
+  // /hoy no rebote a onboarding al ver un perfil todavía a medias.
   const demo = async () => {
     setDemoLoading(true);
     try {
-      const { error } = await supabase.auth.signInAnonymously();
-      if (error) throw error;
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        const { error } = await supabase.auth.signInAnonymously();
+        if (error) throw error;
+      }
+      await saveProfile(randomDemoProfile());
     } catch (error) {
       Alert.alert(
         "No hemos podido crear el perfil de prueba",
@@ -155,7 +164,10 @@ export default function Auth() {
 
   // Cualquier método de entrada (correo, alta o perfil demo) acaba creando
   // sesión; en cuanto AuthProvider la ve, salimos de la pantalla de entrada.
-  if (session) return <Redirect href="/hoy" />;
+  // Excepción: mientras se prepara el perfil demo esperamos a tenerlo guardado
+  // antes de redirigir, si no /hoy vería el perfil a medias y rebotaría a
+  // onboarding.
+  if (session && !demoLoading) return <Redirect href="/hoy" />;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
