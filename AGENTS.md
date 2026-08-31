@@ -34,6 +34,14 @@ Dos caminos distintos, deliberadamente separados:
 - `adjustMonthlyPlan` recoloca **varios** días futuros para compensar (comió de más, salió a
   correr). Ahí el día de hoy sigue fijado.
 
+`generateMonthlyPlan` solo planifica de hoy en adelante: su `.validator` rechaza los meses
+pasados (no se pueden cumplir y gastan tokens) y el mes que viene hasta su última semana
+(`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7` en `plan-shared.ts`, compartido con el
+aviso push de renovación). El mes en curso ya arranca en el día de hoy vía `monthCoverage`. La
+pantalla Plan tiene un navegador de meses `‹ mes ›` que gobierna calendario e ingredientes; su
+suelo es `profiles.app_started_on`. La antigua subpestaña Historial se fundió en el calendario del
+mes (semáforo por día + `day-detail-sheet.tsx`).
+
 El plan base deja desayunos y snacks a nivel de semana (una lista que rota por día), así que un
 cambio para un día concreto se guarda en campos propios del día — `breakfast`/`snack` en `PlanDay`
 ([plan-shared.ts](src/lib/plan-shared.ts)) — y manda sobre la rotación. `mergeFuturePlan` los

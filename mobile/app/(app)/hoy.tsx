@@ -10,6 +10,7 @@ import { BottomNav } from "../../components/bottom-nav";
 import { DishRecipe } from "../../components/dish-recipe";
 import { DishImage } from "../../components/food-category-bg";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
+import { MacroBars } from "../../components/macro-bars";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
 import { WeekStrip } from "../../components/week-strip";
 import { classifyDish, dishAsset, FOOD_CATEGORIES } from "../../lib/food-categories";
@@ -26,10 +27,9 @@ import {
   weeklyTrendFrom,
   type DailyGuide,
   type DailyLog,
-  type MacroEstimate,
-  type MealMacroEstimate,
   type MealStatus,
 } from "../../lib/daily";
+import { sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
 import { fetchHousehold } from "../../lib/household";
 import { sharedDays, type MealKey } from "../../lib/household-shared";
 import { setPendingChatMessage } from "../../lib/pending-chat-message";
@@ -647,108 +647,6 @@ export default function Hoy() {
 
       <BottomNav />
     </SafeAreaView>
-  );
-}
-
-// ── Barra de macros orientativa ──
-/**
- * Suma las estimaciones por plato (`mealMacros`) de las comidas que ya están
- * marcadas como comidas ("comí esto" / "comí distinto"), para que la barra
- * de Hoy refleje solo lo confirmado — no el menú del día entero de golpe.
- * Deshacer una comida la resta de la suma, igual que el contador "x de y".
- * null cuando la guía todavía no trae `mealMacros` — el caller cae entonces a
- * `ZERO_MACROS` para seguir mostrando la barra (en 0). Mismo criterio que la
- * web (src/routes/_authenticated/hoy.tsx).
- */
-const ZERO_MACROS: MacroEstimate = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 };
-
-function sumDoneMacros(
-  mealMacros: MealMacroEstimate[] | null | undefined,
-  habits: DailyLog["habits"],
-): MacroEstimate | null {
-  if (!mealMacros?.length) return null;
-  const doneLabels = new Set(
-    habits.filter((h) => h.status === "plan" || h.status === "distinto").map((h) => h.label),
-  );
-  const totals: MacroEstimate = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 };
-  for (const m of mealMacros) {
-    if (!doneLabels.has(m.moment)) continue;
-    totals.kcal += m.kcal;
-    totals.protein_g += m.protein_g;
-    totals.carbs_g += m.carbs_g;
-    totals.fat_g += m.fat_g;
-    totals.fiber_g += m.fiber_g;
-  }
-  return totals;
-}
-
-// Mismo criterio que la web (src/routes/_authenticated/hoy.tsx): esto es solo
-// el respaldo genérico (no personalizado por ningún profesional) para cuando
-// aún no hay `macroEstimate` del día. En cuanto hay guía, el objetivo real es
-// el total estimado para los platos reales de hoy — así comer todo el menú se
-// acerca al 100%, en vez de compararse contra una referencia que puede no
-// cuadrar con ese menú. La proteína se ajusta al peso (~1,2 g/kg), el resto
-// usa un valor fijo.
-function macroTargets(weightKg: number | null) {
-  const proteinTarget = Math.round(Math.min(200, Math.max(45, (weightKg ?? 70) * 1.2)));
-  return { protein_g: proteinTarget, carbs_g: 250, fat_g: 70, fiber_g: 30 };
-}
-
-const MACRO_BAR_ITEMS = [
-  { key: "protein_g", label: "prot", color: "#6DBE7B" },
-  { key: "carbs_g", label: "carb", color: "#FF8A3D" },
-  { key: "fat_g", label: "gras", color: "#F2C14E" },
-  { key: "fiber_g", label: "fibra", color: "#4C9BD6" },
-] as const;
-
-// `target` es el `macroEstimate` del día cuando ya existe (se recalcula si un
-// plato cambia, ver `cambiar_plato` en use-coach-actions.ts); solo cae al
-// respaldo genérico por peso mientras aún no hay guía. El porcentaje no se
-// recorta a 100: si ya comiste de más la barra se queda llena, pero el número
-// de al lado enseña el exceso (p.ej. "132 g · 118%") — solo cuando el
-// objetivo es el real de hoy, no el genérico.
-function MacroBars({
-  estimate,
-  target,
-  weightKg,
-}: {
-  estimate: MacroEstimate;
-  target: MacroEstimate | null;
-  weightKg: number | null;
-}) {
-  const fallbackTargets = macroTargets(weightKg);
-
-  return (
-    <View className="mt-5">
-      <View className="flex-row gap-2.5">
-        {MACRO_BAR_ITEMS.map((it) => {
-          const value = estimate[it.key];
-          const goal = target?.[it.key] || fallbackTargets[it.key];
-          const pct = goal > 0 ? Math.round((value / goal) * 100) : 0;
-          const width = Math.min(100, pct);
-          return (
-            <View key={it.key} className="flex-1">
-              <View className="h-[5px] overflow-hidden rounded-full bg-secondary">
-                <View
-                  className="h-full rounded-full"
-                  style={{ width: `${width}%`, backgroundColor: it.color }}
-                />
-              </View>
-              <Text className="font-mono-medium mt-1.5 text-[9.5px] uppercase tracking-wider text-muted-foreground">
-                {it.label}
-              </Text>
-              <Text className="font-mono-medium mt-0.5 text-[11px] text-foreground">
-                {value} g{target ? ` · ${pct}%` : ""}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-      <Text className="font-body mt-2.5 text-[10.5px] text-muted-foreground">
-        ~{estimate.kcal} kcal de lo que llevas comido hoy: estimación orientativa, no un conteo
-        nutricional exacto.
-      </Text>
-    </View>
   );
 }
 

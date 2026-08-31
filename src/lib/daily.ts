@@ -56,6 +56,9 @@ export type Profile = {
   evening_time: string;
   theme: string;
   onboarding_completed: boolean;
+  /** Fecha de alta en la app (se fija al completar el onboarding). Suelo del
+   * navegador de meses de la pantalla Plan; antes de esta fecha no hay nada. */
+  app_started_on: string | null;
 };
 
 export type DailyGuide = {
@@ -180,6 +183,24 @@ export async function fetchLogs(): Promise<DailyLog[]> {
     .select("*")
     .order("log_date", { ascending: false })
     .limit(120);
+  if (error) throw error;
+  return (data ?? []) as unknown as DailyLog[];
+}
+
+/**
+ * Registros de un mes concreto ("YYYY-MM"), para pintar los semáforos del
+ * calendario del mes seleccionado en la pantalla Plan sin depender del límite de
+ * 120 días de `fetchLogs` (que solo cubre ~4 meses hacia atrás).
+ */
+export async function fetchLogsForMonth(month: string): Promise<DailyLog[]> {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y ?? 1970, m ?? 1, 0).getDate();
+  const { data, error } = await supabase
+    .from("daily_logs")
+    .select("*")
+    .gte("log_date", `${month}-01`)
+    .lte("log_date", `${month}-${String(lastDay).padStart(2, "0")}`)
+    .order("log_date", { ascending: true });
   if (error) throw error;
   return (data ?? []) as unknown as DailyLog[];
 }

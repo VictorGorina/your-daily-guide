@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 import { DictateButton } from "@/components/dictate-button";
 import { ageFromDOB } from "@/lib/age";
-import { addMessage, monthISO, saveProfile } from "@/lib/daily";
+import { addMessage, fetchProfile, monthISO, saveProfile, todayISO } from "@/lib/daily";
 import { parseOnboarding } from "@/lib/onboarding.functions";
 import { generateMonthlyPlan, welcomeBriefing } from "@/lib/plan.functions";
 
@@ -544,7 +544,11 @@ function Onboarding() {
     setSaving(true);
     const d = { ...draft, ...extra };
     try {
+      // Fecha de alta: se fija la primera vez que se completa el onboarding y no
+      // se vuelve a tocar si ya existía (reeditar el onboarding no la reinicia).
+      const existing = await fetchProfile();
       await saveProfile({
+        app_started_on: existing?.app_started_on ?? todayISO(),
         display_name: d.display_name,
         age: d.age,
         date_of_birth: d.date_of_birth,

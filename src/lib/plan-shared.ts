@@ -165,6 +165,80 @@ export const coverageRatio = (coverage: PlanCoverage, month: string) => {
   return Math.min(1, covered / daysInMonth(month));
 };
 
+// ---------------------------------------------------------------------------
+// Navegación de meses de la pantalla Plan
+// ---------------------------------------------------------------------------
+
+/** "YYYY-MM" desplazado `delta` meses (cruza de año sin problema). */
+export const addMonths = (month: string, delta: number): string => {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
+/** "2026-08" → "agosto de 2026". */
+export const monthTitle = (month: string): string =>
+  new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+
+/** Días que quedan del mes de `dateISO`, contando hoy (1 = hoy es el último día). */
+export const daysLeftInMonth = (dateISO: string): number =>
+  daysInMonth(dateISO.slice(0, 7)) - Number(dateISO.slice(8, 10)) + 1;
+
+/** Mes "YYYY-MM" siguiente al de `dateISO`. */
+export const nextMonthISO = (dateISO: string): string => addMonths(dateISO.slice(0, 7), 1);
+
+/**
+ * Cuántos días naturales antes del día 1 del mes que viene se puede preparar ya
+ * su plan (para ir a la compra antes de que empiece). Un único valor para el
+ * desbloqueo del navegador y para el aviso push de renovación del plan.
+ */
+export const NEXT_MONTH_UNLOCK_DAYS = 7;
+
+export const isNextMonthUnlocked = (today: string): boolean =>
+  daysLeftInMonth(today) <= NEXT_MONTH_UNLOCK_DAYS;
+
+export type PlanMonthStatus = "past" | "current" | "next-locked" | "next-unlocked" | "far-future";
+
+/** En qué situación está `month` respecto a hoy, para saber qué se puede hacer con él. */
+export const planMonthStatus = (month: string, today: string): PlanMonthStatus => {
+  const currentMonth = today.slice(0, 7);
+  if (month < currentMonth) return "past";
+  if (month === currentMonth) return "current";
+  if (month === nextMonthISO(today)) {
+    return isNextMonthUnlocked(today) ? "next-unlocked" : "next-locked";
+  }
+  return "far-future";
+};
+
+/** Un mes donde se puede generar/editar el plan y accionar la compra: el actual o el siguiente ya desbloqueado. */
+export const isMonthActionable = (month: string, today: string): boolean => {
+  const status = planMonthStatus(month, today);
+  return status === "current" || status === "next-unlocked";
+};
+
+/** ¿`dateISO` es anterior a la fecha de alta? (días que la app no podía cubrir). */
+export const isBeforeAppStart = (
+  dateISO: string,
+  appStartedOn: string | null | undefined,
+): boolean => !!appStartedOn && dateISO < appStartedOn;
+
+/**
+ * Límites del navegador de meses de la pantalla Plan: no se baja del mes de la
+ * fecha de alta (antes no hay nada que ver), ni se sube más allá del mes que
+ * viene, y solo cuando está desbloqueado.
+ */
+export const planNavBounds = (
+  today: string,
+  appStartedOn: string | null | undefined,
+): { earliest: string; latest: string } => {
+  const currentMonth = today.slice(0, 7);
+  const startMonth = (appStartedOn ?? today).slice(0, 7);
+  return {
+    earliest: startMonth < currentMonth ? startMonth : currentMonth,
+    latest: isNextMonthUnlocked(today) ? nextMonthISO(today) : currentMonth,
+  };
+};
+
 const FULL_MONTH_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
 /**

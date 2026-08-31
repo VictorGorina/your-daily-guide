@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import {
-  CalendarDays,
   CalendarRange,
   CalendarSync,
   Carrot,
@@ -11,6 +10,7 @@ import {
   Egg,
   Fish,
   Lightbulb,
+  Lock,
   RefreshCw,
   ShoppingBasket,
   ShoppingCart,
@@ -31,12 +31,22 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { DayDetailSheet } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
-import { HistorialSection } from "../../components/historial-section";
+import { GoalWeightSummary } from "../../components/goal-weight-summary";
 import { Dialog } from "../../components/ui/dialog";
 import { apiPost } from "../../lib/api";
-import { fetchMonthlyPlan, fetchProfile, monthISO, todayISO } from "../../lib/daily";
 import {
+  fetchLogs,
+  fetchLogsForMonth,
+  fetchMonthlyPlan,
+  fetchProfile,
+  ratioSignal,
+  todayISO,
+  type DailyLog,
+} from "../../lib/daily";
+import {
+  addMonths,
   boughtTotal,
   cadenceOf,
   CADENCES,
@@ -44,16 +54,22 @@ import {
   eur,
   groupByTrip,
   homeTotal,
+  isBeforeAppStart,
+  isMonthActionable,
   mealsForDate,
+  monthTitle,
   offListNote,
   pendingTotal,
   planForDate,
+  planMonthStatus,
+  planNavBounds,
   shoppingTotal,
   tripDayRange,
   tripsOfCadence,
   tripTiming,
   type MonthlyPlan,
   type PlanCoverage,
+  type PlanMonthStatus,
   type ShoppingCadence,
   type ShoppingItem,
   type ShoppingList,
@@ -68,15 +84,30 @@ const FULL_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
 export default function Plan() {
   const qc = useQueryClient();
-  const month = monthISO();
-  const params = useLocalSearchParams<{ tab?: string }>();
-  const [tab, setTab] = useState<"plan" | "compra" | "historial">(
-    params.tab === "compra" || params.tab === "historial" ? params.tab : "plan",
+  const today = todayISO();
+  const params = useLocalSearchParams<{ tab?: string; month?: string }>();
+  const [tab, setTab] = useState<"plan" | "compra">(params.tab === "compra" ? "compra" : "plan");
+  const [selectedMonth, setSelectedMonth] = useState(
+    typeof params.month === "string" && /^\d{4}-\d{2}$/.test(params.month)
+      ? params.month
+      : today.slice(0, 7),
   );
+  const month = selectedMonth;
   const [cadence, setCadence] = useState<ShoppingCadence | null>(null);
 
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
+  const globalLogsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
+  const monthLogsQ = useQuery({
+    queryKey: ["logs", month],
+    queryFn: () => fetchLogsForMonth(month),
+  });
+
+  const appStartedOn = profileQ.data?.app_started_on ?? null;
+  const monthStatus = planMonthStatus(month, today);
+  const actionable = isMonthActionable(month, today);
+  const bounds = planNavBounds(today, appStartedOn);
+  const [openDay, setOpenDay] = useState<string | null>(null);
 
   const generate = useMutation({
     mutationFn: (nextCadence?: ShoppingCadence) =>
@@ -158,6 +189,29 @@ export default function Plan() {
 
   const clampedTrip = Math.min(selectedTrip, Math.max(0, tripsTotal - 1));
   const currentTrip = trips[clampedTrip] ?? trips[0];
+  const readOnlyMonth = monthStatus === "past";
+
+  // Al cambiar de mes, el índice de compra y el modo compra dejan de tener
+  // sentido (dependían del plan del mes anterior). El primer render se salta
+  // para no pisar el `selectedTrip` inicial (que apunta a la compra en curso).
+  const prevMonthRef = useRef(month);
+  useEffect(() => {
+    if (prevMonthRef.current === month) return;
+    prevMonthRef.current = month;
+    setSelectedTrip(0);
+    setShopMode(false);
+    setOpenDay(null);
+  }, [month]);
+
+  const goToMonth = (target: string) => {
+    if (target < bounds.earliest || target > bounds.latest) return;
+    setSelectedMonth(target);
+    setTab("plan");
+  };
+  const canPrev = month > bounds.earliest;
+  const canNext = month < bounds.latest;
+  const nextIsLocked = !canNext && planMonthStatus(addMonths(month, 1), today) === "next-locked";
+  const showCreateTakeover = !plan && actionable;
 
   const budget = Number(profileQ.data?.budget_month_eur ?? 0);
   // Si el plan empieza a media de mes, el presupuesto que aplica es la parte
@@ -165,20 +219,21 @@ export default function Plan() {
   const periodBudget =
     budget > 0 && coverage ? Math.round(budget * coverageRatio(coverage, month)) : budget;
   const overBudget = periodBudget > 0 && monthTotal > periodBudget;
-  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
-    month: "long",
-    year: "numeric",
-  });
 
   const needCount =
     currentTrip?.groups.reduce((s, g) => s + g.items.filter((i) => !i.owned).length, 0) ?? 0;
   const showShopCta =
-    Boolean(plan) && tab === "compra" && !shopMode && (shopping?.length ?? 0) > 0 && needCount > 0;
+    Boolean(plan) &&
+    tab === "compra" &&
+    !shopMode &&
+    !readOnlyMonth &&
+    (shopping?.length ?? 0) > 0 &&
+    needCount > 0;
 
   // Modo compra: pantalla completa enfocada (diseño 1b). Sustituye toda la
   // pantalla — sin cabecera del plan, sin pestañas, sin barra de navegación —
   // y se sale con la flecha ← de su cabecera.
-  if (plan && tab === "compra" && shopMode) {
+  if (plan && tab === "compra" && shopMode && actionable) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
         <ShopModeView
@@ -205,11 +260,45 @@ export default function Plan() {
             <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
               Plan mensual
             </Text>
-            <Text className="font-heading text-3xl capitalize text-foreground" numberOfLines={1}>
-              {monthLabel}
-            </Text>
+            <View className="mt-0.5 flex-row items-center gap-1">
+              <Pressable
+                onPress={() => goToMonth(addMonths(month, -1))}
+                disabled={!canPrev}
+                hitSlop={8}
+                className="h-8 w-8 items-center justify-center rounded-full"
+                style={!canPrev ? { opacity: 0.3 } : undefined}
+              >
+                <ChevronLeft size={20} color="#83796c" />
+              </Pressable>
+              <Text
+                className="min-w-0 flex-1 text-center font-heading text-[26px] capitalize text-foreground"
+                numberOfLines={1}
+              >
+                {monthTitle(month)}
+              </Text>
+              <Pressable
+                onPress={() =>
+                  nextIsLocked
+                    ? Alert.alert(
+                        "Aún no toca",
+                        `Podrás preparar ${monthTitle(addMonths(month, 1))} la última semana de ${monthTitle(month)}.`,
+                      )
+                    : goToMonth(addMonths(month, 1))
+                }
+                disabled={!canNext && !nextIsLocked}
+                hitSlop={8}
+                className="h-8 w-8 items-center justify-center rounded-full"
+                style={!canNext && !nextIsLocked ? { opacity: 0.3 } : undefined}
+              >
+                {nextIsLocked ? (
+                  <Lock size={16} color="#83796c" />
+                ) : (
+                  <ChevronRight size={20} color="#83796c" />
+                )}
+              </Pressable>
+            </View>
           </View>
-          {plan ? (
+          {plan && actionable ? (
             <Pressable
               onPress={() => generate.mutate(undefined)}
               disabled={generate.isPending}
@@ -225,15 +314,18 @@ export default function Plan() {
           ) : null}
         </View>
 
-        {!plan ? (
+        {showCreateTakeover ? (
           <View className="mt-8 items-center rounded-3xl bg-surface p-6">
             <CalendarRange size={28} color="#ff8a3d" />
             <Text className="mt-3 text-sm font-sans-semibold text-foreground">
-              Todavía no tienes plan de este mes
+              {monthStatus === "next-unlocked"
+                ? `Prepara tu plan de ${monthTitle(month)}`
+                : "Todavía no tienes plan de este mes"}
             </Text>
             <Text className="mt-1.5 text-center text-sm text-muted-foreground">
-              Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu
-              presupuesto.
+              {monthStatus === "next-unlocked"
+                ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
+                : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
             </Text>
             <Pressable
               onPress={() => generate.mutate(undefined)}
@@ -242,7 +334,11 @@ export default function Plan() {
               style={generate.isPending || planQ.isLoading ? { opacity: 0.6 } : undefined}
             >
               <Text className="text-sm font-sans-semibold text-primary-foreground">
-                {generate.isPending ? "Preparando tu mes..." : "Crear plan del mes"}
+                {generate.isPending
+                  ? "Preparando tu mes..."
+                  : monthStatus === "next-unlocked"
+                    ? `Crear plan de ${monthTitle(month)}`
+                    : "Crear plan del mes"}
               </Text>
             </Pressable>
           </View>
@@ -253,7 +349,6 @@ export default function Plan() {
                 [
                   ["plan", "Plan", CalendarRange],
                   ["compra", "Ingredientes", ShoppingBasket],
-                  ["historial", "Historial", CalendarDays],
                 ] as const
               ).map(([key, label, Icon]) => {
                 const active = tab === key;
@@ -278,34 +373,51 @@ export default function Plan() {
 
             {tab === "plan" ? (
               <View className="mt-5 gap-5">
-                <View className="rounded-3xl bg-surface p-5">
-                  <View className="flex-row items-center gap-2">
-                    <Sparkles size={16} color="#ff8a3d" />
-                    <Text className="text-sm font-sans-semibold text-foreground">
-                      Cómo enfocamos el mes
+                <GoalWeightSummary logs={globalLogsQ.data ?? []} profile={profileQ.data ?? null} />
+
+                {plan ? (
+                  <View className="rounded-3xl bg-surface p-5">
+                    <View className="flex-row items-center gap-2">
+                      <Sparkles size={16} color="#ff8a3d" />
+                      <Text className="text-sm font-sans-semibold text-foreground">
+                        Cómo enfocamos el mes
+                      </Text>
+                    </View>
+                    <Text className="mt-2 text-sm leading-relaxed text-foreground">
+                      {plan.intro}
+                    </Text>
+                    {plan.focus.length ? (
+                      <View className="mt-3 gap-1.5">
+                        {plan.focus.map((f) => (
+                          <View key={f} className="flex-row gap-2">
+                            <View className="mt-2 h-1.5 w-1.5 rounded-full bg-primary" />
+                            <Text className="flex-1 text-sm text-foreground">{f}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                    <Text className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                      Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
+                      recoloco los siguientes.
                     </Text>
                   </View>
-                  <Text className="mt-2 text-sm leading-relaxed text-foreground">{plan.intro}</Text>
-                  {plan.focus.length ? (
-                    <View className="mt-3 gap-1.5">
-                      {plan.focus.map((f) => (
-                        <View key={f} className="flex-row gap-2">
-                          <View className="mt-2 h-1.5 w-1.5 rounded-full bg-primary" />
-                          <Text className="flex-1 text-sm text-foreground">{f}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                  <Text className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
-                    recoloco los siguientes.
-                  </Text>
-                </View>
+                ) : null}
 
-                <PlanMonthCalendar plan={plan} month={month} />
+                <PlanMonthCalendar
+                  plan={plan}
+                  month={month}
+                  logs={monthLogsQ.data ?? []}
+                  monthStatus={monthStatus}
+                  appStartedOn={appStartedOn}
+                  onOpenDay={setOpenDay}
+                />
+
+                {!plan && !(monthLogsQ.data?.length ?? 0) ? (
+                  <Text className="px-1 text-sm text-muted-foreground">
+                    No planificaste {monthTitle(month)}.
+                  </Text>
+                ) : null}
               </View>
-            ) : tab === "historial" ? (
-              <HistorialSection />
             ) : (
               <IngredientsTab
                 shopping={shopping}
@@ -324,6 +436,8 @@ export default function Plan() {
                   owned.mutate({ itemName, trip: clampedTrip, source: next })
                 }
                 month={month}
+                monthStatus={monthStatus}
+                readOnly={readOnlyMonth}
                 tripActual={tripActuals[clampedTrip]}
                 periodBudget={periodBudget}
                 overBudget={overBudget}
@@ -332,6 +446,14 @@ export default function Plan() {
           </>
         )}
       </ScrollView>
+
+      <DayDetailSheet
+        date={openDay}
+        plan={plan}
+        log={monthLogsQ.data?.find((l) => l.log_date === openDay)}
+        profile={profileQ.data ?? null}
+        onClose={() => setOpenDay(null)}
+      />
 
       {showShopCta ? (
         <View className="absolute inset-x-0 bottom-[96px] px-5">
@@ -354,9 +476,30 @@ export default function Plan() {
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 
+const SIGNAL_BG: Record<string, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  muted: "bg-muted",
+};
+
 // Calendario del mes con detalle de día en modal, equivalente RN del
-// PlanMonthCalendar de la web.
-function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }) {
+// PlanMonthCalendar de la web. Los días pasados llevan el semáforo de
+// cumplimiento y abren el detalle reducido del día (`onOpenDay`).
+function PlanMonthCalendar({
+  plan,
+  month,
+  logs,
+  monthStatus,
+  appStartedOn,
+  onOpenDay,
+}: {
+  plan: MonthlyPlan | null;
+  month: string;
+  logs: DailyLog[];
+  monthStatus: PlanMonthStatus;
+  appStartedOn: string | null;
+  onOpenDay: (date: string) => void;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
 
@@ -366,6 +509,8 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
   const daysInMonth = new Date(y, monthIdx + 1, 0).getDate();
   const firstOffset = (new Date(y, monthIdx, 1).getDay() + 6) % 7;
   const isoDay = (d: number) => `${month}-${String(d).padStart(2, "0")}`;
+  const fromDay = plan?.coverage?.fromDay ?? 1;
+  const logByDate = new Map(logs.map((l) => [l.log_date, l]));
 
   const cells: (string | null)[] = [
     ...Array.from({ length: firstOffset }, () => null),
@@ -379,7 +524,9 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
     <View className="rounded-3xl bg-surface p-5">
       <Text className="text-sm font-sans-semibold text-foreground">Calendario del mes</Text>
       <Text className="mt-1 text-xs text-muted-foreground">
-        Toca un día para ver su menú completo.
+        {monthStatus === "past"
+          ? "Toca un día para ver lo que comiste y sus macros."
+          : "Toca un día pasado para ver lo que comiste; uno futuro para su menú."}
       </Text>
 
       <View className="mt-4 flex-row flex-wrap">
@@ -393,6 +540,39 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
             return <View key={`empty-${i}`} className="p-0.5" style={{ width: `${100 / 7}%` }} />;
           const isWeekend = i % 7 === 5 || i % 7 === 6;
           const isToday = date === today;
+          const isPast = date < today;
+          const log = logByDate.get(date);
+          const inertBefore =
+            isBeforeAppStart(date, appStartedOn) || Number(date.slice(8, 10)) < fromDay;
+
+          if (inertBefore && !log) {
+            return (
+              <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
+                <View className="aspect-square items-center justify-center rounded-xl bg-muted/50">
+                  <Text className="text-sm text-muted-foreground/40">
+                    {Number(date.slice(8, 10))}
+                  </Text>
+                </View>
+              </View>
+            );
+          }
+
+          if (isPast) {
+            const habits = log?.habits ?? [];
+            const signal = ratioSignal(habits.filter((h) => h.done).length, habits.length);
+            const bg = SIGNAL_BG[signal] ?? "bg-secondary/70";
+            return (
+              <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
+                <Pressable
+                  onPress={() => onOpenDay(date)}
+                  className={`aspect-square items-center justify-center rounded-xl active:opacity-80 ${bg}`}
+                >
+                  <Text className="text-sm text-foreground">{Number(date.slice(8, 10))}</Text>
+                </Pressable>
+              </View>
+            );
+          }
+
           return (
             <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
               <Pressable
@@ -402,18 +582,16 @@ function PlanMonthCalendar({ plan, month }: { plan: MonthlyPlan; month: string }
                 } ${isToday ? "border-2 border-primary" : ""}`}
                 style={isToday ? { borderWidth: 2 } : undefined}
               >
-                <Text
-                  className={`text-sm ${
-                    date < today && !isWeekend ? "text-muted-foreground" : "text-foreground"
-                  }`}
-                >
-                  {Number(date.slice(8, 10))}
-                </Text>
+                <Text className="text-sm text-foreground">{Number(date.slice(8, 10))}</Text>
               </Pressable>
             </View>
           );
         })}
       </View>
+
+      <Text className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+        Verde: todas las comidas. Amarillo: comiste algo. Gris: sin comidas ese día.
+      </Text>
 
       <Dialog
         open={!!selected}
@@ -530,6 +708,8 @@ function IngredientsTab({
   setCadence,
   onToggle,
   month,
+  monthStatus,
+  readOnly,
   tripActual,
   periodBudget,
   overBudget,
@@ -548,13 +728,17 @@ function IngredientsTab({
   setCadence: (c: ShoppingCadence) => void;
   onToggle: (itemName: string, next: "fridge" | "store" | null) => void;
   month: string;
+  monthStatus: PlanMonthStatus;
+  readOnly: boolean;
   /** Gasto real registrado para la compra seleccionada (o undefined). */
   tripActual: number | undefined;
   periodBudget: number;
   overBudget: boolean;
 }) {
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
-  const editable = timing === "current";
+  // Mes que viene desbloqueado: la compra se hace entera ahora. Mes pasado: solo
+  // lectura. Mes en curso: solo la compra "current".
+  const editable = readOnly ? false : monthStatus === "next-unlocked" || timing === "current";
 
   // Cifras de la tarjeta "Te falta comprar": de la compra seleccionada, no del
   // mes (diseño 1c: "el número con el que sales de casa").
@@ -595,50 +779,58 @@ function IngredientsTab({
 
   return (
     <View className="mt-5 gap-2.5">
-      {/* Cadencia */}
-      <View className="rounded-3xl bg-surface px-4 py-3.5">
-        <View className="flex-row items-center gap-2">
-          <CalendarSync size={15} color="#ff8a3d" />
-          <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
-            Cada cuánto compras
+      {readOnly ? (
+        <View className="rounded-[20px] bg-secondary/60 px-4 py-3">
+          <Text className="text-xs leading-relaxed text-muted-foreground">
+            Compra de un mes ya pasado: se muestra solo para consultar, no se puede modificar.
           </Text>
         </View>
-        <View className="mt-2.5 flex-row gap-1 rounded-full bg-secondary/70 p-1">
-          {CADENCES.map((c) => {
-            const active = activeCadence === c.key;
-            return (
-              <Pressable
-                key={c.key}
-                onPress={() => {
-                  if (recadence.isPending) return;
-                  setCadence(c.key);
-                  if (c.key !== activeCadence) recadence.mutate(c.key);
-                }}
-                disabled={recadence.isPending}
-                className={`flex-1 items-center rounded-full py-2.5 active:opacity-80 ${
-                  active ? "bg-foreground" : ""
-                }`}
-                style={recadence.isPending ? { opacity: 0.6 } : undefined}
-              >
-                <Text
-                  className={`text-[11.5px] font-sans-semibold ${
-                    active ? "text-background" : "text-muted-foreground"
+      ) : (
+        /* Cadencia */
+        <View className="rounded-3xl bg-surface px-4 py-3.5">
+          <View className="flex-row items-center gap-2">
+            <CalendarSync size={15} color="#ff8a3d" />
+            <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
+              Cada cuánto compras
+            </Text>
+          </View>
+          <View className="mt-2.5 flex-row gap-1 rounded-full bg-secondary/70 p-1">
+            {CADENCES.map((c) => {
+              const active = activeCadence === c.key;
+              return (
+                <Pressable
+                  key={c.key}
+                  onPress={() => {
+                    if (recadence.isPending) return;
+                    setCadence(c.key);
+                    if (c.key !== activeCadence) recadence.mutate(c.key);
+                  }}
+                  disabled={recadence.isPending}
+                  className={`flex-1 items-center rounded-full py-2.5 active:opacity-80 ${
+                    active ? "bg-foreground" : ""
                   }`}
+                  style={recadence.isPending ? { opacity: 0.6 } : undefined}
                 >
-                  {c.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    className={`text-[11.5px] font-sans-semibold ${
+                      active ? "text-background" : "text-muted-foreground"
+                    }`}
+                  >
+                    {c.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
+            {recadence.isPending
+              ? "Repartiendo la compra..."
+              : tripsTotal > 1
+                ? `${tripsTotal} compras separadas, cada una con su lista.`
+                : "1 sola compra: menos frescos, más despensa."}
+          </Text>
         </View>
-        <Text className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
-          {recadence.isPending
-            ? "Repartiendo la compra..."
-            : tripsTotal > 1
-              ? `${tripsTotal} compras separadas, cada una con su lista.`
-              : "1 sola compra: menos frescos, más despensa."}
-        </Text>
-      </View>
+      )}
 
       {/* Aviso de presupuesto: es del mes entero, no de una compra. */}
       {overBudget ? (
@@ -666,7 +858,7 @@ function IngredientsTab({
               {activeCadence === "mensual"
                 ? "Compra única del mes"
                 : `Compra ${selectedTrip + 1} de ${tripsTotal}`}
-              {timing === "current" ? " · esta semana" : ""}
+              {monthStatus === "current" && timing === "current" ? " · esta semana" : ""}
             </Text>
             <Text className="font-mono text-[10px] text-muted-foreground">
               {tripRange.from} – {tripRange.to} {monthShort}
@@ -835,7 +1027,9 @@ function IngredientsTab({
         ))}
         {!shopping?.length ? (
           <Text className="text-sm text-muted-foreground">
-            Aún no hay lista. Regenera el plan para crearla.
+            {readOnly
+              ? "No hubo lista de la compra este mes."
+              : "Aún no hay lista. Regenera el plan para crearla."}
           </Text>
         ) : filteredGroups.length === 0 ? (
           <Text className="px-0.5 text-sm text-muted-foreground">
@@ -849,13 +1043,15 @@ function IngredientsTab({
       </View>
 
       {/* Tip de persistencia */}
-      <View className="mt-1 flex-row items-start gap-2.5 rounded-3xl bg-primary/10 px-4 py-3.5">
-        <Lightbulb size={15} color="#ff8a3d" style={{ marginTop: 2 }} />
-        <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
-          Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
-          volveré a pedir mientras te dure.
-        </Text>
-      </View>
+      {readOnly ? null : (
+        <View className="mt-1 flex-row items-start gap-2.5 rounded-3xl bg-primary/10 px-4 py-3.5">
+          <Lightbulb size={15} color="#ff8a3d" style={{ marginTop: 2 }} />
+          <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
+            Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
+            volveré a pedir mientras te dure.
+          </Text>
+        </View>
+      )}
     </View>
   );
 }

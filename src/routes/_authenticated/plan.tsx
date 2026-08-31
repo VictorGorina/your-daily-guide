@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  CalendarDays,
   CalendarRange,
   CalendarSync,
   Carrot,
@@ -12,20 +11,29 @@ import {
   Egg,
   Fish,
   Lightbulb,
+  Lock,
   RefreshCw,
   ShoppingBasket,
   ShoppingCart,
   Sparkle,
   Wheat,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
-import { HistorialSection } from "@/components/historial-section";
+import { DayDetailSheet } from "@/components/day-detail-sheet";
+import { GoalWeightSummary } from "@/components/goal-weight-summary";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
-import { fetchMonthlyPlan, fetchProfile, monthISO, todayISO } from "@/lib/daily";
 import {
+  fetchLogs,
+  fetchLogsForMonth,
+  fetchMonthlyPlan,
+  fetchProfile,
+  todayISO,
+} from "@/lib/daily";
+import {
+  addMonths,
   boughtTotal,
   cadenceOf,
   CADENCES,
@@ -33,13 +41,18 @@ import {
   eur,
   groupByTrip,
   homeTotal,
+  isMonthActionable,
+  monthTitle,
   pendingTotal,
+  planMonthStatus,
+  planNavBounds,
   shoppingToText,
   tripDayRange,
   tripsOfCadence,
   tripTiming,
   tripToText,
   shoppingTotal,
+  type PlanMonthStatus,
   type ShoppingCadence,
   type ShoppingItem,
   type TripTiming,
@@ -53,10 +66,11 @@ import {
 } from "@/lib/plan.functions";
 
 export const Route = createFileRoute("/_authenticated/plan")({
-  validateSearch: (search: Record<string, unknown>): { tab?: "plan" | "compra" | "historial" } => ({
-    tab:
-      search.tab === "compra" || search.tab === "historial"
-        ? (search.tab as "compra" | "historial")
+  validateSearch: (search: Record<string, unknown>): { tab?: "compra"; month?: string } => ({
+    tab: search.tab === "compra" ? "compra" : undefined,
+    month:
+      typeof search.month === "string" && /^\d{4}-\d{2}$/.test(search.month)
+        ? search.month
         : undefined,
   }),
   head: () => ({
@@ -81,15 +95,30 @@ export const Route = createFileRoute("/_authenticated/plan")({
 
 function PlanPage() {
   const qc = useQueryClient();
-  const month = monthISO();
+  const today = todayISO();
   const make = useServerFn(generateMonthlyPlan);
   const recad = useServerFn(recadenceMonthlyPlan);
-  const searchTab = Route.useSearch({ select: (s) => s.tab });
-  const [tab, setTab] = useState<"plan" | "compra" | "historial">(searchTab ?? "plan");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<"plan" | "compra">(search.tab ?? "plan");
+  // Mes seleccionado en la cabecera: gobierna toda la pantalla (calendario e
+  // ingredientes). Por defecto el mes en curso, o el que pida el deep link.
+  const [selectedMonth, setSelectedMonth] = useState(search.month ?? today.slice(0, 7));
+  const month = selectedMonth;
   const [cadence, setCadence] = useState<ShoppingCadence | null>(null);
 
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
+  const globalLogsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
+  const monthLogsQ = useQuery({
+    queryKey: ["logs", month],
+    queryFn: () => fetchLogsForMonth(month),
+  });
+
+  const appStartedOn = profileQ.data?.app_started_on ?? null;
+  const monthStatus = planMonthStatus(month, today);
+  const actionable = isMonthActionable(month, today);
+  const bounds = planNavBounds(today, appStartedOn);
+  const [openDay, setOpenDay] = useState<string | null>(null);
 
   const generate = useMutation({
     mutationFn: (nextCadence?: ShoppingCadence) =>
@@ -179,6 +208,25 @@ function PlanPage() {
   const [filter, setFilter] = useState<"need" | "have" | "all">("need");
   // Modo compra a pantalla completa
   const [shopMode, setShopMode] = useState(false);
+  const safeTrip = Math.min(selectedTrip, Math.max(0, tripsTotal - 1));
+
+  // Al cambiar de mes, el índice de compra y el modo compra dejan de tener
+  // sentido (dependían del plan del mes anterior). El primer render se salta
+  // para no pisar el `selectedTrip` inicial (que apunta a la compra en curso).
+  const prevMonthRef = useRef(month);
+  useEffect(() => {
+    if (prevMonthRef.current === month) return;
+    prevMonthRef.current = month;
+    setSelectedTrip(0);
+    setShopMode(false);
+    setOpenDay(null);
+  }, [month]);
+
+  const goToMonth = (target: string) => {
+    if (target < bounds.earliest || target > bounds.latest) return;
+    setSelectedMonth(target);
+    setTab("plan");
+  };
 
   const listText = () => shoppingToText(shopping, activeCadence, month, coverage);
 
@@ -211,10 +259,15 @@ function PlanPage() {
   const periodBudget =
     budget > 0 && coverage ? Math.round(budget * coverageRatio(coverage, month)) : budget;
   const overBudget = periodBudget > 0 && monthTotal > periodBudget;
-  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
-    month: "long",
-    year: "numeric",
-  });
+
+  const canPrev = month > bounds.earliest;
+  const canNext = month < bounds.latest;
+  // El navegador se para en el mes en curso mientras el siguiente sigue
+  // bloqueado; el botón muestra un candado y explica cuándo se abrirá.
+  const nextIsLocked = !canNext && planMonthStatus(addMonths(month, 1), today) === "next-locked";
+  // Pantalla completa "crea tu plan": solo para meses donde se puede generar.
+  const showCreateTakeover = !plan && actionable;
+  const readOnlyMonth = monthStatus === "past";
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
@@ -223,11 +276,37 @@ function PlanPage() {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Plan mensual
           </p>
-          <h1 className="truncate font-title text-[34px] font-semibold tracking-[-0.03em] capitalize">
-            {monthLabel}
-          </h1>
+          <div className="mt-0.5 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => goToMonth(addMonths(month, -1))}
+              disabled={!canPrev}
+              aria-label="Mes anterior"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground disabled:opacity-30"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h1 className="min-w-0 flex-1 truncate text-center font-title text-[28px] font-semibold capitalize tracking-[-0.03em]">
+              {monthTitle(month)}
+            </h1>
+            <button
+              type="button"
+              onClick={() =>
+                nextIsLocked
+                  ? toast.info(
+                      `Podrás preparar ${monthTitle(addMonths(month, 1))} la última semana de ${monthTitle(month)}.`,
+                    )
+                  : goToMonth(addMonths(month, 1))
+              }
+              disabled={!canNext && !nextIsLocked}
+              aria-label={nextIsLocked ? "Mes siguiente (aún bloqueado)" : "Mes siguiente"}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground disabled:opacity-30"
+            >
+              {nextIsLocked ? <Lock className="h-4 w-4" /> : <ChevronRight className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
-        {plan ? (
+        {plan && actionable ? (
           <button
             onClick={() => generate.mutate(undefined)}
             disabled={generate.isPending}
@@ -239,30 +318,38 @@ function PlanPage() {
         ) : null}
       </header>
 
-      {!plan ? (
+      {showCreateTakeover ? (
         <section className="surface-card animate-rise mt-8 p-6 text-center">
           <CalendarRange className="mx-auto h-7 w-7 text-primary" />
-          <h2 className="mt-3 text-sm font-semibold">Todavía no tienes plan de este mes</h2>
+          <h2 className="mt-3 text-sm font-semibold">
+            {monthStatus === "next-unlocked"
+              ? `Prepara tu plan de ${monthTitle(month)}`
+              : "Todavía no tienes plan de este mes"}
+          </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu
-            presupuesto.
+            {monthStatus === "next-unlocked"
+              ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
+              : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
           </p>
           <button
             onClick={() => generate.mutate(undefined)}
             disabled={generate.isPending || planQ.isLoading}
             className="mt-5 w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
           >
-            {generate.isPending ? "Preparando tu mes..." : "Crear plan del mes"}
+            {generate.isPending
+              ? "Preparando tu mes..."
+              : monthStatus === "next-unlocked"
+                ? `Crear plan de ${monthTitle(month)}`
+                : "Crear plan del mes"}
           </button>
         </section>
       ) : (
         <>
-          <div className="sticky top-3 z-10 mt-6 grid grid-cols-3 gap-2 rounded-full bg-secondary/80 p-1 backdrop-blur">
+          <div className="sticky top-3 z-10 mt-6 grid grid-cols-2 gap-2 rounded-full bg-secondary/80 p-1 backdrop-blur">
             {(
               [
                 ["plan", "Plan", CalendarRange],
                 ["compra", "Ingredientes", ShoppingBasket],
-                ["historial", "Historial", CalendarDays],
               ] as const
             ).map(([key, label, Icon]) => (
               <button
@@ -279,48 +366,61 @@ function PlanPage() {
 
           {tab === "plan" ? (
             <section className="mt-5 space-y-5">
-              <div className="surface-card p-5">
-                <div className="flex items-center gap-2">
-                  <Sparkle className="h-4 w-4 text-primary" />
-                  <h2 className="text-sm font-semibold">Cómo enfocamos el mes</h2>
-                </div>
-                <p className="hyphens-auto mt-2 text-justify text-sm leading-relaxed">
-                  {plan.intro}
-                </p>
-                {plan.focus.length ? (
-                  <ul className="mt-3 space-y-1.5">
-                    {plan.focus.map((f) => (
-                      <li key={f} className="flex gap-2 text-sm">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                        <span className="min-w-0">{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <p className="hyphens-auto mt-3 text-justify text-xs leading-relaxed text-muted-foreground">
-                  Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
-                  recoloco los siguientes.
-                </p>
-              </div>
+              <GoalWeightSummary logs={globalLogsQ.data ?? []} profile={profileQ.data ?? null} />
 
-              <PlanMonthCalendar plan={plan} month={month} />
+              {plan ? (
+                <div className="surface-card p-5">
+                  <div className="flex items-center gap-2">
+                    <Sparkle className="h-4 w-4 text-primary" />
+                    <h2 className="text-sm font-semibold">Cómo enfocamos el mes</h2>
+                  </div>
+                  <p className="hyphens-auto mt-2 text-justify text-sm leading-relaxed">
+                    {plan.intro}
+                  </p>
+                  {plan.focus.length ? (
+                    <ul className="mt-3 space-y-1.5">
+                      {plan.focus.map((f) => (
+                        <li key={f} className="flex gap-2 text-sm">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                          <span className="min-w-0">{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <p className="hyphens-auto mt-3 text-justify text-xs leading-relaxed text-muted-foreground">
+                    Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
+                    recoloco los siguientes.
+                  </p>
+                </div>
+              ) : null}
+
+              <PlanMonthCalendar
+                plan={plan}
+                month={month}
+                logs={monthLogsQ.data ?? []}
+                monthStatus={monthStatus}
+                appStartedOn={appStartedOn}
+                onOpenDay={setOpenDay}
+              />
+
+              {!plan && !(monthLogsQ.data?.length ?? 0) ? (
+                <p className="px-1 text-sm text-muted-foreground">
+                  No planificaste {monthTitle(month)}.
+                </p>
+              ) : null}
             </section>
-          ) : tab === "historial" ? (
-            <HistorialSection />
-          ) : shopMode ? (
+          ) : shopMode && actionable ? (
             <ShopModeView
-              trip={trips[selectedTrip]}
+              trip={trips[safeTrip]}
               coverage={coverage}
               tripsTotal={tripsTotal}
-              selectedTrip={selectedTrip}
+              selectedTrip={safeTrip}
               month={month}
-              onToggle={(itemName) =>
-                owned.mutate({ itemName, trip: selectedTrip, source: "store" })
-              }
+              onToggle={(itemName) => owned.mutate({ itemName, trip: safeTrip, source: "store" })}
               onClose={() => setShopMode(false)}
-              tripActual={tripActuals[selectedTrip]}
+              tripActual={tripActuals[safeTrip]}
               savingActual={setActual.isPending}
-              onSaveActual={(amount) => setActual.mutate({ trip: selectedTrip, amount })}
+              onSaveActual={(amount) => setActual.mutate({ trip: safeTrip, amount })}
             />
           ) : (
             <IngredientsTab
@@ -330,7 +430,7 @@ function PlanPage() {
               activeCadence={activeCadence}
               coverage={coverage}
               todayDayOfMonth={todayDayOfMonth}
-              selectedTrip={selectedTrip}
+              selectedTrip={safeTrip}
               setSelectedTrip={setSelectedTrip}
               filter={filter}
               setFilter={setFilter}
@@ -344,6 +444,8 @@ function PlanPage() {
               onEnterShopMode={() => setShopMode(true)}
               onShareTrip={(trip, label) => void shareTrip(trip, label)}
               month={month}
+              monthStatus={monthStatus}
+              readOnly={readOnlyMonth}
               periodBudget={periodBudget}
               partialMonth={partialMonth}
               overBudget={overBudget}
@@ -352,8 +454,16 @@ function PlanPage() {
         </>
       )}
 
+      <DayDetailSheet
+        date={openDay}
+        plan={plan}
+        log={monthLogsQ.data?.find((l) => l.log_date === openDay)}
+        profile={profileQ.data ?? null}
+        onClose={() => setOpenDay(null)}
+      />
+
       {/* En Modo compra la pantalla es completa (diseño 1b): sin barra de nav. */}
-      {shopMode ? null : <BottomNav />}
+      {shopMode && actionable ? null : <BottomNav />}
     </main>
   );
 }
@@ -401,6 +511,8 @@ function IngredientsTab({
   onEnterShopMode,
   onShareTrip,
   month,
+  monthStatus,
+  readOnly,
   periodBudget,
   partialMonth,
   overBudget,
@@ -430,13 +542,18 @@ function IngredientsTab({
     label: string,
   ) => void;
   month: string;
+  monthStatus: PlanMonthStatus;
+  readOnly: boolean;
   periodBudget: number;
   partialMonth: boolean;
   overBudget: boolean;
 }) {
   const currentTrip = trips[selectedTrip] ?? trips[0];
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
-  const editable = timing === "current";
+  // Mes que viene desbloqueado: la compra se hace entera ahora, así que todas
+  // las compras son accionables a la vez (no se respeta el escalonado semanal).
+  // Mes pasado: solo lectura. Mes en curso: solo la compra "current".
+  const editable = readOnly ? false : monthStatus === "next-unlocked" || timing === "current";
 
   // Cifras de la tarjeta "Te falta comprar": de la compra seleccionada, no del
   // mes (diseño 1c: "el número con el que sales de casa").
@@ -480,38 +597,48 @@ function IngredientsTab({
 
   return (
     <section className="mt-5 space-y-3 pb-28">
-      {/* Cadencia */}
-      <div className="surface-card px-4 py-3.5">
-        <div className="flex items-center gap-2">
-          <CalendarSync className="h-[15px] w-[15px] shrink-0 text-primary" />
-          <h3 className="flex-1 text-[12.5px] font-semibold">Cada cuánto compras</h3>
+      {readOnly ? (
+        <div className="rounded-[20px] bg-secondary/60 px-4 py-3">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Compra de un mes ya pasado: se muestra solo para consultar, no se puede modificar.
+          </p>
         </div>
-        <div className="mt-2.5 grid grid-cols-3 gap-1 rounded-full bg-secondary/70 p-1">
-          {CADENCES.map((c) => (
-            <button
-              key={c.key}
-              onClick={() => {
-                if (recadence.isPending) return;
-                setCadence(c.key);
-                if (c.key !== activeCadence) recadence.mutate(c.key);
-              }}
-              disabled={recadence.isPending}
-              className={`rounded-full py-2.5 text-[11.5px] font-semibold transition-colors disabled:opacity-60 ${
-                activeCadence === c.key ? "bg-foreground text-background" : "text-muted-foreground"
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
+      ) : (
+        /* Cadencia */
+        <div className="surface-card px-4 py-3.5">
+          <div className="flex items-center gap-2">
+            <CalendarSync className="h-[15px] w-[15px] shrink-0 text-primary" />
+            <h3 className="flex-1 text-[12.5px] font-semibold">Cada cuánto compras</h3>
+          </div>
+          <div className="mt-2.5 grid grid-cols-3 gap-1 rounded-full bg-secondary/70 p-1">
+            {CADENCES.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => {
+                  if (recadence.isPending) return;
+                  setCadence(c.key);
+                  if (c.key !== activeCadence) recadence.mutate(c.key);
+                }}
+                disabled={recadence.isPending}
+                className={`rounded-full py-2.5 text-[11.5px] font-semibold transition-colors disabled:opacity-60 ${
+                  activeCadence === c.key
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
+            {recadence.isPending
+              ? "Repartiendo la compra..."
+              : tripsTotal > 1
+                ? `${tripsTotal} compras separadas, cada una con su lista.`
+                : "1 sola compra: menos frescos, más despensa."}
+          </p>
         </div>
-        <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
-          {recadence.isPending
-            ? "Repartiendo la compra..."
-            : tripsTotal > 1
-              ? `${tripsTotal} compras separadas, cada una con su lista.`
-              : "1 sola compra: menos frescos, más despensa."}
-        </p>
-      </div>
+      )}
 
       {/* Aviso de presupuesto: es del mes entero, no de una compra. */}
       {overBudget ? (
@@ -539,7 +666,7 @@ function IngredientsTab({
               {activeCadence === "mensual"
                 ? "Compra única del mes"
                 : `Compra ${selectedTrip + 1} de ${tripsTotal}`}
-              {timing === "current" ? " · esta semana" : ""}
+              {monthStatus === "current" && timing === "current" ? " · esta semana" : ""}
             </p>
             <p className="font-mono text-[10px] text-muted-foreground">
               {tripRange.from} – {tripRange.to}{" "}
@@ -705,22 +832,26 @@ function IngredientsTab({
         ))}
         {!shopping?.length ? (
           <p className="text-sm text-muted-foreground">
-            Aún no hay lista. Regenera el plan para crearla.
+            {readOnly
+              ? "No hubo lista de la compra este mes."
+              : "Aún no hay lista. Regenera el plan para crearla."}
           </p>
         ) : null}
       </div>
 
       {/* Tip de persistencia */}
-      <div className="flex items-start gap-2.5 rounded-[20px] bg-primary/10 px-4 py-3.5">
-        <Lightbulb className="mt-0.5 h-[15px] w-[15px] shrink-0 text-primary" />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
-          volveré a pedir mientras te dure.
-        </p>
-      </div>
+      {readOnly ? null : (
+        <div className="flex items-start gap-2.5 rounded-[20px] bg-primary/10 px-4 py-3.5">
+          <Lightbulb className="mt-0.5 h-[15px] w-[15px] shrink-0 text-primary" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
+            volveré a pedir mientras te dure.
+          </p>
+        </div>
+      )}
 
       {/* CTA fijo al fondo — "Ir a comprar" */}
-      {shopping?.length && needCount > 0 ? (
+      {!readOnly && shopping?.length && needCount > 0 ? (
         <div className="fixed inset-x-0 bottom-[88px] z-20 px-5">
           <div className="mx-auto max-w-lg">
             <button

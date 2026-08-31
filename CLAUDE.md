@@ -93,6 +93,17 @@ sobre la rotación semanal por defecto; una recolocación automática posterior 
 pisa (`mergeFuturePlan`). La lista de la compra nunca cambia — si un plato pide algo no comprado,
 se guarda igual y aparece como aviso en `PlanDay.extras`.
 
+**Pantalla Plan — navegación de meses y unificación de Historial.** La pantalla tiene dos
+subpestañas (Plan e Ingredientes; ya no hay "Historial") y un selector `‹ mes ›` en la cabecera
+que gobierna toda la pantalla. El calendario del mes es el navegador del historial: los días
+pasados llevan el semáforo de cumplimiento (`ratioSignal`, sin rojo) y abren un detalle reducido
+del día (`day-detail-sheet.tsx`). El navegador no baja del mes de `profiles.app_started_on` ni
+sube más allá del mes que viene, y este último solo se puede generar/accionar en su última semana
+(`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7`, el mismo del aviso push de
+renovación). `generateMonthlyPlan` rechaza en servidor los meses pasados y el mes que viene aún
+bloqueado. Meses pasados: solo lectura. Helpers de mes en `plan-shared.ts` (`planMonthStatus`,
+`isMonthActionable`, `planNavBounds`, `addMonths`, `monthTitle`).
+
 **Notificaciones push:** Web Push real (VAPID) vía `@pushforge/builder`, elegido porque solo usa
 Web Crypto API (el paquete `web-push` de npm no funciona en el runtime de despliegue). El disparo
 periódico no usa un cron nativo de la plataforma — un workflow de GitHub Actions

@@ -120,7 +120,14 @@ export async function syncSharedMeals(opts: {
   if (!ctx.householdId || !ctx.others.length) return { synced: 0 };
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const cursor = planCursor(opts.today);
+  // Al preparar el mes que viene por adelantado, `opts.today` cae en el mes
+  // anterior: `planCursor` lo tomaría como semana 3-4 y dejaría medio mes sin
+  // sincronizar. Un mes íntegramente futuro no tiene nada fijado, así que el
+  // cursor arranca "antes de todo" para que se copie completo.
+  const cursor =
+    opts.month > opts.today.slice(0, 7)
+      ? { weekIndex: -1, dayIndex: -1, dayName: "" }
+      : planCursor(opts.today);
   let synced = 0;
 
   for (const other of ctx.others) {

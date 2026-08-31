@@ -226,6 +226,7 @@ export type Database = {
         Row: {
           activity_level: string | null;
           age: number | null;
+          app_started_on: string | null;
           budget_month_eur: number | null;
           coach_scope: string | null;
           created_at: string;
@@ -268,6 +269,7 @@ export type Database = {
         Insert: {
           activity_level?: string | null;
           age?: number | null;
+          app_started_on?: string | null;
           budget_month_eur?: number | null;
           coach_scope?: string | null;
           created_at?: string;
@@ -310,6 +312,7 @@ export type Database = {
         Update: {
           activity_level?: string | null;
           age?: number | null;
+          app_started_on?: string | null;
           budget_month_eur?: number | null;
           coach_scope?: string | null;
           created_at?: string;

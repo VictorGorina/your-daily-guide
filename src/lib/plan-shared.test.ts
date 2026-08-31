@@ -1,17 +1,25 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  addMonths,
   cadenceOf,
   cleanPlan,
   cleanShopping,
   cleanTripActuals,
   coverageRatio,
+  daysLeftInMonth,
   groupByTrip,
+  isBeforeAppStart,
+  isMonthActionable,
+  isNextMonthUnlocked,
   mealsForDate,
   mergeFuturePlan,
   type MonthlyPlan,
   monthCoverage,
+  nextMonthISO,
   parseJsonLoose,
+  planMonthStatus,
+  planNavBounds,
   boughtTotal,
   homeTotal,
   ownedTotal,
@@ -93,6 +101,85 @@ describe("coverageRatio", () => {
 
   it("nunca pasa de 1", () => {
     expect(coverageRatio({ fromDay: 1, toDay: 31 }, "2026-08")).toBe(1);
+  });
+});
+
+// --- navegación de meses ------------------------------------------------
+
+describe("addMonths", () => {
+  it("cruza de año hacia delante y hacia atrás", () => {
+    expect(addMonths("2026-12", 1)).toBe("2027-01");
+    expect(addMonths("2026-01", -1)).toBe("2025-12");
+    expect(addMonths("2026-08", 0)).toBe("2026-08");
+  });
+});
+
+describe("daysLeftInMonth / nextMonthISO", () => {
+  it("cuenta hoy incluido", () => {
+    expect(daysLeftInMonth("2026-08-31")).toBe(1);
+    expect(daysLeftInMonth("2026-08-25")).toBe(7);
+    expect(daysLeftInMonth("2026-02-01")).toBe(28);
+  });
+
+  it("da el mes siguiente al de la fecha", () => {
+    expect(nextMonthISO("2026-08-25")).toBe("2026-09");
+    expect(nextMonthISO("2026-12-10")).toBe("2027-01");
+  });
+});
+
+describe("isNextMonthUnlocked", () => {
+  it("se desbloquea a 7 días o menos de fin de mes", () => {
+    expect(isNextMonthUnlocked("2026-08-23")).toBe(false); // quedan 9
+    expect(isNextMonthUnlocked("2026-08-24")).toBe(false); // quedan 8
+    expect(isNextMonthUnlocked("2026-08-25")).toBe(true); // quedan 7
+    expect(isNextMonthUnlocked("2026-08-31")).toBe(true); // queda 1
+  });
+});
+
+describe("planMonthStatus / isMonthActionable", () => {
+  const today = "2026-08-10"; // quedan 22 días → mes+1 bloqueado
+
+  it("clasifica los cinco estados", () => {
+    expect(planMonthStatus("2026-07", today)).toBe("past");
+    expect(planMonthStatus("2026-08", today)).toBe("current");
+    expect(planMonthStatus("2026-09", today)).toBe("next-locked");
+    expect(planMonthStatus("2026-10", today)).toBe("far-future");
+    expect(planMonthStatus("2026-09", "2026-08-28")).toBe("next-unlocked");
+  });
+
+  it("solo el actual y el siguiente desbloqueado son accionables", () => {
+    expect(isMonthActionable("2026-08", today)).toBe(true);
+    expect(isMonthActionable("2026-09", today)).toBe(false);
+    expect(isMonthActionable("2026-09", "2026-08-28")).toBe(true);
+    expect(isMonthActionable("2026-07", today)).toBe(false);
+  });
+});
+
+describe("planNavBounds", () => {
+  it("sin fecha de alta, el suelo es el mes en curso", () => {
+    expect(planNavBounds("2026-08-10", null)).toEqual({ earliest: "2026-08", latest: "2026-08" });
+  });
+
+  it("la fecha de alta baja el suelo hasta su mes", () => {
+    expect(planNavBounds("2026-08-10", "2026-05-14").earliest).toBe("2026-05");
+  });
+
+  it("una fecha de alta futura o del mes en curso no sube el suelo", () => {
+    expect(planNavBounds("2026-08-10", "2026-08-01").earliest).toBe("2026-08");
+  });
+
+  it("el techo sube al mes que viene solo cuando está desbloqueado", () => {
+    expect(planNavBounds("2026-08-10", null).latest).toBe("2026-08");
+    expect(planNavBounds("2026-08-28", null).latest).toBe("2026-09");
+  });
+});
+
+describe("isBeforeAppStart", () => {
+  it("marca los días anteriores a la fecha de alta", () => {
+    expect(isBeforeAppStart("2026-05-10", "2026-05-14")).toBe(true);
+    expect(isBeforeAppStart("2026-05-14", "2026-05-14")).toBe(false);
+    expect(isBeforeAppStart("2026-05-20", "2026-05-14")).toBe(false);
+    expect(isBeforeAppStart("2026-05-01", null)).toBe(false);
   });
 });
 

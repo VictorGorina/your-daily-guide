@@ -1,5 +1,6 @@
 import type { DailyGuide } from "@/lib/daily";
 import { madridTodayISO } from "@/lib/madrid-date";
+import { daysLeftInMonth, nextMonthISO, NEXT_MONTH_UNLOCK_DAYS } from "@/lib/plan-shared";
 import { sendPushNotification, type PushPayload } from "@/lib/web-push.server";
 
 export type DispatchSummary = {
@@ -43,24 +44,11 @@ function timeToMinutes(hhmm: string | null): number | null {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
-/** Días que quedan del mes en curso, contando hoy (1 = hoy es el último día). */
-function daysLeftInMonth(dateISO: string): number {
-  const [y, m] = dateISO.slice(0, 7).split("-").map(Number);
-  const lastDay = new Date(y ?? 1970, m ?? 1, 0).getDate();
-  const day = Number(dateISO.slice(8, 10));
-  return lastDay - day + 1;
-}
-
-/** Mes "YYYY-MM" siguiente al de una fecha "YYYY-MM-DD". */
-function nextMonthOf(dateISO: string): string {
-  const [y, m] = dateISO.slice(0, 7).split("-").map(Number);
-  const d = new Date(y ?? 1970, m ?? 1, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-// A partir de cuántos días quedan del mes se avisa de que hay que preparar el
-// plan del siguiente.
-const RENEWAL_DAYS_LEFT = 5;
+// A cuántos días o menos de fin de mes se avisa de que hay que preparar el plan
+// del siguiente. Es el mismo umbral con el que el navegador de la pantalla Plan
+// desbloquea el mes que viene (`plan-shared.ts`), para que aviso y desbloqueo
+// coincidan.
+const RENEWAL_DAYS_LEFT = NEXT_MONTH_UNLOCK_DAYS;
 
 /** ¿`target` cae en (ahora - WINDOW_MINUTES, ahora]? Contempla el cruce de medianoche. */
 function inWindow(target: number | null, nowMinutes: number): boolean {
@@ -191,10 +179,11 @@ export async function dispatchPush(): Promise<DispatchSummary> {
     (p) => p.evening_push_sent_on !== today && inWindow(timeToMinutes(p.evening_time), nowMinutes),
   );
 
-  // A 5 días o menos de fin de mes, si todavía no hay plan del mes siguiente
-  // (y no se avisó ya hoy), se avisa una vez al día hasta que lo generen —
-  // a mano desde Plan o solo al entrar el día 1 (ver auto-generación en Hoy).
-  const nextMonth = nextMonthOf(today);
+  // A `RENEWAL_DAYS_LEFT` días o menos de fin de mes, si todavía no hay plan del
+  // mes siguiente (y no se avisó ya hoy), se avisa una vez al día hasta que lo
+  // generen — a mano desde Plan (donde ese mismo umbral desbloquea el mes que
+  // viene) o solo al entrar el día 1 (ver auto-generación en Hoy).
+  const nextMonth = nextMonthISO(today);
   const renewalCandidates =
     daysLeftInMonth(today) <= RENEWAL_DAYS_LEFT
       ? rows.filter((p) => p.plan_renewal_push_sent_on !== today)
@@ -301,7 +290,9 @@ export async function dispatchPush(): Promise<DispatchSummary> {
     });
     for (const p of renewalMatches) {
       const { title, body } = renewalCopy(toneOf(p.tone), p.display_name, nextMonthLabel);
-      await sendTo(p.id, { title, body, url: "/hoy" });
+      // Lleva directo a la pantalla del plan del mes que viene (ya desbloqueada),
+      // no a Hoy: el objetivo del aviso es que preparen ese plan y su compra.
+      await sendTo(p.id, { title, body, url: `/plan?month=${nextMonth}` });
       await supabaseAdmin
         .from("profiles")
         .update({ plan_renewal_push_sent_on: today })

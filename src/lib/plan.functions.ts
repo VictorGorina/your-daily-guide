@@ -13,9 +13,11 @@ import {
   coverageRatio,
   daysInMonth,
   ingredientNames,
+  isNextMonthUnlocked,
   mealsForDate,
   mergeFuturePlan,
   monthCoverage,
+  nextMonthISO,
   planForDate,
   repartitionTrips,
   tripDayRange,
@@ -126,6 +128,17 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; cadence?: ShoppingCadence }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    // No se planifica el pasado (no se puede cumplir y gasta tokens) ni más allá
+    // del mes que viene, y este último solo en su última semana — mismo umbral
+    // con el que la pantalla Plan lo desbloquea (ver `isNextMonthUnlocked`).
+    const today = madridTodayISO();
+    const currentMonth = today.slice(0, 7);
+    if (input.month < currentMonth) throw new Error("No se planifican meses pasados");
+    const nm = nextMonthISO(today);
+    if (input.month > nm) throw new Error("Solo puedes preparar hasta el mes que viene");
+    if (input.month === nm && !isNextMonthUnlocked(today)) {
+      throw new Error("Aún no toca preparar el mes que viene; podrás la última semana del mes");
+    }
     const cadence: ShoppingCadence =
       input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
     return { month: input.month, cadence };

@@ -1,7 +1,8 @@
 import { Redirect } from "expo-router";
 
-// Historial vive ahora como tercera sub-pestaña de Plan (ver plan.tsx). Esta
-// pantalla se conserva solo para no romper enlaces antiguos a /historial.
+// Historial se fundió en la subpestaña Plan (el calendario del mes es el
+// navegador del historial). Esta pantalla se conserva solo para no romper
+// enlaces antiguos a /historial.
 export default function Historial() {
-  return <Redirect href="/plan?tab=historial" />;
+  return <Redirect href="/plan" />;
 }

@@ -92,5 +92,8 @@ export function randomDemoProfile(): Partial<Profile> {
     ]),
     weigh_in_cadence: pick(["semanal", "quincenal"]),
     onboarding_completed: true,
+    // Alta ~40 días atrás para que el navegador de meses de Plan tenga historial
+    // que enseñar (y un mes anterior navegable) en las demos.
+    app_started_on: new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10),
   };
 }
