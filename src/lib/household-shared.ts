@@ -53,6 +53,57 @@ export function describeSharedSlots(slots: SharedSlots): string {
   return parts.length ? parts.join(" · ") : "sin comidas compartidas";
 }
 
+/** "Ana", "Ana y Luis", "Ana, Luis y Marta". */
+function joinPeople(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+
+/**
+ * Describe la mesa del hogar en un par de frases para el prompt del coach:
+ * quién come junto y quién tiene la app, los niños con edad y alergias, y quién
+ * planifica. Es solo texto — el reparto de permisos (quién puede cambiar qué)
+ * lo imponen los guards del servidor, no este resumen.
+ */
+export function describeRoster(
+  members: { displayName: string; hasAccount: boolean; isPlanner: boolean }[],
+  children: { name: string; age: number | null; allergies: string | null }[],
+): string {
+  const withApp = members.filter((m) => m.hasAccount).map((m) => m.displayName);
+  const withoutApp = members.filter((m) => !m.hasAccount).map((m) => m.displayName);
+  const planner = members.find((m) => m.isPlanner)?.displayName ?? null;
+
+  const adultParts: string[] = [];
+  if (withApp.length) adultParts.push(`${joinPeople(withApp)} (con la app)`);
+  if (withoutApp.length) {
+    adultParts.push(`${joinPeople(withoutApp)} (sin la app, solo cuentan para la compra)`);
+  }
+
+  const lines: string[] = [
+    adultParts.length
+      ? `Comen juntos en casa: ${adultParts.join(", ")}.`
+      : "Hogar sin adultos configurados todavía.",
+  ];
+  if (children.length) {
+    lines.push(
+      `Niños: ${children
+        .map(
+          (c) =>
+            `${c.name}${c.age != null ? ` (${c.age} años)` : ""}${
+              c.allergies ? `, alergia a ${c.allergies}` : ", sin alergias"
+            }`,
+        )
+        .join("; ")}.`,
+    );
+  }
+  lines.push(
+    planner
+      ? `Planifica el menú y hace la compra de la casa: ${planner}.`
+      : "Ahora mismo nadie de la casa planifica el menú compartido.",
+  );
+  return lines.join("\n");
+}
+
 /** Apetito de una persona: ajusta su ración base ±0,2 (niños) o la fija directa (adultos). */
 export type Appetite = "poco" | "normal" | "mucho";
 

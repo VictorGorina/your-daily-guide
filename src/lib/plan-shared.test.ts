@@ -8,6 +8,7 @@ import {
   cleanPantryExtras,
   cleanPlan,
   cleanShopping,
+  childMealsForDate,
   cleanTripActuals,
   cleanTripReceipts,
   composeDayForUser,
@@ -494,6 +495,41 @@ describe("cleanPlan", () => {
     expect(out!.weeks[0]!.days).toHaveLength(7);
     expect(out!.intro).toBe("123");
   });
+
+  it("valida days[].kids: descarta entradas sin plato, con slot no principal o duplicadas", () => {
+    const out = cleanPlan({
+      weeks: [
+        {
+          label: "S1",
+          days: [
+            {
+              day: "Lunes",
+              lunch: "x",
+              dinner: "y",
+              kids: [
+                { childId: "leo", slot: "cena", dish: "Crema de calabaza", off: ["nata", ""] },
+                { childId: "leo", slot: "cena", dish: "Otro (duplicado, se ignora)" },
+                { childId: "ana", slot: "merienda", dish: "slot inválido, fuera" },
+                { childId: "leo", slot: "snack", dish: "el snack no se comparte (D5), fuera" },
+                { childId: "", slot: "comida", dish: "sin childId, fuera" },
+                { childId: "ana", slot: "comida", dish: "" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(out!.weeks[0]!.days[0]!.kids).toEqual([
+      { childId: "leo", slot: "cena", dish: "Crema de calabaza", off: ["nata"] },
+    ]);
+  });
+
+  it("un día sin kids no lleva la clave", () => {
+    const out = cleanPlan({
+      weeks: [{ label: "S1", days: [{ day: "Lunes", lunch: "x", dinner: "y" }] }],
+    });
+    expect(out!.weeks[0]!.days[0]!).not.toHaveProperty("kids");
+  });
 });
 
 // --- lectura del plan por fecha --------------------------------------
@@ -565,6 +601,51 @@ describe("mergeFuturePlan", () => {
     // día 1 de la semana 0 (di=1 <= cursor.dayIndex=2) queda intacto
     expect(merged.weeks[0]!.days[1]!.lunch).toBe("Comida S0D1");
   });
+
+  it("conserva el plato aparte de un niño puesto a mano en un día futuro (issue 07)", () => {
+    const current = plan();
+    current.weeks[1]!.days[0] = day("Lunes", "C", "D", {
+      kids: [{ childId: "leo", slot: "cena", dish: "Puré de patata" }],
+    });
+    const next = plan({
+      weeks: plan().weeks.map((w) => ({
+        ...w,
+        days: w.days.map((d) => day(d.day, `NUEVO ${d.lunch}`, `NUEVO ${d.dinner}`)),
+      })),
+    });
+
+    const merged = mergeFuturePlan(current, next, { weekIndex: 0, dayIndex: 2 });
+    expect(merged.weeks[1]!.days[0]!.kids).toEqual([
+      { childId: "leo", slot: "cena", dish: "Puré de patata" },
+    ]);
+  });
+});
+
+// --- plato aparte de un niño (issue 07) ---------------------------------
+
+describe("childMealsForDate", () => {
+  it("devuelve solo los slots con override para ese niño", () => {
+    // 2026-08-05 es miércoles → semana 0, día índice 2
+    const p = plan();
+    p.weeks[0]!.days[2] = day("Miércoles", "Lentejas", "Merluza", {
+      kids: [
+        { childId: "leo", slot: "cena", dish: "Crema de calabaza", off: ["nata"] },
+        { childId: "ana", slot: "comida", dish: "Pasta con tomate" },
+      ],
+    });
+
+    expect(childMealsForDate(p, "2026-08-05", "leo")).toEqual([
+      { slot: "cena", dish: "Crema de calabaza", off: ["nata"] },
+    ]);
+    expect(childMealsForDate(p, "2026-08-05", "ana")).toEqual([
+      { slot: "comida", dish: "Pasta con tomate", off: [] },
+    ]);
+    expect(childMealsForDate(p, "2026-08-05", "nadie")).toEqual([]);
+  });
+
+  it("un día sin platos de niño devuelve lista vacía", () => {
+    expect(childMealsForDate(plan(), "2026-08-05", "leo")).toEqual([]);
+  });
 });
 
 // --- plan del hogar: lo que ve un no planificador (issue 05, D1) ----------
@@ -600,6 +681,18 @@ describe("composeDayForUser", () => {
     });
     const composed = composeDayForUser(mine, planner, slots, 3);
     expect(composed.extras?.cena).toEqual(["Ingrediente del planificador"]);
+  });
+
+  it("trae el plato aparte del niño del planificador en un slot compartido (issue 07)", () => {
+    const mine = day("Jueves", "Mi comida", "Mi cena");
+    const planner = day("Jueves", "Su comida", "Su cena", {
+      kids: [{ childId: "leo", slot: "cena", dish: "Crema de calabaza" }],
+    });
+    // Jueves=3 comparte cena → el niño del planificador se ve
+    const composed = composeDayForUser(mine, planner, slots, 3);
+    expect(composed.kids).toEqual([{ childId: "leo", slot: "cena", dish: "Crema de calabaza" }]);
+    // Lunes=0 comparte comida, no cena → no arrastra el plato de un niño de la cena
+    expect(composeDayForUser(mine, planner, slots, 0).kids).toBeUndefined();
   });
 });
 

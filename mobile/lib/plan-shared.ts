@@ -21,11 +21,20 @@ export const MEAL_SLOT_LABEL: Record<MealSlot, string> = {
 };
 
 /**
+ * Plato aparte de un niño para un día concreto, cuando el plato compartido del
+ * hogar no le sirve (issue 07). Lo pone la IA o el planificador; vive en la fila
+ * del planificador y se espeja al resto de miembros. `off` = ingredientes que
+ * pide y no están en la compra. Copia de `src/lib/plan-shared.ts`.
+ */
+export type ChildMeal = { childId: string; slot: MealSlot; dish: string; off?: string[] };
+
+/**
  * Un día del plan. `lunch`/`dinner` vienen siempre del plan generado; el plan
  * base deja el desayuno y el snack a nivel de semana (una lista que rota por
  * día), así que `breakfast`/`snack` sólo aparecen cuando se ha pedido un plato
  * concreto para ESE día. `extras` guarda, por comida, los ingredientes de ese
  * plato que no salen de la lista de la compra, para poder avisar en pantalla.
+ * `kids` guarda los platos aparte de un niño para ESE día.
  */
 export type PlanDay = {
   day: string;
@@ -34,6 +43,7 @@ export type PlanDay = {
   breakfast?: string;
   snack?: string;
   extras?: Partial<Record<MealSlot, string[]>>;
+  kids?: ChildMeal[];
 };
 
 /**
@@ -144,6 +154,23 @@ export function mealsForDate(plan: MonthlyPlan | null, date: string): PlanMeal[]
 }
 
 /**
+ * Platos aparte de un niño para una fecha (issue 07): solo los slots con
+ * override propio para ese niño; en el resto come el plato compartido del día.
+ * Copia de `src/lib/plan-shared.ts`.
+ */
+export function childMealsForDate(
+  plan: MonthlyPlan | null,
+  date: string,
+  childId: string,
+): { slot: MealSlot; dish: string; off: string[] }[] {
+  const day = planForDate(plan, date)?.day;
+  if (!day?.kids?.length) return [];
+  return day.kids
+    .filter((k) => k.childId === childId && k.dish)
+    .map((k) => ({ slot: k.slot, dish: k.dish, off: k.off ?? [] }));
+}
+
+/**
  * El día que ve un miembro del hogar (issue 05, D1): las comidas compartidas
  * ese día de la semana muestran el plato del planificador; las demás, el
  * suyo propio. `weekday` es el índice de día dentro de la semana del plan
@@ -178,6 +205,16 @@ export function composeDayForUser(
   };
   if (Object.keys(extras).length) next.extras = extras;
   else delete next.extras;
+
+  // El plato aparte de un niño (issue 07) lo pone el planificador y va con la
+  // comida compartida: se trae el suyo para un slot compartido.
+  const sharedSet = new Set<string>(shared);
+  const kids = [
+    ...(mineDay.kids ?? []).filter((k) => !sharedSet.has(k.slot)),
+    ...(plannerDay.kids ?? []).filter((k) => sharedSet.has(k.slot)),
+  ];
+  if (kids.length) next.kids = kids;
+  else delete next.kids;
   return next;
 }
 

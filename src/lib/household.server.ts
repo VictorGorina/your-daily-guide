@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   cleanSharedSlots,
+  describeRoster,
   describeServings,
   describeSharedSlots,
   MEAL_KEYS,
@@ -22,6 +23,15 @@ export type HouseholdMemberLite = {
   portion: number;
 };
 
+/** Un niño de la casa, lo mínimo para generar su plato aparte (issue 07). */
+export type HouseholdChildLite = {
+  id: string;
+  name: string;
+  age: number | null;
+  allergies: string | null;
+  portion: number;
+};
+
 export type HouseholdContext = {
   householdId: string | null;
   /** `user_id` del planificador: su plan y su compra son los del hogar. */
@@ -29,6 +39,8 @@ export type HouseholdContext = {
   /** Configuración única de comidas compartidas del hogar. */
   sharedSlots: SharedSlots;
   members: HouseholdMemberLite[];
+  /** Niños de la casa, para el plato aparte cuando el compartido no les vale. */
+  children: HouseholdChildLite[];
   /** Raciones que piden las comidas compartidas y las del planificador en solitario. */
   servings: ServingsTable;
   text: string;
@@ -39,9 +51,37 @@ const emptyContext = (): HouseholdContext => ({
   plannerId: null,
   sharedSlots: cleanSharedSlots(null),
   members: [],
+  children: [],
   servings: { shared: { desayuno: 0, comida: 0, cena: 0 }, plannerSolo: 1 },
   text: "Vive sin hogar compartido configurado.",
 });
+
+/**
+ * Solo el `user_id` del planificador del hogar de `userId` — o `null` si no
+ * está en un hogar, o su hogar no tiene un planificador con cuenta. Una única
+ * consulta a `household_members` (RLS acota a su propio hogar), sin el resto del
+ * contexto: para caminos que solo necesitan resolver "¿de quién es la fila del
+ * plan?", como el estado de compra compartido (issue 06). La pertenencia queda
+ * verificada igual que en `householdContext`: solo devuelve un id no nulo
+ * cuando `userId` aparece como miembro de ese hogar.
+ */
+export async function householdPlannerId(
+  supabase: AnyClient,
+  userId: string,
+): Promise<string | null> {
+  const { data: rawMembers } = await supabase
+    .from("household_members")
+    .select("household_id, user_id, is_planner");
+  const rows = (rawMembers ?? []) as {
+    household_id: string;
+    user_id: string | null;
+    is_planner: boolean;
+  }[];
+  const mine = rows.find((r) => r.user_id === userId);
+  if (!mine) return null;
+  const planner = rows.find((r) => r.household_id === mine.household_id && r.is_planner);
+  return planner?.user_id ?? null;
+}
 
 /** Contexto del hogar (mesa, comidas compartidas e hijos) para los prompts del coach. */
 export async function householdContext(
@@ -83,9 +123,10 @@ export async function householdContext(
 
   const { data: children } = await supabase
     .from("household_children")
-    .select("name, age, allergies, appetite, notes, portion")
+    .select("id, name, age, allergies, appetite, notes, portion")
     .eq("household_id", mine.household_id);
   const kids = (children ?? []) as {
+    id: string;
     name: string;
     age: number | null;
     allergies: string | null;
@@ -94,10 +135,12 @@ export async function householdContext(
     portion: number | string;
   }[];
 
-  const kidLines = kids.map(
-    (k) =>
-      `- Hijo/a ${k.name}${k.age ? ` (${k.age} años)` : ""}: alergias ${k.allergies ?? "ninguna"}, apetito ${k.appetite ?? "normal"}${k.notes ? `, ${k.notes}` : ""}`,
-  );
+  // Notas libres de un niño ("no le gusta el pescado", "come poco a mediodía"):
+  // no caben en el roster pero sí le sirven al coach. Edad y alergias ya van
+  // en `describeRoster`.
+  const kidNotes = kids
+    .filter((k) => k.notes?.trim())
+    .map((k) => `- ${k.name}: ${k.notes!.trim()}`);
 
   const servings = servingsPerSlot(
     members,
@@ -105,22 +148,41 @@ export async function householdContext(
     sharedSlots,
   );
 
+  const plannerName = planner?.displayName ?? "quien lleva la cocina";
+  const anyShared = MEAL_KEYS.some((m) => sharedSlots[m].length);
+
   return {
     householdId: mine.household_id,
     plannerId: planner?.userId ?? null,
     sharedSlots,
     members,
+    children: kids.map((k) => ({
+      id: k.id,
+      name: k.name,
+      age: k.age,
+      allergies: k.allergies,
+      portion: Number(k.portion) || 0.5,
+    })),
     servings,
     text: [
-      `Hogar: ${members.length} adulto(s) y ${kids.length} niño(s).`,
+      describeRoster(
+        members.map((m) => ({
+          displayName: m.displayName,
+          hasAccount: !!m.userId,
+          isPlanner: m.isPlanner,
+        })),
+        kids.map((k) => ({ name: k.name, age: k.age, allergies: k.allergies })),
+      ),
       `Comidas compartidas del hogar → ${describeSharedSlots(sharedSlots)}.`,
-      planner ? `Quien planifica y compra para toda la casa: ${planner.displayName}.` : "",
-      ...kidLines,
-      kids.length
-        ? "Las comidas en casa deben servir también para los niños: platos sencillos, sin sus alérgenos y con raciones adaptadas a su edad."
+      anyShared
+        ? `En una comida compartida el plato es EXACTAMENTE EL MISMO para toda la mesa y solo lo cambia ${plannerName}. Que alguien coma una ración distinta o se salte una comida es privado y no cambia el plato de los demás. Si un niño necesita otro plato un día, va aparte en "days[].kids"; el plato compartido no se toca.`
         : "",
-      members.length > 1
-        ? `En las comidas compartidas el plato es el mismo para toda la mesa: raciones exactas por comida → ${describeServings(servings, sharedSlots)}. Las comidas en solitario (snack y las de días sin compartir) piden ${servings.plannerSolo} ración(es).`
+      ...kidNotes,
+      kids.length
+        ? "Las comidas de casa deben servir también a los niños: platos sencillos, sin sus alérgenos y con raciones adaptadas a su edad."
+        : "",
+      anyShared
+        ? `Raciones exactas por comida compartida → ${describeServings(servings, sharedSlots)}. Las comidas en solitario (snack y días sin compartir) piden ${servings.plannerSolo} ración(es).`
         : "",
     ]
       .filter(Boolean)
@@ -205,6 +267,7 @@ export async function syncSharedMeals(opts: {
             // el spread conserva lo propio del otro miembro (su snack, o su
             // desayuno los días que el desayuno no es compartido).
             const copied = sharedMeals.filter((m) => ctx.sharedSlots[m].includes(di));
+            const copiedSet = new Set<string>(copied);
             const extras = { ...(day.extras ?? {}) };
             for (const meal of copied) {
               const mark = sourceDay.extras?.[meal];
@@ -221,6 +284,15 @@ export async function syncSharedMeals(opts: {
             };
             if (Object.keys(extras).length) next.extras = extras;
             else delete next.extras;
+            // El plato aparte de un niño (issue 07) viaja con su comida
+            // compartida: se copia el del planificador para un slot compartido
+            // y se conserva lo propio del otro miembro para el resto.
+            const kids = [
+              ...(day.kids ?? []).filter((k) => !copiedSet.has(k.slot)),
+              ...(sourceDay.kids ?? []).filter((k) => copiedSet.has(k.slot)),
+            ];
+            if (kids.length) next.kids = kids;
+            else delete next.kids;
             return next;
           }),
         };

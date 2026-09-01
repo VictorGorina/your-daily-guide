@@ -5,6 +5,7 @@ import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ratioSignal, todayISO, type DailyLog } from "@/lib/daily";
 import {
+  childMealsForDate,
   isBeforeAppStart,
   mealsForDate,
   offListNote,
@@ -36,6 +37,7 @@ export function PlanMonthCalendar({
   logs,
   monthStatus,
   appStartedOn,
+  householdChildren,
   onOpenDay,
 }: {
   plan: MonthlyPlan | null;
@@ -43,6 +45,8 @@ export function PlanMonthCalendar({
   logs: DailyLog[];
   monthStatus: PlanMonthStatus;
   appStartedOn: string | null;
+  /** Niños de la casa, para enseñar su plato aparte cuando el compartido no vale (issue 07). */
+  householdChildren?: { id: string; name: string }[];
   onOpenDay: (date: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -67,6 +71,18 @@ export function PlanMonthCalendar({
 
   const detail = selected ? planForDate(plan, selected) : null;
   const meals = selected ? mealsForDate(plan, selected).filter((mm) => mm.idea) : [];
+  // Platos aparte de los niños ese día (issue 07), por slot, para colgarlos bajo
+  // el plato compartido correspondiente.
+  const kidMealsBySlot = new Map<string, { name: string; dish: string; off: string[] }[]>();
+  if (selected) {
+    for (const c of householdChildren ?? []) {
+      for (const k of childMealsForDate(plan, selected, c.id)) {
+        const list = kidMealsBySlot.get(k.slot) ?? [];
+        list.push({ name: c.name, dish: k.dish, off: k.off });
+        kidMealsBySlot.set(k.slot, list);
+      }
+    }
+  }
 
   const hint =
     monthStatus === "past"
@@ -172,6 +188,15 @@ export function PlanMonthCalendar({
                         {offListNote(meal.off)}
                       </span>
                     ) : null}
+                    {(kidMealsBySlot.get(meal.slot) ?? []).map((k) => (
+                      <p
+                        key={`${k.name}-${k.dish}`}
+                        className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground"
+                      >
+                        Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                        {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                      </p>
+                    ))}
                     <DishRecipe dish={meal.idea} month={month} />
                   </div>
                 ))}

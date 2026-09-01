@@ -142,6 +142,18 @@ function renewalCopy(tone: Tone, name: string | null, nextMonthLabel: string) {
   };
 }
 
+// Variante para un miembro del hogar que NO planifica (D1): el menú y la compra
+// de las comidas compartidas los renueva el planificador, no esta persona; a
+// ella solo le toca planificar sus comidas en solitario. Sin variar por tono:
+// el aviso es informativo, no una llamada a la acción.
+function renewalCopyMember(name: string | null, nextMonthLabel: string) {
+  const title = name ? `${name}, se acaba el mes` : "Se acaba el mes";
+  return {
+    title,
+    body: `El menú de tu casa lo renueva quien planifica. Abre la app para preparar tus comidas en solitario de ${nextMonthLabel}.`,
+  };
+}
+
 /**
  * Recorre los perfiles cuyo `morning_time`/`evening_time` cae en la ventana
  * actual y no se les ha enviado ya hoy, y envía el push correspondiente a
@@ -288,8 +300,24 @@ export async function dispatchPush(): Promise<DispatchSummary> {
     const nextMonthLabel = new Date(`${nextMonth}-01T00:00:00`).toLocaleDateString("es-ES", {
       month: "long",
     });
+    // Un no planificador del hogar recibe un aviso distinto: la renovación del
+    // menú de la casa no es cosa suya (issue 08, D1).
+    const { data: memberRows } = await supabaseAdmin
+      .from("household_members")
+      .select("user_id, is_planner")
+      .in(
+        "user_id",
+        renewalMatches.map((p) => p.id),
+      );
+    const nonPlanner = new Set(
+      ((memberRows ?? []) as { user_id: string | null; is_planner: boolean }[])
+        .filter((m) => m.user_id && !m.is_planner)
+        .map((m) => m.user_id as string),
+    );
     for (const p of renewalMatches) {
-      const { title, body } = renewalCopy(toneOf(p.tone), p.display_name, nextMonthLabel);
+      const { title, body } = nonPlanner.has(p.id)
+        ? renewalCopyMember(p.display_name, nextMonthLabel)
+        : renewalCopy(toneOf(p.tone), p.display_name, nextMonthLabel);
       // Lleva directo a la pantalla del plan del mes que viene (ya desbloqueada),
       // no a Hoy: el objetivo del aviso es que preparen ese plan y su compra.
       await sendTo(p.id, { title, body, url: `/plan?month=${nextMonth}` });

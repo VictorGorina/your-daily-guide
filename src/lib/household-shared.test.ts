@@ -4,6 +4,7 @@ import {
   childBasePortion,
   childPortion,
   cleanSharedSlots,
+  describeRoster,
   describeServings,
   describeSharedSlots,
   isSharedSlot,
@@ -63,6 +64,34 @@ describe("describeSharedSlots", () => {
     expect(describeSharedSlots({ desayuno: [], comida: [], cena: [] })).toBe(
       "sin comidas compartidas",
     );
+  });
+});
+
+describe("describeRoster", () => {
+  it("nombra a los adultos con y sin app, los niños con alergias y quién planifica", () => {
+    const text = describeRoster(
+      [
+        { displayName: "Ana", hasAccount: true, isPlanner: true },
+        { displayName: "Luis", hasAccount: true, isPlanner: false },
+        { displayName: "Abuela", hasAccount: false, isPlanner: false },
+      ],
+      [
+        { name: "Leo", age: 5, allergies: "huevo" },
+        { name: "Mía", age: 2, allergies: null },
+      ],
+    );
+    expect(text).toContain("Ana y Luis (con la app)");
+    expect(text).toContain("Abuela (sin la app, solo cuentan para la compra)");
+    expect(text).toContain("Leo (5 años), alergia a huevo");
+    expect(text).toContain("Mía (2 años), sin alergias");
+    expect(text).toContain("Planifica el menú y hace la compra de la casa: Ana.");
+  });
+
+  it("sin planificador lo dice explícitamente y omite la línea de niños si no hay", () => {
+    const text = describeRoster([{ displayName: "Ana", hasAccount: true, isPlanner: false }], []);
+    expect(text).toContain("Ana (con la app)");
+    expect(text).not.toContain("Niños:");
+    expect(text).toContain("nadie de la casa planifica");
   });
 });
 

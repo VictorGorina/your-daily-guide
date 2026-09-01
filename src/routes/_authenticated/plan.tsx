@@ -49,7 +49,6 @@ import {
   eur,
   homeTotal,
   isMonthActionable,
-  monthCoverage,
   monthTitle,
   pendingTotal,
   planMonthStatus,
@@ -157,6 +156,31 @@ function PlanPage() {
   // necesita todavía un empujón a "planificar mis comidas en solitario".
   const hasOwnPlanRow = !!planQ.data && planQ.data.id !== "";
 
+  // --- Compra de la casa (issue 06) --------------------------------------
+  // Un miembro no planificador ve y OPERA la lista del planificador: marcar en
+  // casa / comprado por tramo, gasto real, tiquet, despensa — con navegador de
+  // compras y modo compra propios, para poder ir al súper de forma autónoma.
+  // Solo se le ocultan regenerar el plan y cambiar la cadencia (eso lo decide
+  // el planificador). El servidor resuelve la fila objetivo (`resolveShoppingRow`).
+  const plannerShopping = plannerShoppingQ.data?.shopping ?? null;
+  const plannerPlan = plannerShoppingQ.data?.plan ?? null;
+  const plannerCadence: ShoppingCadence = plannerPlan?.cadence ?? cadenceOf(plannerShopping);
+  const plannerTripsTotal = tripsOfCadence(plannerCadence);
+  const plannerCoverage = plannerPlan?.coverage;
+  const hhTrips = projectTrips(
+    plannerShopping,
+    plannerCadence,
+    plannerCoverage ?? { fromDay: 1, toDay: daysInMonth(month) },
+    plannerPlan?.weeks.length ?? WEEK_COUNT,
+  );
+  const hhTripActuals = plannerShoppingQ.data?.trip_actuals ?? {};
+  const hhPantryExtras: PantryExtra[] = plannerShoppingQ.data?.pantry_extras ?? [];
+  const hhConfirmedTrips = plannerShoppingQ.data?.confirmed_trips ?? {};
+  const [hhSelectedTrip, setHhSelectedTrip] = useState(0);
+  const [hhFilter, setHhFilter] = useState<"need" | "have" | "all">("all");
+  const hhSafeTrip = Math.min(hhSelectedTrip, Math.max(0, plannerTripsTotal - 1));
+  const hasHouseholdShopping = isSoloPlanner && (plannerShopping?.length ?? 0) > 0;
+
   const appStartedOn = profileQ.data?.app_started_on ?? null;
   const monthStatus = planMonthStatus(month, today);
   const actionable = isMonthActionable(month, today);
@@ -260,6 +284,68 @@ function PlanPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
   });
 
+  // Mutaciones de la compra de la casa (issue 06): mismas server fns, pero el
+  // servidor escribe en la fila del planificador y el cache es el de
+  // `["planner-shopping", month]`. Los platos y las cantidades no se tocan.
+  const hhOwned = useMutation({
+    mutationFn: (vars: { itemName: string; trip: number; source: "fridge" | "store" | null }) =>
+      toggleOwned({ data: { month, ...vars } }),
+    onSuccess: (res) =>
+      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
+        prev ? { ...prev, shopping: res.shopping } : prev,
+      ),
+    onError: () => toast.error("No hemos podido guardar el cambio"),
+  });
+  const hhSetActual = useMutation({
+    mutationFn: (vars: { trip: number; amount: number | null }) =>
+      tripActual({ data: { month, ...vars } }),
+    onSuccess: (res) =>
+      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
+        prev ? { ...prev, trip_actuals: res.trip_actuals } : prev,
+      ),
+    onError: () => toast.error("No hemos podido guardar el gasto"),
+  });
+  const hhConfirmTrip = useMutation({
+    mutationFn: (vars: { trip: number; confirmed: boolean }) =>
+      tripConfirm({ data: { month, ...vars } }),
+    onSuccess: (res) =>
+      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
+        prev ? { ...prev, confirmed_trips: res.confirmed_trips } : prev,
+      ),
+    onError: () => toast.error("No hemos podido fijar los ingredientes"),
+  });
+  const hhPantry = useMutation({
+    mutationFn: (vars: { name: string; qty?: string; remove?: boolean }) =>
+      pantryFn({ data: { month, ...vars } }),
+    onSuccess: (res) =>
+      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
+        prev ? { ...prev, pantry_extras: res.pantry_extras } : prev,
+      ),
+    onError: () => toast.error("No hemos podido guardar el ingrediente"),
+  });
+  const hhReceipt = useMutation({
+    mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
+      receiptFn({ data: { month, ...vars } }),
+    onSuccess: (res) => {
+      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
+        prev
+          ? {
+              ...prev,
+              trip_actuals: res.trip_actuals,
+              trip_receipts: res.trip_receipts,
+              pantry_extras: res.pantry_extras,
+            }
+          : prev,
+      );
+      const parts = [`Gasto guardado: ${eur(res.total)}`];
+      if (res.added.length) parts.push(`Añadí a la despensa de la casa: ${res.added.join(", ")}`);
+      if (res.discarded.length)
+        parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
+      toast.success(parts.join(". "));
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
+  });
+
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
   // Total del mes: solo para el aviso de presupuesto. Las cifras de la tarjeta
@@ -299,8 +385,10 @@ function PlanPage() {
   // Abre mostrando TODO (auditoría): marcas lo que ya tienes y "Ir a comprar"
   // te lleva al modo súper solo con lo que falta.
   const [filter, setFilter] = useState<"need" | "have" | "all">("all");
-  // Modo compra a pantalla completa
+  // Modo compra a pantalla completa. `shopSource` decide sobre qué lista opera:
+  // la propia o la de la casa (un no planificador compra la de la casa, issue 06).
   const [shopMode, setShopMode] = useState(false);
+  const [shopSource, setShopSource] = useState<"own" | "household">("own");
   const safeTrip = Math.min(selectedTrip, Math.max(0, tripsTotal - 1));
 
   // Al cambiar de mes, el índice de compra y el modo compra dejan de tener
@@ -311,7 +399,9 @@ function PlanPage() {
     if (prevMonthRef.current === month) return;
     prevMonthRef.current = month;
     setSelectedTrip(0);
+    setHhSelectedTrip(0);
     setShopMode(false);
+    setShopSource("own");
     setOpenDay(null);
   }, [month]);
 
@@ -361,6 +451,38 @@ function PlanPage() {
   // Pantalla completa "crea tu plan": solo para meses donde se puede generar.
   const showCreateTakeover = !plan && actionable;
   const readOnlyMonth = monthStatus === "past";
+
+  // Datos que alimentan el modo compra según sobre qué lista se entró (issue 06).
+  const shop =
+    shopSource === "household"
+      ? {
+          trip: hhTrips[hhSafeTrip],
+          coverage: plannerCoverage,
+          tripsTotal: plannerTripsTotal,
+          selectedTrip: hhSafeTrip,
+          tripActual: hhTripActuals[hhSafeTrip] as number | undefined,
+          savingActual: hhSetActual.isPending,
+          scanningReceipt: hhReceipt.isPending,
+          onToggle: (itemName: string) =>
+            hhOwned.mutate({ itemName, trip: hhSafeTrip, source: "store" }),
+          onSaveActual: (amount: number | null) => hhSetActual.mutate({ trip: hhSafeTrip, amount }),
+          onScanReceipt: (imageBase64: string, mime: string) =>
+            hhReceipt.mutate({ trip: hhSafeTrip, imageBase64, mime }),
+        }
+      : {
+          trip: trips[safeTrip],
+          coverage,
+          tripsTotal,
+          selectedTrip: safeTrip,
+          tripActual: tripActuals[safeTrip] as number | undefined,
+          savingActual: setActual.isPending,
+          scanningReceipt: receipt.isPending,
+          onToggle: (itemName: string) =>
+            owned.mutate({ itemName, trip: safeTrip, source: "store" }),
+          onSaveActual: (amount: number | null) => setActual.mutate({ trip: safeTrip, amount }),
+          onScanReceipt: (imageBase64: string, mime: string) =>
+            receipt.mutate({ trip: safeTrip, imageBase64, mime }),
+        };
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
@@ -521,6 +643,7 @@ function PlanPage() {
                 logs={monthLogsQ.data ?? []}
                 monthStatus={monthStatus}
                 appStartedOn={appStartedOn}
+                householdChildren={hh?.children}
                 onOpenDay={setOpenDay}
               />
 
@@ -532,87 +655,133 @@ function PlanPage() {
             </section>
           ) : shopMode && actionable ? (
             <ShopModeView
-              trip={trips[safeTrip]}
-              coverage={coverage}
-              tripsTotal={tripsTotal}
-              selectedTrip={safeTrip}
+              trip={shop.trip}
+              coverage={shop.coverage}
+              tripsTotal={shop.tripsTotal}
+              selectedTrip={shop.selectedTrip}
               month={month}
-              onToggle={(itemName) => owned.mutate({ itemName, trip: safeTrip, source: "store" })}
+              onToggle={shop.onToggle}
               onClose={() => setShopMode(false)}
-              tripActual={tripActuals[safeTrip]}
-              savingActual={setActual.isPending}
-              onSaveActual={(amount) => setActual.mutate({ trip: safeTrip, amount })}
-              onScanReceipt={(imageBase64, mime) =>
-                receipt.mutate({ trip: safeTrip, imageBase64, mime })
-              }
-              scanningReceipt={receipt.isPending}
+              tripActual={shop.tripActual}
+              savingActual={shop.savingActual}
+              onSaveActual={shop.onSaveActual}
+              onScanReceipt={shop.onScanReceipt}
+              scanningReceipt={shop.scanningReceipt}
             />
           ) : isSoloPlanner ? (
-            <div className="mt-5 space-y-4">
-              {plannerShoppingQ.data ? (
-                <HouseholdShoppingBlock
-                  row={plannerShoppingQ.data}
-                  month={month}
-                  plannerName={plannerName}
-                  today={today}
-                />
+            <div className="mt-5 space-y-6">
+              {hasHouseholdShopping ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 px-0.5">
+                    <Users className="h-4 w-4 text-primary" />
+                    <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
+                      La compra de la casa
+                    </h2>
+                  </div>
+                  <p className="px-0.5 text-xs leading-relaxed text-muted-foreground">
+                    La lleva {plannerName}. Marca lo que ya tengas y sal a comprar cuando quieras;
+                    las cantidades y la frecuencia las decide {plannerName}.
+                  </p>
+                  <IngredientsTab
+                    shopping={plannerShopping}
+                    trips={hhTrips}
+                    tripsTotal={plannerTripsTotal}
+                    activeCadence={plannerCadence}
+                    pendingCadence={null}
+                    coverage={plannerCoverage}
+                    todayDayOfMonth={todayDayOfMonth}
+                    selectedTrip={hhSafeTrip}
+                    setSelectedTrip={setHhSelectedTrip}
+                    filter={hhFilter}
+                    setFilter={setHhFilter}
+                    recadence={{ isPending: false, mutate: () => {} }}
+                    setPendingCadence={() => {}}
+                    owned={hhOwned}
+                    tripActuals={hhTripActuals}
+                    setActual={hhSetActual}
+                    confirmedTrips={hhConfirmedTrips}
+                    confirmTrip={hhConfirmTrip}
+                    pantryExtras={hhPantryExtras}
+                    pantry={hhPantry}
+                    onEnterShopMode={() => {
+                      setShopSource("household");
+                      setShopMode(true);
+                    }}
+                    onShareTrip={(trip, label) => void shareTrip(trip, label)}
+                    month={month}
+                    monthStatus={monthStatus}
+                    readOnly={readOnlyMonth}
+                    periodBudget={0}
+                    partialMonth={false}
+                    overBudget={false}
+                    plannerLocked
+                    plannerName={plannerName}
+                    inlineCta
+                  />
+                </div>
               ) : null}
 
-              <div className="flex items-center gap-2 px-0.5 pt-1">
-                <ShoppingBasket className="h-4 w-4 text-primary" />
-                <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
-                  Tu compra en solitario
-                </h2>
-              </div>
-
-              {hasOwnPlanRow ? (
-                <IngredientsTab
-                  shopping={shopping}
-                  trips={trips}
-                  tripsTotal={tripsTotal}
-                  activeCadence={activeCadence}
-                  pendingCadence={pendingCadence}
-                  coverage={coverage}
-                  todayDayOfMonth={todayDayOfMonth}
-                  selectedTrip={safeTrip}
-                  setSelectedTrip={setSelectedTrip}
-                  filter={filter}
-                  setFilter={setFilter}
-                  recadence={recadence}
-                  setPendingCadence={setPendingCadence}
-                  owned={owned}
-                  tripActuals={tripActuals}
-                  setActual={setActual}
-                  confirmedTrips={confirmedTrips}
-                  confirmTrip={confirmTrip}
-                  pantryExtras={pantryExtras}
-                  pantry={pantry}
-                  onEnterShopMode={() => setShopMode(true)}
-                  onShareTrip={(trip, label) => void shareTrip(trip, label)}
-                  month={month}
-                  monthStatus={monthStatus}
-                  readOnly={readOnlyMonth}
-                  periodBudget={periodBudget}
-                  partialMonth={partialMonth}
-                  overBudget={overBudget}
-                />
-              ) : (
-                <div className="surface-card p-5 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
-                    snacks y los días que no compartís) y aparecerá aquí.
-                  </p>
-                  {actionable ? (
-                    <button
-                      onClick={() => generate.mutate(undefined)}
-                      disabled={generate.isPending}
-                      className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
-                    >
-                      {generate.isPending ? "Preparando…" : "Planificar mis comidas en solitario"}
-                    </button>
-                  ) : null}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 px-0.5">
+                  <ShoppingBasket className="h-4 w-4 text-primary" />
+                  <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
+                    Tu compra en solitario
+                  </h2>
                 </div>
-              )}
+
+                {hasOwnPlanRow ? (
+                  <IngredientsTab
+                    shopping={shopping}
+                    trips={trips}
+                    tripsTotal={tripsTotal}
+                    activeCadence={activeCadence}
+                    pendingCadence={pendingCadence}
+                    coverage={coverage}
+                    todayDayOfMonth={todayDayOfMonth}
+                    selectedTrip={safeTrip}
+                    setSelectedTrip={setSelectedTrip}
+                    filter={filter}
+                    setFilter={setFilter}
+                    recadence={recadence}
+                    setPendingCadence={setPendingCadence}
+                    owned={owned}
+                    tripActuals={tripActuals}
+                    setActual={setActual}
+                    confirmedTrips={confirmedTrips}
+                    confirmTrip={confirmTrip}
+                    pantryExtras={pantryExtras}
+                    pantry={pantry}
+                    onEnterShopMode={() => {
+                      setShopSource("own");
+                      setShopMode(true);
+                    }}
+                    onShareTrip={(trip, label) => void shareTrip(trip, label)}
+                    month={month}
+                    monthStatus={monthStatus}
+                    readOnly={readOnlyMonth}
+                    periodBudget={periodBudget}
+                    partialMonth={partialMonth}
+                    overBudget={overBudget}
+                    inlineCta
+                  />
+                ) : (
+                  <div className="surface-card p-5 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
+                      snacks y los días que no compartís) y aparecerá aquí.
+                    </p>
+                    {actionable ? (
+                      <button
+                        onClick={() => generate.mutate(undefined)}
+                        disabled={generate.isPending}
+                        className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+                      >
+                        {generate.isPending ? "Preparando…" : "Planificar mis comidas en solitario"}
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <IngredientsTab
@@ -636,7 +805,10 @@ function PlanPage() {
               confirmTrip={confirmTrip}
               pantryExtras={pantryExtras}
               pantry={pantry}
-              onEnterShopMode={() => setShopMode(true)}
+              onEnterShopMode={() => {
+                setShopSource("own");
+                setShopMode(true);
+              }}
               onShareTrip={(trip, label) => void shareTrip(trip, label)}
               month={month}
               monthStatus={monthStatus}
@@ -654,6 +826,7 @@ function PlanPage() {
         plan={plan}
         log={monthLogsQ.data?.find((l) => l.log_date === openDay)}
         profile={profileQ.data ?? null}
+        householdChildren={hh?.children}
         onClose={() => setOpenDay(null)}
       />
 
@@ -680,90 +853,6 @@ const CategoryIcon = ({ category, className }: { category: string; className?: s
   const Icon = match[1];
   return <Icon className={className} />;
 };
-
-/**
- * "La compra de la casa" — la lista del planificador, en SOLO LECTURA, para un
- * miembro que no es quien planifica (issue 05, D1). Ve qué se compra y cuánto,
- * pero no marca "lo tengo" ni cambia cantidades ni cadencia: eso lo lleva el
- * planificador. En issue 06 el estado de compra ("lo tengo en casa", gasto
- * real, despensa) pasa a ser editable por cualquier miembro. La vista es el
- * total del mes (una sola proyección "mensual"), sin el navegador de compras.
- */
-function HouseholdShoppingBlock({
-  row,
-  month,
-  plannerName,
-  today,
-}: {
-  row: import("@/lib/daily").PlannerShoppingRow;
-  month: string;
-  plannerName: string;
-  today: string;
-}) {
-  const [open, setOpen] = useState(true);
-  const coverage = row.plan?.coverage ?? monthCoverage(month, today);
-  const groups = useMemo(
-    () => projectTrips(row.shopping, "mensual", coverage, WEEK_COUNT)[0]?.groups ?? [],
-    [row.shopping, coverage],
-  );
-  const total = shoppingTotal(groups);
-  const itemCount = groups.reduce((s, g) => s + g.items.length, 0);
-
-  if (!itemCount) return null;
-
-  return (
-    <section className="surface-card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2.5 px-4 py-3.5 text-left"
-      >
-        <ShoppingCart className="h-4 w-4 shrink-0 text-primary" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold">La compra de la casa</p>
-          <p className="text-[11.5px] text-muted-foreground">
-            la lleva {plannerName} · {itemCount} artículos · {eur(total)}
-          </p>
-        </div>
-        <ChevronRight
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
-        />
-      </button>
-
-      {open ? (
-        <div className="border-t border-border/60 px-4 pb-4 pt-1">
-          <p className="py-2 text-[11.5px] leading-relaxed text-muted-foreground">
-            Solo para consultar. Las cantidades son para toda la mesa; lo que compres y marques como
-            comprado lo gestiona {plannerName}.
-          </p>
-          <div className="space-y-3">
-            {groups.map((group) => (
-              <div key={group.category}>
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  <CategoryIcon category={group.category} className="h-3 w-3" />
-                  {group.category}
-                </div>
-                <ul className="mt-1 divide-y divide-border/50">
-                  {group.items.map((item) => (
-                    <li
-                      key={`${group.category}-${item.name}`}
-                      className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]"
-                    >
-                      <span className="min-w-0 truncate">{item.name}</span>
-                      <span className="shrink-0 font-mono text-[11.5px] text-muted-foreground">
-                        {item.qty} · {eur(item.price_eur ?? 0)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </section>
-  );
-}
 
 /**
  * Reescala una imagen a JPEG de como máximo `maxSide` px de lado y devuelve el
@@ -911,6 +1000,9 @@ function IngredientsTab({
   periodBudget,
   partialMonth,
   overBudget,
+  plannerLocked = false,
+  plannerName,
+  inlineCta = false,
 }: {
   shopping: { category: string; items: ShoppingItem[] }[] | null;
   trips: { trip: number; groups: { category: string; items: ShoppingItem[] }[] }[];
@@ -948,6 +1040,13 @@ function IngredientsTab({
   periodBudget: number;
   partialMonth: boolean;
   overBudget: boolean;
+  /** Lista de la casa vista por un no planificador (issue 06): se puede marcar
+   *  y comprar, pero no regenerar ni cambiar la cadencia. */
+  plannerLocked?: boolean;
+  plannerName?: string;
+  /** El CTA "Ir a comprar" va en línea, no fijo al fondo — para cuando hay dos
+   *  listas apiladas en la pantalla (compra de la casa + compra en solitario). */
+  inlineCta?: boolean;
 }) {
   const currentTrip = trips[selectedTrip] ?? trips[0];
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
@@ -1011,7 +1110,7 @@ function IngredientsTab({
             Compra de un mes ya pasado: se muestra solo para consultar, no se puede modificar.
           </p>
         </div>
-      ) : (
+      ) : plannerLocked ? null : (
         /* Cadencia */
         <div className="surface-card px-4 py-3.5">
           <div className="flex items-center gap-2">
@@ -1254,7 +1353,9 @@ function IngredientsTab({
           <p className="text-sm text-muted-foreground">
             {readOnly
               ? "No hubo lista de la compra este mes."
-              : "Aún no hay lista. Regenera el plan para crearla."}
+              : plannerLocked
+                ? `Aún no hay lista de la casa. La prepara ${plannerName ?? "quien planifica"}.`
+                : "Aún no hay lista. Regenera el plan para crearla."}
           </p>
         ) : filteredGroups.length === 0 ? (
           <p className="px-0.5 text-sm text-muted-foreground">
@@ -1281,20 +1382,32 @@ function IngredientsTab({
         </div>
       )}
 
-      {/* CTA fijo al fondo — "Ir a comprar" */}
+      {/* CTA "Ir a comprar": fijo al fondo en la vista de una sola lista; en
+          línea cuando hay dos listas apiladas (compra de la casa + solitario). */}
       {!readOnly && shopping?.length && needCount > 0 ? (
-        <div className="fixed inset-x-0 bottom-[calc(6.75rem+env(safe-area-inset-bottom))] z-30 pl-5 pr-[4.75rem] sm:px-5">
-          <div className="mx-auto max-w-lg">
-            <button
-              type="button"
-              onClick={onEnterShopMode}
-              className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-primary py-4 text-sm font-bold text-primary-foreground shadow-[0_8px_20px_-10px_rgba(255,138,61,.9)] transition-transform active:scale-[0.98]"
-            >
-              <ShoppingCart className="h-[17px] w-[17px]" />
-              Ir a comprar · {needCount} art.
-            </button>
+        inlineCta ? (
+          <button
+            type="button"
+            onClick={onEnterShopMode}
+            className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-primary py-4 text-sm font-bold text-primary-foreground shadow-[0_8px_20px_-10px_rgba(255,138,61,.9)] transition-transform active:scale-[0.98]"
+          >
+            <ShoppingCart className="h-[17px] w-[17px]" />
+            Ir a comprar · {needCount} art.
+          </button>
+        ) : (
+          <div className="fixed inset-x-0 bottom-[calc(6.75rem+env(safe-area-inset-bottom))] z-30 pl-5 pr-[4.75rem] sm:px-5">
+            <div className="mx-auto max-w-lg">
+              <button
+                type="button"
+                onClick={onEnterShopMode}
+                className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-primary py-4 text-sm font-bold text-primary-foreground shadow-[0_8px_20px_-10px_rgba(255,138,61,.9)] transition-transform active:scale-[0.98]"
+              >
+                <ShoppingCart className="h-[17px] w-[17px]" />
+                Ir a comprar · {needCount} art.
+              </button>
+            </div>
           </div>
-        </div>
+        )
       ) : null}
     </section>
   );

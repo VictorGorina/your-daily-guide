@@ -130,6 +130,35 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
           ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
           : `${base} (con lo que ya tienes comprado)`;
       }
+      if (toolName === "cambiar_plato_nino") {
+        const fecha = String(input.fecha ?? "");
+        const plato = String(input.plato ?? "").trim();
+        const { childName, label, off } = await apiPost<{
+          childName: string;
+          label: string;
+          off: string[];
+        }>("plan/child-meal", {
+          date: fecha,
+          slot: String(input.comida ?? ""),
+          childId: String(input.nino ?? ""),
+          dish: plato,
+          today: date,
+        });
+        const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha)
+          ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-ES", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })
+          : fecha;
+        if (!plato) {
+          return `${label} del ${dia}: ${childName} vuelve a comer el plato compartido.`;
+        }
+        const base = `${label} del ${dia} · para ${childName}: ${plato}`;
+        return off.length
+          ? `${base}. Ojo: ${off.join(", ")} no está en la lista de la compra.`
+          : `${base} (con lo que ya hay comprado)`;
+      }
       if (toolName === "ajustar_plan_mensual") {
         const kcal = Number(input.kcal_extra);
         const { summary } = await apiPost<{ summary: string }>("plan/adjust", {

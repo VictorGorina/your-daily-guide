@@ -32,7 +32,7 @@ import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import { fetchHousehold } from "@/lib/household";
 import { isSharedSlot, type MealKey } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
-import { mealsForDate, offListNote, type MonthlyPlan } from "@/lib/plan-shared";
+import { childMealsForDate, mealsForDate, offListNote, type MonthlyPlan } from "@/lib/plan-shared";
 import { generateMonthlyPlan } from "@/lib/plan.functions";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
@@ -204,6 +204,18 @@ function Hoy() {
     );
     if (!others.length) return null;
     return others.length === 1 ? others[0].display_name : "el resto del hogar";
+  };
+  // Platos aparte de los niños de la casa para ese momento de hoy (issue 07):
+  // el plato compartido no les sirve ese día y el plan lleva el suyo.
+  const childMealsFor = (label: string) => {
+    const mealKey = MOMENT_TO_MEAL_KEY[label];
+    const kids = householdQ.data?.children ?? [];
+    if (!mealKey || !kids.length) return [];
+    return kids.flatMap((c) =>
+      childMealsForDate(planQ.data?.plan ?? null, today0, c.id)
+        .filter((k) => k.slot === mealKey)
+        .map((k) => ({ name: c.name, dish: k.dish, off: k.off })),
+    );
   };
 
   const todayQ = useQuery({
@@ -472,6 +484,7 @@ function Hoy() {
               const isSkip = h.status === "salteo";
               const note = offListNote(planned?.off);
               const shared = sharedWith(h.label);
+              const kidMeals = childMealsFor(h.label);
               // El coach cambió el plato de este momento hoy (desde el chat o
               // desde "comí otra cosa"): se muestra el plato real en naranja,
               // con el que había antes tachado debajo — ver `wasIdea` en
@@ -604,6 +617,15 @@ function Hoy() {
                       Base común con {shared} · marca “Comí otra cosa” si tu ración se sale de eso.
                     </p>
                   ) : null}
+                  {kidMeals.map((k) => (
+                    <p
+                      key={`${k.name}-${k.dish}`}
+                      className="mt-2 text-[11px] leading-relaxed text-muted-foreground"
+                    >
+                      Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                      {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                    </p>
+                  ))}
                   {idea ? <DishRecipe dish={idea} month={month} /> : null}
                 </div>
               );

@@ -1,6 +1,6 @@
 # 06 — Estado de compra y despensa compartidos
 
-Status: todo
+Status: resolved
 Blocked by: 05
 
 ## Objetivo
@@ -43,3 +43,34 @@ Comprobar que el no planificador NO puede regenerar ni cambiar cadencia. Simulad
 
 Estado de compra y despensa editables por cualquier miembro con cuenta; platos y cantidades
 intocables para no planificadores; lint/typecheck verdes; replicado en móvil.
+
+## Answer
+
+Hecho (2026-09-01), web + móvil.
+
+**Servidor** ([src/lib/plan.functions.ts](../../../src/lib/plan.functions.ts)): tres helpers
+nuevos — `resolveShoppingRow(supabase, userId)` (fila objetivo = la del planificador si el
+que llama es miembro no planificador, si no la propia; membresía verificada por
+`householdContext`, que solo devuelve `plannerId` si eres del mismo hogar),
+`readShoppingRow` y `writeShoppingState` (fila propia → cliente de sesión; fila del
+planificador → `supabaseAdmin`, porque la policy RLS de issue 05 solo deja LEERla). Las
+cinco server fns (`toggleShoppingOwned`, `setTripActual`, `setPantryExtra`,
+`scanTripReceipt`, `setTripConfirmed`) pasan por ellos. El `patch` de escritura nunca
+contiene `plan` ni `weekQty`. `scanTripReceipt` lee el perfil de quien llama pero la fila
+de compra y el `pantry_extras` resultante van a la del planificador. Rutas `/api/v1/*` sin
+cambios (ya invocaban las mismas fns).
+
+**UI** (`src/routes/_authenticated/plan.tsx` + `mobile/app/(app)/plan.tsx`): se borró el
+`HouseholdShoppingBlock` de solo lectura. Ahora un no planificador ve "La compra de la
+casa" como un `IngredientsTab` completo (`plannerLocked`) — navegador de tramos, chips
+Falta/Tengo/Comprado, despensa, gasto real y tiquet, y modo compra a pantalla completa
+(`shopSource: "own" | "household"`) para ir al súper de forma autónoma. Solo se ocultan
+regenerar y la cadencia. Con dos listas apiladas el CTA "Ir a comprar" va en línea
+(`inlineCta` en web; `onEnterShopMode` en móvil).
+
+**Verificación**: gates verdes (web lint 0 errores / typecheck / 114 tests; mobile `tsc`
+0). Navegador como no planificador demo Marta (hogar Alex): marcar "en casa" y añadir a la
+despensa → escrito en la fila de Alex (`Cebolla ownedTrips {0:"fridge"}`, `pantry_extras`),
+fila propia de Marta intacta; modo compra marca `store` en la de Alex. Simulador como no
+planificador Copiloto (hogar Nacho): mismo resultado, más el modo compra a pantalla
+completa. Datos de prueba limpiados en las dos filas.

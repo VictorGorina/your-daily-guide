@@ -13,7 +13,13 @@ import {
   type Profile,
 } from "@/lib/daily";
 import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
-import { isBeforeAppStart, mealsForDate, type MonthlyPlan } from "@/lib/plan-shared";
+import {
+  childMealsForDate,
+  isBeforeAppStart,
+  mealsForDate,
+  offListNote,
+  type MonthlyPlan,
+} from "@/lib/plan-shared";
 
 const longDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
@@ -34,12 +40,15 @@ export function DayDetailSheet({
   plan,
   log,
   profile,
+  householdChildren,
   onClose,
 }: {
   date: string | null;
   plan: MonthlyPlan | null;
   log: DailyLog | undefined;
   profile: Profile | null;
+  /** Niños de la casa, para el plato aparte de un niño ese día (issue 07). */
+  householdChildren?: { id: string; name: string }[];
   onClose: () => void;
 }) {
   return (
@@ -48,7 +57,15 @@ export function DayDetailSheet({
         <DialogHeader>
           <DialogTitle className="capitalize">{date ? longDate(date) : ""}</DialogTitle>
         </DialogHeader>
-        {date ? <DayDetailBody date={date} plan={plan} log={log} profile={profile} /> : null}
+        {date ? (
+          <DayDetailBody
+            date={date}
+            plan={plan}
+            log={log}
+            profile={profile}
+            householdChildren={householdChildren}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   );
@@ -59,11 +76,13 @@ function DayDetailBody({
   plan,
   log,
   profile,
+  householdChildren,
 }: {
   date: string;
   plan: MonthlyPlan | null;
   log: DailyLog | undefined;
   profile: Profile | null;
+  householdChildren?: { id: string; name: string }[];
 }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
@@ -91,7 +110,20 @@ function DayDetailBody({
   // Plato planificado de cada momento (comida/cena del día exacto, desayuno/snack
   // por rotación o plato pedido a mano). El detalle recorre `habits` porque son
   // el registro real de lo que se siguió ese día.
-  const plannedByLabel = new Map(mealsForDate(plan, date).map((m) => [m.moment, m.idea]));
+  const dayMeals = mealsForDate(plan, date);
+  const plannedByLabel = new Map(dayMeals.map((m) => [m.moment, m.idea]));
+  // Platos aparte de un niño ese día (issue 07), agrupados por el rótulo del
+  // momento para colgarlos bajo la comida correspondiente.
+  const kidMealsByLabel = new Map<string, { name: string; dish: string; off: string[] }[]>();
+  for (const c of householdChildren ?? []) {
+    for (const k of childMealsForDate(plan, date, c.id)) {
+      const label = dayMeals.find((m) => m.slot === k.slot)?.moment;
+      if (!label) continue;
+      const list = kidMealsByLabel.get(label) ?? [];
+      list.push({ name: c.name, dish: k.dish, off: k.off });
+      kidMealsByLabel.set(label, list);
+    }
+  }
 
   if (!habits.length) {
     return (
@@ -171,6 +203,15 @@ function DayDetailBody({
                     Plan sugerido: <span className="line-through">{wasIdea}</span>
                   </p>
                 ) : null}
+                {(kidMealsByLabel.get(h.label) ?? []).map((k) => (
+                  <p
+                    key={`${k.name}-${k.dish}`}
+                    className="mt-0.5 text-[11px] leading-snug text-muted-foreground"
+                  >
+                    Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                    {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                  </p>
+                ))}
               </button>
               {editing === i ? (
                 <div className="mt-1.5 flex flex-wrap gap-2 rounded-xl bg-secondary/40 p-2.5">

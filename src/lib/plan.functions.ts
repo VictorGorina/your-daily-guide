@@ -47,6 +47,7 @@ import {
   planSlotIndex,
   shoppingTotal,
   normName,
+  type ChildMeal,
   type MealSlot,
   type MonthlyPlan,
   type PantryExtra,
@@ -88,6 +89,84 @@ function ownPlanRow(
     .eq("month", month)
     .eq("user_id", userId)
     .maybeSingle();
+}
+
+/**
+ * Fila `monthly_plans` sobre la que se escribe el ESTADO de compra: marcas
+ * "lo tengo en casa"/"comprado", gasto real, tiquets, despensa extra y cierre
+ * de tramos. En un hogar esa lista vive en la fila del planificador y cualquier
+ * miembro con cuenta puede tocar su estado (issue 06) — nunca los platos ni las
+ * cantidades.
+ *
+ *  - Sin hogar, o si quien llama ES el planificador → su propia fila
+ *    (`isMine: true`), lectura y escritura con el cliente de sesión.
+ *  - Miembro no planificador → la fila del planificador (`isMine: false`); RLS
+ *    solo deja LEER esa fila (policy de issue 05), así que las lecturas y
+ *    escrituras van con `supabaseAdmin` y limitadas a columnas de estado.
+ *
+ * La membresía queda verificada por `householdPlannerId`: solo devuelve un id
+ * no nulo cuando quien llama es miembro del mismo hogar. Es una sola consulta,
+ * mucho más ligera que `householdContext`, porque este camino se recorre en
+ * cada marca de "lo tengo en casa".
+ */
+async function resolveShoppingRow(
+  supabase: unknown,
+  userId: string,
+): Promise<{ targetUserId: string; isMine: boolean }> {
+  const { householdPlannerId } = await import("@/lib/household.server");
+  const plannerId = await householdPlannerId(supabase as never, userId);
+  if (!plannerId || plannerId === userId) {
+    return { targetUserId: userId, isMine: true };
+  }
+  return { targetUserId: plannerId, isMine: false };
+}
+
+/** Lee la fila objetivo del estado de compra (propia con el cliente de sesión;
+ *  la del planificador con `supabaseAdmin`, ver `resolveShoppingRow`). */
+async function readShoppingRow<T>(
+  supabase: unknown,
+  target: { targetUserId: string; isMine: boolean },
+  month: string,
+  columns: string,
+): Promise<T | null> {
+  if (target.isMine) {
+    const { data } = await ownPlanRow(supabase as never, target.targetUserId, month, columns);
+    return (data as T | null) ?? null;
+  }
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await supabaseAdmin
+    .from("monthly_plans")
+    .select(columns)
+    .eq("user_id", target.targetUserId)
+    .eq("month", month)
+    .maybeSingle();
+  return (data as T | null) ?? null;
+}
+
+/** Escribe SOLO columnas de estado de compra en la fila objetivo. El `patch`
+ *  nunca incluye `plan` ni `weekQty`: un no planificador jamás toca los platos
+ *  ni las cantidades de la lista de la casa (issue 06). */
+async function writeShoppingState(
+  supabase: unknown,
+  target: { targetUserId: string; isMine: boolean },
+  month: string,
+  patch: Record<string, unknown>,
+): Promise<{ error: unknown }> {
+  if (target.isMine) {
+    const { error } = await (supabase as SupabaseClient<never, never, never>)
+      .from("monthly_plans")
+      .update(patch as never)
+      .eq("month", month)
+      .eq("user_id", target.targetUserId);
+    return { error };
+  }
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { error } = await supabaseAdmin
+    .from("monthly_plans")
+    .update(patch as never)
+    .eq("user_id", target.targetUserId)
+    .eq("month", month);
+  return { error };
 }
 
 /**
@@ -134,6 +213,14 @@ function blankSharedSlots(plan: MonthlyPlan, sharedSlots: SharedSlots): MonthlyP
         if (isSharedSlot(sharedSlots, "comida", di)) next.lunch = "";
         if (isSharedSlot(sharedSlots, "cena", di)) next.dinner = "";
         if (desayunoShared) delete next.breakfast;
+        // Los platos aparte de un niño (issue 07) los lleva el planificador:
+        // la fila de un no planificador solo conserva los de un slot que ese
+        // día no sea compartido (raro), el resto los pone el espejo.
+        const kids = (next.kids ?? []).filter(
+          (k) => k.slot !== "snack" && !isSharedSlot(sharedSlots, k.slot, di),
+        );
+        if (kids.length) next.kids = kids;
+        else delete next.kids;
         return next;
       }),
     })),
@@ -332,6 +419,21 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
         ? `RACIONES: ${describeServings(home.servings, home.sharedSlots)} (mismo plato para toda la mesa esos días, sin los alérgenos de los niños). Las comidas en solitario (snack, y las que no compartes) piden ${home.servings.plannerSolo} ración(es). Dimensiona cada "weekQty" para esas raciones exactas, ni de más ni de menos. `
         : "";
 
+    // Plato aparte de un niño (issue 07): solo lo genera el planificador (o un
+    // usuario en solitario con niños en casa, caso raro pero posible).
+    const kidsLine =
+      !isNonPlannerInHousehold && home.children.length
+        ? `NIÑOS DE LA CASA: ${JSON.stringify(
+            home.children.map((c) => ({
+              childId: c.id,
+              nombre: c.name,
+              edad: c.age,
+              alergias: c.allergies || "ninguna",
+              racion: c.portion,
+            })),
+          )}. Si un plato compartido no le sirve a un niño (lleva su alérgeno, no encaja con su edad, o no se lo va a comer), añade para ESE niño ESE día un plato alternativo sencillo en "days[].kids" — objeto {"childId" (el de la lista), "slot": "desayuno"|"comida"|"cena", "dish": plato corto} — y suma sus ingredientes al "weekQty" a ración de ese niño. Si el plato compartido le vale, no pongas nada: por defecto el niño come lo mismo que la mesa. `
+        : "";
+
     const { plan: rawPlan, shopping: rawShopping } = await askForJson(
       {
         key,
@@ -345,7 +447,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
           '"perishable": boolean (true si es fresco y aguanta pocos días)}]}], ' +
           '"plan": {"intro": string (2 frases motivadoras y comprensivas), "focus": [3 focos del mes, cortos], ' +
           '"weeks": [4 objetos {"label": "Semana 1".."Semana 4", "focus": string corto, "breakfasts": [2 ideas de desayuno], "snacks": [2 ideas de snack], ' +
-          '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato}]}]}}\n' +
+          '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato, "kids": [opcional, solo si un niño necesita otro plato: {"childId", "slot": "desayuno"|"comida"|"cena", "dish"}]}]}]}}\n' +
           "REGLA CLAVE: todos los platos, desayunos y snacks del plan deben poder prepararse ÚNICAMENTE con los ingredientes de la lista de la compra (más sal, aceite, agua y especias básicas). No menciones ningún alimento que no esté en la lista. " +
           'CANTIDADES: cada número de "weekQty" es lo que de verdad piden los platos de esa semana, ni de más ni de menos. Si un plato se repite en varias semanas, refleja su parte en el "weekQty" de cada una. ' +
           `${coverageLine} ${coveredWeeksNote}` +
@@ -354,6 +456,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
           "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
           "Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: en las comidas fuera de casa propón una opción de menú o restaurante y no cuentes sus ingredientes en la compra. " +
           `${servingsLine}` +
+          `${kidsLine}` +
           "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
       },
       (parsed) => {
@@ -479,13 +582,16 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data, context }): Promise<{ shopping: ShoppingList }> => {
-    const { data: row } = await ownPlanRow(
-      context.supabase as never,
-      context.userId,
+    // La lista puede ser la de la casa: cualquier miembro con cuenta marca su
+    // estado, aunque la escritura vaya a la fila del planificador (issue 06).
+    const target = await resolveShoppingRow(context.supabase, context.userId);
+    const row = await readShoppingRow<{ shopping?: unknown }>(
+      context.supabase,
+      target,
       data.month,
       "shopping",
     );
-    const current = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+    const current = cleanShopping(row?.shopping);
     if (!current.length) throw new Error("Todavía no hay lista de la compra este mes");
 
     const shopping: ShoppingList = current.map((group) => ({
@@ -508,11 +614,9 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
       }),
     }));
 
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({ shopping: shopping as never } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
+    const { error } = await writeShoppingState(context.supabase, target, data.month, {
+      shopping: shopping as never,
+    });
     if (error) {
       console.error("toggleShoppingOwned", error);
       throw new Error("No hemos podido guardar el cambio");
@@ -539,22 +643,23 @@ export const setTripActual = createServerFn({ method: "POST" })
     return { month: input.month, trip: Math.round(trip), amount };
   })
   .handler(async ({ data, context }): Promise<{ trip_actuals: TripActuals }> => {
-    const { data: row } = await ownPlanRow(
-      context.supabase as never,
-      context.userId,
+    // El gasto real de la compra de la casa lo puede anotar cualquier miembro
+    // (issue 06): resuelve la fila objetivo y escribe solo esa columna.
+    const target = await resolveShoppingRow(context.supabase, context.userId);
+    const row = await readShoppingRow<{ trip_actuals?: unknown }>(
+      context.supabase,
+      target,
       data.month,
       "trip_actuals",
     );
-    const current = cleanTripActuals((row as { trip_actuals?: unknown } | null)?.trip_actuals);
+    const current = cleanTripActuals(row?.trip_actuals);
     const next = { ...current };
     if (data.amount == null) delete next[data.trip];
     else next[data.trip] = data.amount;
 
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({ trip_actuals: next as never } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
+    const { error } = await writeShoppingState(context.supabase, target, data.month, {
+      trip_actuals: next as never,
+    });
     if (error) {
       console.error("setTripActual", error);
       throw new Error("No hemos podido guardar el gasto");
@@ -585,13 +690,16 @@ export const setPantryExtra = createServerFn({ method: "POST" })
     return { month: input.month, name, qty, remove: Boolean(input?.remove) };
   })
   .handler(async ({ data, context }): Promise<{ pantry_extras: PantryExtra[] }> => {
-    const { data: row } = await ownPlanRow(
-      context.supabase as never,
-      context.userId,
+    // La despensa "ya lo tenemos en casa" es del hogar (issue 06): cualquier
+    // miembro la edita, aunque viva en la fila del planificador.
+    const target = await resolveShoppingRow(context.supabase, context.userId);
+    const row = await readShoppingRow<{ pantry_extras?: unknown }>(
+      context.supabase,
+      target,
       data.month,
       "pantry_extras",
     );
-    const current = cleanPantryExtras((row as { pantry_extras?: unknown } | null)?.pantry_extras);
+    const current = cleanPantryExtras(row?.pantry_extras);
     const key = normName(data.name);
     const withoutIt = current.filter((e) => normName(e.name) !== key);
     const next: PantryExtra[] = data.remove
@@ -606,11 +714,9 @@ export const setPantryExtra = createServerFn({ method: "POST" })
           },
         ].slice(0, 40);
 
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({ pantry_extras: next as never } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
+    const { error } = await writeShoppingState(context.supabase, target, data.month, {
+      pantry_extras: next as never,
+    });
     if (error) {
       console.error("setPantryExtra", error);
       throw new Error("No hemos podido guardar el ingrediente");
@@ -660,21 +766,25 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
-    const [{ data: profile }, { data: row }] = await Promise.all([
+    // La foto del tiquet la sube quien va al súper — puede no ser el
+    // planificador (issue 06). El perfil para clasificar los productos es
+    // siempre el de quien llama; la fila de compra, la que resuelva el hogar.
+    const target = await resolveShoppingRow(context.supabase, context.userId);
+    const [{ data: profile }, row] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-      ownPlanRow(
-        context.supabase as never,
-        context.userId,
+      readShoppingRow<{
+        shopping?: unknown;
+        pantry_extras?: unknown;
+        trip_actuals?: unknown;
+        trip_receipts?: unknown;
+      }>(
+        context.supabase,
+        target,
         data.month,
         "shopping, pantry_extras, trip_actuals, trip_receipts",
       ),
     ]);
-    const typed = row as {
-      shopping?: unknown;
-      pantry_extras?: unknown;
-      trip_actuals?: unknown;
-      trip_receipts?: unknown;
-    } | null;
+    const typed = row;
     const shopping = cleanShopping(typed?.shopping);
     const pantryExtras = cleanPantryExtras(typed?.pantry_extras);
     const tripActuals = cleanTripActuals(typed?.trip_actuals);
@@ -821,15 +931,11 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
       ...added.map((name) => ({ name, source: "receipt" as const, addedAt: nowIso })),
     ]);
 
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({
-        trip_actuals: nextActuals as never,
-        trip_receipts: nextReceipts as never,
-        pantry_extras: nextPantry as never,
-      } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
+    const { error } = await writeShoppingState(context.supabase, target, data.month, {
+      trip_actuals: nextActuals as never,
+      trip_receipts: nextReceipts as never,
+      pantry_extras: nextPantry as never,
+    });
     if (error) {
       console.error("scanTripReceipt save", error);
       throw new Error("Hemos leído el tiquet pero no hemos podido guardarlo. Inténtalo otra vez.");
@@ -863,13 +969,15 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     return { month: input.month, trip: Math.round(trip), confirmed: Boolean(input?.confirmed) };
   })
   .handler(async ({ data, context }): Promise<{ confirmed_trips: TripConfirmations }> => {
-    const { data: row } = await ownPlanRow(
-      context.supabase as never,
-      context.userId,
-      data.month,
-      "plan, shopping, confirmed_trips",
-    );
-    const typed = row as { plan?: unknown; shopping?: unknown; confirmed_trips?: unknown } | null;
+    // Fijar un tramo de la compra de la casa lo puede hacer cualquier miembro
+    // (issue 06); `confirmed_at` se cierra en la fila del planificador cuando
+    // todos los tramos quedan fijados — `syncSharedMeals` lo respeta.
+    const target = await resolveShoppingRow(context.supabase, context.userId);
+    const typed = await readShoppingRow<{
+      plan?: unknown;
+      shopping?: unknown;
+      confirmed_trips?: unknown;
+    }>(context.supabase, target, data.month, "plan, shopping, confirmed_trips");
     const shopping = cleanShopping(typed?.shopping);
     if (!shopping.length) throw new Error("Todavía no hay lista de la compra este mes");
 
@@ -884,14 +992,10 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     const cadence = cleanPlan(typed?.plan)?.cadence ?? cadenceOf(shopping);
     const allConfirmed = Object.keys(next).length >= tripsOfCadence(cadence);
 
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({
-        confirmed_trips: next as never,
-        confirmed_at: allConfirmed ? new Date().toISOString() : null,
-      } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
+    const { error } = await writeShoppingState(context.supabase, target, data.month, {
+      confirmed_trips: next as never,
+      confirmed_at: allConfirmed ? new Date().toISOString() : null,
+    });
     if (error) {
       console.error("setTripConfirmed", error);
       throw new Error("No hemos podido fijar los ingredientes");
@@ -1183,6 +1287,144 @@ export const setPlanMeal = createServerFn({ method: "POST" })
     },
   );
 
+/**
+ * Pone (o quita) el plato aparte de un niño para un día concreto — paralela a
+ * `setPlanMeal`, pero sobre `PlanDay.kids`. El plato aparte es parte del plan
+ * compartido de la casa, así que solo lo cambia el planificador (D2): un no
+ * planificador recibe un aviso y no se toca nada. `childId` puede venir como el
+ * id real del niño o como su nombre (lo usa el coach). `dish` vacío quita el
+ * override y el niño vuelve a comer el plato compartido. Los días pasados no se
+ * tocan y la lista de la compra tampoco: si el plato pide algo no comprado, se
+ * guarda igual y queda en `kids[].off` para avisar.
+ */
+export const setChildMeal = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    (input: { date: string; slot: string; childId: string; dish: string; today?: string }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? "")) throw new Error("Fecha no válida");
+      // Solo las 3 comidas principales: el snack nunca es compartido ni lleva
+      // plato aparte de un niño (D5), así que no se espejaría a nadie.
+      if (!HOUSEHOLD_MEAL_KEYS.includes(input?.slot as MealKey))
+        throw new Error("Comida no válida");
+      const childId = String(input?.childId ?? "").trim();
+      if (!childId) throw new Error("Falta el niño");
+      const dish = String(input?.dish ?? "")
+        .trim()
+        .slice(0, 200);
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
+        ? input.today!
+        : new Date().toISOString().slice(0, 10);
+      if (input.date < today) {
+        throw new Error(
+          "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
+        );
+      }
+      return { date: input.date, slot: input.slot as MealSlot, childId, dish, today };
+    },
+  )
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{
+      plan: MonthlyPlan;
+      childName: string;
+      label: string;
+      dish: string;
+      off: string[];
+    }> => {
+      const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
+      const home = await householdContext(context.supabase as never, context.userId);
+      const child =
+        home.children.find((c) => c.id === data.childId) ??
+        home.children.find((c) => normName(c.name) === normName(data.childId));
+      if (!child) throw new Error("Ese niño no está en tu casa");
+      // El plato aparte de un niño va con la comida compartida: lo fija el
+      // planificador, igual que el resto de días compartidos (D2).
+      if (home.plannerId && home.plannerId !== context.userId) {
+        const plannerName =
+          home.members.find((m) => m.userId === home.plannerId)?.displayName ??
+          "quien lleva la cocina";
+        throw new Error(`El plato de ${child.name} lo pone ${plannerName} de tu casa.`);
+      }
+
+      const month = data.date.slice(0, 7);
+      const { data: row } = await ownPlanRow(
+        context.supabase as never,
+        context.userId,
+        month,
+        "plan, shopping, pantry_extras",
+      );
+      const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
+      if (!current) throw new Error(`Todavía no hay plan del mes ${month}`);
+      const at = planSlotIndex(current, data.date);
+      if (!at) throw new Error("Ese día todavía no tiene menú en el plan");
+
+      const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+      const pantryExtras = cleanPantryExtras(
+        (row as { pantry_extras?: unknown } | null)?.pantry_extras,
+      );
+      const off = data.dish ? await offShoppingList(data.dish, shopping, pantryExtras) : [];
+
+      const next: MonthlyPlan = {
+        ...current,
+        weeks: current.weeks.map((week, wi) =>
+          wi !== at.weekIndex
+            ? week
+            : {
+                ...week,
+                days: week.days.map((day, di) => {
+                  if (di !== at.dayIndex) return day;
+                  const others = (day.kids ?? []).filter(
+                    (k) => !(k.childId === child.id && k.slot === data.slot),
+                  );
+                  const kids: ChildMeal[] = data.dish
+                    ? [
+                        ...others,
+                        {
+                          childId: child.id,
+                          slot: data.slot,
+                          dish: data.dish,
+                          ...(off.length ? { off } : {}),
+                        },
+                      ]
+                    : others;
+                  const updated: PlanDay = { ...day };
+                  if (kids.length) updated.kids = kids;
+                  else delete updated.kids;
+                  return updated;
+                }),
+              },
+        ),
+      };
+
+      const { error } = await context.supabase
+        .from("monthly_plans")
+        .update({ plan: next as never } as never)
+        .eq("month", month)
+        .eq("user_id", context.userId);
+      if (error) {
+        console.error("setChildMeal", error);
+        throw new Error("No hemos podido guardar el plato del niño");
+      }
+
+      await syncSharedMeals({
+        supabase: context.supabase as never,
+        userId: context.userId,
+        month,
+        today: data.today,
+      });
+
+      return {
+        plan: next,
+        childName: child.name,
+        label: MEAL_SLOT_LABEL[data.slot],
+        dish: data.dish,
+        off,
+      };
+    },
+  );
+
 /** Calcula cómo afecta lo ocurrido al objetivo y propone acortar el plazo o ser más laxo. */
 export const goalImpact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -1244,25 +1486,41 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
-    const [{ data: profile }, { data: row }] = await Promise.all([
+    const { householdContext } = await import("@/lib/household.server");
+    const [{ data: profile }, { data: row }, home] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
       ownPlanRow(context.supabase as never, context.userId, data.month, "plan, shopping"),
+      householdContext(context.supabase as never, context.userId),
     ]);
     const plan = cleanPlan((row as { plan?: unknown } | null)?.plan);
     const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
 
+    // Un no planificador del hogar (D1): el plan y la compra de las comidas
+    // compartidas los lleva otra persona; él solo planifica sus comidas en
+    // solitario. El mensaje de bienvenida tiene que explicar ese reparto en vez
+    // de hablar de "tu plan del mes" como si fuera entero suyo.
+    const isNonPlanner = !!home.plannerId && home.plannerId !== context.userId;
+    const plannerName =
+      home.members.find((m) => m.userId === home.plannerId)?.displayName ??
+      "otra persona de tu casa";
+
     const ai = createAiProvider(key);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
-      system: coachSystemPrompt(profile as never),
-      prompt:
-        `Plan del mes creado: ${plan ? JSON.stringify({ intro: plan.intro, focus: plan.focus, semanas: plan.weeks.map((w) => w.focus) }) : "sin plan"}\n` +
-        `Lista de la compra (${shoppingTotal(shopping)} € aprox.): ${ingredientNames(shopping) || "sin lista"}\n\n` +
-        "Escribe un mensaje de bienvenida corto (máx. 10 líneas, sin markdown) que: " +
-        "1) resuma en 2 frases el enfoque de su plan del mes y su coste aproximado; " +
-        "2) explique cómo funciona la app: la pestaña Hoy con su guía, platos y hábitos; la pestaña Plan con el mes y la lista de la compra que confirma cuando ya ha comprado; el botón flotante para hablar conmigo en cualquier momento; " +
-        "3) deje claro que si un día se salta el plan solo tiene que contármelo y yo recoloco los días siguientes con lo que ya tiene comprado, sin cambiar la compra y sin juzgarle. " +
-        "Tono motivador y comprensivo, sin presiones.",
+      system: coachSystemPrompt(profile as never, home.householdId ? home.text : null),
+      prompt: isNonPlanner
+        ? "Escribe un mensaje de bienvenida corto (máx. 10 líneas, sin markdown) para alguien que acaba de entrar en un hogar compartido y NO es quien planifica. Explícale: " +
+          `1) que el menú de las comidas compartidas de tu casa y su lista de la compra los prepara ${plannerName}, y que los ve en la app sin tener que generar nada; ` +
+          "2) qué hace él: planifica sus comidas en solitario (las que no comparte) desde la pestaña Plan, registra cada día lo que come en la pestaña Hoy, y en Ingredientes marca lo que ya hay en casa o se ha comprado; " +
+          "3) que el botón flotante sirve para hablar conmigo cuando quiera. " +
+          "Tono motivador y cercano, sin presiones."
+        : `Plan del mes creado: ${plan ? JSON.stringify({ intro: plan.intro, focus: plan.focus, semanas: plan.weeks.map((w) => w.focus) }) : "sin plan"}\n` +
+          `Lista de la compra (${shoppingTotal(shopping)} € aprox.): ${ingredientNames(shopping) || "sin lista"}\n\n` +
+          "Escribe un mensaje de bienvenida corto (máx. 10 líneas, sin markdown) que: " +
+          "1) resuma en 2 frases el enfoque de su plan del mes y su coste aproximado; " +
+          "2) explique cómo funciona la app: la pestaña Hoy con su guía, platos y hábitos; la pestaña Plan con el mes y la lista de la compra que confirma cuando ya ha comprado; el botón flotante para hablar conmigo en cualquier momento; " +
+          "3) deje claro que si un día se salta el plan solo tiene que contármelo y yo recoloco los días siguientes con lo que ya tiene comprado, sin cambiar la compra y sin juzgarle. " +
+          "Tono motivador y comprensivo, sin presiones.",
     });
 
     return { text: text.trim() };

@@ -12,7 +12,7 @@ import {
   type Profile,
 } from "@/lib/daily";
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { adjustMonthlyPlan, goalImpact, setPlanMeal } from "@/lib/plan.functions";
+import { adjustMonthlyPlan, goalImpact, setChildMeal, setPlanMeal } from "@/lib/plan.functions";
 import { mealsForDate } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "@/lib/profile-fields";
 
@@ -27,6 +27,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
   const makeGuide = useServerFn(generateDailyGuide);
   const adjustPlan = useServerFn(adjustMonthlyPlan);
   const changeMeal = useServerFn(setPlanMeal);
+  const changeChildMeal = useServerFn(setChildMeal);
   const checkGoal = useServerFn(goalImpact);
   const date = todayISO();
 
@@ -135,6 +136,33 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
           ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
           : `${base} (con lo que ya tienes comprado)`;
       }
+      if (toolName === "cambiar_plato_nino") {
+        const targetDate = String(input.fecha ?? "");
+        const dish = String(input.plato ?? "").trim();
+        const { childName, label, off } = await changeChildMeal({
+          data: {
+            date: targetDate,
+            slot: String(input.comida ?? ""),
+            childId: String(input.nino ?? ""),
+            dish,
+            today: date,
+          },
+        });
+        const dayLabel = /^\d{4}-\d{2}-\d{2}$/.test(targetDate)
+          ? new Date(`${targetDate}T00:00:00`).toLocaleDateString("es-ES", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })
+          : targetDate;
+        if (!dish) {
+          return `${label} del ${dayLabel}: ${childName} vuelve a comer el plato compartido.`;
+        }
+        const base = `${label} del ${dayLabel} · para ${childName}: ${dish}`;
+        return off.length
+          ? `${base}. Ojo: ${off.join(", ")} no está en la lista de la compra.`
+          : `${base} (con lo que ya hay comprado)`;
+      }
       if (toolName === "ajustar_plan_mensual") {
         const kcal = Number(input.kcal_extra);
         const { summary } = await adjustPlan({
@@ -190,7 +218,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       }
       return "Acción desconocida";
     },
-    [adjustPlan, changeMeal, checkGoal, date, getLog, makeGuide],
+    [adjustPlan, changeMeal, changeChildMeal, checkGoal, date, getLog, makeGuide],
   );
 
   return { runTool, refresh };

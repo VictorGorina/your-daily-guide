@@ -96,6 +96,81 @@ ingredientes, la despensa extra y el menú de los próximos días (`coachPlanCon
 fecha de hoy — sin ella el modelo no puede convertir "mañana" en la fecha que necesita la
 herramienta.
 
+## Familia — hogar compartido
+
+La pestaña Familia (`/hogar`) modela una casa donde varias personas comen el mismo plato. El
+spec largo, con las decisiones cerradas con el usuario (D1–D5), vive en
+[.scratch/familia-comidas-compartidas/](.scratch/familia-comidas-compartidas/); esto es el
+resumen de lo que no se puede romper.
+
+**`household_members` son huecos de la mesa, no filas de usuario.** `id` es la PK; `user_id`
+es NULL-able (`NULL` = hueco sin reclamar, o adulto que no usa la app pero cuenta para la
+compra); `display_name` lo pone quien crea la familia al declarar la mesa; `portion` es el
+peso de ración. "Un hogar por persona" se mantiene con un índice parcial
+`UNIQUE (user_id) WHERE user_id IS NOT NULL`. Quien se une ya no inserta una fila: mete el
+código, elige su hueco de una lista de nombres (`household_open_slots` /
+`claim_household_slot`) y el `UPDATE` le pone su `user_id`. Los niños siguen en
+`household_children` (sin cuenta, con `portion` por edad).
+
+**Un solo planificador.** `household_members.is_planner` — exactamente uno `true` por hogar,
+lo garantiza un trigger. El plan y la lista de la compra de ese miembro **son los del hogar**
+para todas las comidas compartidas, dimensionados para todos los comensales. Si el
+planificador sale del hogar o borra su cuenta, otro trigger (`AFTER DELETE`) pasa
+`is_planner` al miembro con cuenta de más edad (`date_of_birth` → `age` → `created_at`); no
+hay que llamar a nada desde el código de aplicación (D3).
+
+**Una sola configuración de comidas compartidas, a nivel de hogar.** `households.shared_slots`
+(`{desayuno,comida,cena: number[]}`, 0=lunes…6=domingo) dice qué comida de qué día es "el
+mismo plato para toda la mesa". Sustituye al viejo `household_members.shared_meals` por
+miembro y a la lógica de intersección (`sharedDays`), que ya no existen. Solo el planificador
+la edita; el resto la ve en lectura (D2). Los snacks nunca se comparten (D5).
+
+**Cada adulto con cuenta sigue teniendo su fila `monthly_plans` (D1).** No es todo suyo: los
+slots compartidos de esa fila son un **espejo de solo lectura** del planificador, y los no
+compartidos (sus desayunos si el finde no se comparte, sus snacks) los genera y edita él.
+La composición es en vivo al leer — `composeDayForUser` / `composeMonthlyPlanForMember`
+([plan-shared.ts](src/lib/plan-shared.ts)) mezclan las dos filas día a día — y hacia adelante
+al escribir, con `syncSharedMeals` ([household.server.ts](src/lib/household.server.ts)), que
+**siempre** toma como fuente la fila del planificador. `fetchMonthlyPlan`
+([daily.ts](src/lib/daily.ts)) es el único punto donde se compone: Hoy, el calendario del
+plan, el contexto del coach y el repaso nocturno lo consumen por la misma query
+`["plan", month]`. `generateMonthlyPlan` tiene un modo "solo mis slots" para un no
+planificador (`blankSharedSlots` vacía los slots compartidos y la rotación de desayuno). Un
+no planificador que pida cambiar una comida compartida —desde la UI o el coach— recibe un
+aviso y no se toca nada (`guardSharedSlotWrite`).
+
+**El estado de la compra sí es de todos.** Marcas "en casa"/"comprado", gasto real, tiquets,
+despensa extra y cierre de tramos los edita cualquier miembro con cuenta sobre la lista del
+planificador. En `plan.functions.ts`, `resolveShoppingRow` decide la fila objetivo
+(`householdPlannerId`, una sola consulta) y `readShoppingRow` / `writeShoppingState` la leen
+y escriben: si el que llama no es el planificador, con `supabaseAdmin` (RLS solo le deja
+LEER esa fila) y **solo** columnas de estado, nunca `plan` ni `weekQty`. La pantalla Plan de
+un no planificador muestra "La compra de la casa" (la del planificador, operable: navegador
+de compras y modo súper propios) encima de "Tu compra en solitario" (la suya).
+
+**Plato aparte de un niño.** Cuando un plato compartido no le sirve a un niño (su alérgeno,
+su edad, no lo come), el plan lleva `PlanDay.kids` (`{childId, slot, dish, off?}`): lo emite
+la IA al generar (`generateMonthlyPlan`) o lo cambia el planificador a mano con `setChildMeal`
+(paralela a `setPlanMeal` — hoy y el pasado bloqueados, la compra no cambia, lo que falte va
+en `kids[].off`; ruta espejo `/api/v1/plan/child-meal`). Es parte del plan compartido: solo
+el planificador lo toca (D2) y `syncSharedMeals` / `composeDayForUser` lo arrastran con su
+comida compartida. Solo las 3 comidas principales — el snack nunca.
+
+**El coach conoce la mesa.** `householdContext` (roster con raciones vía `describeRoster`,
+`shared_slots`, niños con alergias, quién planifica) alimenta `generateMonthlyPlan`,
+`adjustMonthlyPlan`, `welcomeBriefing` y también `/api/chat`, que para leerlo con las
+políticas del usuario usa `supabaseFromRequest` ([api-auth.server.ts](src/lib/api-auth.server.ts))
+— un cliente Supabase de servidor ligado al Bearer de la petición. Cuando `actions` está
+activo, `householdCoachRules` le dice al coach qué puede cambiar cada persona (el planificador
+usa `cambiar_plato_nino` para los niños; un no planificador solo toca sus comidas en
+solitario). Los `.server.ts` y los guards del servidor son la barrera real; el prompt solo
+evita que el coach prometa lo que no puede hacer.
+
+**RLS — cuidado con las lecturas de `monthly_plans`.** La policy de SELECT que deja a un
+miembro leer la fila del planificador hace que cualquier `.maybeSingle()` sin
+`.eq("user_id", …)` explícito devuelva 2 filas para un no planificador y lance `PGRST116`.
+En server functions se usa el helper `ownPlanRow`; en `daily.ts`, `fetchOwnMonthlyPlan`.
+
 ## Push notifications
 
 Web Push real (VAPID) vía [`@pushforge/builder`](https://github.com/draphy/pushforge) — usa solo

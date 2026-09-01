@@ -34,6 +34,7 @@ import { fetchHousehold } from "../../lib/household";
 import { isSharedSlot, type MealKey } from "../../lib/household-shared";
 import { setPendingChatMessage } from "../../lib/pending-chat-message";
 import {
+  childMealsForDate,
   mealsForDate,
   offListNote,
   type MonthlyPlan,
@@ -197,6 +198,17 @@ export default function Hoy() {
     );
     if (!others.length) return null;
     return others.length === 1 ? others[0].display_name : "el resto del hogar";
+  };
+  // Platos aparte de los niños de la casa para ese momento de hoy (issue 07).
+  const childMealsFor = (label: string) => {
+    const mealKey = MOMENT_TO_MEAL_KEY[label];
+    const kids = householdQ.data?.children ?? [];
+    if (!mealKey || !kids.length) return [];
+    return kids.flatMap((c) =>
+      childMealsForDate((planQ.data?.plan as MonthlyPlan | null) ?? null, today0, c.id)
+        .filter((k) => k.slot === mealKey)
+        .map((k) => ({ name: c.name, dish: k.dish, off: k.off })),
+    );
   };
 
   const todayQ = useQuery({
@@ -557,6 +569,15 @@ export default function Hoy() {
                         eso.
                       </Text>
                     ) : null}
+                    {childMealsFor(h.label).map((k) => (
+                      <Text
+                        key={`${k.name}-${k.dish}`}
+                        className="font-body mt-2 text-[11px] leading-relaxed text-muted-foreground"
+                      >
+                        Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
+                        {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                      </Text>
+                    ))}
                     {planned?.idea ? <DishRecipe dish={dish} month={month} /> : null}
                   </View>
                 );

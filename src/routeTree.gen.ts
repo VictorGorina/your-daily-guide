@@ -34,6 +34,7 @@ import { Route as ApiV1HouseholdSharedSlotsRouteImport } from './routes/api/v1/h
 import { Route as ApiV1HouseholdSyncRouteImport } from './routes/api/v1/household/sync'
 import { Route as ApiV1OnboardingParseRouteImport } from './routes/api/v1/onboarding/parse'
 import { Route as ApiV1PlanAdjustRouteImport } from './routes/api/v1/plan/adjust'
+import { Route as ApiV1PlanChildMealRouteImport } from './routes/api/v1/plan/child-meal'
 import { Route as ApiV1PlanGenerateRouteImport } from './routes/api/v1/plan/generate'
 import { Route as ApiV1PlanGoalImpactRouteImport } from './routes/api/v1/plan/goal-impact'
 import { Route as ApiV1PlanMealRouteImport } from './routes/api/v1/plan/meal'
@@ -171,6 +172,11 @@ const ApiV1PlanAdjustRoute = ApiV1PlanAdjustRouteImport.update({
   path: '/api/v1/plan/adjust',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlanChildMealRoute = ApiV1PlanChildMealRouteImport.update({
+  id: '/api/v1/plan/child-meal',
+  path: '/api/v1/plan/child-meal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1PlanGenerateRoute = ApiV1PlanGenerateRouteImport.update({
   id: '/api/v1/plan/generate',
   path: '/api/v1/plan/generate',
@@ -252,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
+  '/api/v1/plan/child-meal': typeof ApiV1PlanChildMealRoute
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
@@ -289,6 +296,7 @@ export interface FileRoutesByTo {
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
+  '/api/v1/plan/child-meal': typeof ApiV1PlanChildMealRoute
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
@@ -328,6 +336,7 @@ export interface FileRoutesById {
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
+  '/api/v1/plan/child-meal': typeof ApiV1PlanChildMealRoute
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
@@ -367,6 +376,7 @@ export interface FileRouteTypes {
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
+    | '/api/v1/plan/child-meal'
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
@@ -404,6 +414,7 @@ export interface FileRouteTypes {
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
+    | '/api/v1/plan/child-meal'
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
@@ -442,6 +453,7 @@ export interface FileRouteTypes {
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
+    | '/api/v1/plan/child-meal'
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
@@ -473,6 +485,7 @@ export interface RootRouteChildren {
   ApiV1HouseholdSyncRoute: typeof ApiV1HouseholdSyncRoute
   ApiV1OnboardingParseRoute: typeof ApiV1OnboardingParseRoute
   ApiV1PlanAdjustRoute: typeof ApiV1PlanAdjustRoute
+  ApiV1PlanChildMealRoute: typeof ApiV1PlanChildMealRoute
   ApiV1PlanGenerateRoute: typeof ApiV1PlanGenerateRoute
   ApiV1PlanGoalImpactRoute: typeof ApiV1PlanGoalImpactRoute
   ApiV1PlanMealRoute: typeof ApiV1PlanMealRoute
@@ -663,6 +676,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanAdjustRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plan/child-meal': {
+      id: '/api/v1/plan/child-meal'
+      path: '/api/v1/plan/child-meal'
+      fullPath: '/api/v1/plan/child-meal'
+      preLoaderRoute: typeof ApiV1PlanChildMealRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/plan/generate': {
       id: '/api/v1/plan/generate'
       path: '/api/v1/plan/generate'
@@ -786,6 +806,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1HouseholdSyncRoute: ApiV1HouseholdSyncRoute,
   ApiV1OnboardingParseRoute: ApiV1OnboardingParseRoute,
   ApiV1PlanAdjustRoute: ApiV1PlanAdjustRoute,
+  ApiV1PlanChildMealRoute: ApiV1PlanChildMealRoute,
   ApiV1PlanGenerateRoute: ApiV1PlanGenerateRoute,
   ApiV1PlanGoalImpactRoute: ApiV1PlanGoalImpactRoute,
   ApiV1PlanMealRoute: ApiV1PlanMealRoute,

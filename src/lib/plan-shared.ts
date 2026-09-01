@@ -1,4 +1,4 @@
-import { isSharedSlot, MEAL_KEYS, type SharedSlots } from "@/lib/household-shared";
+import { isSharedSlot, MEAL_KEYS, type MealKey, type SharedSlots } from "@/lib/household-shared";
 
 /** Las cuatro comidas que se pueden cambiar una a una desde el chat. */
 export const MEAL_SLOTS = ["desayuno", "comida", "cena", "snack"] as const;
@@ -20,12 +20,23 @@ export const MEAL_SLOT_FIELD = {
 } as const satisfies Record<MealSlot, keyof PlanDay>;
 
 /**
+ * Plato aparte de un niño para un día concreto, cuando el plato compartido del
+ * hogar no le sirve (su alérgeno, su edad, o no lo come). Lo emite la IA al
+ * generar el plan o lo pone el planificador a mano (`setChildMeal`). Vive en la
+ * fila del planificador y se espeja a los demás miembros como el resto de
+ * comidas compartidas. `off` = ingredientes que pide y no están en la compra.
+ */
+export type ChildMeal = { childId: string; slot: MealSlot; dish: string; off?: string[] };
+
+/**
  * Un día del plan. `lunch`/`dinner` vienen siempre del plan generado; el plan
  * base deja el desayuno y el snack a nivel de semana (una lista que rota por
  * día), así que `breakfast`/`snack` sólo aparecen cuando se ha pedido un plato
  * concreto para ESE día — un cambio a mano manda sobre la rotación semanal.
  * `extras` guarda, por comida, los ingredientes de ese plato que no salen de la
- * lista de la compra, para poder avisar en pantalla.
+ * lista de la compra, para poder avisar en pantalla. `kids` guarda los platos
+ * aparte de un niño para ESE día (issue 07); el resto de comidas el niño come
+ * el plato compartido.
  */
 export type PlanDay = {
   day: string;
@@ -34,6 +45,7 @@ export type PlanDay = {
   breakfast?: string;
   snack?: string;
   extras?: Partial<Record<MealSlot, string[]>>;
+  kids?: ChildMeal[];
 };
 
 /**
@@ -728,6 +740,36 @@ const cleanExtras = (raw: unknown): PlanDay["extras"] => {
   return entries.length ? Object.fromEntries(entries) : undefined;
 };
 
+/**
+ * Valida la lista de platos de niño de un día: descarta entradas sin `childId`,
+ * sin plato o con un `slot` que no sea una de las 3 comidas principales (el
+ * snack nunca se comparte ni lleva plato aparte, D5), deduplica por niño+comida
+ * (una sola alternativa por niño y momento) y recorta `off` como `extras`.
+ */
+const cleanKids = (raw: unknown): ChildMeal[] | undefined => {
+  const list = Array.isArray(raw) ? raw : [];
+  const seen = new Set<string>();
+  const out: ChildMeal[] = [];
+  for (const entry of list.slice(0, 12)) {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    const childId = String(o.childId ?? "").trim();
+    const slot = MEAL_KEYS.includes(o.slot as MealKey) ? (o.slot as MealSlot) : null;
+    const dish = String(o.dish ?? "")
+      .trim()
+      .slice(0, 200);
+    if (!childId || !slot || !dish) continue;
+    const key = `${childId}|${slot}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const off = (Array.isArray(o.off) ? o.off : [])
+      .map((n) => String(n).trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    out.push({ childId, slot, dish, ...(off.length ? { off } : {}) });
+  }
+  return out.length ? out.slice(0, 6) : undefined;
+};
+
 const cleanDay = (raw: unknown): PlanDay => {
   const d = (raw ?? {}) as Record<string, unknown>;
   const day: PlanDay = {
@@ -738,9 +780,11 @@ const cleanDay = (raw: unknown): PlanDay => {
   const breakfast = String(d.breakfast ?? "").trim();
   const snack = String(d.snack ?? "").trim();
   const extras = cleanExtras(d.extras);
+  const kids = cleanKids(d.kids);
   if (breakfast) day.breakfast = breakfast;
   if (snack) day.snack = snack;
   if (extras) day.extras = extras;
+  if (kids) day.kids = kids;
   return day;
 };
 
@@ -1013,9 +1057,10 @@ export const mergeFuturePlan = (
         const freshDay =
           fresh.days.find((d) => normDay(d.day) === normDay(day.day)) ?? fresh.days[di];
         if (!freshDay?.lunch && !freshDay?.dinner) return day;
-        // El spread conserva breakfast/snack/extras: un plato pedido a mano
-        // manda sobre la recolocación automática hasta que se cambie a mano
-        // otra vez (la IA sólo devuelve lunch/dinner por día).
+        // El spread conserva breakfast/snack/extras/kids: un plato pedido a
+        // mano (incluido el plato aparte de un niño) manda sobre la recolocación
+        // automática hasta que se cambie a mano otra vez (la IA sólo devuelve
+        // lunch/dinner por día).
         return {
           ...day,
           lunch: freshDay.lunch || day.lunch,
@@ -1099,6 +1144,23 @@ export function mealsForDate(plan: MonthlyPlan | null, date: string): PlanMeal[]
 }
 
 /**
+ * Platos aparte de un niño para una fecha (issue 07): devuelve solo los slots
+ * con override propio para ese niño; en el resto de comidas el niño come el
+ * plato compartido del día, así que no aparecen aquí.
+ */
+export function childMealsForDate(
+  plan: MonthlyPlan | null,
+  date: string,
+  childId: string,
+): { slot: MealSlot; dish: string; off: string[] }[] {
+  const day = planForDate(plan, date)?.day;
+  if (!day?.kids?.length) return [];
+  return day.kids
+    .filter((k) => k.childId === childId && k.dish)
+    .map((k) => ({ slot: k.slot, dish: k.dish, off: k.off ?? [] }));
+}
+
+/**
  * El día que ve un miembro del hogar (issue 05, D1): las comidas compartidas
  * ese día de la semana muestran el plato del planificador; las demás, el
  * suyo propio. `weekday` es el índice de día dentro de la semana del plan
@@ -1133,6 +1195,17 @@ export function composeDayForUser(
   };
   if (Object.keys(extras).length) next.extras = extras;
   else delete next.extras;
+
+  // El plato aparte de un niño (issue 07) lo pone el planificador y va con la
+  // comida compartida: se trae el del planificador para un slot compartido y se
+  // conserva el propio (raro) para un slot que ese día no se comparte.
+  const sharedSet = new Set<string>(shared);
+  const kids = [
+    ...(mineDay.kids ?? []).filter((k) => !sharedSet.has(k.slot)),
+    ...(plannerDay.kids ?? []).filter((k) => sharedSet.has(k.slot)),
+  ];
+  if (kids.length) next.kids = kids;
+  else delete next.kids;
   return next;
 }
 

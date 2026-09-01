@@ -49,9 +49,15 @@ Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
 
 - [ ] **El día de hoy no se toca nunca.** `setPlanMeal` cambia un plato de hoy en adelante
       tal cual lo pide la persona (sin IA). `adjustMonthlyPlan` recoloca solo días futuros.
-- [ ] Un cambio a mano se guarda en campos propios del día (`breakfast`/`snack` en `PlanDay`)
-      y manda sobre la rotación semanal. `mergeFuturePlan` los conserva: una recolocación
-      automática posterior no pisa `breakfast`/`snack`/`extras`.
+- [ ] Un cambio a mano se guarda en campos propios del día (`breakfast`/`snack`/`kids` en
+      `PlanDay`) y manda sobre la rotación semanal. `mergeFuturePlan` los conserva: una
+      recolocación automática posterior no pisa `breakfast`/`snack`/`extras`/`kids`.
+- [ ] El **plato aparte de un niño** (`PlanDay.kids`, `setChildMeal`) es parte del plan
+      compartido de la casa: lo emite la IA al generar el plan o lo cambia **solo el
+      planificador** (`setChildMeal` rechaza a un no planificador, igual que
+      `guardSharedSlotWrite`). Se espeja al resto de miembros con la comida compartida
+      (`syncSharedMeals` y `composeDayForUser` arrastran `kids` de un slot compartido). La
+      lista de la compra no cambia por esto: lo que falte va en `kids[].off`.
 - [ ] **La lista de la compra nunca cambia** por un cambio de plan. Si un plato pide algo no
       comprado, se guarda igual y los ingredientes que faltan quedan en `PlanDay.extras`
       como aviso.
@@ -63,6 +69,49 @@ Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
 - [ ] Los tramos de compra (`tripDayRange`, `groupByTrip`) se calculan con `tripsOfCadence`,
       no escaneando los datos: un tramo sin artículos sigue apareciendo vacío.
 - [ ] El estado de una comida es **por usuario**, nunca se sincroniza al hogar.
+- [ ] El **estado de compra** (marcas "en casa"/"comprado", gasto real, tiquets, despensa
+      extra, cierre de tramos) SÍ es del hogar: cualquier miembro con cuenta lo edita sobre
+      la lista del planificador (`resolveShoppingRow` → `readShoppingRow`/`writeShoppingState`
+      en [plan.functions.ts](../../src/lib/plan.functions.ts)). Un no planificador escribe la
+      fila del planificador con `supabaseAdmin` (RLS solo le deja LEERla) y **solo** columnas
+      de estado — nunca `plan` ni `weekQty`. Los platos, las cantidades y la cadencia siguen
+      siendo exclusivos del planificador.
+
+## Familia — hogar compartido
+
+Modelo desde la feature `familia-comidas-compartidas` (spec en
+[.scratch/familia-comidas-compartidas/](../../.scratch/familia-comidas-compartidas/)). Ver
+también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.md).
+
+- [ ] **Un solo planificador por hogar.** `household_members.is_planner` — exactamente uno
+      `true`, garantizado por trigger. `household_members` son "huecos de la mesa":
+      `user_id` NULL-able (hueco sin reclamar o adulto sin app), `display_name` obligatorio,
+      `portion` para el cálculo de la compra. Nada de asumir PK `(household_id, user_id)` ni
+      `UNIQUE(user_id)` sin `WHERE user_id IS NOT NULL`.
+- [ ] **`shared_slots` vive en `households`, no por miembro.** Es la única configuración de
+      comidas compartidas del hogar (`{desayuno,comida,cena: number[]}`, 0=lunes…6=domingo;
+      snacks nunca, D5). La columna `household_members.shared_meals` y los helpers de
+      intersección (`sharedDays`) **ya no existen**. Solo el planificador la edita (D2); el
+      resto la ve en lectura.
+- [ ] **Cada adulto con cuenta conserva su fila `monthly_plans` (D1).** Las comidas
+      compartidas de esa fila son un **espejo de lectura** del planificador
+      (`composeDayForUser` / `composeMonthlyPlanForMember` en
+      [plan-shared.ts](../../src/lib/plan-shared.ts) al leer; `syncSharedMeals` al escribir
+      hacia adelante). Las no compartidas las genera y edita cada uno.
+      `generateMonthlyPlan` tiene modo "solo mis slots" para un no planificador
+      (`blankSharedSlots`). Un no planificador que pida cambiar una comida compartida
+      (`setPlanMeal`, `setChildMeal`, coach) recibe un aviso y no se toca nada
+      (`guardSharedSlotWrite`).
+- [ ] **El coach conoce el hogar.** `householdContext`
+      ([household.server.ts](../../src/lib/household.server.ts)) alimenta `generateMonthlyPlan`,
+      `adjustMonthlyPlan`, `welcomeBriefing` y `/api/chat` (vía `supabaseFromRequest`, cliente
+      ligado a RLS). Si tocas el copy de una de esas superficies para un no planificador,
+      revisa que no dé por hecho "tu plan" cuando es el del hogar (incluye el push de
+      renovación, `renewalCopyMember`).
+- [ ] **Traspaso de planificador (D3) es automático.** Trigger `AFTER DELETE` en
+      `household_members`: al salir el planificador (`leaveHousehold`) o borrar su cuenta,
+      `is_planner` salta al miembro con cuenta de más edad. No hay que llamar a nada desde el
+      código de aplicación.
 
 ## Diseño y paridad web / móvil
 
