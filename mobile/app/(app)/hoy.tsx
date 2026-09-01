@@ -90,6 +90,19 @@ function tintBg(accent: string, pct: number): string {
 const AUTO_PLAN_MIN_INTERVAL_MS = 60_000;
 const autoPlanAttemptKey = (month: string) => `ydg:autoPlanAttempt:${month}`;
 
+// La guía del día se pide sola al abrir Hoy si falta o está incompleta. Dos
+// salvaguardas para que ese reintento automático no se convierta en spam:
+//   1. Si falla, no se avisa (`silent`): el aviso solo sale al pulsar "Generar"
+//      a mano. Antes cada fallo encolaba un `Alert`, y como iOS los muestra de
+//      uno en uno, un montaje repetido de Hoy (Fast Refresh, volver a la
+//      pestaña, el backend caído un rato) dejaba una cola de avisos idénticos
+//      imposible de cerrar.
+//   2. No se relanza sola más de una vez por minuto entre montajes (variable a
+//      nivel de módulo, no por montaje), para no martillear la IA. Mismo
+//      criterio que `AUTO_PLAN_MIN_INTERVAL_MS`.
+const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
+let lastAutoGuideAttempt = 0;
+
 /** ms desde el último intento (de cualquier apertura de la app), o null si no hay uno registrado. */
 async function msSinceLastAutoPlanAttempt(month: string): Promise<number | null> {
   try {
@@ -220,7 +233,7 @@ export default function Hoy() {
 
   const guide = today?.guide ?? null;
 
-  const requestGuide = async () => {
+  const requestGuide = async ({ silent = false }: { silent?: boolean } = {}) => {
     setGenerating(true);
     try {
       const g = await apiPost<DailyGuide>("guide", {
@@ -229,7 +242,10 @@ export default function Hoy() {
       await updateTodayLog({ guide: g });
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
-      Alert.alert("El coach no ha podido responder ahora mismo");
+      // El reintento automático (`silent`) falla sin ruido: hay un botón
+      // "Generar" a la vista para reintentar a mano, y así un fallo no encola
+      // un `Alert` por cada montaje de Hoy.
+      if (!silent) Alert.alert("El coach no ha podido responder ahora mismo");
     } finally {
       setGenerating(false);
     }
@@ -245,7 +261,11 @@ export default function Hoy() {
     // `meals`/`tips`, así que la condición de abajo no la pillaría.
     const missingMacros =
       !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
-    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) void requestGuide();
+    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) {
+      if (Date.now() - lastAutoGuideAttempt < AUTO_GUIDE_MIN_INTERVAL_MS) return;
+      lastAutoGuideAttempt = Date.now();
+      void requestGuide({ silent: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id]);
 
@@ -358,7 +378,7 @@ export default function Hoy() {
                 : "Guía del coach"}
           </Text>
           {!guide && !generating && !todayQ.isLoading ? (
-            <Pressable onPress={requestGuide}>
+            <Pressable onPress={() => requestGuide()}>
               <Text className="font-body-medium text-xs text-primary">Generar</Text>
             </Pressable>
           ) : null}

@@ -126,6 +126,17 @@ function markAutoPlanAttempt(month: string) {
   }
 }
 
+// La guía del día se pide sola al abrir Hoy si falta o está incompleta. Dos
+// salvaguardas para que ese reintento automático no se convierta en spam:
+//   1. Si falla, no se avisa (`silent`): el toast de error solo sale al pulsar
+//      "Generar" a mano. Si no, cada fallo mientras Hoy se re-monta (el backend
+//      caído un rato, volver a la pantalla) deja un toast tras otro.
+//   2. No se relanza sola más de una vez por minuto entre montajes (variable a
+//      nivel de módulo, no por montaje), para no martillear la IA. Mismo
+//      criterio que `AUTO_PLAN_MIN_INTERVAL_MS`.
+const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
+let lastAutoGuideAttempt = 0;
+
 function Hoy() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -234,7 +245,7 @@ function Hoy() {
 
   const guide = today?.guide ?? null;
 
-  const requestGuide = async () => {
+  const requestGuide = async ({ silent = false }: { silent?: boolean } = {}) => {
     setGenerating(true);
     try {
       const g = await makeGuide({
@@ -245,7 +256,10 @@ function Hoy() {
       await updateTodayLog({ guide: g });
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
-      toast.error("El coach no ha podido responder ahora mismo");
+      // El reintento automático (`silent`) falla sin ruido: hay un botón
+      // "Generar" a la vista para reintentar a mano, y así un fallo no deja un
+      // toast por cada vez que Hoy se vuelve a montar.
+      if (!silent) toast.error("El coach no ha podido responder ahora mismo");
     } finally {
       setGenerating(false);
     }
@@ -261,7 +275,11 @@ function Hoy() {
     // `meals`/`tips`, así que la condición de abajo no la pillaría.
     const missingMacros =
       !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
-    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) void requestGuide();
+    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) {
+      if (Date.now() - lastAutoGuideAttempt < AUTO_GUIDE_MIN_INTERVAL_MS) return;
+      lastAutoGuideAttempt = Date.now();
+      void requestGuide({ silent: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id]);
 
@@ -401,7 +419,7 @@ function Hoy() {
           {!guide && !generating && !todayQ.isLoading ? (
             <button
               type="button"
-              onClick={requestGuide}
+              onClick={() => requestGuide()}
               className="shrink-0 text-xs font-medium text-primary"
             >
               Generar
