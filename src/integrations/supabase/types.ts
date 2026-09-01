@@ -87,6 +87,7 @@ export type Database = {
           id: string;
           name: string;
           notes: string | null;
+          portion: number;
           updated_at: string;
         };
         Insert: {
@@ -98,6 +99,7 @@ export type Database = {
           id?: string;
           name: string;
           notes?: string | null;
+          portion?: number;
           updated_at?: string;
         };
         Update: {
@@ -109,6 +111,7 @@ export type Database = {
           id?: string;
           name?: string;
           notes?: string | null;
+          portion?: number;
           updated_at?: string;
         };
         Relationships: [
@@ -124,27 +127,39 @@ export type Database = {
       household_members: {
         Row: {
           created_at: string;
+          display_name: string;
           household_id: string;
+          id: string;
+          is_planner: boolean;
+          portion: number;
           role: string;
-          shared_meals: Json;
           updated_at: string;
-          user_id: string;
+          user_id: string | null;
+          uses_app: boolean;
         };
         Insert: {
           created_at?: string;
+          display_name: string;
           household_id: string;
+          id?: string;
+          is_planner?: boolean;
+          portion?: number;
           role?: string;
-          shared_meals?: Json;
           updated_at?: string;
-          user_id: string;
+          user_id?: string | null;
+          uses_app?: boolean;
         };
         Update: {
           created_at?: string;
+          display_name?: string;
           household_id?: string;
+          id?: string;
+          is_planner?: boolean;
+          portion?: number;
           role?: string;
-          shared_meals?: Json;
           updated_at?: string;
-          user_id?: string;
+          user_id?: string | null;
+          uses_app?: boolean;
         };
         Relationships: [
           {
@@ -163,6 +178,7 @@ export type Database = {
           id: string;
           invite_code: string;
           name: string;
+          shared_slots: Json;
           updated_at: string;
         };
         Insert: {
@@ -171,6 +187,7 @@ export type Database = {
           id?: string;
           invite_code: string;
           name?: string;
+          shared_slots?: Json;
           updated_at?: string;
         };
         Update: {
@@ -179,6 +196,7 @@ export type Database = {
           id?: string;
           invite_code?: string;
           name?: string;
+          shared_slots?: Json;
           updated_at?: string;
         };
         Relationships: [];
@@ -386,21 +404,41 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_household_slot: {
+        Args: { _invite_code: string; _member_id: string };
+        Returns: string;
+      };
       household_member_list: {
         Args: never;
         Returns: {
+          id: string;
+          user_id: string | null;
           display_name: string;
           role: string;
-          shared_meals: Json;
-          user_id: string;
+          uses_app: boolean;
+          is_planner: boolean;
+          portion: number;
         }[];
       };
       household_of: { Args: { _user_id: string }; Returns: string };
+      household_open_slots: {
+        Args: { _invite_code: string };
+        Returns: { id: string; display_name: string }[];
+      };
+      household_plan_context: {
+        Args: { _user_id: string };
+        Returns: { planner_id: string | null; shared_slots: Json }[];
+      };
+      household_planner_of: { Args: { _user_id: string }; Returns: string };
       is_household_member: {
         Args: { _household_id: string; _user_id: string };
         Returns: boolean;
       };
       join_household: { Args: { _invite_code: string }; Returns: string };
+      set_household_planner: {
+        Args: { _household_id: string; _member_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       [_ in never]: never;

@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Baby,
+  ChefHat,
   Copy,
   LogOut,
   Plus,
@@ -10,6 +11,7 @@ import {
   ShieldCheck,
   Target,
   Trash2,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
@@ -18,27 +20,35 @@ import { toast } from "sonner";
 import { BottomNav } from "@/components/bottom-nav";
 import { fetchMonthlyPlan, monthISO, todayISO } from "@/lib/daily";
 import {
+  childPortion,
   DAY_LABEL,
   DAY_SHORT,
   MEAL_KEYS,
   MEAL_LABEL,
   toggleDay,
-  type SharedMeals,
+  type Appetite,
+  type SharedSlots,
 } from "@/lib/household-shared";
 import {
+  addAdultSlot,
   addChild,
+  claimSlot,
   clearHouseholdGoal,
   createHousehold,
   fetchHousehold,
-  joinHousehold,
   leaveHousehold,
+  openSlots,
   removeChild,
+  removeMember,
   renameHousehold,
   saveHouseholdGoal,
-  saveSharedMeals,
+  setPlanner,
+  updateChild,
+  updateMember,
   type HouseholdGoalType,
+  type OpenSlot,
 } from "@/lib/household";
-import { syncHouseholdPlan } from "@/lib/household.functions";
+import { saveSharedSlots, syncHouseholdPlan } from "@/lib/household.functions";
 import { eur, shoppingTotal } from "@/lib/plan-shared";
 
 export const Route = createFileRoute("/_authenticated/hogar")({
@@ -65,15 +75,35 @@ export const Route = createFileRoute("/_authenticated/hogar")({
 const input =
   "h-12 w-full rounded-2xl bg-muted px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
 
+/** Apetito → peso de ración para dimensionar la compra (adultos; los niños usan `childPortion`). */
+const APPETITES: readonly [Appetite, string, number][] = [
+  ["poco", "Poco", 0.8],
+  ["normal", "Normal", 1],
+  ["mucho", "Mucho", 1.2],
+];
+const portionFor = (a: Appetite) => APPETITES.find(([key]) => key === a)![2];
+
 function Hogar() {
   const qc = useQueryClient();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
   const sync = useServerFn(syncHouseholdPlan);
+  const saveSlots = useServerFn(saveSharedSlots);
 
   const [name, setName] = useState("Mi casa");
   const [code, setCode] = useState("");
-  const [shared, setShared] = useState<SharedMeals | null>(null);
-  const [child, setChild] = useState({ name: "", age: "", allergies: "", appetite: "" });
+  const [slots, setSlots] = useState<OpenSlot[] | null>(null);
+  const [shared, setShared] = useState<SharedSlots | null>(null);
+  const [child, setChild] = useState<{
+    name: string;
+    age: string;
+    allergies: string;
+    appetite: Appetite;
+  }>({ name: "", age: "", allergies: "", appetite: "normal" });
+  const [newAdult, setNewAdult] = useState<{ name: string; usesApp: boolean; appetite: Appetite }>({
+    name: "",
+    usesApp: true,
+    appetite: "normal",
+  });
   const [goalType, setGoalType] = useState<HouseholdGoalType>("comportamiento");
   const [goalText, setGoalText] = useState("");
   const [goalBudget, setGoalBudget] = useState("");
@@ -83,8 +113,8 @@ function Hogar() {
   const monthSpend = shoppingTotal(planQ.data?.shopping);
 
   useEffect(() => {
-    if (state.data?.me) setShared(state.data.me.shared_meals);
-  }, [state.data?.me]);
+    if (state.data?.household) setShared(state.data.household.shared_slots);
+  }, [state.data?.household]);
 
   useEffect(() => {
     const household = state.data?.household;
@@ -105,15 +135,72 @@ function Hogar() {
     onError: () => toast.error("No hemos podido crear el hogar"),
   });
 
-  const join = useMutation({
-    mutationFn: () => joinHousehold(code),
+  const lookup = useMutation({
+    mutationFn: () => openSlots(code),
+    onSuccess: (found) => setSlots(found),
+    onError: () => toast.error("No hemos podido buscar tu familia"),
+  });
+
+  const claim = useMutation({
+    mutationFn: (memberId: string) => claimSlot(code, memberId),
     onSuccess: () => {
-      toast.success("Te has unido al hogar");
+      toast.success("¡Ya estás en la familia!");
       setCode("");
+      setSlots(null);
       refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
+  const isPlanner = !!state.data?.me?.is_planner;
+  const plannerName = state.data?.planner?.display_name ?? "quien lleva la cocina";
+
+  const addAdult = useMutation({
+    mutationFn: () => {
+      const householdId = state.data?.household?.id;
+      if (!householdId) throw new Error("Sin hogar");
+      return addAdultSlot(householdId, {
+        display_name: newAdult.name.trim(),
+        uses_app: newAdult.usesApp,
+        portion: portionFor(newAdult.appetite),
+      });
+    },
+    onSuccess: () => {
+      setNewAdult({ name: "", usesApp: true, appetite: "normal" });
+      toast.success("Añadido a la mesa");
+      refresh();
+    },
+    onError: () => toast.error("No hemos podido añadir a esa persona"),
+  });
+
+  const markUsesApp = useMutation({
+    mutationFn: (id: string) => updateMember(id, { uses_app: true }),
+    onSuccess: refresh,
+  });
+
+  const dropMember = useMutation({
+    mutationFn: (id: string) => removeMember(id),
+    onSuccess: refresh,
+  });
+
+  const makePlanner = useMutation({
+    mutationFn: (id: string) => {
+      const householdId = state.data?.household?.id;
+      if (!householdId) throw new Error("Sin hogar");
+      return setPlanner(householdId, id);
+    },
+    onSuccess: () => {
+      toast.success("Cambiado quién planifica en casa");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const renameMember = (id: string, value: string) =>
+    void updateMember(id, { display_name: value.trim() || "Miembro" }).then(refresh);
+  const setMemberPortion = (id: string, portion: number) =>
+    void updateMember(id, { portion }).then(refresh);
 
   const leave = useMutation({
     mutationFn: leaveHousehold,
@@ -124,8 +211,8 @@ function Hogar() {
   });
 
   const persistShared = useMutation({
-    mutationFn: async (next: SharedMeals) => {
-      await saveSharedMeals(next);
+    mutationFn: async (next: SharedSlots) => {
+      await saveSlots({ data: { slots: next } });
       await sync({ data: { month: monthISO(), today: todayISO() } });
     },
     onSuccess: () => {
@@ -133,7 +220,7 @@ function Hogar() {
       refresh();
       qc.invalidateQueries({ queryKey: ["plan", monthISO()] });
     },
-    onError: () => toast.error("No hemos podido guardar"),
+    onError: (e: Error) => toast.error(e.message || "No hemos podido guardar"),
   });
 
   const syncNow = useMutation({
@@ -152,16 +239,18 @@ function Hogar() {
       const householdId = state.data?.household?.id;
       if (!householdId) throw new Error("Sin hogar");
       const age = Number(child.age.replace(",", "."));
+      const ageVal = Number.isFinite(age) && age > 0 ? Math.round(age) : null;
       await addChild(householdId, {
         name: child.name.trim(),
-        age: Number.isFinite(age) && age > 0 ? Math.round(age) : null,
+        age: ageVal,
         allergies: child.allergies.trim() || null,
-        appetite: child.appetite.trim() || null,
+        appetite: child.appetite,
+        portion: childPortion(ageVal, child.appetite),
         notes: null,
       });
     },
     onSuccess: () => {
-      setChild({ name: "", age: "", allergies: "", appetite: "" });
+      setChild({ name: "", age: "", allergies: "", appetite: "normal" });
       toast.success("Peque añadido");
       refresh();
     },
@@ -172,6 +261,9 @@ function Hogar() {
     mutationFn: (id: string) => removeChild(id),
     onSuccess: refresh,
   });
+
+  const setChildAppetite = (id: string, age: number | null, appetite: Appetite) =>
+    void updateChild(id, { appetite, portion: childPortion(age, appetite) }).then(refresh);
 
   const saveGoal = useMutation({
     mutationFn: async () => {
@@ -247,20 +339,62 @@ function Hogar() {
           </section>
 
           <section className="surface-card mt-4 space-y-3 p-5">
-            <h2 className="text-sm font-semibold">Unirme con un código</h2>
-            <input
-              className={`${input} uppercase tracking-widest`}
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="ABC123"
-            />
-            <button
-              onClick={() => join.mutate()}
-              disabled={join.isPending || code.trim().length < 4}
-              className="w-full rounded-full bg-secondary py-3.5 text-sm font-medium disabled:opacity-60"
-            >
-              {join.isPending ? "Uniéndome..." : "Unirme al hogar"}
-            </button>
+            <h2 className="text-sm font-semibold">Unirme a una familia</h2>
+            {!slots ? (
+              <Fragment key="ask-code">
+                <input
+                  className={`${input} uppercase tracking-widest`}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="ABC123"
+                />
+                <button
+                  onClick={() => lookup.mutate()}
+                  disabled={lookup.isPending || code.trim().length < 4}
+                  className="w-full rounded-full bg-secondary py-3.5 text-sm font-medium disabled:opacity-60"
+                >
+                  {lookup.isPending ? "Buscando..." : "Buscar mi familia"}
+                </button>
+              </Fragment>
+            ) : slots.length ? (
+              <Fragment key="pick-who">
+                <p className="text-xs text-muted-foreground">¿Quién eres? Toca tu nombre.</p>
+                <div className="space-y-2">
+                  {slots.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => claim.mutate(s.id)}
+                      disabled={claim.isPending}
+                      className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-sm font-medium disabled:opacity-60"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-title text-sm font-semibold text-primary">
+                        {(s.display_name.trim()[0] ?? "?").toUpperCase()}
+                      </span>
+                      {s.display_name}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setSlots(null)}
+                  className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Probar otro código
+                </button>
+              </Fragment>
+            ) : (
+              <Fragment key="no-slots">
+                <p className="text-xs text-muted-foreground">
+                  No hay ningún sitio libre con ese código. Comprueba que está bien escrito o pídele
+                  a quien creó la familia que te añada.
+                </p>
+                <button
+                  onClick={() => setSlots(null)}
+                  className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Probar otro código
+                </button>
+              </Fragment>
+            )}
           </section>
         </Fragment>
       ) : (
@@ -278,43 +412,182 @@ function Hogar() {
             />
 
             <h3 className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <Users className="h-3.5 w-3.5" /> Miembros
+              <Users className="h-3.5 w-3.5" /> La mesa
             </h3>
-            <div className="mt-2 space-y-2">
+            <p className="mt-1 text-xs text-muted-foreground">
+              Todos los que coméis en casa. La compra se calcula para esta lista.
+            </p>
+            <div className="mt-3 space-y-2">
               {members.map((m) => {
-                const isMe = m.user_id === state.data?.me?.user_id;
-                const initial = (m.display_name?.trim()?.[0] ?? "?").toUpperCase();
+                const isMe = !!m.user_id && m.user_id === state.data?.me?.user_id;
+                const initial = (m.display_name.trim()[0] ?? "?").toUpperCase();
                 return (
-                  <div
-                    key={m.user_id}
-                    className="flex items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-sm"
-                  >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-title text-sm font-semibold text-primary">
-                      {initial}
-                    </span>
-                    <span className="flex-1 font-medium">
-                      {m.display_name ?? "Sin nombre todavía"}
-                    </span>
-                    {isMe ? (
-                      <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                        Tú
+                  <div key={m.id} className="rounded-2xl bg-secondary px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-title text-sm font-semibold text-primary">
+                        {initial}
                       </span>
+                      {isCreator && !isMe ? (
+                        <input
+                          className="min-w-0 flex-1 rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none focus:ring-2 focus:ring-ring/40"
+                          defaultValue={m.display_name}
+                          onBlur={(e) => renameMember(m.id, e.target.value)}
+                        />
+                      ) : (
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {m.display_name}
+                        </span>
+                      )}
+                      <div className="flex shrink-0 items-center gap-1">
+                        {m.is_planner ? (
+                          <span className="flex items-center gap-1 rounded-full bg-primary-soft px-2 py-1 text-[11px] font-medium text-primary">
+                            <ChefHat className="h-3 w-3" /> Planifica
+                          </span>
+                        ) : null}
+                        {isMe ? (
+                          <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                            Tú
+                          </span>
+                        ) : !m.uses_app ? (
+                          <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                            Sin cuenta
+                          </span>
+                        ) : !m.user_id ? (
+                          <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                            Pendiente
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] text-muted-foreground">Ración</span>
+                      {APPETITES.map(([key, label, value]) => {
+                        const active = Math.abs(m.portion - value) < 0.01;
+                        return (
+                          <button
+                            key={key}
+                            disabled={!isCreator}
+                            onClick={() => setMemberPortion(m.id, value)}
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                              active
+                                ? "bg-primary-soft text-primary"
+                                : "bg-surface text-muted-foreground"
+                            } ${isCreator ? "" : "opacity-70"}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {isCreator && !isMe ? (
+                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                        {!m.uses_app ? (
+                          <button
+                            onClick={() => markUsesApp.mutate(m.id)}
+                            className="text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+                          >
+                            Ya usa la app
+                          </button>
+                        ) : null}
+                        {m.user_id && !m.is_planner ? (
+                          <button
+                            onClick={() => makePlanner.mutate(m.id)}
+                            className="text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline"
+                          >
+                            Que planifique la casa
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => dropMember.mutate(m.id)}
+                          className="text-[11px] font-medium text-destructive underline-offset-2 hover:underline"
+                        >
+                          Quitar
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                 );
               })}
             </div>
+
+            {isCreator ? (
+              <div className="mt-3 rounded-2xl bg-secondary/60 p-4">
+                <p className="text-xs font-semibold">Añadir a alguien a la mesa</p>
+                <input
+                  className={`${input} mt-2`}
+                  value={newAdult.name}
+                  onChange={(e) => setNewAdult((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Nombre"
+                />
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      [true, "Usa la app"],
+                      [false, "No usa la app"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={label}
+                      onClick={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
+                      className={`rounded-xl py-2 text-xs font-medium transition-colors ${
+                        newAdult.usesApp === value
+                          ? "bg-primary-soft text-primary"
+                          : "bg-surface text-muted-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">Ración</span>
+                  {APPETITES.map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setNewAdult((p) => ({ ...p, appetite: key }))}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                        newAdult.appetite === key
+                          ? "bg-primary-soft text-primary"
+                          : "bg-surface text-muted-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => addAdult.mutate()}
+                  disabled={addAdult.isPending || !newAdult.name.trim()}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-2.5 text-sm font-medium disabled:opacity-60"
+                >
+                  <UserPlus className="h-4 w-4" /> Añadir
+                </button>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Si usa la app, podrá unirse con el código y elegir su nombre de esta lista.
+                </p>
+              </div>
+            ) : null}
           </section>
 
           <section className="surface-card mt-4 p-5">
             <h2 className="text-sm font-semibold">¿Qué comidas compartís?</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Marca los días que coméis lo mismo en casa. Solo se sincroniza cuando la otra persona
-              también lo marca: los dos partís de un plato base común, salido de la misma compra. Si
-              ese día quieres tu ración distinta (menos cantidad, sin un ingrediente...), dilo en
-              "Comí distinto" desde Hoy — es tu ajuste personal, no cambia el plato del otro.
+              Estos días coméis lo mismo en casa. Lo planifica y lo compra {plannerName}; tú marcas
+              si ya lo tienes. Si ese día quieres tu ración distinta (menos cantidad, sin un
+              ingrediente...), dilo en "Comí distinto" desde Hoy — es tu ajuste personal, no cambia
+              el plato de los demás.
             </p>
-            <div className="mt-4 space-y-4">
+            {!isPlanner ? (
+              <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                Lo decide {plannerName}, que lleva la cocina en casa.
+              </p>
+            ) : null}
+            <div
+              className={`mt-4 space-y-4 ${isPlanner ? "" : "pointer-events-none opacity-70"}`}
+              aria-disabled={!isPlanner}
+            >
               {MEAL_KEYS.map((meal) => (
                 <div key={meal}>
                   <p className="text-xs font-medium">{MEAL_LABEL[meal]}</p>
@@ -324,6 +597,7 @@ function Hogar() {
                       return (
                         <button
                           key={day}
+                          disabled={!isPlanner}
                           aria-label={`${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
                           onClick={() =>
                             setShared((prev) =>
@@ -344,13 +618,15 @@ function Hogar() {
                 </div>
               ))}
             </div>
-            <button
-              onClick={() => shared && persistShared.mutate(shared)}
-              disabled={!shared || persistShared.isPending}
-              className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-            >
-              {persistShared.isPending ? "Guardando y ajustando..." : "Guardar y ajustar planes"}
-            </button>
+            {isPlanner ? (
+              <button
+                onClick={() => shared && persistShared.mutate(shared)}
+                disabled={!shared || persistShared.isPending}
+                className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+              >
+                {persistShared.isPending ? "Guardando y ajustando..." : "Guardar y ajustar planes"}
+              </button>
+            ) : null}
             <button
               onClick={() => syncNow.mutate()}
               disabled={syncNow.isPending}
@@ -479,22 +755,40 @@ function Hogar() {
             </h2>
             <div className="mt-3 space-y-2">
               {state.data?.children.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-start gap-3 rounded-2xl bg-secondary px-4 py-3 text-sm"
-                >
-                  <span className="flex-1">
-                    <span className="block font-medium">
-                      {c.name}
-                      {c.age ? ` · ${c.age} años` : ""}
+                <div key={c.id} className="rounded-2xl bg-secondary px-4 py-3 text-sm">
+                  <div className="flex items-start gap-3">
+                    <span className="flex-1">
+                      <span className="block font-medium">
+                        {c.name}
+                        {c.age ? ` · ${c.age} años` : ""}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        Alergias: {c.allergies ?? "ninguna"}
+                      </span>
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      Alergias: {c.allergies ?? "ninguna"} · Apetito: {c.appetite ?? "normal"}
-                    </span>
-                  </span>
-                  <button onClick={() => dropChild.mutate(c.id)} aria-label={`Quitar ${c.name}`}>
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </button>
+                    <button onClick={() => dropChild.mutate(c.id)} aria-label={`Quitar ${c.name}`}>
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground">Apetito</span>
+                    {APPETITES.map(([key, label]) => {
+                      const active = c.appetite === key;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setChildAppetite(c.id, c.age, key)}
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                            active
+                              ? "bg-primary-soft text-primary"
+                              : "bg-surface text-muted-foreground"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
               {!state.data?.children.length ? (
@@ -511,20 +805,28 @@ function Hogar() {
                 onChange={(e) => setChild({ ...child, name: e.target.value })}
                 placeholder="Nombre"
               />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  className={input}
-                  inputMode="numeric"
-                  value={child.age}
-                  onChange={(e) => setChild({ ...child, age: e.target.value })}
-                  placeholder="Edad"
-                />
-                <input
-                  className={input}
-                  value={child.appetite}
-                  onChange={(e) => setChild({ ...child, appetite: e.target.value })}
-                  placeholder="Apetito (poco, normal...)"
-                />
+              <input
+                className={input}
+                inputMode="numeric"
+                value={child.age}
+                onChange={(e) => setChild({ ...child, age: e.target.value })}
+                placeholder="Edad"
+              />
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">Apetito</span>
+                {APPETITES.map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setChild((p) => ({ ...p, appetite: key }))}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      child.appetite === key
+                        ? "bg-primary-soft text-primary"
+                        : "bg-surface text-muted-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
               <input
                 className={input}

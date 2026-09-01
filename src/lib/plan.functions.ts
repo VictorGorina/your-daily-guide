@@ -1,8 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText, streamText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
+import {
+  describeServings,
+  describeSharedSlots,
+  isSharedSlot,
+  MEAL_KEYS as HOUSEHOLD_MEAL_KEYS,
+  type MealKey,
+  type SharedSlots,
+} from "@/lib/household-shared";
 import {
   cadenceOf,
   carryOwnedByName,
@@ -13,6 +22,7 @@ import {
   cleanTripConfirmations,
   cleanTripReceipts,
   completePlan,
+  composeMonthlyPlanForMember,
   coverageRatio,
   daysInMonth,
   formatQty,
@@ -49,6 +59,86 @@ import {
 import { madridTodayISO } from "@/lib/madrid-date";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
+
+/**
+ * `MealSlot` (plan-shared, 4 comidas) y `MealKey` (household-shared, issue 03)
+ * comparten los mismos 3 nombres para desayuno/comida/cena — solo el snack no
+ * tiene equivalente, porque nunca es una comida compartida del hogar (D5).
+ */
+const mealKeyOf = (slot: MealSlot): MealKey | null => (slot === "snack" ? null : slot);
+
+/**
+ * Lee la fila `monthly_plans` PROPIA del que llama para un mes. Se filtra por
+ * `user_id` siempre: desde issue 05 hay una policy de SELECT en `monthly_plans`
+ * que también deja a un miembro del hogar leer la fila del planificador, así que
+ * un `.maybeSingle()` filtrado solo por `month` devolvería 2 filas (y un error
+ * PGRST116) cuando lo llama un no planificador. Toda escritura de estas server
+ * functions ya usa el mismo filtro `.eq("user_id", context.userId)`; esto lo
+ * hace también en la lectura previa.
+ */
+function ownPlanRow(
+  supabase: SupabaseClient<never, never, never>,
+  userId: string,
+  month: string,
+  columns: string,
+) {
+  return supabase
+    .from("monthly_plans")
+    .select(columns)
+    .eq("month", month)
+    .eq("user_id", userId)
+    .maybeSingle();
+}
+
+/**
+ * Si esa comida de ese día es compartida y quien llama NO es quien planifica
+ * en casa, el cambio no es suyo que hacer (D2). `date` decide el día de la
+ * semana; si no hay hogar o la comida no se comparte, no hay nada que impedir.
+ */
+async function guardSharedSlotWrite(
+  supabase: unknown,
+  userId: string,
+  date: string,
+  slot: MealSlot,
+): Promise<void> {
+  const mealKey = mealKeyOf(slot);
+  if (!mealKey) return;
+  const { householdContext } = await import("@/lib/household.server");
+  const home = await householdContext(supabase as never, userId);
+  if (!home.plannerId || home.plannerId === userId) return;
+  const weekday = planCursor(date).dayIndex;
+  if (!isSharedSlot(home.sharedSlots, mealKey, weekday)) return;
+  const plannerName =
+    home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
+  throw new Error(
+    `Esa comida la lleva ${plannerName} de tu casa. Puedo cambiar tus comidas en solitario.`,
+  );
+}
+
+/**
+ * Vacía en un plan las comidas que ese día son compartidas del hogar. Lo usa
+ * el modo "solo mis comidas" de un no planificador: su fila `monthly_plans`
+ * no debe guardar el plato de una comida de la casa (lo pone el espejo /
+ * la composición en lectura). El desayuno se comparte "todo o nada" a nivel
+ * de rotación semanal, igual que en `syncSharedMeals` / `composeDayForUser`.
+ */
+function blankSharedSlots(plan: MonthlyPlan, sharedSlots: SharedSlots): MonthlyPlan {
+  const desayunoShared = sharedSlots.desayuno.length > 0;
+  return {
+    ...plan,
+    weeks: plan.weeks.map((week) => ({
+      ...week,
+      breakfasts: desayunoShared ? [] : week.breakfasts,
+      days: week.days.map((day, di) => {
+        const next: PlanDay = { ...day };
+        if (isSharedSlot(sharedSlots, "comida", di)) next.lunch = "";
+        if (isSharedSlot(sharedSlots, "cena", di)) next.dinner = "";
+        if (desayunoShared) delete next.breakfast;
+        return next;
+      }),
+    })),
+  };
+}
 
 /** Pide el JSON al modelo en streaming (evita cortes por timeout) y lo intenta varias veces. */
 async function askForJson<T>(
@@ -223,6 +313,25 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
         ? `Pon 0 en "weekQty"/"weekPrice" de las semanas del mes anteriores al día ${coverage.fromDay} (este plan no las cubre). `
         : "";
 
+    // No planificador (issue 05, D1): genera SOLO sus comidas en solitario —
+    // las compartidas ya las cubre el plan del planificador, que se espeja
+    // por lectura (`fetchMonthlyPlan`/`composeMonthlyPlanForMember`) y por
+    // escritura (`syncSharedMeals`). No es el planificador ni un usuario en
+    // solitario si `plannerId` existe y no es quien llama.
+    const isNonPlannerInHousehold = !!home.plannerId && home.plannerId !== context.userId;
+    const plannerName =
+      home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
+    const myPortion = home.members.find((m) => m.userId === context.userId)?.portion ?? 1;
+
+    // Raciones exactas del hogar (issue 04): sustituye la frase vaga de "cubre
+    // las raciones extra" por la tabla real que ya calculó `householdContext`,
+    // para que la IA dimensione `weekQty` sin adivinar cuánta gente come.
+    const servingsLine = isNonPlannerInHousehold
+      ? `SOLO TUS COMIDAS EN SOLITARIO: en tu casa, ${describeSharedSlots(home.sharedSlots)} ya las cubre el plan de ${plannerName} — NO las incluyas ni en "plan" ni en "shopping" (deja esos campos de "lunch"/"dinner" vacíos, "" ). Dimensiona lo que sí planifiques para ${myPortion} ración(es). `
+      : home.householdId && HOUSEHOLD_MEAL_KEYS.some((m) => home.sharedSlots[m].length)
+        ? `RACIONES: ${describeServings(home.servings, home.sharedSlots)} (mismo plato para toda la mesa esos días, sin los alérgenos de los niños). Las comidas en solitario (snack, y las que no compartes) piden ${home.servings.plannerSolo} ración(es). Dimensiona cada "weekQty" para esas raciones exactas, ni de más ni de menos. `
+        : "";
+
     const { plan: rawPlan, shopping: rawShopping } = await askForJson(
       {
         key,
@@ -244,7 +353,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
           `${cadenceLine} ` +
           "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
           "Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: en las comidas fuera de casa propón una opción de menú o restaurante y no cuentes sus ingredientes en la compra. " +
-          "Si convive con más personas o hay niños, las comidas compartidas deben ser platos que sirvan para todos (sin sus alérgenos) y la compra debe cubrir esas raciones extra. " +
+          `${servingsLine}` +
           "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
       },
       (parsed) => {
@@ -264,7 +373,13 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       rawShopping,
       proratedBudget,
     );
-    const plan: MonthlyPlan = { ...rawPlan, coverage, cadence: data.cadence };
+    // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
+    // una comida compartida, se vacía aquí — la fila de un no planificador
+    // nunca guarda el plato de una comida de la casa (lo pone el espejo).
+    const planBody = isNonPlannerInHousehold
+      ? blankSharedSlots(rawPlan, home.sharedSlots)
+      : rawPlan;
+    const plan: MonthlyPlan = { ...planBody, coverage, cadence: data.cadence };
 
     const { error } = await context.supabase.from("monthly_plans").upsert(
       {
@@ -286,8 +401,6 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       userId: context.userId,
       month: data.month,
       today,
-      plan,
-      shopping,
     });
 
     return { plan, shopping };
@@ -309,11 +422,12 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     return { month: input.month, cadence };
   })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
-    const { data: row } = await context.supabase
-      .from("monthly_plans")
-      .select("plan, shopping")
-      .eq("month", data.month)
-      .maybeSingle();
+    const { data: row } = await ownPlanRow(
+      context.supabase as never,
+      context.userId,
+      data.month,
+      "plan, shopping",
+    );
     const typed = row as { plan?: unknown; shopping?: unknown } | null;
 
     const current = cleanPlan(typed?.plan);
@@ -365,11 +479,12 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data, context }): Promise<{ shopping: ShoppingList }> => {
-    const { data: row } = await context.supabase
-      .from("monthly_plans")
-      .select("shopping")
-      .eq("month", data.month)
-      .maybeSingle();
+    const { data: row } = await ownPlanRow(
+      context.supabase as never,
+      context.userId,
+      data.month,
+      "shopping",
+    );
     const current = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
     if (!current.length) throw new Error("Todavía no hay lista de la compra este mes");
 
@@ -424,11 +539,12 @@ export const setTripActual = createServerFn({ method: "POST" })
     return { month: input.month, trip: Math.round(trip), amount };
   })
   .handler(async ({ data, context }): Promise<{ trip_actuals: TripActuals }> => {
-    const { data: row } = await context.supabase
-      .from("monthly_plans")
-      .select("trip_actuals")
-      .eq("month", data.month)
-      .maybeSingle();
+    const { data: row } = await ownPlanRow(
+      context.supabase as never,
+      context.userId,
+      data.month,
+      "trip_actuals",
+    );
     const current = cleanTripActuals((row as { trip_actuals?: unknown } | null)?.trip_actuals);
     const next = { ...current };
     if (data.amount == null) delete next[data.trip];
@@ -469,11 +585,12 @@ export const setPantryExtra = createServerFn({ method: "POST" })
     return { month: input.month, name, qty, remove: Boolean(input?.remove) };
   })
   .handler(async ({ data, context }): Promise<{ pantry_extras: PantryExtra[] }> => {
-    const { data: row } = await context.supabase
-      .from("monthly_plans")
-      .select("pantry_extras")
-      .eq("month", data.month)
-      .maybeSingle();
+    const { data: row } = await ownPlanRow(
+      context.supabase as never,
+      context.userId,
+      data.month,
+      "pantry_extras",
+    );
     const current = cleanPantryExtras((row as { pantry_extras?: unknown } | null)?.pantry_extras);
     const key = normName(data.name);
     const withoutIt = current.filter((e) => normName(e.name) !== key);
@@ -545,11 +662,12 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
 
     const [{ data: profile }, { data: row }] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-      context.supabase
-        .from("monthly_plans")
-        .select("shopping, pantry_extras, trip_actuals, trip_receipts")
-        .eq("month", data.month)
-        .maybeSingle(),
+      ownPlanRow(
+        context.supabase as never,
+        context.userId,
+        data.month,
+        "shopping, pantry_extras, trip_actuals, trip_receipts",
+      ),
     ]);
     const typed = row as {
       shopping?: unknown;
@@ -745,11 +863,12 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     return { month: input.month, trip: Math.round(trip), confirmed: Boolean(input?.confirmed) };
   })
   .handler(async ({ data, context }): Promise<{ confirmed_trips: TripConfirmations }> => {
-    const { data: row } = await context.supabase
-      .from("monthly_plans")
-      .select("plan, shopping, confirmed_trips")
-      .eq("month", data.month)
-      .maybeSingle();
+    const { data: row } = await ownPlanRow(
+      context.supabase as never,
+      context.userId,
+      data.month,
+      "plan, shopping, confirmed_trips",
+    );
     const typed = row as { plan?: unknown; shopping?: unknown; confirmed_trips?: unknown } | null;
     const shopping = cleanShopping(typed?.shopping);
     if (!shopping.length) throw new Error("Todavía no hay lista de la compra este mes");
@@ -802,11 +921,12 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
-    const { data: row } = await context.supabase
-      .from("monthly_plans")
-      .select("plan, shopping, pantry_extras")
-      .eq("month", data.month)
-      .maybeSingle();
+    const { data: row } = await ownPlanRow(
+      context.supabase as never,
+      context.userId,
+      data.month,
+      "plan, shopping, pantry_extras",
+    );
     const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
     const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
     const pantryExtras = cleanPantryExtras(
@@ -838,6 +958,16 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
 
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
+    // Un no planificador recoloca sus comidas en solitario; las compartidas
+    // las lleva quien planifica en casa (D2). Se lo decimos a la IA en el
+    // prompt Y, por si no lo respeta, se congelan mecánicamente después
+    // (mismo patrón "cinturón y tirantes" que el resto de REGLAs).
+    const isNonPlannerInHousehold = !!home.plannerId && home.plannerId !== context.userId;
+    const plannerName =
+      home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
+    const sharedSlotsLine = isNonPlannerInHousehold
+      ? `REGLA 5: Hay comidas compartidas en tu casa que lleva ${plannerName}: ${describeSharedSlots(home.sharedSlots)}. NO las toques — devuélvelas exactamente igual que en el plan actual. Ajusta solo tus comidas en solitario.\n`
+      : "";
 
     const plan = await askForJson(
       {
@@ -857,6 +987,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
           `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
           `REGLA 3: ${kcalLine}\n` +
           "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
+          `${sharedSlotsLine}` +
           "Actualiza 'intro' con 1-2 frases explicando en lenguaje sencillo qué has recolocado y por qué. " +
           'Devuelve solo JSON válido con la misma forma: {"intro": string, "focus": [3 strings], "weeks": [{"label", "focus", "breakfasts": [..], "snacks": [..], "days": [{"day","lunch","dinner"}]}]}. Sin markdown.',
       },
@@ -864,10 +995,16 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
     );
 
     const merged = mergeFuturePlan(current, plan, cursor);
+    // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
+    // `current` (congelado) — un no planificador nunca puede acabar
+    // escribiendo, ni por accidente, el plato de una comida de la casa.
+    const final = isNonPlannerInHousehold
+      ? (composeMonthlyPlanForMember(merged, current, home.sharedSlots) ?? merged)
+      : merged;
 
     const { error } = await context.supabase
       .from("monthly_plans")
-      .update({ plan: merged as never } as never)
+      .update({ plan: final as never } as never)
       .eq("month", data.month)
       .eq("user_id", context.userId);
     if (error) throw error;
@@ -877,16 +1014,15 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
       userId: context.userId,
       month: data.month,
       today: data.today,
-      plan: merged,
-      shopping,
     });
 
-    return {
-      plan: merged,
-      summary: synced
-        ? `${merged.intro} También he ajustado las comidas compartidas de tu hogar.`
-        : merged.intro,
-    };
+    const summary = isNonPlannerInHousehold
+      ? `${final.intro} Las comidas compartidas de tu hogar no las toco — esas las lleva ${plannerName}.`
+      : synced
+        ? `${final.intro} También he ajustado las comidas compartidas de tu hogar.`
+        : final.intro;
+
+    return { plan: final, summary };
   });
 
 /**
@@ -969,12 +1105,15 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       off: string[];
       previousIdea: string;
     }> => {
+      await guardSharedSlotWrite(context.supabase, context.userId, data.date, data.slot);
+
       const month = data.date.slice(0, 7);
-      const { data: row } = await context.supabase
-        .from("monthly_plans")
-        .select("plan, shopping, pantry_extras")
-        .eq("month", month)
-        .maybeSingle();
+      const { data: row } = await ownPlanRow(
+        context.supabase as never,
+        context.userId,
+        month,
+        "plan, shopping, pantry_extras",
+      );
 
       const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
       if (!current) throw new Error(`Todavía no hay plan del mes ${month}`);
@@ -1032,8 +1171,6 @@ export const setPlanMeal = createServerFn({ method: "POST" })
         userId: context.userId,
         month,
         today: data.today,
-        plan: next,
-        shopping,
       });
 
       return {
@@ -1109,11 +1246,7 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
 
     const [{ data: profile }, { data: row }] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-      context.supabase
-        .from("monthly_plans")
-        .select("plan, shopping")
-        .eq("month", data.month)
-        .maybeSingle(),
+      ownPlanRow(context.supabase as never, context.userId, data.month, "plan, shopping"),
     ]);
     const plan = cleanPlan((row as { plan?: unknown } | null)?.plan);
     const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
@@ -1158,11 +1291,12 @@ export const dishRecipe = createServerFn({ method: "POST" })
 
     let pantry = "";
     if (data.month) {
-      const { data: row } = await context.supabase
-        .from("monthly_plans")
-        .select("shopping")
-        .eq("month", data.month)
-        .maybeSingle();
+      const { data: row } = await ownPlanRow(
+        context.supabase as never,
+        context.userId,
+        data.month,
+        "shopping",
+      );
       pantry = ingredientNames(cleanShopping((row as { shopping?: unknown } | null)?.shopping));
     }
 

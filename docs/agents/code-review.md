@@ -84,6 +84,12 @@ Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
 - [ ] Cambio de esquema → migración nueva en `supabase/migrations/` con el prefijo de
       timestamp del formato existente. Se aplica a mano pegándola en el SQL Editor.
 - [ ] Políticas RLS consideradas para cualquier tabla nueva o columna sensible.
+- [ ] Toda lectura de `monthly_plans` que espere **una sola fila propia** filtra por
+      `.eq("user_id", …)` explícitamente, no se apoya solo en la RLS. Desde la feature
+      Familia hay una policy de SELECT permisiva (un miembro del hogar ve también la fila
+      del planificador), así que un `.maybeSingle()` sin ese filtro devuelve 2 filas y
+      lanza `PGRST116` para un no planificador. En server functions se usa el helper
+      `ownPlanRow` de [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts).
 - [ ] Parámetros de redirect validados con `safeInternalPath`
       ([src/lib/safe-next.ts](../../src/lib/safe-next.ts)) — rechaza `//host`, `/\host` y
       URLs absolutas.

@@ -1,3 +1,5 @@
+import { cleanSharedSlots, type SharedSlots } from "./household-shared";
+import { composeMonthlyPlanForMember } from "./plan-shared";
 import { supabase } from "./supabase";
 import type {
   MonthlyPlan,
@@ -265,13 +267,21 @@ export type MonthlyPlanRow = {
 /** Mes actual en formato YYYY-MM, para la clave del plan mensual. */
 export const monthISO = () => todayISO().slice(0, 7);
 
-export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
+async function fetchOwnMonthlyPlan(
+  month: string,
+  userId: string | null,
+): Promise<MonthlyPlanRow | null> {
+  // Se filtra por `user_id` explícitamente: desde issue 05 hay una policy de
+  // SELECT que también deja a un miembro del hogar leer la fila del
+  // planificador, así que un `.maybeSingle()` sin ese filtro devolvería 2 filas
+  // (PGRST116) para un no planificador. Sin sesión, RLS ya no deja ver nada.
   const { data, error } = await supabase
     .from("monthly_plans")
     .select(
       "id, month, plan, shopping, confirmed_at, trip_actuals, confirmed_trips, pantry_extras, trip_receipts",
     )
     .eq("month", month)
+    .eq("user_id", userId ?? "")
     .maybeSingle();
 
   if (error) {
@@ -283,6 +293,7 @@ export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | 
       .from("monthly_plans")
       .select("id, month, plan, shopping, confirmed_at, trip_actuals")
       .eq("month", month)
+      .eq("user_id", userId ?? "")
       .maybeSingle();
     if (retry.error) throw retry.error;
     return retry.data
@@ -295,6 +306,97 @@ export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | 
       : null;
   }
   return (data as unknown as MonthlyPlanRow | null) ?? null;
+}
+
+/** Quién planifica en tu hogar y qué comidas comparte, en una sola consulta. */
+async function householdPlanInfo(
+  userId: string,
+): Promise<{ plannerId: string; sharedSlots: SharedSlots } | null> {
+  const { data } = await supabase.rpc("household_plan_context", { _user_id: userId });
+  const row = (Array.isArray(data) ? data[0] : data) as
+    { planner_id: string | null; shared_slots: unknown } | undefined;
+  if (!row?.planner_id) return null;
+  return { plannerId: row.planner_id, sharedSlots: cleanSharedSlots(row.shared_slots) };
+}
+
+/**
+ * El plan del mes tal y como lo ve la persona: si vive en un hogar y no es
+ * quien planifica, las comidas compartidas (issue 03) se componen en vivo con
+ * la fila del planificador (issue 05, D1) — incluso si ella todavía no ha
+ * planificado nada suyo, para que nunca vea "sin plan" en lo que ya cubre la
+ * casa. Sus comidas en solitario siguen siendo las de su propia fila.
+ */
+export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id ?? null;
+  const [row, info] = await Promise.all([
+    fetchOwnMonthlyPlan(month, userId),
+    userId ? householdPlanInfo(userId) : Promise.resolve(null),
+  ]);
+  if (!info || info.plannerId === userId) return row;
+
+  const { data: plannerRow } = await supabase
+    .from("monthly_plans")
+    .select("plan")
+    .eq("user_id", info.plannerId)
+    .eq("month", month)
+    .maybeSingle();
+  const plannerPlan =
+    ((plannerRow as { plan: unknown } | null)?.plan as MonthlyPlan | null) ?? null;
+  const composed = composeMonthlyPlanForMember(row?.plan ?? null, plannerPlan, info.sharedSlots);
+  if (!composed) return row;
+  return row
+    ? { ...row, plan: composed }
+    : {
+        id: "",
+        month,
+        plan: composed,
+        shopping: null,
+        confirmed_at: null,
+        trip_actuals: null,
+        confirmed_trips: null,
+        pantry_extras: null,
+        trip_receipts: null,
+      };
+}
+
+export type PlannerShoppingRow = {
+  plannerId: string;
+  plan: MonthlyPlan | null;
+  shopping: ShoppingList | null;
+  pantry_extras: PantryExtra[] | null;
+  trip_actuals: TripActuals | null;
+  trip_receipts: TripReceipts | null;
+  confirmed_trips: TripConfirmations | null;
+  confirmed_at: string | null;
+};
+
+/**
+ * La compra del hogar — la fila `monthly_plans` del planificador — para un
+ * miembro que NO es quien planifica. `null` si vive sin hogar, si es el propio
+ * planificador o si el planificador aún no tiene plan de ese mes. La lectura la
+ * permite la policy RLS de issue 05. En issue 05 la pestaña Ingredientes la
+ * muestra en solo lectura; el estado de compra se hace editable en issue 06.
+ */
+export async function fetchPlannerShopping(month: string): Promise<PlannerShoppingRow | null> {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id ?? null;
+  if (!userId) return null;
+  const info = await householdPlanInfo(userId);
+  if (!info || info.plannerId === userId) return null;
+
+  const { data, error } = await supabase
+    .from("monthly_plans")
+    .select(
+      "plan, shopping, pantry_extras, trip_actuals, trip_receipts, confirmed_trips, confirmed_at",
+    )
+    .eq("user_id", info.plannerId)
+    .eq("month", month)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const row = data as unknown as Omit<PlannerShoppingRow, "plannerId">;
+  return { plannerId: info.plannerId, ...row };
 }
 
 // --- Señales de progreso (impulso, tendencia semanal, semáforo) ---

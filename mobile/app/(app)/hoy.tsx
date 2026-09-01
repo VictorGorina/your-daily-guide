@@ -31,7 +31,7 @@ import {
 } from "../../lib/daily";
 import { sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
 import { fetchHousehold } from "../../lib/household";
-import { sharedDays, type MealKey } from "../../lib/household-shared";
+import { isSharedSlot, type MealKey } from "../../lib/household-shared";
 import { setPendingChatMessage } from "../../lib/pending-chat-message";
 import {
   mealsForDate,
@@ -190,14 +190,13 @@ export default function Hoy() {
   const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
   const sharedWith = (label: string) => {
     const mealKey = MOMENT_TO_MEAL_KEY[label];
-    const mine = householdQ.data?.me?.shared_meals;
-    if (!mealKey || !mine) return null;
-    const other = (householdQ.data?.members ?? []).find(
-      (m) =>
-        m.user_id !== householdQ.data?.me?.user_id &&
-        sharedDays(mine, m.shared_meals, mealKey).includes(todayWeekday),
+    const slots = householdQ.data?.household?.shared_slots;
+    if (!mealKey || !slots || !isSharedSlot(slots, mealKey, todayWeekday)) return null;
+    const others = (householdQ.data?.members ?? []).filter(
+      (m) => m.user_id !== householdQ.data?.me?.user_id,
     );
-    return other?.display_name ?? (other ? "el resto del hogar" : null);
+    if (!others.length) return null;
+    return others.length === 1 ? others[0].display_name : "el resto del hogar";
   };
 
   const todayQ = useQuery({

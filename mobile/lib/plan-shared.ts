@@ -7,6 +7,8 @@
  * nativa recibe datos ya saneados de `/api/v1/*`.
  */
 
+import { isSharedSlot, MEAL_KEYS, type SharedSlots } from "./household-shared";
+
 /** Las cuatro comidas que se pueden cambiar una a una desde el chat. */
 export const MEAL_SLOTS = ["desayuno", "comida", "cena", "snack"] as const;
 export type MealSlot = (typeof MEAL_SLOTS)[number];
@@ -139,6 +141,95 @@ export function mealsForDate(plan: MonthlyPlan | null, date: string): PlanMeal[]
     moments.push({ moment: MEAL_SLOT_LABEL.snack, slot: "snack", idea: snack, off: off("snack") });
   }
   return moments;
+}
+
+/**
+ * El día que ve un miembro del hogar (issue 05, D1): las comidas compartidas
+ * ese día de la semana muestran el plato del planificador; las demás, el
+ * suyo propio. `weekday` es el índice de día dentro de la semana del plan
+ * (0=lunes…6=domingo, igual que `SharedSlots`), no un índice de calendario.
+ * Lectura en vivo, válida para cualquier día — a diferencia del espejo de
+ * `syncSharedMeals` (que solo escribe hacia adelante), esto no muta nada.
+ */
+export function composeDayForUser(
+  mineDay: PlanDay,
+  plannerDay: PlanDay | undefined,
+  sharedSlots: SharedSlots,
+  weekday: number,
+): PlanDay {
+  if (!plannerDay) return mineDay;
+  const shared = MEAL_KEYS.filter((m) => isSharedSlot(sharedSlots, m, weekday));
+  if (!shared.length) return mineDay;
+
+  const extras = { ...(mineDay.extras ?? {}) };
+  for (const meal of shared) {
+    const mark = plannerDay.extras?.[meal];
+    if (mark?.length) extras[meal] = mark;
+    else delete extras[meal];
+  }
+
+  const next: PlanDay = {
+    ...mineDay,
+    lunch: shared.includes("comida") ? plannerDay.lunch || mineDay.lunch : mineDay.lunch,
+    dinner: shared.includes("cena") ? plannerDay.dinner || mineDay.dinner : mineDay.dinner,
+    ...(shared.includes("desayuno") && plannerDay.breakfast
+      ? { breakfast: plannerDay.breakfast }
+      : {}),
+  };
+  if (Object.keys(extras).length) next.extras = extras;
+  else delete next.extras;
+  return next;
+}
+
+/**
+ * El plan mensual que ve un miembro del hogar: compone cada día con
+ * `composeDayForUser` y, cuando el desayuno se comparte, también sustituye la
+ * rotación semanal (`week.breakfasts`) por la del planificador. Sin plan
+ * propio (`mine` null) compone igualmente, sobre un esqueleto en blanco con
+ * los mismos rótulos de semana/día que el del planificador, para que las
+ * comidas compartidas se vean aunque la persona no haya planificado nada
+ * suyo todavía.
+ */
+export function composeMonthlyPlanForMember(
+  mine: MonthlyPlan | null,
+  planner: MonthlyPlan | null,
+  sharedSlots: SharedSlots,
+): MonthlyPlan | null {
+  if (!planner || !MEAL_KEYS.some((m) => sharedSlots[m].length)) return mine;
+
+  const base: MonthlyPlan =
+    mine ??
+    ({
+      intro: "",
+      focus: [],
+      weeks: planner.weeks.map((w) => ({
+        label: w.label,
+        focus: "",
+        breakfasts: [],
+        snacks: [],
+        days: w.days.map((d) => ({ day: d.day, lunch: "", dinner: "" })),
+      })),
+      coverage: planner.coverage,
+      cadence: planner.cadence,
+    } as MonthlyPlan);
+
+  return {
+    ...base,
+    weeks: base.weeks.map((week, wi) => {
+      const plannerWeek = planner.weeks[wi];
+      if (!plannerWeek) return week;
+      return {
+        ...week,
+        breakfasts:
+          sharedSlots.desayuno.length && plannerWeek.breakfasts.length
+            ? plannerWeek.breakfasts
+            : week.breakfasts,
+        days: week.days.map((day, di) =>
+          composeDayForUser(day, plannerWeek.days[di], sharedSlots, di),
+        ),
+      };
+    }),
+  };
 }
 
 /** Aviso corto para pantalla cuando un plato lleva algo que no se compró. */

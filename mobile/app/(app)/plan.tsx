@@ -17,6 +17,7 @@ import {
   ShoppingBasket,
   ShoppingCart,
   Sparkles,
+  Users,
   Wheat,
   X,
 } from "lucide-react-native";
@@ -44,11 +45,14 @@ import {
   fetchLogs,
   fetchLogsForMonth,
   fetchMonthlyPlan,
+  fetchPlannerShopping,
   fetchProfile,
   ratioSignal,
   todayISO,
   type DailyLog,
+  type PlannerShoppingRow,
 } from "../../lib/daily";
+import { fetchHousehold } from "../../lib/household";
 import {
   addMonths,
   boughtTotal,
@@ -61,6 +65,7 @@ import {
   isBeforeAppStart,
   isMonthActionable,
   mealsForDate,
+  monthCoverage,
   monthTitle,
   offListNote,
   pendingTotal,
@@ -123,6 +128,28 @@ export default function Plan() {
     queryKey: ["logs", month],
     queryFn: () => fetchLogsForMonth(month),
   });
+  const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
+
+  // Miembro del hogar que NO es quien planifica (D1): sus comidas compartidas y
+  // la compra de la casa las lleva el planificador; aquí solo planifica sus
+  // comidas en solitario. Cambia el copy del botón de generar y añade la compra
+  // de la casa en solo lectura a la pestaña Ingredientes (issue 05).
+  const hh = householdQ.data;
+  const isSoloPlanner = !!hh?.me && !!hh?.planner && hh.me.id !== hh.planner.id;
+  const plannerName = hh?.planner?.display_name ?? "quien lleva la cocina";
+  const sharedSlots = hh?.household?.shared_slots ?? null;
+  const hasSharedMeals =
+    !!sharedSlots &&
+    sharedSlots.desayuno.length + sharedSlots.comida.length + sharedSlots.cena.length > 0;
+
+  const plannerShoppingQ = useQuery({
+    queryKey: ["planner-shopping", month],
+    queryFn: () => fetchPlannerShopping(month),
+    enabled: isSoloPlanner,
+  });
+  // `fetchMonthlyPlan` compone un plan para un no planificador aunque él no
+  // tenga fila propia (id ""), para que vea las comidas de la casa.
+  const hasOwnPlanRow = !!planQ.data && planQ.data.id !== "";
 
   const appStartedOn = profileQ.data?.app_started_on ?? null;
   const monthStatus = planMonthStatus(month, today);
@@ -390,14 +417,18 @@ export default function Plan() {
           <View className="mt-8 items-center rounded-3xl bg-surface p-6">
             <CalendarRange size={28} color="#ff8a3d" />
             <Text className="mt-3 text-sm font-sans-semibold text-foreground">
-              {monthStatus === "next-unlocked"
-                ? `Prepara tu plan de ${monthTitle(month)}`
-                : "Todavía no tienes plan de este mes"}
+              {isSoloPlanner
+                ? "Planifica tus comidas en solitario"
+                : monthStatus === "next-unlocked"
+                  ? `Prepara tu plan de ${monthTitle(month)}`
+                  : "Todavía no tienes plan de este mes"}
             </Text>
             <Text className="mt-1.5 text-center text-sm text-muted-foreground">
-              {monthStatus === "next-unlocked"
-                ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
-                : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
+              {isSoloPlanner
+                ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, snacks y los días que no compartís).`
+                : monthStatus === "next-unlocked"
+                  ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
+                  : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
             </Text>
             <Pressable
               onPress={() => generate.mutate(undefined)}
@@ -408,9 +439,11 @@ export default function Plan() {
               <Text className="text-sm font-sans-semibold text-primary-foreground">
                 {generate.isPending
                   ? "Preparando tu mes..."
-                  : monthStatus === "next-unlocked"
-                    ? `Crear plan de ${monthTitle(month)}`
-                    : "Crear plan del mes"}
+                  : isSoloPlanner
+                    ? "Planificar mis comidas en solitario"
+                    : monthStatus === "next-unlocked"
+                      ? `Crear plan de ${monthTitle(month)}`
+                      : "Crear plan del mes"}
               </Text>
             </Pressable>
           </View>
@@ -442,6 +475,17 @@ export default function Plan() {
                 );
               })}
             </View>
+
+            {isSoloPlanner && hasSharedMeals ? (
+              <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-secondary/60 px-3.5 py-2.5">
+                <Users size={14} color="#83796c" style={{ marginTop: 2 }} />
+                <Text className="flex-1 text-[12px] leading-relaxed text-muted-foreground">
+                  Las comidas compartidas de tu casa las lleva{" "}
+                  <Text className="font-sans-medium text-foreground">{plannerName}</Text>. Aquí solo
+                  planificas y ves tus comidas en solitario.
+                </Text>
+              </View>
+            ) : null}
 
             {tab === "plan" ? (
               <View className="mt-5 gap-5">
@@ -498,6 +542,74 @@ export default function Plan() {
                     No planificaste {monthTitle(month)}.
                   </Text>
                 ) : null}
+              </View>
+            ) : isSoloPlanner ? (
+              <View className="mt-5 gap-4">
+                {plannerShoppingQ.data ? (
+                  <HouseholdShoppingBlock
+                    row={plannerShoppingQ.data}
+                    month={month}
+                    plannerName={plannerName}
+                    today={today}
+                  />
+                ) : null}
+
+                <View className="flex-row items-center gap-2 px-0.5 pt-1">
+                  <ShoppingBasket size={16} color="#ff8a3d" />
+                  <Text className="font-heading text-lg text-foreground">
+                    Tu compra en solitario
+                  </Text>
+                </View>
+
+                {hasOwnPlanRow ? (
+                  <IngredientsTab
+                    shopping={shopping}
+                    currentTrip={currentTrip}
+                    tripsTotal={tripsTotal}
+                    activeCadence={activeCadence}
+                    pendingCadence={pendingCadence}
+                    coverage={coverage}
+                    todayDayOfMonth={todayDayOfMonth}
+                    selectedTrip={clampedTrip}
+                    setSelectedTrip={setSelectedTrip}
+                    filter={filter}
+                    setFilter={setFilter}
+                    recadence={recadence}
+                    setPendingCadence={setPendingCadence}
+                    onToggle={(itemName, next) =>
+                      owned.mutate({ itemName, trip: clampedTrip, source: next })
+                    }
+                    pantryExtras={pantryExtras}
+                    pantry={pantry}
+                    month={month}
+                    monthStatus={monthStatus}
+                    readOnly={readOnlyMonth}
+                    tripActual={tripActuals[clampedTrip]}
+                    periodBudget={periodBudget}
+                    overBudget={overBudget}
+                  />
+                ) : (
+                  <View className="items-center rounded-3xl bg-surface p-5">
+                    <Text className="text-center text-sm text-muted-foreground">
+                      Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
+                      snacks y los días que no compartís) y aparecerá aquí.
+                    </Text>
+                    {actionable ? (
+                      <Pressable
+                        onPress={() => generate.mutate(undefined)}
+                        disabled={generate.isPending}
+                        className="mt-4 w-full items-center rounded-full bg-primary py-3.5 active:opacity-90"
+                        style={generate.isPending ? { opacity: 0.6 } : undefined}
+                      >
+                        <Text className="text-sm font-sans-semibold text-primary-foreground">
+                          {generate.isPending
+                            ? "Preparando…"
+                            : "Planificar mis comidas en solitario"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                )}
               </View>
             ) : (
               <IngredientsTab
@@ -748,6 +860,99 @@ function CategoryIcon({
   if (!match) return null;
   const Icon = match[1];
   return <Icon size={size} color={color} />;
+}
+
+/**
+ * "La compra de la casa" — la lista del planificador en SOLO LECTURA, para un
+ * miembro que no es quien planifica (issue 05, D1). Ve qué se compra y cuánto,
+ * pero no marca "lo tengo" ni cambia cantidades: eso lo lleva el planificador.
+ * En issue 06 el estado de compra pasa a ser editable por cualquier miembro.
+ * Copia RN de `HouseholdShoppingBlock` de la web.
+ */
+function HouseholdShoppingBlock({
+  row,
+  month,
+  plannerName,
+  today,
+}: {
+  row: PlannerShoppingRow;
+  month: string;
+  plannerName: string;
+  today: string;
+}) {
+  const [open, setOpen] = useState(true);
+  const coverage = row.plan?.coverage ?? monthCoverage(month, today);
+  const groups = useMemo(
+    () => projectTrips(row.shopping, "mensual", coverage, WEEK_COUNT)[0]?.groups ?? [],
+    [row.shopping, coverage],
+  );
+  const total = shoppingTotal(groups);
+  const itemCount = groups.reduce((s, g) => s + g.items.length, 0);
+
+  if (!itemCount) return null;
+
+  return (
+    <View className="overflow-hidden rounded-3xl bg-surface">
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        className="flex-row items-center gap-2.5 px-4 py-3.5 active:opacity-70"
+      >
+        <ShoppingCart size={16} color="#ff8a3d" />
+        <View className="min-w-0 flex-1">
+          <Text className="text-[13px] font-sans-semibold text-foreground">
+            La compra de la casa
+          </Text>
+          <Text className="text-[11.5px] text-muted-foreground">
+            la lleva {plannerName} · {itemCount} artículos · {eur(total)}
+          </Text>
+        </View>
+        {open ? (
+          <ChevronRight size={16} color="#83796c" style={{ transform: [{ rotate: "90deg" }] }} />
+        ) : (
+          <ChevronRight size={16} color="#83796c" />
+        )}
+      </Pressable>
+
+      {open ? (
+        <View className="border-t border-border/60 px-4 pb-4 pt-1">
+          <Text className="py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+            Solo para consultar. Las cantidades son para toda la mesa; lo que compres y marques como
+            comprado lo gestiona {plannerName}.
+          </Text>
+          <View className="gap-3">
+            {groups.map((group) => (
+              <View key={group.category}>
+                <View className="flex-row items-center gap-1.5">
+                  <CategoryIcon category={group.category} size={12} color="#83796c" />
+                  <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.category}
+                  </Text>
+                </View>
+                <View className="mt-1">
+                  {group.items.map((item) => (
+                    <View
+                      key={`${group.category}-${item.name}`}
+                      className="flex-row items-baseline justify-between gap-3 border-b border-border/40 py-1.5"
+                    >
+                      <Text
+                        className="min-w-0 flex-1 text-[13px] text-foreground"
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text className="text-[11.5px] text-muted-foreground">
+                        {item.qty} · {eur(item.price_eur ?? 0)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 const clampPct = (n: number) => Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));

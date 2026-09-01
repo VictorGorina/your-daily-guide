@@ -13,11 +13,16 @@ export const MEAL_LABEL: Record<MealKey, string> = {
 export const DAY_SHORT = ["L", "M", "X", "J", "V", "S", "D"];
 export const DAY_LABEL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-export type SharedMeals = Record<MealKey, number[]>;
+/**
+ * Los días en que cada comida es una comida compartida del hogar: mismo plato
+ * para todos, salido de la misma compra. Es una sola config por hogar
+ * (`households.shared_slots`), la fija el planificador.
+ */
+export type SharedSlots = Record<MealKey, number[]>;
 
-export const EMPTY_SHARED: SharedMeals = { desayuno: [], comida: [], cena: [] };
+export const EMPTY_SLOTS: SharedSlots = { desayuno: [], comida: [], cena: [] };
 
-export function cleanSharedMeals(raw: unknown): SharedMeals {
+export function cleanSharedSlots(raw: unknown): SharedSlots {
   const o = (raw ?? {}) as Record<string, unknown>;
   const days = (v: unknown) =>
     [
@@ -37,16 +42,71 @@ export function cleanSharedMeals(raw: unknown): SharedMeals {
 export const toggleDay = (list: number[], day: number) =>
   list.includes(day) ? list.filter((d) => d !== day) : [...list, day].sort((a, b) => a - b);
 
-/** Días en los que dos personas comparten la misma comida. */
-export const sharedDays = (a: SharedMeals, b: SharedMeals, meal: MealKey) =>
-  a[meal].filter((d) => b[meal].includes(d));
+/** ¿Esa comida ese día (0=lunes … 6=domingo) es una comida compartida del hogar? */
+export const isSharedSlot = (slots: SharedSlots, meal: MealKey, day: number) =>
+  slots[meal].includes(day);
 
-export const hasAnyShared = (a: SharedMeals, b: SharedMeals) =>
-  MEAL_KEYS.some((m) => sharedDays(a, b, m).length > 0);
+export function describeSharedSlots(slots: SharedSlots): string {
+  const parts = MEAL_KEYS.filter((m) => slots[m].length).map(
+    (m) => `${MEAL_LABEL[m]}: ${slots[m].map((d) => DAY_LABEL[d]).join(", ")}`,
+  );
+  return parts.length ? parts.join(" · ") : "sin comidas compartidas";
+}
 
-export function describeShared(shared: SharedMeals): string {
-  const parts = MEAL_KEYS.filter((m) => shared[m].length).map(
-    (m) => `${MEAL_LABEL[m]}: ${shared[m].map((d) => DAY_LABEL[d]).join(", ")}`,
+/** Apetito de una persona: ajusta su ración base ±0,2 (niños) o la fija directa (adultos). */
+export type Appetite = "poco" | "normal" | "mucho";
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Ración base de un niño según su edad (1 = ración de adulto estándar). Misma
+ * tabla que el backfill de la migración `household_children_portion.sql`.
+ */
+export function childBasePortion(age: number | null): number {
+  if (age == null) return 0.5;
+  if (age <= 3) return 0.3;
+  if (age <= 8) return 0.5;
+  if (age <= 13) return 0.75;
+  return 1;
+}
+
+const CHILD_APPETITE_ADJUST: Record<Appetite, number> = { poco: -0.2, normal: 0, mucho: 0.2 };
+
+/** Ración de un niño: su base por edad, ajustada ±0,2 según su apetito. */
+export function childPortion(age: number | null, appetite: Appetite): number {
+  return Math.max(0.1, round2(childBasePortion(age) + CHILD_APPETITE_ADJUST[appetite]));
+}
+
+/** Tabla de raciones del hogar por comida, para dimensionar la compra. */
+export type ServingsTable = { shared: Record<MealKey, number>; plannerSolo: number };
+
+/**
+ * Cuántas raciones piden las comidas del hogar: `shared[meal]` es la suma de
+ * raciones de todos los que comen ese slot (0 si esa comida no se comparte
+ * ningún día); `plannerSolo` es la ración de quien planifica, para sus comidas
+ * en solitario (snack y las comidas de días sin compartir).
+ */
+export function servingsPerSlot(
+  members: { portion: number; isPlanner?: boolean }[],
+  children: { portion: number }[],
+  sharedSlots: SharedSlots,
+): ServingsTable {
+  const total =
+    members.reduce((sum, m) => sum + (Number(m.portion) || 0), 0) +
+    children.reduce((sum, c) => sum + (Number(c.portion) || 0), 0);
+  const planner = members.find((m) => m.isPlanner);
+  return {
+    shared: Object.fromEntries(
+      MEAL_KEYS.map((meal) => [meal, sharedSlots[meal].length ? round2(total) : 0]),
+    ) as Record<MealKey, number>,
+    plannerSolo: round2(planner?.portion ?? 1),
+  };
+}
+
+/** Resume la tabla de raciones en texto, solo para las comidas que sí se comparten. */
+export function describeServings(servings: ServingsTable, slots: SharedSlots): string {
+  const parts = MEAL_KEYS.filter((m) => slots[m].length).map(
+    (m) => `${MEAL_LABEL[m]}: ${servings.shared[m]} raciones`,
   );
   return parts.length ? parts.join(" · ") : "sin comidas compartidas";
 }

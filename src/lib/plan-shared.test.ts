@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import type { SharedSlots } from "./household-shared";
 import {
   addMonths,
   cadenceOf,
@@ -9,6 +10,8 @@ import {
   cleanShopping,
   cleanTripActuals,
   cleanTripReceipts,
+  composeDayForUser,
+  composeMonthlyPlanForMember,
   coverageRatio,
   daysLeftInMonth,
   formatQty,
@@ -564,6 +567,93 @@ describe("mergeFuturePlan", () => {
   });
 });
 
+// --- plan del hogar: lo que ve un no planificador (issue 05, D1) ----------
+
+describe("composeDayForUser", () => {
+  // Lunes=0 comparte comida; Jueves=3 comparte cena; nada más.
+  const slots: SharedSlots = { desayuno: [], comida: [0], cena: [3] };
+
+  it("un día sin ninguna comida compartida vuelve tal cual (el mío)", () => {
+    const mine = day("Martes", "Mi comida", "Mi cena");
+    const planner = day("Martes", "Su comida", "Su cena");
+    expect(composeDayForUser(mine, planner, slots, 1)).toBe(mine);
+  });
+
+  it("solo se pisa la comida que ese día es compartida, el resto es lo mío", () => {
+    const mine = day("Lunes", "Mi comida", "Mi cena", { breakfast: "Mi desayuno" });
+    const planner = day("Lunes", "Su comida", "Su cena", { breakfast: "Su desayuno" });
+    const composed = composeDayForUser(mine, planner, slots, 0);
+    expect(composed.lunch).toBe("Su comida"); // lunes: comida compartida
+    expect(composed.dinner).toBe("Mi cena"); // lunes: cena NO compartida
+    expect(composed.breakfast).toBe("Mi desayuno"); // desayuno nunca compartido aquí
+  });
+
+  it("sin fila del planificador para ese día, se queda con la mía", () => {
+    const mine = day("Lunes", "Mi comida", "Mi cena");
+    expect(composeDayForUser(mine, undefined, slots, 0)).toBe(mine);
+  });
+
+  it("arrastra el aviso de 'fuera de la compra' del plato compartido, no el mío", () => {
+    const mine = day("Jueves", "Mi comida", "Mi cena", { extras: { cena: ["Mi ingrediente"] } });
+    const planner = day("Jueves", "Su comida", "Su cena", {
+      extras: { cena: ["Ingrediente del planificador"] },
+    });
+    const composed = composeDayForUser(mine, planner, slots, 3);
+    expect(composed.extras?.cena).toEqual(["Ingrediente del planificador"]);
+  });
+});
+
+describe("composeMonthlyPlanForMember", () => {
+  const slots: SharedSlots = { desayuno: [], comida: [0, 1, 2, 3, 4], cena: [] };
+
+  it("sin ninguna comida compartida, el plan es exactamente el propio", () => {
+    const mine = plan();
+    expect(composeMonthlyPlanForMember(mine, plan(), { desayuno: [], comida: [], cena: [] })).toBe(
+      mine,
+    );
+  });
+
+  it("compone comida entre semana con la del planificador, cena queda como la mía", () => {
+    const mine = plan();
+    const planner = plan({
+      weeks: plan().weeks.map((w, wi) => ({
+        ...w,
+        days: w.days.map((d, di) => day(d.day, `CASA S${wi}D${di}`, d.dinner)),
+      })),
+    });
+    const composed = composeMonthlyPlanForMember(mine, planner, slots)!;
+    expect(composed.weeks[0]!.days[0]!.lunch).toBe("CASA S0D0"); // lunes: compartido
+    expect(composed.weeks[0]!.days[5]!.lunch).toBe("Comida S0D5"); // sábado: no compartido, lo mío
+    expect(composed.weeks[0]!.days[0]!.dinner).toBe("Cena S0D0"); // cena nunca compartida aquí
+  });
+
+  it("sin plan propio (nunca lo generó), sigue viendo las comidas compartidas del planificador", () => {
+    const planner = plan();
+    const composed = composeMonthlyPlanForMember(null, planner, slots)!;
+    expect(composed.weeks[0]!.days[0]!.lunch).toBe(planner.weeks[0]!.days[0]!.lunch); // lunes: de la casa
+    expect(composed.weeks[0]!.days[5]!.lunch).toBe(""); // sábado: sin planificar, vacío — no el del planificador
+  });
+
+  it("sin comidas compartidas en absoluto, ni con plan propio null, devuelve null (nada que componer)", () => {
+    expect(composeMonthlyPlanForMember(null, plan(), { desayuno: [], comida: [], cena: [] })).toBe(
+      null,
+    );
+  });
+
+  it("desayuno compartido sustituye también la rotación semanal, no solo el día con plato a mano", () => {
+    const mine = plan();
+    const planner = plan({
+      weeks: plan().weeks.map((w) => ({ ...w, breakfasts: ["Tortitas de la casa"] })),
+    });
+    const composed = composeMonthlyPlanForMember(mine, planner, {
+      desayuno: [0, 1, 2, 3, 4, 5, 6],
+      comida: [],
+      cena: [],
+    })!;
+    expect(composed.weeks[0]!.breakfasts).toEqual(["Tortitas de la casa"]);
+  });
+});
+
 // --- cantidades: unidades y desglose por semana --------------------------
 
 describe("normalizeUnit / formatQty / parseQtyLegacy", () => {
@@ -707,6 +797,38 @@ describe("projectTrips", () => {
   it("una lista antigua cae en el reparto de siempre (groupByTrip)", () => {
     const legacy = shopping();
     expect(projectTrips(legacy, "bisemanal", septiembre)).toEqual(groupByTrip(legacy, 2));
+  });
+
+  // Issue 04 (raciones por comensal): dimensionar `weekQty` para un hogar de
+  // varias personas es solo escalar el mismo número — la invariante canónica
+  // (Σ compras = total del mes, estable al cambiar cadencia) no puede depender
+  // de cuánta gente come. Mismos platos, ×3 raciones.
+  it("la misma invariante se cumple con raciones de hogar (weekQty ×3)", () => {
+    const scaled = (): ShoppingList =>
+      canonical().map((g) => ({
+        ...g,
+        items: g.items.map((i) => ({
+          ...i,
+          weekQty: i.weekQty?.map((q) => q * 3),
+          weekPrice: i.weekPrice?.map((p) => p * 3),
+        })),
+      }));
+
+    const [trip] = projectTrips(scaled(), "mensual", septiembre);
+    const byName = Object.fromEntries(
+      trip!.groups.flatMap((g) => g.items).map((i) => [i.name, i.qtyValue]),
+    );
+    expect(byName["Cebolla"]).toBe(6000); // 2 kg × 3
+    expect(byName["Arroz"]).toBe(3000); // 1 kg × 3
+
+    for (const name of ["Cebolla", "Espinaca", "Arroz"]) {
+      const mensual = totalQtyOf(projectTrips(scaled(), "mensual", septiembre), name);
+      const bisemanal = totalQtyOf(projectTrips(scaled(), "bisemanal", septiembre), name);
+      const semanal = totalQtyOf(projectTrips(scaled(), "semanal", septiembre), name);
+      // Al triplicar la cantidad se triplica también el margen de redondeo tolerado.
+      expect(Math.abs(bisemanal - mensual)).toBeLessThan(6);
+      expect(Math.abs(semanal - mensual)).toBeLessThan(6);
+    }
   });
 });
 

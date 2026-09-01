@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Baby,
+  ChefHat,
   Copy,
   LogOut,
   Plus,
@@ -8,6 +9,7 @@ import {
   ShieldCheck,
   Target,
   Trash2,
+  UserPlus,
   Users,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -26,29 +28,46 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { apiPost } from "../../lib/api";
 import { fetchMonthlyPlan, monthISO, todayISO } from "../../lib/daily";
 import {
+  addAdultSlot,
   addChild,
+  claimSlot,
   clearHouseholdGoal,
   createHousehold,
   fetchHousehold,
-  joinHousehold,
   leaveHousehold,
+  openSlots,
   removeChild,
+  removeMember,
   renameHousehold,
   saveHouseholdGoal,
-  saveSharedMeals,
+  saveSharedSlots,
+  setPlanner,
+  updateChild,
+  updateMember,
   type HouseholdGoalType,
+  type OpenSlot,
 } from "../../lib/household";
 import {
+  childPortion,
   DAY_LABEL,
   DAY_SHORT,
   MEAL_KEYS,
   MEAL_LABEL,
   toggleDay,
-  type SharedMeals,
+  type Appetite,
+  type SharedSlots,
 } from "../../lib/household-shared";
 import { eur, shoppingTotal } from "../../lib/plan-shared";
 
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
+
+/** Apetito → peso de ración para dimensionar la compra (adultos; los niños usan `childPortion`). */
+const APPETITES: readonly [Appetite, string, number][] = [
+  ["poco", "Poco", 0.8],
+  ["normal", "Normal", 1],
+  ["mucho", "Mucho", 1.2],
+];
+const portionFor = (a: Appetite) => APPETITES.find(([key]) => key === a)![2];
 
 // La sincronización del plan compartido toca el plan del otro miembro con la
 // clave de servicio, así que va por /api/v1/* como en la web (el resto del CRUD
@@ -62,8 +81,19 @@ export default function Hogar() {
 
   const [name, setName] = useState("Mi casa");
   const [code, setCode] = useState("");
-  const [shared, setShared] = useState<SharedMeals | null>(null);
-  const [child, setChild] = useState({ name: "", age: "", allergies: "", appetite: "" });
+  const [slots, setSlots] = useState<OpenSlot[] | null>(null);
+  const [shared, setShared] = useState<SharedSlots | null>(null);
+  const [child, setChild] = useState<{
+    name: string;
+    age: string;
+    allergies: string;
+    appetite: Appetite;
+  }>({ name: "", age: "", allergies: "", appetite: "normal" });
+  const [newAdult, setNewAdult] = useState<{ name: string; usesApp: boolean; appetite: Appetite }>({
+    name: "",
+    usesApp: true,
+    appetite: "normal",
+  });
   const [goalType, setGoalType] = useState<HouseholdGoalType>("comportamiento");
   const [goalText, setGoalText] = useState("");
   const [goalBudget, setGoalBudget] = useState("");
@@ -73,8 +103,8 @@ export default function Hogar() {
   const monthSpend = shoppingTotal(planQ.data?.shopping);
 
   useEffect(() => {
-    if (state.data?.me) setShared(state.data.me.shared_meals);
-  }, [state.data?.me]);
+    if (state.data?.household) setShared(state.data.household.shared_slots);
+  }, [state.data?.household]);
 
   useEffect(() => {
     const household = state.data?.household;
@@ -95,15 +125,72 @@ export default function Hogar() {
     onError: () => Alert.alert("No hemos podido crear el hogar"),
   });
 
-  const join = useMutation({
-    mutationFn: () => joinHousehold(code),
+  const lookup = useMutation({
+    mutationFn: () => openSlots(code),
+    onSuccess: (found) => setSlots(found),
+    onError: () => Alert.alert("No hemos podido buscar tu familia"),
+  });
+
+  const claim = useMutation({
+    mutationFn: (memberId: string) => claimSlot(code, memberId),
     onSuccess: () => {
-      Alert.alert("Te has unido al hogar");
+      Alert.alert("¡Ya estás en la familia!");
       setCode("");
+      setSlots(null);
       refresh();
     },
     onError: (e: Error) => Alert.alert(e.message),
   });
+
+  const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
+  const isPlanner = !!state.data?.me?.is_planner;
+  const plannerName = state.data?.planner?.display_name ?? "quien lleva la cocina";
+
+  const addAdult = useMutation({
+    mutationFn: () => {
+      const householdId = state.data?.household?.id;
+      if (!householdId) throw new Error("Sin hogar");
+      return addAdultSlot(householdId, {
+        display_name: newAdult.name.trim(),
+        uses_app: newAdult.usesApp,
+        portion: portionFor(newAdult.appetite),
+      });
+    },
+    onSuccess: () => {
+      setNewAdult({ name: "", usesApp: true, appetite: "normal" });
+      Alert.alert("Añadido a la mesa");
+      refresh();
+    },
+    onError: () => Alert.alert("No hemos podido añadir a esa persona"),
+  });
+
+  const markUsesApp = useMutation({
+    mutationFn: (id: string) => updateMember(id, { uses_app: true }),
+    onSuccess: refresh,
+  });
+
+  const dropMember = useMutation({
+    mutationFn: (id: string) => removeMember(id),
+    onSuccess: refresh,
+  });
+
+  const makePlanner = useMutation({
+    mutationFn: (id: string) => {
+      const householdId = state.data?.household?.id;
+      if (!householdId) throw new Error("Sin hogar");
+      return setPlanner(householdId, id);
+    },
+    onSuccess: () => {
+      Alert.alert("Cambiado quién planifica en casa");
+      refresh();
+    },
+    onError: (e: Error) => Alert.alert(e.message),
+  });
+
+  const renameMember = (id: string, value: string) =>
+    void updateMember(id, { display_name: value.trim() || "Miembro" }).then(refresh);
+  const setMemberPortion = (id: string, portion: number) =>
+    void updateMember(id, { portion }).then(refresh);
 
   const leave = useMutation({
     mutationFn: leaveHousehold,
@@ -114,8 +201,8 @@ export default function Hogar() {
   });
 
   const persistShared = useMutation({
-    mutationFn: async (next: SharedMeals) => {
-      await saveSharedMeals(next);
+    mutationFn: async (next: SharedSlots) => {
+      await saveSharedSlots(next);
       await syncSharedPlan();
     },
     onSuccess: () => {
@@ -123,7 +210,7 @@ export default function Hogar() {
       refresh();
       qc.invalidateQueries({ queryKey: ["plan", month] });
     },
-    onError: () => Alert.alert("No hemos podido guardar"),
+    onError: (e: Error) => Alert.alert(e.message || "No hemos podido guardar"),
   });
 
   const syncNow = useMutation({
@@ -142,16 +229,18 @@ export default function Hogar() {
       const householdId = state.data?.household?.id;
       if (!householdId) throw new Error("Sin hogar");
       const age = Number(child.age.replace(",", "."));
+      const ageVal = Number.isFinite(age) && age > 0 ? Math.round(age) : null;
       await addChild(householdId, {
         name: child.name.trim(),
-        age: Number.isFinite(age) && age > 0 ? Math.round(age) : null,
+        age: ageVal,
         allergies: child.allergies.trim() || null,
-        appetite: child.appetite.trim() || null,
+        appetite: child.appetite,
+        portion: childPortion(ageVal, child.appetite),
         notes: null,
       });
     },
     onSuccess: () => {
-      setChild({ name: "", age: "", allergies: "", appetite: "" });
+      setChild({ name: "", age: "", allergies: "", appetite: "normal" });
       Alert.alert("Peque añadido");
       refresh();
     },
@@ -162,6 +251,9 @@ export default function Hogar() {
     mutationFn: (id: string) => removeChild(id),
     onSuccess: refresh,
   });
+
+  const setChildAppetite = (id: string, age: number | null, appetite: Appetite) =>
+    void updateChild(id, { appetite, portion: childPortion(age, appetite) }).then(refresh);
 
   const saveGoal = useMutation({
     mutationFn: async () => {
@@ -210,7 +302,6 @@ export default function Hogar() {
 
   const household = state.data?.household;
   const members = state.data?.members ?? [];
-  const others = members.filter((m) => m.user_id !== state.data?.me?.user_id);
   const goalDisabled =
     saveGoal.isPending || (goalType === "comportamiento" ? !goalText.trim() : !goalBudget.trim());
 
@@ -263,27 +354,74 @@ export default function Hogar() {
 
             <View className="mt-4 gap-3 rounded-3xl bg-surface p-5">
               <Text className="text-sm font-sans-semibold text-foreground">
-                Unirme con un código
+                Unirme a una familia
               </Text>
-              <TextInput
-                className={`${INPUT} tracking-widest`}
-                value={code}
-                onChangeText={(t) => setCode(t.toUpperCase())}
-                placeholder="ABC123"
-                placeholderTextColor="#a69d8f"
-                autoCapitalize="characters"
-                autoCorrect={false}
-              />
-              <Pressable
-                onPress={() => join.mutate()}
-                disabled={join.isPending || code.trim().length < 4}
-                className="items-center rounded-full bg-secondary py-3.5 active:opacity-80"
-                style={join.isPending || code.trim().length < 4 ? { opacity: 0.6 } : undefined}
-              >
-                <Text className="text-sm font-sans-medium text-foreground">
-                  {join.isPending ? "Uniéndome..." : "Unirme al hogar"}
-                </Text>
-              </Pressable>
+              {!slots ? (
+                <>
+                  <TextInput
+                    className={`${INPUT} tracking-widest`}
+                    value={code}
+                    onChangeText={(t) => setCode(t.toUpperCase())}
+                    placeholder="ABC123"
+                    placeholderTextColor="#a69d8f"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                  <Pressable
+                    onPress={() => lookup.mutate()}
+                    disabled={lookup.isPending || code.trim().length < 4}
+                    className="items-center rounded-full bg-secondary py-3.5 active:opacity-80"
+                    style={
+                      lookup.isPending || code.trim().length < 4 ? { opacity: 0.6 } : undefined
+                    }
+                  >
+                    <Text className="text-sm font-sans-medium text-foreground">
+                      {lookup.isPending ? "Buscando..." : "Buscar mi familia"}
+                    </Text>
+                  </Pressable>
+                </>
+              ) : slots.length ? (
+                <>
+                  <Text className="text-xs text-muted-foreground">
+                    ¿Quién eres? Toca tu nombre.
+                  </Text>
+                  {slots.map((s) => (
+                    <Pressable
+                      key={s.id}
+                      onPress={() => claim.mutate(s.id)}
+                      disabled={claim.isPending}
+                      className="flex-row items-center gap-3 rounded-2xl bg-secondary px-4 py-3 active:opacity-80"
+                      style={claim.isPending ? { opacity: 0.6 } : undefined}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-full bg-primary-soft">
+                        <Text className="font-heading text-sm text-primary">
+                          {(s.display_name.trim()[0] ?? "?").toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text className="text-sm font-sans-medium text-foreground">
+                        {s.display_name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                  <Pressable onPress={() => setSlots(null)} className="active:opacity-70">
+                    <Text className="text-xs font-sans-medium text-muted-foreground underline">
+                      Probar otro código
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text className="text-xs text-muted-foreground">
+                    No hay ningún sitio libre con ese código. Comprueba que está bien escrito o
+                    pídele a quien creó la familia que te añada.
+                  </Text>
+                  <Pressable onPress={() => setSlots(null)} className="active:opacity-70">
+                    <Text className="text-xs font-sans-medium text-muted-foreground underline">
+                      Probar otro código
+                    </Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           </>
         ) : (
@@ -311,12 +449,189 @@ export default function Hogar() {
                   <Copy size={16} color="#83796c" />
                 </View>
               </Pressable>
-              <Text className="text-xs text-muted-foreground">
-                {members.length} adulto(s) en casa
-                {others.length
-                  ? `: ${others.map((m) => m.display_name ?? "otra persona").join(", ")} y tú`
-                  : ". Comparte el código para que alguien se una."}
+            </View>
+
+            <View className="mt-4 rounded-3xl bg-surface p-5">
+              <View className="flex-row items-center gap-2">
+                <Users size={16} color="#6dbe7b" />
+                <Text className="text-sm font-sans-semibold text-foreground">La mesa</Text>
+              </View>
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Todos los que coméis en casa. La compra se calcula para esta lista.
               </Text>
+              <View className="mt-3 gap-2">
+                {members.map((m) => {
+                  const isMe = !!m.user_id && m.user_id === state.data?.me?.user_id;
+                  const initial = (m.display_name.trim()[0] ?? "?").toUpperCase();
+                  return (
+                    <View key={m.id} className="rounded-2xl bg-secondary px-4 py-3">
+                      <View className="flex-row items-center gap-3">
+                        <View className="h-9 w-9 items-center justify-center rounded-full bg-primary-soft">
+                          <Text className="font-heading text-sm text-primary">{initial}</Text>
+                        </View>
+                        {isCreator && !isMe ? (
+                          <TextInput
+                            className="flex-1 rounded-lg bg-muted px-2 py-1 text-sm text-foreground"
+                            defaultValue={m.display_name}
+                            placeholderTextColor="#a69d8f"
+                            onEndEditing={(e) => renameMember(m.id, e.nativeEvent.text)}
+                          />
+                        ) : (
+                          <Text className="flex-1 text-sm font-sans-medium text-foreground">
+                            {m.display_name}
+                          </Text>
+                        )}
+                        <View className="flex-row items-center gap-1">
+                          {m.is_planner ? (
+                            <View className="flex-row items-center gap-1 rounded-full bg-primary-soft px-2 py-1">
+                              <ChefHat size={12} color="#6dbe7b" />
+                              <Text className="text-[11px] font-sans-medium text-primary">
+                                Planifica
+                              </Text>
+                            </View>
+                          ) : null}
+                          {isMe ? (
+                            <Text className="rounded-full bg-surface px-2 py-1 text-[11px] font-sans-medium text-muted-foreground">
+                              Tú
+                            </Text>
+                          ) : !m.uses_app ? (
+                            <Text className="rounded-full bg-surface px-2 py-1 text-[11px] font-sans-medium text-muted-foreground">
+                              Sin cuenta
+                            </Text>
+                          ) : !m.user_id ? (
+                            <Text className="rounded-full bg-surface px-2 py-1 text-[11px] font-sans-medium text-muted-foreground">
+                              Pendiente
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+
+                      <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
+                        <Text className="text-[11px] text-muted-foreground">Ración</Text>
+                        {APPETITES.map(([key, label, value]) => {
+                          const active = Math.abs(m.portion - value) < 0.01;
+                          return (
+                            <Pressable
+                              key={key}
+                              disabled={!isCreator}
+                              onPress={() => setMemberPortion(m.id, value)}
+                              className={`rounded-full px-2 py-0.5 ${
+                                active ? "bg-primary-soft" : "bg-surface"
+                              }`}
+                              style={isCreator ? undefined : { opacity: 0.7 }}
+                            >
+                              <Text
+                                className={`text-[11px] font-sans-medium ${
+                                  active ? "text-primary" : "text-muted-foreground"
+                                }`}
+                              >
+                                {label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
+                      {isCreator && !isMe ? (
+                        <View className="mt-2 flex-row flex-wrap gap-x-3 gap-y-1">
+                          {!m.uses_app ? (
+                            <Pressable onPress={() => markUsesApp.mutate(m.id)}>
+                              <Text className="text-[11px] font-sans-medium text-primary underline">
+                                Ya usa la app
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                          {m.user_id && !m.is_planner ? (
+                            <Pressable onPress={() => makePlanner.mutate(m.id)}>
+                              <Text className="text-[11px] font-sans-medium text-muted-foreground underline">
+                                Que planifique la casa
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                          <Pressable onPress={() => dropMember.mutate(m.id)}>
+                            <Text className="text-[11px] font-sans-medium text-destructive underline">
+                              Quitar
+                            </Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+
+              {isCreator ? (
+                <View className="mt-3 gap-2 rounded-2xl bg-secondary/60 p-4">
+                  <Text className="text-xs font-sans-semibold text-foreground">
+                    Añadir a alguien a la mesa
+                  </Text>
+                  <TextInput
+                    className={INPUT}
+                    value={newAdult.name}
+                    onChangeText={(t) => setNewAdult((p) => ({ ...p, name: t }))}
+                    placeholder="Nombre"
+                    placeholderTextColor="#a69d8f"
+                  />
+                  <View className="flex-row gap-2">
+                    {(
+                      [
+                        [true, "Usa la app"],
+                        [false, "No usa la app"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <Pressable
+                        key={label}
+                        onPress={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
+                        className={`flex-1 items-center rounded-xl py-2 ${
+                          newAdult.usesApp === value ? "bg-primary-soft" : "bg-surface"
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-sans-medium ${
+                            newAdult.usesApp === value ? "text-primary" : "text-muted-foreground"
+                          }`}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <View className="flex-row items-center gap-1.5">
+                    <Text className="text-[11px] text-muted-foreground">Ración</Text>
+                    {APPETITES.map(([key, label]) => (
+                      <Pressable
+                        key={key}
+                        onPress={() => setNewAdult((p) => ({ ...p, appetite: key }))}
+                        className={`rounded-full px-2.5 py-1 ${
+                          newAdult.appetite === key ? "bg-primary-soft" : "bg-surface"
+                        }`}
+                      >
+                        <Text
+                          className={`text-[11px] font-sans-medium ${
+                            newAdult.appetite === key ? "text-primary" : "text-muted-foreground"
+                          }`}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Pressable
+                    onPress={() => addAdult.mutate()}
+                    disabled={addAdult.isPending || !newAdult.name.trim()}
+                    className="flex-row items-center justify-center gap-2 rounded-full bg-secondary py-2.5 active:opacity-80"
+                    style={
+                      addAdult.isPending || !newAdult.name.trim() ? { opacity: 0.6 } : undefined
+                    }
+                  >
+                    <UserPlus size={16} color="#3e3d39" />
+                    <Text className="text-sm font-sans-medium text-foreground">Añadir</Text>
+                  </Pressable>
+                  <Text className="text-[11px] text-muted-foreground">
+                    Si usa la app, podrá unirse con el código y elegir su nombre de esta lista.
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
             <View className="mt-4 rounded-3xl bg-surface p-5">
@@ -324,13 +639,17 @@ export default function Hogar() {
                 ¿Qué comidas compartís?
               </Text>
               <Text className="mt-1 text-xs text-muted-foreground">
-                Marca los días que coméis lo mismo en casa. Solo se sincroniza cuando la otra
-                persona también lo marca: los dos partís de un plato base común, salido de la misma
-                compra. Si ese día quieres tu ración distinta (menos cantidad, sin un
-                ingrediente...), dilo en "Comí distinto" desde Hoy — es tu ajuste personal, no
-                cambia el plato del otro.
+                Estos días coméis lo mismo en casa. Lo planifica y lo compra {plannerName}; tú
+                marcas si ya lo tienes. Si ese día quieres tu ración distinta (menos cantidad, sin
+                un ingrediente...), dilo en "Comí distinto" desde Hoy — es tu ajuste personal, no
+                cambia el plato de los demás.
               </Text>
-              <View className="mt-4 gap-4">
+              {!isPlanner ? (
+                <Text className="mt-2 text-[11px] font-sans-medium text-muted-foreground">
+                  Lo decide {plannerName}, que lleva la cocina en casa.
+                </Text>
+              ) : null}
+              <View className="mt-4 gap-4" style={isPlanner ? undefined : { opacity: 0.7 }}>
                 {MEAL_KEYS.map((meal) => (
                   <View key={meal}>
                     <Text className="text-xs font-sans-medium text-foreground">
@@ -342,6 +661,7 @@ export default function Hogar() {
                         return (
                           <Pressable
                             key={day}
+                            disabled={!isPlanner}
                             accessibilityLabel={`${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
                             onPress={() =>
                               setShared((prev) =>
@@ -364,18 +684,20 @@ export default function Hogar() {
                   </View>
                 ))}
               </View>
-              <Pressable
-                onPress={() => shared && persistShared.mutate(shared)}
-                disabled={!shared || persistShared.isPending}
-                className="mt-4 items-center rounded-full bg-primary py-3.5 active:opacity-90"
-                style={!shared || persistShared.isPending ? { opacity: 0.6 } : undefined}
-              >
-                <Text className="text-sm font-sans-semibold text-primary-foreground">
-                  {persistShared.isPending
-                    ? "Guardando y ajustando..."
-                    : "Guardar y ajustar planes"}
-                </Text>
-              </Pressable>
+              {isPlanner ? (
+                <Pressable
+                  onPress={() => shared && persistShared.mutate(shared)}
+                  disabled={!shared || persistShared.isPending}
+                  className="mt-4 items-center rounded-full bg-primary py-3.5 active:opacity-90"
+                  style={!shared || persistShared.isPending ? { opacity: 0.6 } : undefined}
+                >
+                  <Text className="text-sm font-sans-semibold text-primary-foreground">
+                    {persistShared.isPending
+                      ? "Guardando y ajustando..."
+                      : "Guardar y ajustar planes"}
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={() => syncNow.mutate()}
                 disabled={syncNow.isPending}
@@ -522,27 +844,49 @@ export default function Hogar() {
               </View>
               <View className="mt-3 gap-2">
                 {state.data?.children.map((c) => (
-                  <View
-                    key={c.id}
-                    className="flex-row items-start gap-3 rounded-2xl bg-secondary px-4 py-3"
-                  >
-                    <View className="flex-1">
-                      <Text className="text-sm font-sans-medium text-foreground">
-                        {c.name}
-                        {c.age ? ` · ${c.age} años` : ""}
-                      </Text>
-                      <Text className="text-xs text-muted-foreground">
-                        Alergias: {c.allergies ?? "ninguna"} · Apetito: {c.appetite ?? "normal"}
-                      </Text>
+                  <View key={c.id} className="rounded-2xl bg-secondary px-4 py-3">
+                    <View className="flex-row items-start gap-3">
+                      <View className="flex-1">
+                        <Text className="text-sm font-sans-medium text-foreground">
+                          {c.name}
+                          {c.age ? ` · ${c.age} años` : ""}
+                        </Text>
+                        <Text className="text-xs text-muted-foreground">
+                          Alergias: {c.allergies ?? "ninguna"}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => dropChild.mutate(c.id)}
+                        accessibilityLabel={`Quitar ${c.name}`}
+                        hitSlop={8}
+                        className="active:opacity-70"
+                      >
+                        <Trash2 size={16} color="#83796c" />
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => dropChild.mutate(c.id)}
-                      accessibilityLabel={`Quitar ${c.name}`}
-                      hitSlop={8}
-                      className="active:opacity-70"
-                    >
-                      <Trash2 size={16} color="#83796c" />
-                    </Pressable>
+                    <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
+                      <Text className="text-[11px] text-muted-foreground">Apetito</Text>
+                      {APPETITES.map(([key, label]) => {
+                        const active = c.appetite === key;
+                        return (
+                          <Pressable
+                            key={key}
+                            onPress={() => setChildAppetite(c.id, c.age, key)}
+                            className={`rounded-full px-2 py-0.5 ${
+                              active ? "bg-primary-soft" : "bg-surface"
+                            }`}
+                          >
+                            <Text
+                              className={`text-[11px] font-sans-medium ${
+                                active ? "text-primary" : "text-muted-foreground"
+                              }`}
+                            >
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
                 ))}
                 {!state.data?.children.length ? (
@@ -560,22 +904,33 @@ export default function Hogar() {
                   placeholder="Nombre"
                   placeholderTextColor="#a69d8f"
                 />
-                <View className="flex-row gap-2">
-                  <TextInput
-                    className={`${INPUT} flex-1`}
-                    value={child.age}
-                    onChangeText={(t) => setChild({ ...child, age: t })}
-                    placeholder="Edad"
-                    placeholderTextColor="#a69d8f"
-                    keyboardType="number-pad"
-                  />
-                  <TextInput
-                    className={`${INPUT} flex-1`}
-                    value={child.appetite}
-                    onChangeText={(t) => setChild({ ...child, appetite: t })}
-                    placeholder="Apetito (poco, normal...)"
-                    placeholderTextColor="#a69d8f"
-                  />
+                <TextInput
+                  className={INPUT}
+                  value={child.age}
+                  onChangeText={(t) => setChild({ ...child, age: t })}
+                  placeholder="Edad"
+                  placeholderTextColor="#a69d8f"
+                  keyboardType="number-pad"
+                />
+                <View className="flex-row items-center gap-1.5">
+                  <Text className="text-[11px] text-muted-foreground">Apetito</Text>
+                  {APPETITES.map(([key, label]) => (
+                    <Pressable
+                      key={key}
+                      onPress={() => setChild((p) => ({ ...p, appetite: key }))}
+                      className={`rounded-full px-2.5 py-1 ${
+                        child.appetite === key ? "bg-primary-soft" : "bg-surface"
+                      }`}
+                    >
+                      <Text
+                        className={`text-[11px] font-sans-medium ${
+                          child.appetite === key ? "text-primary" : "text-muted-foreground"
+                        }`}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
                 <TextInput
                   className={INPUT}

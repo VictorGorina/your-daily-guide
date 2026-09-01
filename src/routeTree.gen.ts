@@ -30,6 +30,7 @@ import { Route as ApiPushUnsubscribeRouteImport } from './routes/api/push/unsubs
 import { Route as ApiV1GuideRouteImport } from './routes/api/v1/guide'
 import { Route as ApiV1AccountDeleteRouteImport } from './routes/api/v1/account/delete'
 import { Route as ApiV1AuthResetRouteImport } from './routes/api/v1/auth/reset'
+import { Route as ApiV1HouseholdSharedSlotsRouteImport } from './routes/api/v1/household/shared-slots'
 import { Route as ApiV1HouseholdSyncRouteImport } from './routes/api/v1/household/sync'
 import { Route as ApiV1OnboardingParseRouteImport } from './routes/api/v1/onboarding/parse'
 import { Route as ApiV1PlanAdjustRouteImport } from './routes/api/v1/plan/adjust'
@@ -149,6 +150,12 @@ const ApiV1AuthResetRoute = ApiV1AuthResetRouteImport.update({
   path: '/api/v1/auth/reset',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1HouseholdSharedSlotsRoute =
+  ApiV1HouseholdSharedSlotsRouteImport.update({
+    id: '/api/v1/household/shared-slots',
+    path: '/api/v1/household/shared-slots',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1HouseholdSyncRoute = ApiV1HouseholdSyncRouteImport.update({
   id: '/api/v1/household/sync',
   path: '/api/v1/household/sync',
@@ -241,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
@@ -277,6 +285,7 @@ export interface FileRoutesByTo {
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
@@ -315,6 +324,7 @@ export interface FileRoutesById {
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
@@ -353,6 +363,7 @@ export interface FileRouteTypes {
     | '/api/v1/guide'
     | '/api/v1/account/delete'
     | '/api/v1/auth/reset'
+    | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
@@ -389,6 +400,7 @@ export interface FileRouteTypes {
     | '/api/v1/guide'
     | '/api/v1/account/delete'
     | '/api/v1/auth/reset'
+    | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
@@ -426,6 +438,7 @@ export interface FileRouteTypes {
     | '/api/v1/guide'
     | '/api/v1/account/delete'
     | '/api/v1/auth/reset'
+    | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
@@ -456,6 +469,7 @@ export interface RootRouteChildren {
   ApiV1GuideRoute: typeof ApiV1GuideRoute
   ApiV1AccountDeleteRoute: typeof ApiV1AccountDeleteRoute
   ApiV1AuthResetRoute: typeof ApiV1AuthResetRoute
+  ApiV1HouseholdSharedSlotsRoute: typeof ApiV1HouseholdSharedSlotsRoute
   ApiV1HouseholdSyncRoute: typeof ApiV1HouseholdSyncRoute
   ApiV1OnboardingParseRoute: typeof ApiV1OnboardingParseRoute
   ApiV1PlanAdjustRoute: typeof ApiV1PlanAdjustRoute
@@ -621,6 +635,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AuthResetRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/household/shared-slots': {
+      id: '/api/v1/household/shared-slots'
+      path: '/api/v1/household/shared-slots'
+      fullPath: '/api/v1/household/shared-slots'
+      preLoaderRoute: typeof ApiV1HouseholdSharedSlotsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/household/sync': {
       id: '/api/v1/household/sync'
       path: '/api/v1/household/sync'
@@ -761,6 +782,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1GuideRoute: ApiV1GuideRoute,
   ApiV1AccountDeleteRoute: ApiV1AccountDeleteRoute,
   ApiV1AuthResetRoute: ApiV1AuthResetRoute,
+  ApiV1HouseholdSharedSlotsRoute: ApiV1HouseholdSharedSlotsRoute,
   ApiV1HouseholdSyncRoute: ApiV1HouseholdSyncRoute,
   ApiV1OnboardingParseRoute: ApiV1OnboardingParseRoute,
   ApiV1PlanAdjustRoute: ApiV1PlanAdjustRoute,

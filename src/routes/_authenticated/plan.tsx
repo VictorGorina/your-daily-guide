@@ -18,6 +18,7 @@ import {
   ShoppingBasket,
   ShoppingCart,
   Sparkle,
+  Users,
   Wheat,
   X,
 } from "lucide-react";
@@ -33,9 +34,11 @@ import {
   fetchLogs,
   fetchLogsForMonth,
   fetchMonthlyPlan,
+  fetchPlannerShopping,
   fetchProfile,
   todayISO,
 } from "@/lib/daily";
+import { fetchHousehold } from "@/lib/household";
 import {
   addMonths,
   boughtTotal,
@@ -46,6 +49,7 @@ import {
   eur,
   homeTotal,
   isMonthActionable,
+  monthCoverage,
   monthTitle,
   pendingTotal,
   planMonthStatus,
@@ -129,6 +133,29 @@ function PlanPage() {
     queryKey: ["logs", month],
     queryFn: () => fetchLogsForMonth(month),
   });
+  const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
+
+  // Miembro del hogar que NO es quien planifica (D1): sus comidas compartidas y
+  // la compra de la casa las lleva el planificador; aquí solo plan-ifica y ve
+  // sus comidas en solitario. Cambia el copy del botón de generar y añade la
+  // compra del hogar en solo lectura a la pestaña Ingredientes (issue 05).
+  const hh = householdQ.data;
+  const isSoloPlanner = !!hh?.me && !!hh?.planner && hh.me.id !== hh.planner.id;
+  const plannerName = hh?.planner?.display_name ?? "quien lleva la cocina";
+  const sharedSlots = hh?.household?.shared_slots ?? null;
+  const hasSharedMeals =
+    !!sharedSlots &&
+    sharedSlots.desayuno.length + sharedSlots.comida.length + sharedSlots.cena.length > 0;
+
+  const plannerShoppingQ = useQuery({
+    queryKey: ["planner-shopping", month],
+    queryFn: () => fetchPlannerShopping(month),
+    enabled: isSoloPlanner,
+  });
+  // `fetchMonthlyPlan` compone un plan para un no planificador aunque él no
+  // tenga fila propia (id ""), para que vea las comidas de la casa. Ese caso
+  // necesita todavía un empujón a "planificar mis comidas en solitario".
+  const hasOwnPlanRow = !!planQ.data && planQ.data.id !== "";
 
   const appStartedOn = profileQ.data?.app_started_on ?? null;
   const monthStatus = planMonthStatus(month, today);
@@ -376,7 +403,9 @@ function PlanPage() {
           <button
             onClick={() => generate.mutate(undefined)}
             disabled={generate.isPending}
-            aria-label="Regenerar plan"
+            aria-label={
+              isSoloPlanner ? "Volver a planificar mis comidas en solitario" : "Regenerar plan"
+            }
             className="mt-1 rounded-full bg-surface p-2.5 text-muted-foreground disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${generate.isPending ? "animate-spin" : ""}`} />
@@ -388,14 +417,18 @@ function PlanPage() {
         <section className="surface-card animate-rise mt-8 p-6 text-center">
           <CalendarRange className="mx-auto h-7 w-7 text-primary" />
           <h2 className="mt-3 text-sm font-semibold">
-            {monthStatus === "next-unlocked"
-              ? `Prepara tu plan de ${monthTitle(month)}`
-              : "Todavía no tienes plan de este mes"}
+            {isSoloPlanner
+              ? "Planifica tus comidas en solitario"
+              : monthStatus === "next-unlocked"
+                ? `Prepara tu plan de ${monthTitle(month)}`
+                : "Todavía no tienes plan de este mes"}
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            {monthStatus === "next-unlocked"
-              ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
-              : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
+            {isSoloPlanner
+              ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, snacks y los días que no compartís).`
+              : monthStatus === "next-unlocked"
+                ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
+                : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
           </p>
           <button
             onClick={() => generate.mutate(undefined)}
@@ -404,9 +437,11 @@ function PlanPage() {
           >
             {generate.isPending
               ? "Preparando tu mes..."
-              : monthStatus === "next-unlocked"
-                ? `Crear plan de ${monthTitle(month)}`
-                : "Crear plan del mes"}
+              : isSoloPlanner
+                ? "Planificar mis comidas en solitario"
+                : monthStatus === "next-unlocked"
+                  ? `Crear plan de ${monthTitle(month)}`
+                  : "Crear plan del mes"}
           </button>
         </section>
       ) : (
@@ -429,6 +464,17 @@ function PlanPage() {
               </button>
             ))}
           </div>
+
+          {isSoloPlanner && hasSharedMeals ? (
+            <div className="mt-4 flex items-start gap-2 rounded-2xl bg-secondary/60 px-3.5 py-2.5">
+              <Users className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <p className="text-[12px] leading-relaxed text-muted-foreground">
+                Las comidas compartidas de tu casa las lleva{" "}
+                <span className="font-medium text-foreground">{plannerName}</span>. Aquí solo
+                planificas y ves tus comidas en solitario.
+              </p>
+            </div>
+          ) : null}
 
           {tab === "plan" ? (
             <section className="mt-5 space-y-5">
@@ -501,6 +547,73 @@ function PlanPage() {
               }
               scanningReceipt={receipt.isPending}
             />
+          ) : isSoloPlanner ? (
+            <div className="mt-5 space-y-4">
+              {plannerShoppingQ.data ? (
+                <HouseholdShoppingBlock
+                  row={plannerShoppingQ.data}
+                  month={month}
+                  plannerName={plannerName}
+                  today={today}
+                />
+              ) : null}
+
+              <div className="flex items-center gap-2 px-0.5 pt-1">
+                <ShoppingBasket className="h-4 w-4 text-primary" />
+                <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
+                  Tu compra en solitario
+                </h2>
+              </div>
+
+              {hasOwnPlanRow ? (
+                <IngredientsTab
+                  shopping={shopping}
+                  trips={trips}
+                  tripsTotal={tripsTotal}
+                  activeCadence={activeCadence}
+                  pendingCadence={pendingCadence}
+                  coverage={coverage}
+                  todayDayOfMonth={todayDayOfMonth}
+                  selectedTrip={safeTrip}
+                  setSelectedTrip={setSelectedTrip}
+                  filter={filter}
+                  setFilter={setFilter}
+                  recadence={recadence}
+                  setPendingCadence={setPendingCadence}
+                  owned={owned}
+                  tripActuals={tripActuals}
+                  setActual={setActual}
+                  confirmedTrips={confirmedTrips}
+                  confirmTrip={confirmTrip}
+                  pantryExtras={pantryExtras}
+                  pantry={pantry}
+                  onEnterShopMode={() => setShopMode(true)}
+                  onShareTrip={(trip, label) => void shareTrip(trip, label)}
+                  month={month}
+                  monthStatus={monthStatus}
+                  readOnly={readOnlyMonth}
+                  periodBudget={periodBudget}
+                  partialMonth={partialMonth}
+                  overBudget={overBudget}
+                />
+              ) : (
+                <div className="surface-card p-5 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
+                    snacks y los días que no compartís) y aparecerá aquí.
+                  </p>
+                  {actionable ? (
+                    <button
+                      onClick={() => generate.mutate(undefined)}
+                      disabled={generate.isPending}
+                      className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+                    >
+                      {generate.isPending ? "Preparando…" : "Planificar mis comidas en solitario"}
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
           ) : (
             <IngredientsTab
               shopping={shopping}
@@ -567,6 +680,90 @@ const CategoryIcon = ({ category, className }: { category: string; className?: s
   const Icon = match[1];
   return <Icon className={className} />;
 };
+
+/**
+ * "La compra de la casa" — la lista del planificador, en SOLO LECTURA, para un
+ * miembro que no es quien planifica (issue 05, D1). Ve qué se compra y cuánto,
+ * pero no marca "lo tengo" ni cambia cantidades ni cadencia: eso lo lleva el
+ * planificador. En issue 06 el estado de compra ("lo tengo en casa", gasto
+ * real, despensa) pasa a ser editable por cualquier miembro. La vista es el
+ * total del mes (una sola proyección "mensual"), sin el navegador de compras.
+ */
+function HouseholdShoppingBlock({
+  row,
+  month,
+  plannerName,
+  today,
+}: {
+  row: import("@/lib/daily").PlannerShoppingRow;
+  month: string;
+  plannerName: string;
+  today: string;
+}) {
+  const [open, setOpen] = useState(true);
+  const coverage = row.plan?.coverage ?? monthCoverage(month, today);
+  const groups = useMemo(
+    () => projectTrips(row.shopping, "mensual", coverage, WEEK_COUNT)[0]?.groups ?? [],
+    [row.shopping, coverage],
+  );
+  const total = shoppingTotal(groups);
+  const itemCount = groups.reduce((s, g) => s + g.items.length, 0);
+
+  if (!itemCount) return null;
+
+  return (
+    <section className="surface-card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2.5 px-4 py-3.5 text-left"
+      >
+        <ShoppingCart className="h-4 w-4 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold">La compra de la casa</p>
+          <p className="text-[11.5px] text-muted-foreground">
+            la lleva {plannerName} · {itemCount} artículos · {eur(total)}
+          </p>
+        </div>
+        <ChevronRight
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+
+      {open ? (
+        <div className="border-t border-border/60 px-4 pb-4 pt-1">
+          <p className="py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+            Solo para consultar. Las cantidades son para toda la mesa; lo que compres y marques como
+            comprado lo gestiona {plannerName}.
+          </p>
+          <div className="space-y-3">
+            {groups.map((group) => (
+              <div key={group.category}>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <CategoryIcon category={group.category} className="h-3 w-3" />
+                  {group.category}
+                </div>
+                <ul className="mt-1 divide-y divide-border/50">
+                  {group.items.map((item) => (
+                    <li
+                      key={`${group.category}-${item.name}`}
+                      className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]"
+                    >
+                      <span className="min-w-0 truncate">{item.name}</span>
+                      <span className="shrink-0 font-mono text-[11.5px] text-muted-foreground">
+                        {item.qty} · {eur(item.price_eur ?? 0)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 /**
  * Reescala una imagen a JPEG de como máximo `maxSide` px de lado y devuelve el
