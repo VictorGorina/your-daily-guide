@@ -1,5 +1,5 @@
 import { cleanSharedSlots, type SharedSlots } from "./household-shared";
-import { composeMonthlyPlanForMember } from "./plan-shared";
+import { composeMonthlyPlanForMember, mealsForDate } from "./plan-shared";
 import { supabase } from "./supabase";
 import type {
   MonthlyPlan,
@@ -397,6 +397,38 @@ export async function fetchPlannerShopping(month: string): Promise<PlannerShoppi
 
   const row = data as unknown as Omit<PlannerShoppingRow, "plannerId">;
   return { plannerId: info.plannerId, ...row };
+}
+
+/**
+ * Anota el peso de hoy: en el registro del día (`daily_logs.weight_kg`) y como
+ * peso actual del perfil (`profiles.current_weight_kg`) — el mismo par que
+ * escribe el coach en `actualizar_peso`, para que Hoy, el objetivo y la
+ * tendencia queden coherentes por un único camino.
+ *
+ * Si el registro de hoy todavía no existe (p. ej. se entra directo a la
+ * pestaña Plan sin pasar por Hoy), se crea con las comidas reales del plan del
+ * mes en curso — nunca con `[]` — porque un registro con `habits` vacío deja
+ * Hoy con "Preparando las comidas de hoy..." colgado (ver `ensureTodayLog`).
+ */
+export async function logTodayWeight(kg: number) {
+  if (!Number.isFinite(kg) || kg < 25 || kg > 400) {
+    throw new Error("El peso debe estar entre 25 y 400 kg");
+  }
+  const { data, error } = await supabase
+    .from("daily_logs")
+    .update({ weight_kg: kg } as never)
+    .eq("log_date", todayISO())
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    const planRow = await fetchMonthlyPlan(monthISO());
+    const moments = mealsForDate((planRow?.plan as MonthlyPlan | null) ?? null, todayISO()).map(
+      (m) => m.moment,
+    );
+    await ensureTodayLog(moments);
+    await updateTodayLog({ weight_kg: kg });
+  }
+  await saveProfile({ current_weight_kg: kg });
 }
 
 // --- Señales de progreso (impulso, tendencia semanal, semáforo) ---
