@@ -58,6 +58,7 @@ import {
   type TripReceipts,
 } from "@/lib/plan-shared";
 import { madridTodayISO } from "@/lib/madrid-date";
+import { ValidationError } from "@/lib/validation-error";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
 
@@ -189,7 +190,7 @@ async function guardSharedSlotWrite(
   if (!isSharedSlot(home.sharedSlots, mealKey, weekday)) return;
   const plannerName =
     home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
-  throw new Error(
+  throw new ValidationError(
     `Esa comida la lleva ${plannerName} de tu casa. Puedo cambiar tus comidas en solitario.`,
   );
 }
@@ -334,17 +335,19 @@ const scaleShoppingToBudget = (shopping: ShoppingList, factor: number): Shopping
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; cadence?: ShoppingCadence }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     // No se planifica el pasado (no se puede cumplir y gasta tokens) ni más allá
     // del mes que viene, y este último solo en su última semana — mismo umbral
     // con el que la pantalla Plan lo desbloquea (ver `isNextMonthUnlocked`).
     const today = madridTodayISO();
     const currentMonth = today.slice(0, 7);
-    if (input.month < currentMonth) throw new Error("No se planifican meses pasados");
+    if (input.month < currentMonth) throw new ValidationError("No se planifican meses pasados");
     const nm = nextMonthISO(today);
-    if (input.month > nm) throw new Error("Solo puedes preparar hasta el mes que viene");
+    if (input.month > nm) throw new ValidationError("Solo puedes preparar hasta el mes que viene");
     if (input.month === nm && !isNextMonthUnlocked(today)) {
-      throw new Error("Aún no toca preparar el mes que viene; podrás la última semana del mes");
+      throw new ValidationError(
+        "Aún no toca preparar el mes que viene; podrás la última semana del mes",
+      );
     }
     const cadence: ShoppingCadence =
       input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
@@ -519,7 +522,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
 export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; cadence?: ShoppingCadence }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     const cadence: ShoppingCadence =
       input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
     return { month: input.month, cadence };
@@ -534,7 +537,7 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     const typed = row as { plan?: unknown; shopping?: unknown } | null;
 
     const current = cleanPlan(typed?.plan);
-    if (!current) throw new Error("Todavía no hay plan de este mes");
+    if (!current) throw new ValidationError("Todavía no hay plan de este mes");
     const prevShopping = cleanShopping(typed?.shopping);
     const shopping = isCanonicalShopping(prevShopping)
       ? prevShopping
@@ -572,11 +575,11 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
       trip: number;
       source: "fridge" | "store" | null;
     }) => {
-      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
       const itemName = String(input?.itemName ?? "").trim();
-      if (!itemName) throw new Error("Falta el ingrediente");
+      if (!itemName) throw new ValidationError("Falta el ingrediente");
       const trip = Number(input?.trip);
-      if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
+      if (!Number.isFinite(trip) || trip < 0) throw new ValidationError("Viaje no válido");
       const source = input?.source === "fridge" || input?.source === "store" ? input.source : null;
       return { month: input.month, itemName, trip: Math.round(trip), source };
     },
@@ -592,7 +595,7 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
       "shopping",
     );
     const current = cleanShopping(row?.shopping);
-    if (!current.length) throw new Error("Todavía no hay lista de la compra este mes");
+    if (!current.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
 
     const shopping: ShoppingList = current.map((group) => ({
       category: group.category,
@@ -633,12 +636,12 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
 export const setTripActual = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; trip: number; amount: number | null }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     const trip = Number(input?.trip);
-    if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
+    if (!Number.isFinite(trip) || trip < 0) throw new ValidationError("Viaje no válido");
     const amount = input?.amount == null ? null : Number(input.amount);
     if (amount != null && (!Number.isFinite(amount) || amount < 0)) {
-      throw new Error("Importe no válido");
+      throw new ValidationError("Importe no válido");
     }
     return { month: input.month, trip: Math.round(trip), amount };
   })
@@ -679,11 +682,11 @@ export const setTripActual = createServerFn({ method: "POST" })
 export const setPantryExtra = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; name: string; qty?: string; remove?: boolean }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     const name = String(input?.name ?? "")
       .trim()
       .slice(0, 80);
-    if (!name) throw new Error("Falta el ingrediente");
+    if (!name) throw new ValidationError("Falta el ingrediente");
     const qty = String(input?.qty ?? "")
       .trim()
       .slice(0, 40);
@@ -749,13 +752,15 @@ export type ReceiptScan = {
 export const scanTripReceipt = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; trip: number; imageBase64: string; mime?: string }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     const trip = Number(input?.trip);
-    if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
+    if (!Number.isFinite(trip) || trip < 0) throw new ValidationError("Viaje no válido");
     const imageBase64 = String(input?.imageBase64 ?? "").trim();
-    if (!imageBase64) throw new Error("Falta la foto del tiquet");
+    if (!imageBase64) throw new ValidationError("Falta la foto del tiquet");
     if (imageBase64.length > 4_500_000) {
-      throw new Error("La foto es demasiado grande: baja la calidad e inténtalo otra vez");
+      throw new ValidationError(
+        "La foto es demasiado grande: baja la calidad e inténtalo otra vez",
+      );
     }
     const mime = /^image\/(jpeg|png|webp|heic)$/.test(input?.mime ?? "")
       ? input!.mime!
@@ -963,9 +968,9 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
 export const setTripConfirmed = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; trip: number; confirmed: boolean }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     const trip = Number(input?.trip);
-    if (!Number.isFinite(trip) || trip < 0) throw new Error("Viaje no válido");
+    if (!Number.isFinite(trip) || trip < 0) throw new ValidationError("Viaje no válido");
     return { month: input.month, trip: Math.round(trip), confirmed: Boolean(input?.confirmed) };
   })
   .handler(async ({ data, context }): Promise<{ confirmed_trips: TripConfirmations }> => {
@@ -979,7 +984,7 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
       confirmed_trips?: unknown;
     }>(context.supabase, target, data.month, "plan, shopping, confirmed_trips");
     const shopping = cleanShopping(typed?.shopping);
-    if (!shopping.length) throw new Error("Todavía no hay lista de la compra este mes");
+    if (!shopping.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
 
     const current = cleanTripConfirmations(typed?.confirmed_trips);
     const next = { ...current };
@@ -1008,7 +1013,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
     (input: { month: string; note: string; today?: string; kcalDelta?: number | null }) => {
-      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
       const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
         ? input.today!
         : madridTodayISO();
@@ -1036,7 +1041,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
     const pantryExtras = cleanPantryExtras(
       (row as { pantry_extras?: unknown } | null)?.pantry_extras,
     );
-    if (!current) throw new Error("Todavía no hay plan de este mes");
+    if (!current) throw new ValidationError("Todavía no hay plan de este mes");
 
     const [{ data: profile }, { data: logs }] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
@@ -1184,17 +1189,19 @@ async function offShoppingList(
 export const setPlanMeal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { date: string; slot: string; dish: string; today?: string }) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? "")) throw new Error("Fecha no válida");
-    if (!MEAL_SLOTS.includes(input?.slot as MealSlot)) throw new Error("Comida no válida");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? ""))
+      throw new ValidationError("Fecha no válida");
+    if (!MEAL_SLOTS.includes(input?.slot as MealSlot))
+      throw new ValidationError("Comida no válida");
     const dish = String(input?.dish ?? "")
       .trim()
       .slice(0, 200);
-    if (!dish) throw new Error("Falta el plato nuevo");
-    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
-      ? input.today!
-      : new Date().toISOString().slice(0, 10);
+    if (!dish) throw new ValidationError("Falta el plato nuevo");
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : madridTodayISO();
     if (input.date < today) {
-      throw new Error("Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante");
+      throw new ValidationError(
+        "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
+      );
     }
     return { date: input.date, slot: input.slot as MealSlot, dish, today };
   })
@@ -1220,9 +1227,9 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       );
 
       const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
-      if (!current) throw new Error(`Todavía no hay plan del mes ${month}`);
+      if (!current) throw new ValidationError(`Todavía no hay plan del mes ${month}`);
       const at = planSlotIndex(current, data.date);
-      if (!at) throw new Error("Ese día todavía no tiene menú en el plan");
+      if (!at) throw new ValidationError("Ese día todavía no tiene menú en el plan");
 
       // Plato resuelto tal cual se veía en pantalla antes de este cambio (con
       // la rotación semanal ya aplicada para desayuno/snack si no había un
@@ -1301,21 +1308,22 @@ export const setChildMeal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
     (input: { date: string; slot: string; childId: string; dish: string; today?: string }) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? "")) throw new Error("Fecha no válida");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? ""))
+        throw new ValidationError("Fecha no válida");
       // Solo las 3 comidas principales: el snack nunca es compartido ni lleva
       // plato aparte de un niño (D5), así que no se espejaría a nadie.
       if (!HOUSEHOLD_MEAL_KEYS.includes(input?.slot as MealKey))
-        throw new Error("Comida no válida");
+        throw new ValidationError("Comida no válida");
       const childId = String(input?.childId ?? "").trim();
-      if (!childId) throw new Error("Falta el niño");
+      if (!childId) throw new ValidationError("Falta el niño");
       const dish = String(input?.dish ?? "")
         .trim()
         .slice(0, 200);
       const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
         ? input.today!
-        : new Date().toISOString().slice(0, 10);
+        : madridTodayISO();
       if (input.date < today) {
-        throw new Error(
+        throw new ValidationError(
           "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
         );
       }
@@ -1338,14 +1346,14 @@ export const setChildMeal = createServerFn({ method: "POST" })
       const child =
         home.children.find((c) => c.id === data.childId) ??
         home.children.find((c) => normName(c.name) === normName(data.childId));
-      if (!child) throw new Error("Ese niño no está en tu casa");
+      if (!child) throw new ValidationError("Ese niño no está en tu casa");
       // El plato aparte de un niño va con la comida compartida: lo fija el
       // planificador, igual que el resto de días compartidos (D2).
       if (home.plannerId && home.plannerId !== context.userId) {
         const plannerName =
           home.members.find((m) => m.userId === home.plannerId)?.displayName ??
           "quien lleva la cocina";
-        throw new Error(`El plato de ${child.name} lo pone ${plannerName} de tu casa.`);
+        throw new ValidationError(`El plato de ${child.name} lo pone ${plannerName} de tu casa.`);
       }
 
       const month = data.date.slice(0, 7);
@@ -1356,9 +1364,9 @@ export const setChildMeal = createServerFn({ method: "POST" })
         "plan, shopping, pantry_extras",
       );
       const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
-      if (!current) throw new Error(`Todavía no hay plan del mes ${month}`);
+      if (!current) throw new ValidationError(`Todavía no hay plan del mes ${month}`);
       const at = planSlotIndex(current, data.date);
-      if (!at) throw new Error("Ese día todavía no tiene menú en el plan");
+      if (!at) throw new ValidationError("Ese día todavía no tiene menú en el plan");
 
       const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
       const pantryExtras = cleanPantryExtras(
@@ -1430,9 +1438,7 @@ export const goalImpact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { note: string; today?: string }) => ({
     note: String(input?.note ?? "").slice(0, 1500),
-    today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
-      ? input.today!
-      : new Date().toISOString().slice(0, 10),
+    today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : madridTodayISO(),
   }))
   .handler(
     async ({ data, context }): Promise<{ text: string; suggested_target_date: string | null }> => {
@@ -1539,7 +1545,7 @@ export const dishRecipe = createServerFn({ method: "POST" })
     const dish = String(input?.dish ?? "")
       .trim()
       .slice(0, 200);
-    if (!dish) throw new Error("Falta el plato");
+    if (!dish) throw new ValidationError("Falta el plato");
     const month = /^\d{4}-\d{2}$/.test(input?.month ?? "") ? input!.month! : "";
     return { dish, month };
   })

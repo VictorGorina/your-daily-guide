@@ -3,6 +3,7 @@ import { generateText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
+import { parseJsonLoose } from "@/lib/plan-shared";
 
 /**
  * Estimación aproximada del total del día, calculada por el modelo a partir
@@ -111,8 +112,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
           dishesLine +
           "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
       });
-      const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-      const parsed = JSON.parse(json) as GeneratedGuide;
+      const parsed = parseJsonLoose(text) as GeneratedGuide;
       if (!parsed.behaviors?.length) return fallback;
       const rawMacro = parsed.macroEstimate as unknown;
       const macroEstimate: MacroEstimate | null =

@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { ValidationError } from "@/lib/validation-error";
+
 /** A dónde lleva el enlace del correo según desde dónde se pidió. */
 export type ResetPlatform = "web" | "mobile";
 
@@ -7,7 +9,12 @@ export type ResetPlatform = "web" | "mobile";
  * Momento del último envío por correo, para no permitir que se pida un enlace
  * detrás de otro. Es memoria del proceso: en serverless cada instancia tiene la
  * suya, así que frena el caso normal (alguien pulsando repetido) pero no un
- * ataque repartido. La defensa de verdad para eso está en Resend y su cuota.
+ * ataque repartido. La defensa real es la cuota de Resend (backstop externo).
+ *
+ * TODO: cuando escale, reemplazar por rate-limiting de Vercel Edge o un campo
+ * `last_reset_sent_at` en la tabla `profiles` (ojo: solo cubre cuentas
+ * existentes; la función no confirma si el email existe a propósito, para no
+ * facilitar la enumeración de cuentas).
  */
 const lastSentAt = new Map<string, number>();
 const MIN_INTERVAL_MS = 60_000;
@@ -27,7 +34,7 @@ const MIN_INTERVAL_MS = 60_000;
 export const requestPasswordReset = createServerFn({ method: "POST" })
   .validator((input: { email: string; platform?: ResetPlatform }) => {
     const email = typeof input?.email === "string" ? input.email.trim().toLowerCase() : "";
-    if (!email || !email.includes("@")) throw new Error("Necesitamos un correo válido");
+    if (!email || !email.includes("@")) throw new ValidationError("Necesitamos un correo válido");
     const platform: ResetPlatform = input?.platform === "mobile" ? "mobile" : "web";
     return { email, platform };
   })

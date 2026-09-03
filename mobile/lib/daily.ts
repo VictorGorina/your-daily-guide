@@ -289,6 +289,10 @@ async function fetchOwnMonthlyPlan(
     // pantry_extras, trip_receipts) todavía no se ha aplicado, esa columna no
     // existe y la consulta falla entera. Reintenta con el set mínimo seguro
     // para no tumbar toda la pestaña Plan mientras tanto.
+    // Si no es un error de columna (PGRST204), lo propagamos directamente.
+    const isColumnError = typeof error === "object" && "code" in error && error.code === "PGRST204";
+    if (!isColumnError) throw error;
+    console.warn("fetchOwnMonthlyPlan: columna faltante, reintentando con set mínimo", error);
     const retry = await supabase
       .from("monthly_plans")
       .select("id, month, plan, shopping, confirmed_at, trip_actuals")

@@ -747,6 +747,64 @@ describe("composeMonthlyPlanForMember", () => {
   });
 });
 
+// --- edge cases hogar (L-04) -----------------------------------------------
+
+describe("composeDayForUser — edge cases", () => {
+  it("all-slots-shared: todo se toma del planificador", () => {
+    const allShared: SharedSlots = {
+      desayuno: [0, 1, 2, 3, 4, 5, 6],
+      comida: [0, 1, 2, 3, 4, 5, 6],
+      cena: [0, 1, 2, 3, 4, 5, 6],
+    };
+    const mine = day("Lunes", "Mi comida", "Mi cena", { breakfast: "Mi desayuno" });
+    const planner = day("Lunes", "Su comida", "Su cena", { breakfast: "Su desayuno" });
+    const composed = composeDayForUser(mine, planner, allShared, 0);
+    expect(composed.lunch).toBe("Su comida");
+    expect(composed.dinner).toBe("Su cena");
+    expect(composed.breakfast).toBe("Su desayuno");
+  });
+
+  it("planner con día vacío (strings '') no borra el plato del miembro", () => {
+    const allShared: SharedSlots = {
+      desayuno: [0, 1, 2, 3, 4, 5, 6],
+      comida: [0, 1, 2, 3, 4, 5, 6],
+      cena: [0, 1, 2, 3, 4, 5, 6],
+    };
+    const mine = day("Martes", "Mi comida", "Mi cena", { breakfast: "Mi desayuno" });
+    const planner = day("Martes", "", "");
+    // composeDayForUser usa `plannerDay.lunch || mineDay.lunch` — con "" vuelve a lo mío
+    const composed = composeDayForUser(mine, planner, allShared, 1);
+    expect(composed.lunch).toBe("Mi comida");
+    expect(composed.dinner).toBe("Mi cena");
+    // breakfast: plannerDay.breakfast es falsy → no se sustituye
+    expect(composed.breakfast).toBe("Mi desayuno");
+  });
+});
+
+describe("composeMonthlyPlanForMember — edge cases", () => {
+  const slots: SharedSlots = { desayuno: [], comida: [0, 1, 2, 3, 4], cena: [] };
+
+  it("plan con 5 semanas: la quinta semana sin par en el planificador queda como la mía", () => {
+    const fiveWeeks = plan({
+      weeks: Array.from({ length: 5 }, (_, wi) => ({
+        label: `Semana ${wi + 1}`,
+        focus: "",
+        breakfasts: ["Avena"],
+        snacks: ["Fruta"],
+        days: DAY_NAMES.map((n, di) => day(n, `Comida S${wi}D${di}`, `Cena S${wi}D${di}`)),
+      })),
+    });
+    const fourWeeks = plan(); // solo 4 semanas
+    const composed = composeMonthlyPlanForMember(fiveWeeks, fourWeeks, slots)!;
+    expect(composed.weeks).toHaveLength(5);
+    // Semanas 0-3: comida compartida del planificador entre semana
+    expect(composed.weeks[0]!.days[0]!.lunch).toBe("Comida S0D0"); // del planificador
+    // Semana 4: el planificador no la tiene → se queda la mía sin tocar
+    expect(composed.weeks[4]!.days[0]!.lunch).toBe("Comida S4D0");
+    expect(composed.weeks[4]!.days[0]!.dinner).toBe("Cena S4D0");
+  });
+});
+
 // --- cantidades: unidades y desglose por semana --------------------------
 
 describe("normalizeUnit / formatQty / parseQtyLegacy", () => {

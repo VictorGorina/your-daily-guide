@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { cleanSharedSlots, type SharedSlots } from "@/lib/household-shared";
 import { madridTodayISO } from "@/lib/madrid-date";
+import { ValidationError } from "@/lib/validation-error";
 
 /**
  * Guarda la configuración única de comidas compartidas del hogar
@@ -23,9 +24,11 @@ export const saveSharedSlots = createServerFn({ method: "POST" })
       is_planner: boolean;
     }[];
     const mine = rows.find((r) => r.user_id === context.userId);
-    if (!mine) throw new Error("No estás en ningún hogar");
+    if (!mine) throw new ValidationError("No estás en ningún hogar");
     if (!mine.is_planner) {
-      throw new Error("Solo quien lleva la cocina en casa puede cambiar las comidas compartidas");
+      throw new ValidationError(
+        "Solo quien lleva la cocina en casa puede cambiar las comidas compartidas",
+      );
     }
 
     const { error } = await context.supabase
@@ -47,7 +50,7 @@ export const saveSharedSlots = createServerFn({ method: "POST" })
 export const syncHouseholdPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; today?: string }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new Error("Mes no válido");
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     return {
       month: input.month,
       today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : madridTodayISO(),

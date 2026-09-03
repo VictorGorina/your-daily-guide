@@ -85,6 +85,7 @@ import {
   type ShoppingItem,
   type ShoppingList,
   type TripActuals,
+  type TripConfirmations,
   type TripReceipts,
 } from "../../lib/plan-shared";
 import { freshRiskNames, freshRisksForTrip } from "../../lib/perishability";
@@ -168,6 +169,7 @@ export default function Plan() {
     plannerPlan?.weeks.length ?? WEEK_COUNT,
   );
   const hhTripActuals = plannerShoppingQ.data?.trip_actuals ?? {};
+  const hhConfirmedTrips: TripConfirmations = plannerShoppingQ.data?.confirmed_trips ?? {};
   const hhPantryExtras: PantryExtra[] = plannerShoppingQ.data?.pantry_extras ?? [];
   const [hhSelectedTrip, setHhSelectedTrip] = useState(0);
   const [hhFilter, setHhFilter] = useState<"need" | "have" | "all">("all");
@@ -201,6 +203,15 @@ export default function Plan() {
         prev ? { ...prev, pantry_extras: res.pantry_extras } : prev,
       ),
     onError: () => Alert.alert("No hemos podido guardar el ingrediente"),
+  });
+  const hhConfirmTrip = useMutation({
+    mutationFn: (vars: { trip: number; confirmed: boolean }) =>
+      apiPost<{ confirmed_trips: TripConfirmations }>("plan/trip-confirm", { month, ...vars }),
+    onSuccess: (res) =>
+      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
+        prev ? { ...prev, confirmed_trips: res.confirmed_trips } : prev,
+      ),
+    onError: () => Alert.alert("No hemos podido fijar los ingredientes"),
   });
   const hhReceipt = useMutation({
     mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
@@ -316,6 +327,17 @@ export default function Plan() {
     onError: () => Alert.alert("No hemos podido guardar el gasto"),
   });
 
+  const confirmTrip = useMutation({
+    mutationFn: (vars: { trip: number; confirmed: boolean }) =>
+      apiPost<{ confirmed_trips: TripConfirmations }>("plan/trip-confirm", { month, ...vars }),
+    onSuccess: (res) => {
+      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
+        prev ? { ...prev, confirmed_trips: res.confirmed_trips } : prev,
+      );
+    },
+    onError: () => Alert.alert("No hemos podido fijar los ingredientes"),
+  });
+
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
   // Total del mes: solo para el aviso de presupuesto. Las cifras de la tarjeta
@@ -323,6 +345,7 @@ export default function Plan() {
   // IngredientsTab (ver diseño 1c).
   const monthTotal = shoppingTotal(shopping);
   const tripActuals = planQ.data?.trip_actuals ?? {};
+  const confirmedTrips: TripConfirmations = planQ.data?.confirmed_trips ?? {};
   const tripReceipts: TripReceipts = planQ.data?.trip_receipts ?? {};
   const pantryExtras: PantryExtra[] = planQ.data?.pantry_extras ?? [];
   const coverage = plan?.coverage;
@@ -687,6 +710,8 @@ export default function Plan() {
                       onToggle={(itemName, next) =>
                         hhOwned.mutate({ itemName, trip: hhClampedTrip, source: next })
                       }
+                      confirmedTrips={hhConfirmedTrips}
+                      confirmTrip={hhConfirmTrip}
                       pantryExtras={hhPantryExtras}
                       pantry={hhPantry}
                       month={month}
@@ -731,6 +756,8 @@ export default function Plan() {
                       onToggle={(itemName, next) =>
                         owned.mutate({ itemName, trip: clampedTrip, source: next })
                       }
+                      confirmedTrips={confirmedTrips}
+                      confirmTrip={confirmTrip}
                       pantryExtras={pantryExtras}
                       pantry={pantry}
                       month={month}
@@ -786,6 +813,8 @@ export default function Plan() {
                 onToggle={(itemName, next) =>
                   owned.mutate({ itemName, trip: clampedTrip, source: next })
                 }
+                confirmedTrips={confirmedTrips}
+                confirmTrip={confirmTrip}
                 pantryExtras={pantryExtras}
                 pantry={pantry}
                 month={month}
@@ -1165,6 +1194,8 @@ function IngredientsTab({
   pendingCadence,
   setPendingCadence,
   onToggle,
+  confirmedTrips = {},
+  confirmTrip,
   pantryExtras,
   pantry,
   month,
@@ -1191,6 +1222,8 @@ function IngredientsTab({
   recadence: { isPending: boolean; mutate: (c: ShoppingCadence) => void };
   setPendingCadence: (c: ShoppingCadence) => void;
   onToggle: (itemName: string, next: "fridge" | "store" | null) => void;
+  confirmedTrips?: TripConfirmations;
+  confirmTrip?: { isPending: boolean; mutate: (v: { trip: number; confirmed: boolean }) => void };
   pantryExtras: PantryExtra[];
   pantry: {
     isPending: boolean;
@@ -1409,6 +1442,33 @@ function IngredientsTab({
           </Text>
         ) : null}
       </View>
+
+      {/* Botón de fijar ingredientes de esta compra: aparece cuando todos los
+          items están resueltos y la compra aún no está fijada. */}
+      {confirmTrip &&
+      editable &&
+      !confirmedTrips[selectedTrip] &&
+      needCount === 0 &&
+      totalItems > 0 ? (
+        <Pressable
+          onPress={() => confirmTrip.mutate({ trip: selectedTrip, confirmed: true })}
+          disabled={confirmTrip.isPending}
+          className="flex-row items-center justify-center gap-2 rounded-full bg-success py-3.5 active:opacity-90"
+          style={confirmTrip.isPending ? { opacity: 0.6 } : undefined}
+        >
+          <Check size={16} color="#fff" />
+          <Text className="text-sm font-sans-semibold text-white">
+            {confirmTrip.isPending ? "Fijando…" : "Fijar ingredientes de esta compra"}
+          </Text>
+        </Pressable>
+      ) : confirmedTrips[selectedTrip] ? (
+        <View className="flex-row items-center justify-center gap-2 rounded-full bg-success/15 py-3">
+          <Lock size={13} color="#4cae64" />
+          <Text className="text-xs font-sans-semibold text-success">
+            Compra fijada el {new Date(confirmedTrips[selectedTrip]).toLocaleDateString("es-ES")}
+          </Text>
+        </View>
+      ) : null}
 
       {/* Aviso de frescura: frescos que no aguantan los días de esta compra. */}
       {freshRisks.length ? (

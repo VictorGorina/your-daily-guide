@@ -15,6 +15,8 @@
 /** Firma común a las server functions, con o sin `inputValidator`. */
 type ServerFn<TOutput> = (opts: { data: never }) => Promise<TOutput>;
 
+import { ValidationError } from "@/lib/validation-error";
+
 export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
   return async ({ request }: { request: Request }): Promise<Response> => {
     let data: unknown = undefined;
@@ -38,6 +40,12 @@ export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
       // en vez de reintentar.
       if (raw.startsWith("Unauthorized")) {
         return Response.json({ error: raw }, { status: 401 });
+      }
+      // ValidationError = dato inválido del usuario → 400 con su mensaje
+      // original, para que el cliente (y la observabilidad) distinga errores de
+      // input de fallos reales del servidor.
+      if (error instanceof ValidationError) {
+        return Response.json({ error: raw }, { status: 400 });
       }
       console.error("apiPost", error);
       return Response.json(

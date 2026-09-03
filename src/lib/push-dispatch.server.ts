@@ -233,32 +233,43 @@ export async function dispatchPush(): Promise<DispatchSummary> {
     subsByUser.set(s.user_id, list);
   }
 
+  // Procesa items en lotes de `concurrency` en paralelo. JS es single-threaded,
+  // así que las mutaciones a `summary` entre awaits no hacen race conditions.
+  const CONCURRENCY = 10;
+  async function batch<T>(items: T[], fn: (item: T) => Promise<void>) {
+    for (let i = 0; i < items.length; i += CONCURRENCY) {
+      await Promise.allSettled(items.slice(i, i + CONCURRENCY).map(fn));
+    }
+  }
+
   const sendTo = async (userId: string, payload: PushPayload) => {
     const userSubs = subsByUser.get(userId) ?? [];
     if (!userSubs.length) {
       summary.skippedNoSubscription++;
       return;
     }
-    for (const s of userSubs) {
-      try {
-        const result = await sendPushNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          payload,
-        );
-        if (result === "gone") {
-          summary.gone++;
-          await supabaseAdmin.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
-        } else {
-          summary.sent++;
+    await Promise.allSettled(
+      userSubs.map(async (s) => {
+        try {
+          const result = await sendPushNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            payload,
+          );
+          if (result === "gone") {
+            summary.gone++;
+            await supabaseAdmin.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
+          } else {
+            summary.sent++;
+          }
+        } catch (err) {
+          summary.errors++;
+          console.error("dispatchPush: fallo al enviar", userId, err);
         }
-      } catch (err) {
-        summary.errors++;
-        console.error("dispatchPush: fallo al enviar", userId, err);
-      }
-    }
+      }),
+    );
   };
 
-  for (const p of morningMatches) {
+  await batch(morningMatches, async (p) => {
     const { data: log } = await supabaseAdmin
       .from("daily_logs")
       .select("guide")
@@ -271,9 +282,9 @@ export async function dispatchPush(): Promise<DispatchSummary> {
     // Se marca como enviado tanto si había suscripciones como si no, para no
     // reintentar en bucle dentro del mismo día — igual para la noche debajo.
     await supabaseAdmin.from("profiles").update({ morning_push_sent_on: today }).eq("id", p.id);
-  }
+  });
 
-  for (const p of eveningMatches) {
+  await batch(eveningMatches, async (p) => {
     const tone = toneOf(p.tone);
     const { data: log } = await supabaseAdmin
       .from("daily_logs")
@@ -294,7 +305,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
       await sendTo(p.id, { title, body, url: "/hoy" });
     }
     await supabaseAdmin.from("profiles").update({ evening_push_sent_on: today }).eq("id", p.id);
-  }
+  });
 
   if (renewalMatches.length) {
     const nextMonthLabel = new Date(`${nextMonth}-01T00:00:00`).toLocaleDateString("es-ES", {
@@ -314,7 +325,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
         .filter((m) => m.user_id && !m.is_planner)
         .map((m) => m.user_id as string),
     );
-    for (const p of renewalMatches) {
+    await batch(renewalMatches, async (p) => {
       const { title, body } = nonPlanner.has(p.id)
         ? renewalCopyMember(p.display_name, nextMonthLabel)
         : renewalCopy(toneOf(p.tone), p.display_name, nextMonthLabel);
@@ -325,7 +336,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
         .from("profiles")
         .update({ plan_renewal_push_sent_on: today })
         .eq("id", p.id);
-    }
+    });
   }
 
   return summary;

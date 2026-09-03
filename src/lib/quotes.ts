@@ -71,5 +71,5 @@ export function quoteOfTheDay(date: Date = new Date()): Quote {
   const start = new Date(date.getFullYear(), 0, 0);
   const diff = date.getTime() - start.getTime();
   const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-  return QUOTES[dayOfYear % QUOTES.length];
+  return QUOTES[dayOfYear % QUOTES.length]!;
 }
