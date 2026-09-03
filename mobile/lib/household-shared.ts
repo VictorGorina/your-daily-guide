@@ -72,3 +72,26 @@ const CHILD_APPETITE_ADJUST: Record<Appetite, number> = { poco: -0.2, normal: 0,
 export function childPortion(age: number | null, appetite: Appetite): number {
   return Math.max(0.1, round2(childBasePortion(age) + CHILD_APPETITE_ADJUST[appetite]));
 }
+
+/**
+ * Paleta de avatares de la pestaña Familia: cinco tonos cálidos del rediseño.
+ * `#ffe7d3` y `#e1f2e4` ya son `--primary-soft` / `--success-soft` del sistema.
+ */
+export const PERSON_COLORS: readonly { soft: string; ink: string }[] = [
+  { soft: "#ffe7d3", ink: "#c2611f" },
+  { soft: "#e1f2e4", ink: "#3d8f52" },
+  { soft: "#fbeecb", ink: "#a37b13" },
+  { soft: "#dbeaf6", ink: "#3a7fb0" },
+  { soft: "#f8dfdd", ink: "#c2534b" },
+];
+
+/**
+ * Color de avatar de una persona del hogar, derivado de forma determinista de un
+ * `seed` estable (el id del hueco de la mesa o del peque). No hay columna de
+ * color en la BD: se calcula al vuelo para que cada cara tenga su tono estable.
+ */
+export function personColor(seed: string): { soft: string; ink: string } {
+  let sum = 0;
+  for (let i = 0; i < seed.length; i += 1) sum += seed.charCodeAt(i);
+  return PERSON_COLORS[sum % PERSON_COLORS.length]!;
+}

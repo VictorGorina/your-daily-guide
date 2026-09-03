@@ -2,15 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Baby,
+  Check,
+  ChevronDown,
+  ChevronRight,
   ChefHat,
   Copy,
   LogOut,
+  Pencil,
   Plus,
   RefreshCw,
   ShieldCheck,
   Target,
-  Trash2,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -18,33 +20,32 @@ import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { ChildSheet } from "@/components/child-sheet";
 import { fetchMonthlyPlan, monthISO, todayISO } from "@/lib/daily";
 import {
-  childPortion,
   DAY_LABEL,
   DAY_SHORT,
   MEAL_KEYS,
   MEAL_LABEL,
+  personColor,
   toggleDay,
   type Appetite,
   type SharedSlots,
 } from "@/lib/household-shared";
 import {
   addAdultSlot,
-  addChild,
   claimSlot,
   clearHouseholdGoal,
   createHousehold,
   fetchHousehold,
   leaveHousehold,
   openSlots,
-  removeChild,
   removeMember,
   renameHousehold,
   saveHouseholdGoal,
   setPlanner,
-  updateChild,
   updateMember,
+  type HouseholdChild,
   type HouseholdGoalType,
   type OpenSlot,
 } from "@/lib/household";
@@ -93,12 +94,6 @@ function Hogar() {
   const [code, setCode] = useState("");
   const [slots, setSlots] = useState<OpenSlot[] | null>(null);
   const [shared, setShared] = useState<SharedSlots | null>(null);
-  const [child, setChild] = useState<{
-    name: string;
-    age: string;
-    allergies: string;
-    appetite: Appetite;
-  }>({ name: "", age: "", allergies: "", appetite: "normal" });
   const [newAdult, setNewAdult] = useState<{ name: string; usesApp: boolean; appetite: Appetite }>({
     name: "",
     usesApp: true,
@@ -107,6 +102,13 @@ function Hogar() {
   const [goalType, setGoalType] = useState<HouseholdGoalType>("comportamiento");
   const [goalText, setGoalText] = useState("");
   const [goalBudget, setGoalBudget] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [childSheet, setChildSheet] = useState<{ open: boolean; child: HouseholdChild | null }>({
+    open: false,
+    child: null,
+  });
 
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
@@ -234,37 +236,6 @@ function Hogar() {
     onError: () => toast.error("No hemos podido sincronizar el plan"),
   });
 
-  const newChild = useMutation({
-    mutationFn: async () => {
-      const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
-      const age = Number(child.age.replace(",", "."));
-      const ageVal = Number.isFinite(age) && age > 0 ? Math.round(age) : null;
-      await addChild(householdId, {
-        name: child.name.trim(),
-        age: ageVal,
-        allergies: child.allergies.trim() || null,
-        appetite: child.appetite,
-        portion: childPortion(ageVal, child.appetite),
-        notes: null,
-      });
-    },
-    onSuccess: () => {
-      setChild({ name: "", age: "", allergies: "", appetite: "normal" });
-      toast.success("Peque añadido");
-      refresh();
-    },
-    onError: () => toast.error("Falta el nombre del peque"),
-  });
-
-  const dropChild = useMutation({
-    mutationFn: (id: string) => removeChild(id),
-    onSuccess: refresh,
-  });
-
-  const setChildAppetite = (id: string, age: number | null, appetite: Appetite) =>
-    void updateChild(id, { appetite, portion: childPortion(age, appetite) }).then(refresh);
-
   const saveGoal = useMutation({
     mutationFn: async () => {
       const householdId = state.data?.household?.id;
@@ -299,30 +270,103 @@ function Hogar() {
 
   const household = state.data?.household;
   const members = state.data?.members ?? [];
+  const children = state.data?.children ?? [];
+
+  const openChild = (child: HouseholdChild | null) => setChildSheet({ open: true, child });
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
-      <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">Tu hogar</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder tu
-        propio plan.
-      </p>
-
-      <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        <p>
-          Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto del
-          hogar. Solo compartís lo que marquéis aquí como comidas comunes y el objetivo del hogar de
-          abajo.
-        </p>
-      </div>
-
       {!household ? (
         <Fragment key="no-household">
-          <section className="surface-card mt-6 space-y-3 p-5">
+          <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">Tu hogar</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder
+            tu propio plan.
+          </p>
+
+          <section className="mt-6 rounded-[1.25rem] bg-primary-soft p-5">
+            <h2 className="text-sm font-semibold">¿Ya te han pasado un código?</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Lo tiene arriba del todo quien ya esté dentro de la familia.
+            </p>
+            {!slots ? (
+              <Fragment key="ask-code">
+                <input
+                  className="mt-3.5 h-[60px] w-full rounded-2xl bg-surface px-4 text-center font-title text-[26px] font-semibold uppercase tracking-[0.14em] outline-none focus:ring-2 focus:ring-ring/40"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="ABC123"
+                />
+                <button
+                  onClick={() => lookup.mutate()}
+                  disabled={lookup.isPending || code.trim().length < 4}
+                  className="mt-2.5 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                >
+                  {lookup.isPending ? "Buscando..." : "Unirme a la familia"}
+                </button>
+              </Fragment>
+            ) : slots.length ? (
+              <Fragment key="pick-who">
+                <p className="mt-3 text-xs text-muted-foreground">¿Quién eres? Toca tu nombre.</p>
+                <div className="mt-2 space-y-2">
+                  {slots.map((s) => {
+                    const pal = personColor(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => claim.mutate(s.id)}
+                        disabled={claim.isPending}
+                        className="flex w-full items-center gap-3 rounded-2xl bg-surface px-4 py-3 text-sm font-medium disabled:opacity-60"
+                      >
+                        <span
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full font-title text-sm font-semibold"
+                          style={{ background: pal.soft, color: pal.ink }}
+                        >
+                          {(s.display_name.trim()[0] ?? "?").toUpperCase()}
+                        </span>
+                        {s.display_name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setSlots(null)}
+                  className="mt-3 text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Probar otro código
+                </button>
+              </Fragment>
+            ) : (
+              <Fragment key="no-slots">
+                <p className="mt-3 text-xs text-muted-foreground">
+                  No hay ningún sitio libre con ese código. Comprueba que está bien escrito o pídele
+                  a quien creó la familia que te añada.
+                </p>
+                <button
+                  onClick={() => setSlots(null)}
+                  className="mt-3 text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Probar otro código
+                </button>
+              </Fragment>
+            )}
+          </section>
+
+          <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              o empieza tú
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <section className="surface-card space-y-3 p-5">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Users className="h-4 w-4 text-primary" /> Crear un hogar
             </h2>
+            <p className="text-xs text-muted-foreground">
+              Tendrás un código para invitar a quien vive contigo.
+            </p>
             <input
               className={input}
               value={name}
@@ -332,99 +376,117 @@ function Hogar() {
             <button
               onClick={() => create.mutate()}
               disabled={create.isPending}
-              className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+              className="w-full rounded-full bg-secondary py-3.5 text-sm font-semibold disabled:opacity-60"
             >
               {create.isPending ? "Creando..." : "Crear hogar"}
             </button>
           </section>
 
-          <section className="surface-card mt-4 space-y-3 p-5">
-            <h2 className="text-sm font-semibold">Unirme a una familia</h2>
-            {!slots ? (
-              <Fragment key="ask-code">
-                <input
-                  className={`${input} uppercase tracking-widest`}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="ABC123"
-                />
-                <button
-                  onClick={() => lookup.mutate()}
-                  disabled={lookup.isPending || code.trim().length < 4}
-                  className="w-full rounded-full bg-secondary py-3.5 text-sm font-medium disabled:opacity-60"
-                >
-                  {lookup.isPending ? "Buscando..." : "Buscar mi familia"}
-                </button>
-              </Fragment>
-            ) : slots.length ? (
-              <Fragment key="pick-who">
-                <p className="text-xs text-muted-foreground">¿Quién eres? Toca tu nombre.</p>
-                <div className="space-y-2">
-                  {slots.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => claim.mutate(s.id)}
-                      disabled={claim.isPending}
-                      className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-sm font-medium disabled:opacity-60"
-                    >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-title text-sm font-semibold text-primary">
-                        {(s.display_name.trim()[0] ?? "?").toUpperCase()}
-                      </span>
-                      {s.display_name}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => setSlots(null)}
-                  className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
-                >
-                  Probar otro código
-                </button>
-              </Fragment>
-            ) : (
-              <Fragment key="no-slots">
-                <p className="text-xs text-muted-foreground">
-                  No hay ningún sitio libre con ese código. Comprueba que está bien escrito o pídele
-                  a quien creó la familia que te añada.
-                </p>
-                <button
-                  onClick={() => setSlots(null)}
-                  className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
-                >
-                  Probar otro código
-                </button>
-              </Fragment>
-            )}
-          </section>
+          <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <p>
+              Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
+              del hogar.
+            </p>
+          </div>
         </Fragment>
       ) : (
         <Fragment key="household">
-          <section className="surface-card mt-6 p-5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Tu familia
-            </span>
-            <input
-              className="mt-1 w-full rounded-2xl bg-muted px-3.5 py-2 font-title text-3xl font-semibold tracking-[-0.02em] outline-none"
-              defaultValue={household.name}
-              onBlur={(e) => {
-                void renameHousehold(household.id, e.target.value).then(refresh);
-              }}
-            />
+          <div className="flex items-start gap-2.5">
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                Tu familia
+              </span>
+              {editingName ? (
+                <input
+                  autoFocus
+                  defaultValue={household.name}
+                  onBlur={(e) => {
+                    void renameHousehold(household.id, e.target.value).then(refresh);
+                    setEditingName(false);
+                  }}
+                  className="mt-0.5 w-full rounded-xl bg-muted px-2 py-1 font-title text-[30px] font-semibold tracking-[-0.02em] outline-none focus:ring-2 focus:ring-ring/40"
+                />
+              ) : (
+                <h1 className="mt-0.5 font-title text-[34px] font-semibold leading-tight tracking-[-0.03em]">
+                  {household.name}
+                </h1>
+              )}
+            </div>
+            {!editingName ? (
+              <button
+                onClick={() => setEditingName(true)}
+                aria-label="Cambiar el nombre de la familia"
+                className="mt-4 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-border"
+              >
+                <Pencil className="h-[15px] w-[15px]" />
+              </button>
+            ) : null}
+          </div>
 
-            <h3 className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <Users className="h-3.5 w-3.5" /> La mesa
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Todos los que coméis en casa. La compra se calcula para esta lista.
+          <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <p>
+              Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
+              del hogar. Solo compartís las comidas comunes y el objetivo del hogar.
             </p>
-            <div className="mt-3 space-y-2">
+          </div>
+
+          <section className="mt-4 rounded-[1.25rem] bg-primary-soft p-5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                Código de la familia
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {members.length} {members.length === 1 ? "miembro" : "miembros"}
+              </span>
+            </div>
+            <div className="mt-2.5 flex items-center gap-3">
+              <span className="flex-1 font-title text-[32px] font-semibold leading-none tracking-[0.14em]">
+                {household.invite_code}
+              </span>
+              <button
+                onClick={() => {
+                  void navigator.clipboard?.writeText(household.invite_code);
+                  setCopied(true);
+                  toast.success("Código copiado");
+                  window.setTimeout(() => setCopied(false), 1900);
+                }}
+                className="flex shrink-0 items-center gap-2 rounded-full bg-surface px-4 py-3 text-sm font-medium transition-colors hover:bg-secondary"
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+              Quien lo tenga puede unirse a esta familia desde su app.
+            </p>
+          </section>
+
+          <section className="surface-card mt-4 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold">En casa</h2>
+              <span className="text-[11px] text-muted-foreground">
+                {members.length} {members.length === 1 ? "adulto" : "adultos"} · {children.length}{" "}
+                {children.length === 1 ? "peque" : "peques"}
+              </span>
+            </div>
+
+            <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              Adultos
+            </p>
+            <div className="space-y-2">
               {members.map((m) => {
                 const isMe = !!m.user_id && m.user_id === state.data?.me?.user_id;
                 const initial = (m.display_name.trim()[0] ?? "?").toUpperCase();
+                const pal = personColor(m.id);
                 return (
                   <div key={m.id} className="rounded-2xl bg-secondary px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft font-title text-sm font-semibold text-primary">
+                      <span
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full font-title text-[15px] font-semibold"
+                        style={{ background: pal.soft, color: pal.ink }}
+                      >
                         {initial}
                       </span>
                       {isCreator && !isMe ? (
@@ -569,16 +631,83 @@ function Hogar() {
                 </p>
               </div>
             ) : null}
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                Peques
+              </p>
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Pencil className="h-3 w-3" /> Editables
+              </span>
+            </div>
+            <div className="mt-2 space-y-2">
+              {children.map((c) => {
+                const pal = personColor(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => openChild(c)}
+                    className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-left transition-colors hover:bg-border"
+                  >
+                    <span
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full font-title text-[15px] font-semibold"
+                      style={{ background: pal.soft, color: pal.ink }}
+                    >
+                      {(c.name.trim()[0] ?? "?").toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">
+                        {c.name}
+                        {c.age ? ` · ${c.age} años` : ""}
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                        {c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"} ·
+                        apetito {c.appetite ?? "normal"}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => openChild(null)}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-secondary/50 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Plus className="h-4 w-4" /> Añadir peque
+              </button>
+            </div>
+
+            <div className="mt-4 flex items-start gap-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-[11.5px] leading-relaxed text-muted-foreground">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <p>
+                Cada adulto edita su propio perfil desde Ajustes; aquí solo ves lo que comparte con
+                la casa. A los peques los editáis entre todos.
+              </p>
+            </div>
           </section>
 
           <section className="surface-card mt-4 p-5">
             <h2 className="text-sm font-semibold">¿Qué comidas compartís?</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Estos días coméis lo mismo en casa. Lo planifica y lo compra {plannerName}; tú marcas
-              si ya lo tienes. Si ese día quieres tu ración distinta (menos cantidad, sin un
-              ingrediente...), dilo en "Comí distinto" desde Hoy — es tu ajuste personal, no cambia
-              el plato de los demás.
+              si ya lo tienes.
             </p>
+            <button
+              onClick={() => setShowHelp((v) => !v)}
+              className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary"
+            >
+              {showHelp ? "Ocultar detalle" : "Cómo funciona exactamente"}
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${showHelp ? "rotate-180" : ""}`}
+              />
+            </button>
+            {showHelp ? (
+              <p className="mt-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+                Los dos partís de un plato base común, salido de la misma compra. Si ese día quieres
+                tu ración distinta (menos cantidad, sin un ingrediente...), dilo en "Comí distinto"
+                desde Hoy — es tu ajuste personal, no cambia el plato de los demás.
+              </p>
+            ) : null}
             {!isPlanner ? (
               <p className="mt-2 text-[11px] font-medium text-muted-foreground">
                 Lo decide {plannerName}, que lleva la cocina en casa.
@@ -588,35 +717,43 @@ function Hogar() {
               className={`mt-4 space-y-4 ${isPlanner ? "" : "pointer-events-none opacity-70"}`}
               aria-disabled={!isPlanner}
             >
-              {MEAL_KEYS.map((meal) => (
-                <div key={meal}>
-                  <p className="text-xs font-medium">{MEAL_LABEL[meal]}</p>
-                  <div className="mt-2 grid grid-cols-7 gap-1.5">
-                    {DAY_SHORT.map((label, day) => {
-                      const active = shared?.[meal].includes(day) ?? false;
-                      return (
-                        <button
-                          key={day}
-                          disabled={!isPlanner}
-                          aria-label={`${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
-                          onClick={() =>
-                            setShared((prev) =>
-                              prev ? { ...prev, [meal]: toggleDay(prev[meal], day) } : prev,
-                            )
-                          }
-                          className={`h-10 rounded-xl text-xs font-medium transition-colors ${
-                            active
-                              ? "bg-primary-soft text-primary"
-                              : "bg-secondary text-muted-foreground"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
+              {MEAL_KEYS.map((meal) => {
+                const picked = shared?.[meal] ?? [];
+                return (
+                  <div key={meal}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="text-xs font-medium">{MEAL_LABEL[meal]}</p>
+                      <span className="text-[11px] text-muted-foreground">
+                        {picked.length ? `${picked.length} de 7` : "ningún día"}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-7 gap-1.5">
+                      {DAY_SHORT.map((label, day) => {
+                        const active = picked.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            disabled={!isPlanner}
+                            aria-label={`${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
+                            onClick={() =>
+                              setShared((prev) =>
+                                prev ? { ...prev, [meal]: toggleDay(prev[meal], day) } : prev,
+                              )
+                            }
+                            className={`h-[42px] rounded-[14px] text-xs font-medium transition-colors ${
+                              active
+                                ? "bg-primary-soft text-primary"
+                                : "bg-secondary text-muted-foreground"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             {isPlanner ? (
               <button
@@ -749,126 +886,20 @@ function Hogar() {
             ) : null}
           </section>
 
-          <section className="surface-card mt-4 p-5">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Baby className="h-4 w-4 text-primary" /> Peques en casa
-            </h2>
-            <div className="mt-3 space-y-2">
-              {state.data?.children.map((c) => (
-                <div key={c.id} className="rounded-2xl bg-secondary px-4 py-3 text-sm">
-                  <div className="flex items-start gap-3">
-                    <span className="flex-1">
-                      <span className="block font-medium">
-                        {c.name}
-                        {c.age ? ` · ${c.age} años` : ""}
-                      </span>
-                      <span className="block text-xs text-muted-foreground">
-                        Alergias: {c.allergies ?? "ninguna"}
-                      </span>
-                    </span>
-                    <button onClick={() => dropChild.mutate(c.id)} aria-label={`Quitar ${c.name}`}>
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground">Apetito</span>
-                    {APPETITES.map(([key, label]) => {
-                      const active = c.appetite === key;
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setChildAppetite(c.id, c.age, key)}
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                            active
-                              ? "bg-primary-soft text-primary"
-                              : "bg-surface text-muted-foreground"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-              {!state.data?.children.length ? (
-                <p className="text-xs text-muted-foreground">
-                  Añade a los niños para que los menús de casa les sirvan también.
-                </p>
-              ) : null}
-            </div>
-
-            <div className="mt-4 space-y-2">
-              <input
-                className={input}
-                value={child.name}
-                onChange={(e) => setChild({ ...child, name: e.target.value })}
-                placeholder="Nombre"
-              />
-              <input
-                className={input}
-                inputMode="numeric"
-                value={child.age}
-                onChange={(e) => setChild({ ...child, age: e.target.value })}
-                placeholder="Edad"
-              />
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground">Apetito</span>
-                {APPETITES.map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setChild((p) => ({ ...p, appetite: key }))}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      child.appetite === key
-                        ? "bg-primary-soft text-primary"
-                        : "bg-surface text-muted-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <input
-                className={input}
-                value={child.allergies}
-                onChange={(e) => setChild({ ...child, allergies: e.target.value })}
-                placeholder="Alergias o intolerancias"
-              />
-              <button
-                onClick={() => newChild.mutate()}
-                disabled={newChild.isPending || !child.name.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium disabled:opacity-60"
-              >
-                <Plus className="h-4 w-4" /> Añadir peque
-              </button>
-            </div>
-          </section>
-
-          <section className="surface-card mt-4 space-y-3 p-5">
-            <h2 className="text-sm font-semibold">Invitar a la familia</h2>
-            <button
-              onClick={() => {
-                void navigator.clipboard?.writeText(household.invite_code);
-                toast.success("Código copiado");
-              }}
-              className="flex w-full items-center justify-between rounded-2xl bg-secondary px-4 py-3 text-sm"
-            >
-              <span className="text-muted-foreground">Código de invitación</span>
-              <span className="flex items-center gap-2 font-mono text-base tracking-widest">
-                {household.invite_code} <Copy className="h-4 w-4 text-muted-foreground" />
-              </span>
-            </button>
-            <p className="text-xs text-muted-foreground">
-              Comparte este código para que alguien se una a la familia.
-            </p>
-          </section>
-
           <button
             onClick={() => leave.mutate()}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground transition-colors hover:text-destructive"
           >
             <LogOut className="h-4 w-4" /> Salir del hogar
           </button>
+
+          <ChildSheet
+            key={childSheet.child?.id ?? "new"}
+            open={childSheet.open}
+            child={childSheet.child}
+            householdId={household.id}
+            onClose={() => setChildSheet((s) => ({ ...s, open: false }))}
+          />
         </Fragment>
       )}
 

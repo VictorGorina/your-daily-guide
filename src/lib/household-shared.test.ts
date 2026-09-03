@@ -8,6 +8,8 @@ import {
   describeServings,
   describeSharedSlots,
   isSharedSlot,
+  PERSON_COLORS,
+  personColor,
   servingsPerSlot,
   toggleDay,
   type SharedSlots,
@@ -154,5 +156,24 @@ describe("describeServings", () => {
     const slots: SharedSlots = { desayuno: [], comida: [0, 1], cena: [0, 1, 2, 3, 4, 5, 6] };
     const servings = servingsPerSlot([{ portion: 1, isPlanner: true }], [], slots);
     expect(describeServings(servings, slots)).toBe("Comida: 1 raciones · Cena: 1 raciones");
+  });
+});
+
+describe("personColor", () => {
+  it("es determinista: el mismo seed devuelve siempre el mismo color", () => {
+    expect(personColor("member-abc")).toEqual(personColor("member-abc"));
+  });
+
+  it("siempre devuelve un color de la paleta", () => {
+    for (const seed of ["", "a", "k1", "5e38f97f-1234", "Vega", "0000-1111-2222"]) {
+      expect(PERSON_COLORS).toContainEqual(personColor(seed));
+    }
+  });
+
+  it("reparte por la paleta: seeds distintos alcanzan los 5 índices", () => {
+    const seen = new Set(
+      Array.from({ length: 60 }, (_, i) => JSON.stringify(personColor(`seed-${i}`))),
+    );
+    expect(seen.size).toBe(PERSON_COLORS.length);
   });
 });

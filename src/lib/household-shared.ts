@@ -161,3 +161,29 @@ export function describeServings(servings: ServingsTable, slots: SharedSlots): s
   );
   return parts.length ? parts.join(" · ") : "sin comidas compartidas";
 }
+
+/**
+ * Paleta de avatares de la pestaña Familia: cinco tonos cálidos tomados del
+ * rediseño. `#ffe7d3` y `#e1f2e4` ya son `--primary-soft` / `--success-soft` del
+ * sistema; el resto son variantes en la misma familia. `soft` es el fondo del
+ * círculo, `ink` la inicial encima.
+ */
+export const PERSON_COLORS: readonly { soft: string; ink: string }[] = [
+  { soft: "#ffe7d3", ink: "#c2611f" },
+  { soft: "#e1f2e4", ink: "#3d8f52" },
+  { soft: "#fbeecb", ink: "#a37b13" },
+  { soft: "#dbeaf6", ink: "#3a7fb0" },
+  { soft: "#f8dfdd", ink: "#c2534b" },
+];
+
+/**
+ * Color de avatar de una persona del hogar, derivado de forma determinista de un
+ * `seed` estable (el id del hueco de la mesa o del peque). No hay columna de
+ * color en la BD: se calcula al vuelo para que cada cara tenga su tono y no
+ * cambie entre recargas.
+ */
+export function personColor(seed: string): { soft: string; ink: string } {
+  let sum = 0;
+  for (let i = 0; i < seed.length; i += 1) sum += seed.charCodeAt(i);
+  return PERSON_COLORS[sum % PERSON_COLORS.length]!;
+}
