@@ -519,19 +519,32 @@ export function weeklyTrendFrom(logs: DailyLog[]): WeeklyTrend | null {
 }
 
 /**
+ * Normaliza goal_type para absorber las etiquetas UI que se guardaron en BD
+ * por error (ver bug chips perfil — "perder peso" en vez de "perder").
+ */
+export function normalizeGoalType(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.startsWith("perder")) return "perder";
+  if (lower.startsWith("ganar")) return "ganar";
+  if (lower === "salud") return "habitos";
+  return raw;
+}
+
+/**
  * Progreso hacia el objetivo de peso, en 0-1 y en kg. "Mantener" mide la
  * estabilidad (cuánto te has alejado del peso inicial, hasta 3 kg de margen).
  */
 export function goalProgress(profile: Profile | null) {
   if (!profile || !profile.goal_type) return { pct: 0, done: 0, total: 0, unit: "kg" };
+  const goal = normalizeGoalType(profile.goal_type);
   const start = Number(profile.start_weight_kg ?? 0);
   const current = Number(profile.current_weight_kg ?? start);
   const total = Number(profile.goal_amount ?? 0);
-  if (profile.goal_type === "mantener" || total <= 0) {
+  if (goal === "mantener" || total <= 0) {
     const drift = Math.abs(current - start);
     return { pct: Math.max(0, Math.min(1, 1 - drift / 3)), done: drift, total: 0, unit: "kg" };
   }
-  const done = profile.goal_type === "perder" ? start - current : current - start;
+  const done = goal === "perder" ? start - current : current - start;
   return {
     pct: Math.max(0, Math.min(1, done / total)),
     done: Math.max(0, done),

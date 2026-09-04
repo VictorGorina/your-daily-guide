@@ -4,7 +4,13 @@ import { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import Svg, { Polyline } from "react-native-svg";
 
-import { goalProgress, logTodayWeight, type DailyLog, type Profile } from "../lib/daily";
+import {
+  goalProgress,
+  logTodayWeight,
+  normalizeGoalType,
+  type DailyLog,
+  type Profile,
+} from "../lib/daily";
 
 // "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
 const formatMetaDate = (isoDate: string) => {
@@ -30,7 +36,8 @@ export function GoalWeightSummary({
   profile: Profile | null;
 }) {
   const progress = goalProgress(profile ?? null);
-  const hasMetric = profile?.goal_type === "mantener" || progress.total > 0;
+  const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
+  const hasMetric = goal === "mantener" || progress.total > 0;
   const pct = Math.round(progress.pct * 100);
 
   return (
@@ -40,7 +47,7 @@ export function GoalWeightSummary({
           <View className="flex-row items-end justify-between gap-3">
             <View className="min-w-0 flex-1">
               <Text className="text-sm font-sans-semibold text-foreground">
-                {profile?.goal_type === "mantener"
+                {goal === "mantener"
                   ? "Estabilidad"
                   : `${progress.done.toFixed(1)} de ${progress.total} kg`}
               </Text>

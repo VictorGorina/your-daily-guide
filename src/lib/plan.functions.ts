@@ -4,6 +4,7 @@ import { generateText, streamText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
+import { normalizeGoalType } from "@/lib/daily";
 import {
   describeServings,
   describeSharedSlots,
@@ -1055,8 +1056,9 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
 
     const p = (profile ?? {}) as Record<string, unknown>;
     const cursor = planCursor(data.today);
-    const goalLine = p.goal_type
-      ? `Objetivo: ${String(p.goal_type)} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
+    const gt = p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
+    const goalLine = gt
+      ? `Objetivo: ${gt} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
       : "La persona no tiene un objetivo de peso definido: no asumas uno ni recoloques el plan para adelgazar; céntrate en comidas equilibradas y hábitos.";
     const kcalLine = data.kcalDelta
       ? data.kcalDelta > 0

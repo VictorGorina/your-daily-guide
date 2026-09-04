@@ -18,6 +18,11 @@ export type ProfileField = {
   kind: FieldKind;
   help?: string;
   options?: string[];
+  /**
+   * Para chips cuya etiqueta UI difiere del valor almacenado en BD.
+   * Clave = etiqueta que se muestra, valor = lo que se guarda.
+   */
+  valueMap?: Record<string, string>;
   min?: number;
   max?: number;
   unit?: string;
@@ -157,6 +162,12 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
         label: "Objetivo",
         kind: "chips",
         options: ["perder peso", "mantener", "ganar músculo", "salud"],
+        valueMap: {
+          "perder peso": "perder",
+          mantener: "mantener",
+          "ganar músculo": "ganar",
+          salud: "habitos",
+        },
       },
       {
         key: "goal_amount",
@@ -218,3 +229,15 @@ export const CHAT_PROFILE_FIELD_EXCLUDE = new Set<keyof Profile>([
 export const CHAT_EDITABLE_PROFILE_FIELDS: ProfileField[] = PROFILE_FIELDS.filter(
   (f) => !CHAT_PROFILE_FIELD_EXCLUDE.has(f.key),
 );
+
+/** Etiqueta UI → valor almacenado (identity si no hay mapa). */
+export function chipToValue(field: ProfileField, chip: string): string {
+  return field.valueMap?.[chip] ?? chip;
+}
+
+/** Valor almacenado → etiqueta UI (identity si no hay mapa). */
+export function valueToChip(field: ProfileField, stored: string): string {
+  if (!field.valueMap) return stored;
+  const entry = Object.entries(field.valueMap).find(([, v]) => v === stored);
+  return entry ? entry[0] : stored;
+}

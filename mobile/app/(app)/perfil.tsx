@@ -7,7 +7,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ageFromDOB } from "../../lib/age";
 import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
-import { PROFILE_SECTIONS, type ProfileField as Field } from "../../lib/profile-fields";
+import {
+  PROFILE_SECTIONS,
+  chipToValue,
+  valueToChip,
+  type ProfileField as Field,
+} from "../../lib/profile-fields";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -36,6 +41,8 @@ function validate(field: Field, raw: string): { error?: string; value?: unknown 
     }
     return { value: text };
   }
+  // Para chips con valueMap, convertir la etiqueta UI al valor interno.
+  if (field.kind === "chips" && text) return { value: chipToValue(field, text) };
   return { value: text || null };
 }
 
@@ -49,6 +56,8 @@ function display(field: Field, profile: Profile | null | undefined) {
     const [y, m, d] = String(value).split("-");
     return `${d}/${m}/${y}${age !== null ? ` · ${age} años` : ""}`;
   }
+  // Chips con valueMap: mostrar la etiqueta UI, no el valor interno.
+  if (field.kind === "chips" && field.valueMap) return valueToChip(field, String(value));
   return String(value);
 }
 
@@ -76,13 +85,14 @@ export default function Perfil() {
     const value = profile ? (profile[field.key] as unknown) : null;
     setEditing(String(field.key));
     setError(undefined);
-    setDraft(
+    const str =
       value === null || value === undefined
         ? ""
         : field.kind === "time"
           ? String(value).slice(0, 5)
-          : String(value),
-    );
+          : String(value);
+    // Para chips con valueMap, el draft debe ser la etiqueta UI.
+    setDraft(field.kind === "chips" && field.valueMap ? valueToChip(field, str) : str);
   };
 
   const commit = (field: Field, raw?: string) => {

@@ -1,6 +1,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 import { ageFromDOB } from "@/lib/age";
+import { normalizeGoalType } from "@/lib/daily";
 
 /** Modelo usado por el coach vía OpenRouter: Gemini 2.5 Flash da un buen
  * equilibrio coste/calidad para chat conversacional en español y generación
@@ -76,13 +77,13 @@ export function coachSystemPrompt(
   // El objetivo se describe según lo que hay: sin objetivo NO se asume uno de
   // peso (antes el prompt imprimía "Objetivo: ?" y el coach se lo inventaba);
   // los objetivos no ponderales (hábitos, energía) evitan hablar de kilos.
-  const weightGoal =
-    p.goal_type === "perder" || p.goal_type === "ganar" || p.goal_type === "mantener";
-  const goalLine = !p.goal_type
+  const gt = p.goal_type ? normalizeGoalType(p.goal_type) : null;
+  const weightGoal = gt === "perder" || gt === "ganar" || gt === "mantener";
+  const goalLine = !gt
     ? "- Objetivo: no tiene ninguno definido. No des por hecho que quiere perder peso ni te inventes un objetivo; céntrate en hábitos, bienestar y alimentación equilibrada, y solo si viene a cuento pregúntale con delicadeza si quiere fijar alguno."
     : weightGoal
-      ? `- Objetivo: ${p.goal_type}${p.goal_amount ? ` ${p.goal_amount} kg` : ""} ${p.goal_target_date ? `para ${p.goal_target_date}` : "(sin fecha)"}`
-      : `- Objetivo: ${p.goal_type}${p.goal_target_date ? ` para ${p.goal_target_date}` : ""} (no es un objetivo de peso: no hables de kilos salvo que la persona lo pida).`;
+      ? `- Objetivo: ${gt}${p.goal_amount ? ` ${p.goal_amount} kg` : ""} ${p.goal_target_date ? `para ${p.goal_target_date}` : "(sin fecha)"}`
+      : `- Objetivo: ${gt}${p.goal_target_date ? ` para ${p.goal_target_date}` : ""} (no es un objetivo de peso: no hables de kilos salvo que la persona lo pida).`;
 
   // Seguridad: nunca un déficit ni alimentos de riesgo durante embarazo/lactancia.
   const pregnancyLine =

@@ -4,7 +4,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { ProgressBar } from "@/components/progress-bar";
-import { goalProgress, logTodayWeight, type DailyLog, type Profile } from "@/lib/daily";
+import {
+  goalProgress,
+  logTodayWeight,
+  normalizeGoalType,
+  type DailyLog,
+  type Profile,
+} from "@/lib/daily";
 
 // "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
 const formatMetaDate = (isoDate: string) => {
@@ -30,7 +36,8 @@ export function GoalWeightSummary({
   profile: Profile | null;
 }) {
   const progress = goalProgress(profile ?? null);
-  const hasMetric = profile?.goal_type === "mantener" || progress.total > 0;
+  const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
+  const hasMetric = goal === "mantener" || progress.total > 0;
 
   return (
     <div className="surface-card animate-rise p-5">
@@ -38,7 +45,7 @@ export function GoalWeightSummary({
         <ProgressBar
           value={progress.pct}
           label={
-            profile?.goal_type === "mantener"
+            goal === "mantener"
               ? "Estabilidad"
               : `${progress.done.toFixed(1)} de ${progress.total} kg`
           }
