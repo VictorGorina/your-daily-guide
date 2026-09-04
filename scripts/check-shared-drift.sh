@@ -49,6 +49,30 @@ for f in perishability.ts quotes.ts profile-fields.ts; do
   fi
 done
 
+# --- Catálogos i18n: mismas claves en ES/EN y en web/móvil (requiere jq) ---
+# Los catálogos son intencionalmente un espejo exacto entre plataformas (a
+# diferencia del resto de este script, que excluye lo que diverge a propósito):
+# una clave que falte en un idioma o una copia deja ese texto sin traducir.
+leaf_keys() {
+  jq -r '[paths(scalars) | join(".")] | sort | .[]' "$1"
+}
+
+check_locale_pair() {
+  local label="$1" file_a="$2" file_b="$3"
+  local a b
+  a=$(leaf_keys "$file_a")
+  b=$(leaf_keys "$file_b")
+  if [ "$a" != "$b" ]; then
+    echo "DRIFT (claves $label): $file_a vs $file_b"
+    diff <(echo "$a") <(echo "$b") || true
+    fail=1
+  fi
+}
+
+check_locale_pair "ES≠EN, web" src/locales/es.json src/locales/en.json
+check_locale_pair "ES≠EN, móvil" mobile/locales/es.json mobile/locales/en.json
+check_locale_pair "web≠móvil" src/locales/es.json mobile/locales/es.json
+
 if [ "$fail" -eq 0 ]; then
   echo "✓ Todos los archivos compartidos están sincronizados"
 fi

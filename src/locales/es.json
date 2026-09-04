@@ -1,0 +1,79 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "change": "Cambiar",
+    "continue": "Continuar",
+    "loading": "Un momento…",
+    "back": "Atrás",
+    "retry": "Inténtalo otra vez."
+  },
+  "languages": {
+    "es": "Español",
+    "en": "Inglés"
+  },
+  "countries": {
+    "ES": "España",
+    "GB": "Reino Unido",
+    "US": "Estados Unidos",
+    "IE": "Irlanda",
+    "MX": "México"
+  },
+  "region": {
+    "onboardingTitle": "Tu país y tu idioma",
+    "onboardingSubtitle": "Ajustamos el idioma, la moneda y la hora a donde vives. Podrás cambiarlo luego en Ajustes.",
+    "languageLabel": "Idioma",
+    "countryLabel": "País",
+    "timezoneLabel": "Zona horaria",
+    "timezoneAuto": "Detectada de tu dispositivo",
+    "currencyLabel": "Moneda",
+    "settingsTitle": "Idioma y región",
+    "settingsSubtitle": "El idioma de la app y del coach, tu país para las referencias de precio y la zona horaria de tus avisos.",
+    "continue": "Continuar",
+    "saved": "Región guardada",
+    "saveError": "No hemos podido guardar"
+  },
+  "auth": {
+    "landing": {
+      "badge": "Tu asistente de alimentación con IA",
+      "tagline": "Para comer mejor cada día, sin complicaciones. Te da una guía flexible por la mañana, repasa contigo la noche y convierte tu objetivo en progreso que puedes ver.",
+      "bullet1": "Hábitos y bienestar, nunca dietas rígidas",
+      "bullet2": "Objetivo medible con progreso visual y rachas",
+      "bullet3": "Tono relajado, neutro o exigente: tú eliges",
+      "cta": "Empezar ahora",
+      "disclaimer": "Guía flexible de bienestar. Calorías y macros son estimaciones orientativas, no un conteo nutricional exacto. No sustituye consejo médico."
+    },
+    "titleIn": "Bienvenido de vuelta",
+    "titleUp": "Empecemos",
+    "titleForgot": "Recupera tu acceso",
+    "subtitleIn": "Entra con tu correo y sigue donde lo dejaste.",
+    "subtitleUp": "Crea tu cuenta y tu coach te acompaña desde hoy.",
+    "subtitleForgot": "Te enviamos un enlace a tu correo para crear una contraseña nueva.",
+    "emailPlaceholder": "tu@correo.com",
+    "passwordPlaceholder": "Contraseña",
+    "forgotLink": "¿Has olvidado tu contraseña?",
+    "sendLink": "Enviar enlace",
+    "sending": "Enviando…",
+    "rememberLink": "Ya me acuerdo, quiero entrar",
+    "signIn": "Entrar",
+    "signUp": "Crear cuenta",
+    "working": "Un momento…",
+    "toSignUp": "No tengo cuenta todavía, quiero crearla",
+    "toSignIn": "Ya tengo cuenta, quiero entrar",
+    "or": "o",
+    "google": "Continuar con Google",
+    "demo": "Probar con un perfil aleatorio",
+    "demoCreating": "Creando perfil…",
+    "accountNote": "Con tu cuenta puedes entrar y salir cuando quieras, y unir tu hogar con quien vive contigo.",
+    "sentConfirm": "Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar.",
+    "sentReset": "Te hemos enviado un correo con un enlace para restablecer tu contraseña. Ábrelo y crea una nueva.",
+    "backToSignIn": "Volver a entrar",
+    "errNeedEmail": "Necesito tu correo entero para enviarte el enlace",
+    "errNeedCreds": "Necesito tu correo y una contraseña de al menos 6 caracteres",
+    "errSendLink": "No hemos podido enviar el enlace",
+    "errSignIn": "No hemos podido entrar",
+    "errGoogle": "No hemos podido conectar con Google",
+    "errDemo": "No hemos podido crear el perfil",
+    "demoOk": "Perfil de prueba creado"
+  }
+}

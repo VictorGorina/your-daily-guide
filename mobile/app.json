@@ -47,7 +47,8 @@
           "photosPermission": "Peppers usa tus fotos para leer el tiquet de la compra.",
           "cameraPermission": "Peppers usa la cámara para escanear el tiquet de la compra."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "scheme": "dailyguide"
   }

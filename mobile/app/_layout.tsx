@@ -21,11 +21,14 @@ import {
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { I18nextProvider } from "react-i18next";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import "../global.css";
 import { AuthProvider } from "../lib/auth-context";
+import i18n from "../lib/i18n";
+import { useLocale } from "../lib/use-locale";
 // Importado aquí a propósito: empieza a escuchar deep links desde el arranque,
 // antes de cualquier navegación, para que /restablecer no se pierda el
 // fragmento del enlace de recuperación. Ver lib/deep-link.ts.
@@ -35,6 +38,13 @@ import "../lib/deep-link";
 // comparten caché por `queryKey` (["profile"], ["today"], ["logs"]...) para no
 // repetir consultas a Supabase entre pestañas.
 const queryClient = new QueryClient();
+
+/** Mantiene i18next en sintonía con el locale del perfil (o el del dispositivo
+ *  antes de tener sesión). Sin UI. */
+function LocaleSync() {
+  useLocale();
+  return null;
+}
 
 export default function RootLayout() {
   // React Native no sintetiza negrita sobre una tipografía cargada: cada peso
@@ -64,12 +74,15 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false }} />
-        </AuthProvider>
-      </QueryClientProvider>
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <LocaleSync />
+            <StatusBar style="dark" />
+            <Stack screenOptions={{ headerShown: false }} />
+          </AuthProvider>
+        </QueryClientProvider>
+      </I18nextProvider>
     </SafeAreaProvider>
   );
 }

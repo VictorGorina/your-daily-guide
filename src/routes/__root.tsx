@@ -8,10 +8,13 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { I18nextProvider } from "react-i18next";
 
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
+import i18n from "@/lib/i18n";
 import { applyTheme, storedTheme } from "@/lib/theme";
+import { useLocale } from "@/lib/use-locale";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -117,6 +120,13 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Mantiene i18next y `<html lang>` en sintonía con el locale del perfil (o el
+ *  detectado del navegador antes de tener sesión). Sin UI. */
+function LocaleSync() {
+  useLocale();
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
@@ -146,9 +156,12 @@ function RootComponent() {
   }, [router, queryClient]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Outlet />
-      <Toaster position="top-center" />
-    </QueryClientProvider>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={queryClient}>
+        <LocaleSync />
+        <Outlet />
+        <Toaster position="top-center" />
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }

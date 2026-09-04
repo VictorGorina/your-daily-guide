@@ -4,9 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react";
 import * as React from "react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { RegionFields } from "@/components/region-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +31,10 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
 } from "@/lib/push";
+import { currencyForCountry, DEFAULT_COUNTRY } from "@/lib/regions";
 import { applyTheme, THEMES } from "@/lib/theme";
+import { useLocale } from "@/lib/use-locale";
+import { resolveDeviceTimeZone } from "@/lib/zoned-date";
 
 function FieldNote({ error, help }: { error?: string; help: string }) {
   if (error)
@@ -67,10 +72,12 @@ export const Route = createFileRoute("/_authenticated/ajustes")({
 });
 
 function Ajustes() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const profile = profileQ.data;
+  const { locale, setLocale } = useLocale();
 
   const save = useMutation({
     mutationFn: (patch: Partial<Profile>) => saveProfile(patch),
@@ -371,6 +378,25 @@ function Ajustes() {
         ) : iosHint ? (
           <FieldNote help="En iPhone: añade Peppers a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) para poder recibir avisos." />
         ) : null}
+      </section>
+
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {t("region.settingsTitle")}
+      </span>
+      <section className="surface-card mt-2 p-5">
+        <p className="text-xs text-muted-foreground">{t("region.settingsSubtitle")}</p>
+        <div className="mt-4">
+          <RegionFields
+            locale={locale}
+            country={profile?.country ?? DEFAULT_COUNTRY.code}
+            timezone={profile?.timezone ?? resolveDeviceTimeZone()}
+            onLocaleChange={(next) => void setLocale(next)}
+            onCountryChange={(code) =>
+              save.mutate({ country: code, currency: currencyForCountry(code) })
+            }
+            onTimezoneChange={(tz) => save.mutate({ timezone: tz })}
+          />
+        </div>
       </section>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

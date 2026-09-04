@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { DictateButton } from "@/components/dictate-button";
+import { RegionStep } from "@/components/region-step";
 import { ageFromDOB } from "@/lib/age";
 import { addMessage, fetchProfile, monthISO, saveProfile, todayISO } from "@/lib/daily";
 import { parseOnboarding } from "@/lib/onboarding.functions";
@@ -480,6 +481,11 @@ function Onboarding() {
   const makePlan = useServerFn(generateMonthlyPlan);
   const brief = useServerFn(welcomeBriefing);
 
+  // País e idioma van antes del chat guionizado: mientras `profile.country` no
+  // esté fijado, se muestra el RegionStep en lugar del onboarding conversacional.
+  const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
+  const [regionDone, setRegionDone] = useState(false);
+
   const [screen, setScreen] = useState(0);
   const [step, setStep] = useState(0);
   const [screenDone, setScreenDone] = useState(false);
@@ -883,6 +889,11 @@ function Onboarding() {
     setStep(0);
     setScreenDone(false);
   };
+
+  if (profileQ.isLoading) return null;
+  if (!regionDone && !profileQ.data?.country) {
+    return <RegionStep profile={profileQ.data} onDone={() => setRegionDone(true)} />;
+  }
 
   if (review) {
     const sections = SCREENS.map((s) => ({

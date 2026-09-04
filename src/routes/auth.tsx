@@ -1,13 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { requestPasswordReset } from "@/lib/auth.functions";
 import { saveProfile } from "@/lib/daily";
 import { randomDemoProfile } from "@/lib/demo-profile";
+import { SUPPORTED_LOCALES } from "@/lib/i18n";
 import { safeInternalPath } from "@/lib/safe-next";
+import { useLocale } from "@/lib/use-locale";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -27,6 +30,8 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { locale, setLocale } = useLocale();
   const { next } = Route.useSearch();
   const goNext = () => {
     if (next) {
@@ -63,7 +68,7 @@ function AuthPage() {
 
   const forgotPassword = async () => {
     if (!email.trim().includes("@")) {
-      toast.error("Necesito tu correo entero para enviarte el enlace");
+      toast.error(t("auth.errNeedEmail"));
       return;
     }
     setLoading(true);
@@ -76,7 +81,7 @@ function AuthPage() {
       await requestPasswordReset({ data: { email: email.trim(), platform: "web" } });
       setSent(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No hemos podido enviar el enlace");
+      toast.error(error instanceof Error ? error.message : t("auth.errSendLink"));
     } finally {
       setLoading(false);
     }
@@ -84,7 +89,7 @@ function AuthPage() {
 
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
-      toast.error("Necesito tu correo y una contraseña de al menos 6 caracteres");
+      toast.error(t("auth.errNeedCreds"));
       return;
     }
     setLoading(true);
@@ -117,7 +122,7 @@ function AuthPage() {
       }
       if (!goNext()) navigate({ to: "/hoy", replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No hemos podido entrar");
+      toast.error(error instanceof Error ? error.message : t("auth.errSignIn"));
     } finally {
       setLoading(false);
     }
@@ -132,10 +137,10 @@ function AuthPage() {
         if (error) throw error;
       }
       await saveProfile(randomDemoProfile());
-      toast.success("Perfil de prueba creado");
+      toast.success(t("auth.demoOk"));
       navigate({ to: "/hoy", replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No hemos podido crear el perfil");
+      toast.error(error instanceof Error ? error.message : t("auth.errDemo"));
     } finally {
       setDemoLoading(false);
     }
@@ -152,7 +157,7 @@ function AuthPage() {
         redirectTo: next ? `${window.location.origin}${next}` : window.location.origin,
       },
     });
-    if (error) toast.error("No hemos podido conectar con Google");
+    if (error) toast.error(t("auth.errGoogle"));
   };
 
   const field =
@@ -161,27 +166,44 @@ function AuthPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-14">
       <div className="animate-rise">
-        <h1 className="font-title text-4xl font-semibold tracking-[-0.03em]">
-          {mode === "in"
-            ? "Bienvenido de vuelta"
-            : mode === "up"
-              ? "Empecemos"
-              : "Recupera tu acceso"}
-        </h1>
+        <div className="flex items-start justify-between gap-2">
+          <h1 className="font-title text-4xl font-semibold tracking-[-0.03em]">
+            {mode === "in"
+              ? t("auth.titleIn")
+              : mode === "up"
+                ? t("auth.titleUp")
+                : t("auth.titleForgot")}
+          </h1>
+          <div className="mt-1 flex shrink-0 gap-1 rounded-full bg-secondary p-0.5 text-[11px] font-medium">
+            {SUPPORTED_LOCALES.map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => void setLocale(l)}
+                aria-pressed={locale === l}
+                className={`rounded-full px-2 py-1 uppercase transition-colors ${
+                  locale === l
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
         <p className="mt-2 text-sm text-muted-foreground">
           {mode === "in"
-            ? "Entra con tu correo y sigue donde lo dejaste."
+            ? t("auth.subtitleIn")
             : mode === "up"
-              ? "Crea tu cuenta y tu coach te acompaña desde hoy."
-              : "Te enviamos un enlace a tu correo para crear una contraseña nueva."}
+              ? t("auth.subtitleUp")
+              : t("auth.subtitleForgot")}
         </p>
 
         {sent ? (
           <div className="mt-8 space-y-3">
             <div className="rounded-2xl bg-primary-soft px-4 py-4 text-sm">
-              {mode === "forgot"
-                ? "Te hemos enviado un correo con un enlace para restablecer tu contraseña. Ábrelo y crea una nueva."
-                : "Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar."}
+              {mode === "forgot" ? t("auth.sentReset") : t("auth.sentConfirm")}
             </div>
             {mode === "forgot" && (
               <button
@@ -191,7 +213,7 @@ function AuthPage() {
                 }}
                 className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
               >
-                Volver a entrar
+                {t("auth.backToSignIn")}
               </button>
             )}
           </div>
@@ -203,20 +225,20 @@ function AuthPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@correo.com"
+              placeholder={t("auth.emailPlaceholder")}
             />
             <button
               onClick={forgotPassword}
               disabled={loading}
               className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
             >
-              {loading ? "Enviando..." : "Enviar enlace"}
+              {loading ? t("auth.sending") : t("auth.sendLink")}
             </button>
             <button
               onClick={() => setMode("in")}
               className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
             >
-              Ya me acuerdo, quiero entrar
+              {t("auth.rememberLink")}
             </button>
           </div>
         ) : (
@@ -227,7 +249,7 @@ function AuthPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@correo.com"
+              placeholder={t("auth.emailPlaceholder")}
             />
             <input
               className={field}
@@ -235,14 +257,14 @@ function AuthPage() {
               autoComplete={mode === "in" ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Contraseña"
+              placeholder={t("auth.passwordPlaceholder")}
             />
             {mode === "in" && (
               <button
                 onClick={() => setMode("forgot")}
                 className="w-full text-right text-xs text-muted-foreground underline-offset-4 hover:underline"
               >
-                ¿Has olvidado tu contraseña?
+                {t("auth.forgotLink")}
               </button>
             )}
             <button
@@ -250,28 +272,27 @@ function AuthPage() {
               disabled={loading}
               className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
             >
-              {loading ? "Un momento..." : mode === "in" ? "Entrar" : "Crear cuenta"}
+              {loading ? t("auth.working") : mode === "in" ? t("auth.signIn") : t("auth.signUp")}
             </button>
             <button
               onClick={() => setMode(mode === "in" ? "up" : "in")}
               className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
             >
-              {mode === "in"
-                ? "No tengo cuenta todavía, quiero crearla"
-                : "Ya tengo cuenta, quiero entrar"}
+              {mode === "in" ? t("auth.toSignUp") : t("auth.toSignIn")}
             </button>
           </div>
         )}
 
         <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border" /> o <span className="h-px flex-1 bg-border" />
+          <span className="h-px flex-1 bg-border" /> {t("auth.or")}{" "}
+          <span className="h-px flex-1 bg-border" />
         </div>
 
         <button
           onClick={google}
           className="w-full rounded-full bg-surface py-4 text-sm font-medium text-foreground transition-transform active:scale-[0.98]"
         >
-          Continuar con Google
+          {t("auth.google")}
         </button>
 
         <button
@@ -280,13 +301,10 @@ function AuthPage() {
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3.5 text-sm font-medium text-muted-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
         >
           <Shuffle className="h-4 w-4" />
-          {demoLoading ? "Creando perfil..." : "Probar con un perfil aleatorio"}
+          {demoLoading ? t("auth.demoCreating") : t("auth.demo")}
         </button>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Con tu cuenta puedes entrar y salir cuando quieras, y unir tu hogar con quien vive
-          contigo.
-        </p>
+        <p className="mt-6 text-center text-xs text-muted-foreground">{t("auth.accountNote")}</p>
       </div>
     </main>
   );

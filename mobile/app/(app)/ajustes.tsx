@@ -2,13 +2,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react-native";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { RegionFields } from "../../components/region-fields";
 import { apiPost } from "../../lib/api";
 import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
+import { currencyForCountry, DEFAULT_COUNTRY } from "../../lib/regions";
 import { supabase } from "../../lib/supabase";
+import { useLocale } from "../../lib/use-locale";
+import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
 // Nota de portado (ver AGENTS.md de mobile/): respecto a la pantalla web se
 // omiten dos secciones que aún no aplican en nativo:
@@ -20,10 +25,12 @@ import { supabase } from "../../lib/supabase";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export default function Ajustes() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const router = useRouter();
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const profile = profileQ.data;
+  const { locale, setLocale } = useLocale();
 
   const save = useMutation({
     mutationFn: (patch: Partial<Profile>) => saveProfile(patch),
@@ -315,6 +322,26 @@ export default function Ajustes() {
                 <FieldNote error={errors["evening_time"]} help="Hora del repaso nocturno." />
               </View>
             </View>
+          </View>
+        </View>
+
+        {/* Idioma y región */}
+        <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
+          {t("region.settingsTitle")}
+        </Text>
+        <View className="mt-2 rounded-3xl bg-surface p-5">
+          <Text className="text-xs text-muted-foreground">{t("region.settingsSubtitle")}</Text>
+          <View className="mt-4">
+            <RegionFields
+              locale={locale}
+              country={profile?.country ?? DEFAULT_COUNTRY.code}
+              timezone={profile?.timezone ?? resolveDeviceTimeZone()}
+              onLocaleChange={(next) => void setLocale(next)}
+              onCountryChange={(code) =>
+                save.mutate({ country: code, currency: currencyForCountry(code) })
+              }
+              onTimezoneChange={(tz) => save.mutate({ timezone: tz })}
+            />
           </View>
         </View>
 

@@ -3,6 +3,7 @@ import * as Linking from "expo-linking";
 import { Redirect } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
@@ -20,7 +21,9 @@ import { apiPostPublic } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { saveProfile } from "../lib/daily";
 import { randomDemoProfile } from "../lib/demo-profile";
+import { SUPPORTED_LOCALES } from "../lib/i18n";
 import { supabase } from "../lib/supabase";
+import { useLocale } from "../lib/use-locale";
 
 // Cierra la pestaña de auth que quedara abierta de un intento anterior.
 WebBrowser.maybeCompleteAuthSession();
@@ -38,6 +41,8 @@ const redirectTo = makeRedirectUri({ scheme: "dailyguide" });
  */
 export default function Auth() {
   const { session } = useAuth();
+  const { t } = useTranslation();
+  const { locale, setLocale } = useLocale();
   const [mode, setMode] = useState<"in" | "up" | "forgot">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -61,10 +66,7 @@ export default function Auth() {
       }
       await saveProfile(randomDemoProfile());
     } catch (error) {
-      Alert.alert(
-        "No hemos podido crear el perfil de prueba",
-        error instanceof Error ? error.message : "Inténtalo otra vez.",
-      );
+      Alert.alert(t("auth.errDemo"), error instanceof Error ? error.message : t("common.retry"));
     } finally {
       setDemoLoading(false);
     }
@@ -95,10 +97,7 @@ export default function Auth() {
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
       if (exchangeError) throw exchangeError;
     } catch (error) {
-      Alert.alert(
-        "No hemos podido conectar con Google",
-        error instanceof Error ? error.message : "Inténtalo otra vez.",
-      );
+      Alert.alert(t("auth.errGoogle"), error instanceof Error ? error.message : t("common.retry"));
     } finally {
       setGoogleLoading(false);
     }
@@ -110,7 +109,7 @@ export default function Auth() {
   // buzón".
   const forgotPassword = async () => {
     if (!email.trim().includes("@")) {
-      Alert.alert("Falta tu correo", "Escríbelo entero y te enviamos el enlace.");
+      Alert.alert(t("auth.errNeedEmail"));
       return;
     }
 
@@ -120,8 +119,8 @@ export default function Auth() {
       setSent(true);
     } catch (error) {
       Alert.alert(
-        "No hemos podido enviar el enlace",
-        error instanceof Error ? error.message : "Inténtalo otra vez.",
+        t("auth.errSendLink"),
+        error instanceof Error ? error.message : t("common.retry"),
       );
     } finally {
       setLoading(false);
@@ -130,7 +129,7 @@ export default function Auth() {
 
   const submit = async () => {
     if (!email.trim() || !password) {
-      Alert.alert("Faltan datos", "Escribe tu correo y tu contraseña.");
+      Alert.alert(t("auth.errNeedCreds"));
       return;
     }
 
@@ -153,10 +152,7 @@ export default function Auth() {
         if (error) throw error;
       }
     } catch (error) {
-      Alert.alert(
-        "No hemos podido entrar",
-        error instanceof Error ? error.message : "Inténtalo otra vez.",
-      );
+      Alert.alert(t("auth.errSignIn"), error instanceof Error ? error.message : t("common.retry"));
     } finally {
       setLoading(false);
     }
@@ -179,28 +175,43 @@ export default function Auth() {
           contentContainerClassName="flex-grow justify-center px-6 py-14"
           keyboardShouldPersistTaps="handled"
         >
-          <Text className="text-4xl font-display text-foreground">
-            {mode === "in"
-              ? "Bienvenido de vuelta"
-              : mode === "up"
-                ? "Empecemos"
-                : "Recupera tu acceso"}
-          </Text>
+          <View className="flex-row items-start justify-between gap-2">
+            <Text className="flex-1 text-4xl font-display text-foreground">
+              {mode === "in"
+                ? t("auth.titleIn")
+                : mode === "up"
+                  ? t("auth.titleUp")
+                  : t("auth.titleForgot")}
+            </Text>
+            <View className="mt-1 flex-row gap-1 rounded-full bg-secondary p-0.5">
+              {SUPPORTED_LOCALES.map((l) => (
+                <Pressable
+                  key={l}
+                  onPress={() => void setLocale(l)}
+                  className={`rounded-full px-2 py-1 ${l === locale ? "bg-foreground" : ""}`}
+                >
+                  <Text
+                    className={`text-[11px] font-sans-medium uppercase ${l === locale ? "text-background" : "text-muted-foreground"}`}
+                  >
+                    {l}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
           <Text className="mt-2 text-sm text-muted-foreground">
             {mode === "in"
-              ? "Entra con tu correo y sigue donde lo dejaste."
+              ? t("auth.subtitleIn")
               : mode === "up"
-                ? "Crea tu cuenta y tu coach te acompaña desde hoy."
-                : "Te enviamos un enlace a tu correo para crear una contraseña nueva."}
+                ? t("auth.subtitleUp")
+                : t("auth.subtitleForgot")}
           </Text>
 
           {sent ? (
             <View className="mt-8 gap-3">
               <View className="rounded-2xl border border-primary bg-primary-soft px-4 py-4">
                 <Text className="text-sm text-foreground">
-                  {mode === "forgot"
-                    ? "Te hemos enviado un correo con un enlace para restablecer tu contraseña. Ábrelo y crea una nueva."
-                    : "Te he enviado un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para entrar."}
+                  {mode === "forgot" ? t("auth.sentReset") : t("auth.sentConfirm")}
                 </Text>
               </View>
               {mode === "forgot" && (
@@ -211,7 +222,9 @@ export default function Auth() {
                   }}
                   className="w-full py-2"
                 >
-                  <Text className="text-center text-xs text-muted-foreground">Volver a entrar</Text>
+                  <Text className="text-center text-xs text-muted-foreground">
+                    {t("auth.backToSignIn")}
+                  </Text>
                 </Pressable>
               )}
             </View>
@@ -224,7 +237,7 @@ export default function Auth() {
                 autoComplete="email"
                 value={email}
                 onChangeText={setEmail}
-                placeholder="tu@correo.com"
+                placeholder={t("auth.emailPlaceholder")}
                 placeholderTextColor="#83796c"
               />
 
@@ -237,14 +250,14 @@ export default function Auth() {
                   <ActivityIndicator color="#3e3d39" />
                 ) : (
                   <Text className="text-sm font-sans-semibold text-primary-foreground">
-                    Enviar enlace
+                    {t("auth.sendLink")}
                   </Text>
                 )}
               </Pressable>
 
               <Pressable onPress={() => setMode("in")} className="w-full py-2">
                 <Text className="text-center text-xs text-muted-foreground">
-                  Ya me acuerdo, quiero entrar
+                  {t("auth.rememberLink")}
                 </Text>
               </Pressable>
             </View>
@@ -257,7 +270,7 @@ export default function Auth() {
                 autoComplete="email"
                 value={email}
                 onChangeText={setEmail}
-                placeholder="tu@correo.com"
+                placeholder={t("auth.emailPlaceholder")}
                 placeholderTextColor="#83796c"
               />
               <TextInput
@@ -267,14 +280,14 @@ export default function Auth() {
                 autoComplete={mode === "in" ? "current-password" : "new-password"}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Contraseña"
+                placeholder={t("auth.passwordPlaceholder")}
                 placeholderTextColor="#83796c"
               />
 
               {mode === "in" && (
                 <Pressable onPress={() => setMode("forgot")} className="w-full py-1">
                   <Text className="text-right text-xs text-muted-foreground">
-                    ¿Has olvidado tu contraseña?
+                    {t("auth.forgotLink")}
                   </Text>
                 </Pressable>
               )}
@@ -288,7 +301,7 @@ export default function Auth() {
                   <ActivityIndicator color="#3e3d39" />
                 ) : (
                   <Text className="text-sm font-sans-semibold text-primary-foreground">
-                    {mode === "in" ? "Entrar" : "Crear cuenta"}
+                    {mode === "in" ? t("auth.signIn") : t("auth.signUp")}
                   </Text>
                 )}
               </Pressable>
@@ -298,9 +311,7 @@ export default function Auth() {
                 className="w-full py-2"
               >
                 <Text className="text-center text-xs text-muted-foreground">
-                  {mode === "in"
-                    ? "No tengo cuenta todavía, quiero crearla"
-                    : "Ya tengo cuenta, quiero entrar"}
+                  {mode === "in" ? t("auth.toSignUp") : t("auth.toSignIn")}
                 </Text>
               </Pressable>
             </View>
@@ -312,7 +323,7 @@ export default function Auth() {
             <>
               <View className="my-3 flex-row items-center gap-3">
                 <View className="h-px flex-1 bg-border" />
-                <Text className="text-xs text-muted-foreground">o</Text>
+                <Text className="text-xs text-muted-foreground">{t("auth.or")}</Text>
                 <View className="h-px flex-1 bg-border" />
               </View>
 
@@ -325,7 +336,7 @@ export default function Auth() {
                   <ActivityIndicator color="#83796c" />
                 ) : (
                   <Text className="text-sm font-sans-medium text-foreground">
-                    Continuar con Google
+                    {t("auth.google")}
                   </Text>
                 )}
               </Pressable>
@@ -336,7 +347,7 @@ export default function Auth() {
                 className="mt-3 w-full items-center rounded-full border border-dashed border-input bg-surface py-3.5 active:opacity-90 disabled:opacity-60"
               >
                 <Text className="text-sm font-sans-medium text-muted-foreground">
-                  {demoLoading ? "Creando perfil..." : "Probar con un perfil aleatorio"}
+                  {demoLoading ? t("auth.demoCreating") : t("auth.demo")}
                 </Text>
               </Pressable>
             </>

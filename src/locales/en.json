@@ -1,0 +1,79 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "change": "Change",
+    "continue": "Continue",
+    "loading": "One moment…",
+    "back": "Back",
+    "retry": "Please try again."
+  },
+  "languages": {
+    "es": "Spanish",
+    "en": "English"
+  },
+  "countries": {
+    "ES": "Spain",
+    "GB": "United Kingdom",
+    "US": "United States",
+    "IE": "Ireland",
+    "MX": "Mexico"
+  },
+  "region": {
+    "onboardingTitle": "Your country and language",
+    "onboardingSubtitle": "We'll match the language, currency and time to where you live. You can change this later in Settings.",
+    "languageLabel": "Language",
+    "countryLabel": "Country",
+    "timezoneLabel": "Time zone",
+    "timezoneAuto": "Detected from your device",
+    "currencyLabel": "Currency",
+    "settingsTitle": "Language and region",
+    "settingsSubtitle": "The language of the app and the coach, your country for price references, and the time zone for your reminders.",
+    "continue": "Continue",
+    "saved": "Region saved",
+    "saveError": "We couldn't save that"
+  },
+  "auth": {
+    "landing": {
+      "badge": "Your AI nutrition assistant",
+      "tagline": "To eat better every day, without the hassle. It gives you a flexible guide in the morning, reviews the day with you at night, and turns your goal into progress you can see.",
+      "bullet1": "Habits and wellbeing, never rigid diets",
+      "bullet2": "A measurable goal with visual progress and streaks",
+      "bullet3": "Relaxed, neutral or demanding tone: you choose",
+      "cta": "Get started",
+      "disclaimer": "A flexible wellbeing guide. Calories and macros are rough estimates, not exact nutritional tracking. It does not replace medical advice."
+    },
+    "titleIn": "Welcome back",
+    "titleUp": "Let's begin",
+    "titleForgot": "Recover your access",
+    "subtitleIn": "Sign in with your email and pick up where you left off.",
+    "subtitleUp": "Create your account and your coach is with you from today.",
+    "subtitleForgot": "We'll send a link to your email to create a new password.",
+    "emailPlaceholder": "you@email.com",
+    "passwordPlaceholder": "Password",
+    "forgotLink": "Forgot your password?",
+    "sendLink": "Send link",
+    "sending": "Sending…",
+    "rememberLink": "I remember now, let me sign in",
+    "signIn": "Sign in",
+    "signUp": "Create account",
+    "working": "One moment…",
+    "toSignUp": "I don't have an account yet, let me create one",
+    "toSignIn": "I already have an account, let me sign in",
+    "or": "or",
+    "google": "Continue with Google",
+    "demo": "Try with a random profile",
+    "demoCreating": "Creating profile…",
+    "accountNote": "With your account you can sign in and out whenever you like, and join your household with whoever lives with you.",
+    "sentConfirm": "I've sent you an email to confirm your account. Open it and come back here to sign in.",
+    "sentReset": "We've sent you an email with a link to reset your password. Open it and create a new one.",
+    "backToSignIn": "Back to sign in",
+    "errNeedEmail": "I need your full email to send you the link",
+    "errNeedCreds": "I need your email and a password of at least 6 characters",
+    "errSendLink": "We couldn't send the link",
+    "errSignIn": "We couldn't sign you in",
+    "errGoogle": "We couldn't connect to Google",
+    "errDemo": "We couldn't create the profile",
+    "demoOk": "Test profile created"
+  }
+}
