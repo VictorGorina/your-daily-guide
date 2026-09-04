@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId } from "@/lib/auth-headers";
 import { cleanSharedSlots, type SharedSlots } from "@/lib/household-shared";
-import { madridTodayISO } from "@/lib/madrid-date";
+import { resolveDeviceTimeZone, zonedTodayISO } from "@/lib/zoned-date";
 import { composeMonthlyPlanForMember, mealsForDate, type MonthlyPlan } from "@/lib/plan-shared";
 
 export type Profile = {
@@ -57,6 +57,17 @@ export type Profile = {
   morning_time: string;
   evening_time: string;
   theme: string;
+  /** Idioma de la interfaz y del coach ('es' | 'en'). */
+  locale: string;
+  /** Zona horaria IANA detectada del dispositivo. El corte del día y la ventana
+   * del push matutino/nocturno se calculan contra ella. */
+  timezone: string;
+  /** País elegido en el onboarding (ISO-3166 alpha-2), o null si es un perfil
+   * anterior a la feature. Deriva `currency` y da contexto de precios al coach. */
+  country: string | null;
+  /** Moneda para formatear importes ('EUR' | 'GBP' | 'USD'...). `budget_month_eur`
+   * conserva el nombre pero su valor está en esta moneda. */
+  currency: string;
   onboarding_completed: boolean;
   /** Fecha de alta en la app (se fija al completar el onboarding). Suelo del
    * navegador de meses de la pantalla Plan; antes de esta fecha no hay nada. */
@@ -267,8 +278,13 @@ export type ChatMessage = {
   created_at: string;
 };
 
-/** Fecha actual en zona Europe/Madrid — único "hoy" de toda la app. */
-export const todayISO = madridTodayISO;
+/**
+ * "Hoy" para toda la app, según el reloj de pared del dispositivo. Antes se
+ * fijaba a Europe/Madrid; ahora sigue la zona horaria de quien usa la app (que
+ * es también la que se guarda en `profiles.timezone` para el push). Las server
+ * functions que necesitan este dato lo reciben como `input.today` desde aquí.
+ */
+export const todayISO = (): string => zonedTodayISO(resolveDeviceTimeZone());
 
 export async function fetchProfile(): Promise<Profile | null> {
   const userId = await currentUserId();

@@ -247,7 +247,9 @@ export type Database = {
           app_started_on: string | null;
           budget_month_eur: number | null;
           coach_scope: string | null;
+          country: string | null;
           created_at: string;
+          currency: string;
           current_weight_kg: number | null;
           date_of_birth: string | null;
           diet_pattern: string | null;
@@ -263,6 +265,7 @@ export type Database = {
           height_cm: number | null;
           id: string;
           life_context: string | null;
+          locale: string;
           meal_schedule: string | null;
           meals_per_day: number | null;
           medical_conditions: string | null;
@@ -279,6 +282,7 @@ export type Database = {
           sleep_time: string | null;
           start_weight_kg: number | null;
           theme: string;
+          timezone: string;
           tone: string;
           updated_at: string;
           wake_time: string | null;
@@ -290,7 +294,9 @@ export type Database = {
           app_started_on?: string | null;
           budget_month_eur?: number | null;
           coach_scope?: string | null;
+          country?: string | null;
           created_at?: string;
+          currency?: string;
           current_weight_kg?: number | null;
           date_of_birth?: string | null;
           diet_pattern?: string | null;
@@ -306,6 +312,7 @@ export type Database = {
           height_cm?: number | null;
           id: string;
           life_context?: string | null;
+          locale?: string;
           meal_schedule?: string | null;
           meals_per_day?: number | null;
           medical_conditions?: string | null;
@@ -322,6 +329,7 @@ export type Database = {
           sleep_time?: string | null;
           start_weight_kg?: number | null;
           theme?: string;
+          timezone?: string;
           tone?: string;
           updated_at?: string;
           wake_time?: string | null;
@@ -333,7 +341,9 @@ export type Database = {
           app_started_on?: string | null;
           budget_month_eur?: number | null;
           coach_scope?: string | null;
+          country?: string | null;
           created_at?: string;
+          currency?: string;
           current_weight_kg?: number | null;
           date_of_birth?: string | null;
           diet_pattern?: string | null;
@@ -349,6 +359,7 @@ export type Database = {
           height_cm?: number | null;
           id?: string;
           life_context?: string | null;
+          locale?: string;
           meal_schedule?: string | null;
           meals_per_day?: number | null;
           medical_conditions?: string | null;
@@ -365,6 +376,7 @@ export type Database = {
           sleep_time?: string | null;
           start_weight_kg?: number | null;
           theme?: string;
+          timezone?: string;
           tone?: string;
           updated_at?: string;
           wake_time?: string | null;

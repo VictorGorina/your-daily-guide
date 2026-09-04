@@ -1266,6 +1266,64 @@ export function composeMonthlyPlanForMember(
 export const offListNote = (names: string[] | undefined) =>
   names?.length ? `Fuera de tu compra: ${names.join(", ")}` : null;
 
+// ---------------------------------------------------------------------------
+// Diff de platos futuros tras un ajuste del plan
+// ---------------------------------------------------------------------------
+
+/**
+ * Un plato del plan que cambió entre la versión anterior y la posterior de un
+ * `adjustMonthlyPlan`. Usado por el badge "i" de Hoy para mostrar qué efecto
+ * tuvo el cambio de plato en el plan futuro.
+ */
+export type MealChange = {
+  date: string;
+  slot: MealSlot;
+  slotLabel: string;
+  before: string;
+  after: string;
+};
+
+/**
+ * Compara los platos de los días FUTUROS (posteriores a `today`) entre dos
+ * versiones del plan y devuelve los que cambiaron. Ignora el día de hoy y
+ * anteriores (están fijados). Compara solo lunch y dinner — desayunos y snacks
+ * no los recoloca `adjustMonthlyPlan` (giran por semana, no por día).
+ */
+export function diffFutureMeals(
+  before: MonthlyPlan | null,
+  after: MonthlyPlan | null,
+  today: string,
+): MealChange[] {
+  if (!before || !after) return [];
+  const month = today.slice(0, 7);
+  const changes: MealChange[] = [];
+  const totalDays = daysInMonth(month);
+
+  for (let d = 1; d <= totalDays; d++) {
+    const date = `${month}-${String(d).padStart(2, "0")}`;
+    if (date <= today) continue; // solo días futuros
+
+    const mealsBefore = mealsForDate(before, date);
+    const mealsAfter = mealsForDate(after, date);
+
+    for (const mb of mealsBefore) {
+      // Solo comparar comida y cena — lo que adjustMonthlyPlan recoloca
+      if (mb.slot !== "comida" && mb.slot !== "cena") continue;
+      const ma = mealsAfter.find((m) => m.slot === mb.slot);
+      if (ma && ma.idea && mb.idea && ma.idea !== mb.idea) {
+        changes.push({
+          date,
+          slot: mb.slot,
+          slotLabel: MEAL_SLOT_LABEL[mb.slot],
+          before: mb.idea,
+          after: ma.idea,
+        });
+      }
+    }
+  }
+  return changes;
+}
+
 export const addDays = (date: string, days: number) => {
   const d = new Date(`${date}T00:00:00`);
   d.setDate(d.getDate() + days);

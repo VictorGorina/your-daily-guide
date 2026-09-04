@@ -22,6 +22,7 @@ import {
   fetchProfile,
   impulsoFrom,
   monthISO,
+  saveProfile,
   todayISO,
   updateTodayLog,
   weeklyTrendFrom,
@@ -41,6 +42,7 @@ import {
   type ShoppingList,
 } from "../../lib/plan-shared";
 import { quoteOfTheDay } from "../../lib/quotes";
+import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
 // Orden cronológico aproximado de cada momento, para saber cuál toca ahora.
 const MOMENT_RANK: Record<string, number> = {
@@ -149,7 +151,10 @@ export default function Hoy() {
   const noPlanYet = planQ.isFetched && !planQ.data;
   const autoPlan = useMutation({
     mutationFn: () =>
-      apiPost<{ plan: MonthlyPlan; shopping: ShoppingList }>("plan/generate", { month }),
+      apiPost<{ plan: MonthlyPlan; shopping: ShoppingList }>("plan/generate", {
+        month,
+        today: todayISO(),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
     onError: (e) => {
       Alert.alert(
@@ -232,6 +237,18 @@ export default function Hoy() {
       router.replace("/onboarding");
     }
   }, [profileQ.isSuccess, profileQ.isFetching, profile, router]);
+
+  // Mantiene `profiles.timezone` al día (viajes, o perfiles anteriores a la
+  // feature) para que el push del servidor use la hora local. Solo escribe si
+  // cambia.
+  useEffect(() => {
+    if (!profile?.onboarding_completed) return;
+    const deviceTz = resolveDeviceTimeZone();
+    if (deviceTz && profile.timezone !== deviceTz) {
+      // Best-effort: si falla (migración aún sin aplicar) se reintenta luego.
+      saveProfile({ timezone: deviceTz }).catch(() => {});
+    }
+  }, [profile?.onboarding_completed, profile?.timezone]);
 
   const save = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateTodayLog(patch),

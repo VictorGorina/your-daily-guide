@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { cleanSharedSlots, type SharedSlots } from "@/lib/household-shared";
-import { madridTodayISO } from "@/lib/madrid-date";
+import { zonedTodayISO } from "@/lib/zoned-date";
 import { ValidationError } from "@/lib/validation-error";
 
 /**
@@ -53,7 +53,9 @@ export const syncHouseholdPlan = createServerFn({ method: "POST" })
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     return {
       month: input.month,
-      today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : madridTodayISO(),
+      // `today` lo pasa el cliente ya en su zona horaria (ver `todayISO` en
+      // daily.ts); el fallback a Madrid solo cubre llamadas sin ese dato.
+      today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO(),
     };
   })
   .handler(async ({ data, context }): Promise<{ synced: number }> => {

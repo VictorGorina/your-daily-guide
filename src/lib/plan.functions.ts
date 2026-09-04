@@ -57,7 +57,7 @@ import {
   type TripConfirmations,
   type TripReceipts,
 } from "@/lib/plan-shared";
-import { madridTodayISO } from "@/lib/madrid-date";
+import { zonedTodayISO } from "@/lib/zoned-date";
 import { ValidationError } from "@/lib/validation-error";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
@@ -334,12 +334,13 @@ const scaleShoppingToBudget = (shopping: ShoppingList, factor: number): Shopping
 
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { month: string; cadence?: ShoppingCadence }) => {
+  .validator((input: { month: string; cadence?: ShoppingCadence; today?: string }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     // No se planifica el pasado (no se puede cumplir y gasta tokens) ni más allá
     // del mes que viene, y este último solo en su última semana — mismo umbral
     // con el que la pantalla Plan lo desbloquea (ver `isNextMonthUnlocked`).
-    const today = madridTodayISO();
+    // `today` lo manda el cliente en su zona horaria; el fallback es Madrid.
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
     const currentMonth = today.slice(0, 7);
     if (input.month < currentMonth) throw new ValidationError("No se planifican meses pasados");
     const nm = nextMonthISO(today);
@@ -351,7 +352,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     }
     const cadence: ShoppingCadence =
       input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
-    return { month: input.month, cadence };
+    return { month: input.month, cadence, today };
   })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
     const key = process.env.OPENROUTER_API_KEY;
@@ -366,7 +367,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
 
-    const today = madridTodayISO();
+    const today = data.today;
     const coverage = monthCoverage(data.month, today);
     const coveredDays = coverage.toDay - coverage.fromDay + 1;
     const ratio = coverageRatio(coverage, data.month);
@@ -988,7 +989,7 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
 
     const current = cleanTripConfirmations(typed?.confirmed_trips);
     const next = { ...current };
-    if (data.confirmed) next[data.trip] = madridTodayISO();
+    if (data.confirmed) next[data.trip] = zonedTodayISO();
     else delete next[data.trip];
 
     // El número "oficial" de tramos es el de la cadencia guardada, no el que se
@@ -1014,9 +1015,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   .validator(
     (input: { month: string; note: string; today?: string; kcalDelta?: number | null }) => {
       if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
-      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
-        ? input.today!
-        : madridTodayISO();
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
       const kcal = Number(input?.kcalDelta);
       return {
         month: input.month,
@@ -1197,7 +1196,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       .trim()
       .slice(0, 200);
     if (!dish) throw new ValidationError("Falta el plato nuevo");
-    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : madridTodayISO();
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
     if (input.date < today) {
       throw new ValidationError(
         "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
@@ -1319,9 +1318,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
       const dish = String(input?.dish ?? "")
         .trim()
         .slice(0, 200);
-      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "")
-        ? input.today!
-        : madridTodayISO();
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
       if (input.date < today) {
         throw new ValidationError(
           "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
@@ -1438,7 +1435,7 @@ export const goalImpact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { note: string; today?: string }) => ({
     note: String(input?.note ?? "").slice(0, 1500),
-    today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : madridTodayISO(),
+    today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO(),
   }))
   .handler(
     async ({ data, context }): Promise<{ text: string; suggested_target_date: string | null }> => {

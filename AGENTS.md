@@ -186,7 +186,9 @@ probar. En su lugar, un workflow de GitHub Actions
 ([.github/workflows/push-dispatch.yml](.github/workflows/push-dispatch.yml)) llama cada 15 min a
 `POST /api/cron/dispatch` (protegido por `x-cron-secret`), que reutiliza
 [src/lib/push-dispatch.server.ts](src/lib/push-dispatch.server.ts) para mirar qué perfiles caen en
-la ventana de su `morning_time`/`evening_time` (asumiendo `Europe/Madrid`) y enviar el push.
+la ventana de su `morning_time`/`evening_time` — cada uno evaluado contra su propia
+`profiles.timezone` (detectada del dispositivo; ver [src/lib/zoned-date.ts](src/lib/zoned-date.ts)) —
+y enviar el push.
 Necesita los secrets de repo `APP_URL` y `CRON_SECRET` en GitHub una vez desplegada la app.
 
 El copy de mañana/noche y la frecuencia de contacto varían según `profiles.tone`

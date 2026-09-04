@@ -19,6 +19,7 @@ import { ageFromDOB } from "@/lib/age";
 import { addMessage, fetchProfile, monthISO, saveProfile, todayISO } from "@/lib/daily";
 import { parseOnboarding } from "@/lib/onboarding.functions";
 import { generateMonthlyPlan, welcomeBriefing } from "@/lib/plan.functions";
+import { resolveDeviceTimeZone } from "@/lib/zoned-date";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
@@ -549,6 +550,9 @@ function Onboarding() {
       const existing = await fetchProfile();
       await saveProfile({
         app_started_on: existing?.app_started_on ?? todayISO(),
+        // Zona horaria del dispositivo: la usa el push del servidor para
+        // disparar el resumen matutino y el repaso nocturno a la hora local.
+        timezone: resolveDeviceTimeZone(),
         display_name: d.display_name,
         age: d.age,
         date_of_birth: d.date_of_birth,
@@ -607,7 +611,7 @@ function Onboarding() {
 
       const month = monthISO();
       try {
-        await makePlan({ data: { month } });
+        await makePlan({ data: { month, today: todayISO() } });
         const { text } = await brief({ data: { month } });
         if (text) {
           setTurns((prev) => [...prev, { role: "coach", text }]);

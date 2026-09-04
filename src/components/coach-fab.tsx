@@ -135,7 +135,10 @@ export function CoachFab() {
     log: todayQ.data,
     plan: planQ.data,
   };
-  const { runTool, refresh } = useCoachActions(() => ctx.current.log);
+  const { runTool, refresh } = useCoachActions(
+    () => ctx.current.log,
+    () => ctx.current.plan,
+  );
 
   const transport = useMemo(
     () =>

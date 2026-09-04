@@ -247,6 +247,7 @@ export default function Plan() {
       apiPost<GenerateResult>("plan/generate", {
         month,
         cadence: nextCadence ?? "mensual",
+        today,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
     onError: (e) =>

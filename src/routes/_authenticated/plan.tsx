@@ -189,7 +189,7 @@ function PlanPage() {
 
   const generate = useMutation({
     mutationFn: (nextCadence?: ShoppingCadence) =>
-      make({ data: { month, cadence: nextCadence ?? "mensual" } }),
+      make({ data: { month, cadence: nextCadence ?? "mensual", today } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
     onError: (e) =>
       toast.error(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),

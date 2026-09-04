@@ -62,6 +62,10 @@ export function randomDemoProfile(): Partial<Profile> {
     tone: pick(["relajado", "neutro"]),
     morning_time: "08:00",
     evening_time: "22:00",
+    locale: "es",
+    timezone: "Europe/Madrid",
+    country: "ES",
+    currency: "EUR",
     pregnancy_status: null,
     menstrual_cycle:
       sex === "mujer" ? pick([null, "Los días antes de la regla me apetece picar más"]) : null,

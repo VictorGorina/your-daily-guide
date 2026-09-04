@@ -1,7 +1,7 @@
 import type { DailyGuide } from "@/lib/daily";
-import { madridTodayISO } from "@/lib/madrid-date";
 import { daysLeftInMonth, nextMonthISO, NEXT_MONTH_UNLOCK_DAYS } from "@/lib/plan-shared";
 import { sendPushNotification, type PushPayload } from "@/lib/web-push.server";
+import { DEFAULT_TZ, zonedMinutesNow, zonedTodayISO } from "@/lib/zoned-date";
 
 export type DispatchSummary = {
   sent: number;
@@ -13,29 +13,19 @@ export type DispatchSummary = {
   errors: number;
 };
 
-// La app es en español, para un único uso en España: sin campo de zona
-// horaria en el perfil, se asume Europe/Madrid para comparar morning_time/
-// evening_time contra la hora actual.
-const TIMEZONE = "Europe/Madrid";
-
 // Ventana de 20 min hacia atrás: algo más ancha que la cadencia del workflow
 // de GitHub Actions (cada 15 min) para absorber el jitter típico de los
 // schedules de Actions sin dejar ningún hueco sin cubrir.
 const WINDOW_MINUTES = 20;
 
-function madridMinutesNow(): number {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date());
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  return hour * 60 + minute;
+// "Ahora" y "hoy" son por perfil: cada uno tiene su `timezone` (detectada del
+// dispositivo), así que el resumen matutino y el repaso nocturno se comparan
+// contra el reloj de esa persona, no contra el de Madrid. `zonedMinutesNow` y
+// `zonedTodayISO` viven en zoned-date.ts.
+function clockFor(timeZone: string | null): { nowMinutes: number; today: string } {
+  const tz = timeZone || DEFAULT_TZ;
+  return { nowMinutes: zonedMinutesNow(tz), today: zonedTodayISO(tz) };
 }
-
-// Usa madridTodayISO() de madrid-date.ts (misma implementación, un único sitio).
 
 function timeToMinutes(hhmm: string | null): number | null {
   if (!hhmm) return null;
@@ -67,6 +57,7 @@ type ProfileRow = {
   evening_push_sent_on: string | null;
   plan_renewal_push_sent_on: string | null;
   tone: string | null;
+  timezone: string | null;
 };
 
 type Tone = "relajado" | "neutro" | "exigente";
@@ -172,48 +163,59 @@ export async function dispatchPush(): Promise<DispatchSummary> {
     errors: 0,
   };
 
-  const nowMinutes = madridMinutesNow();
-  const today = madridTodayISO();
-
   const { data: profiles, error } = await supabaseAdmin
     .from("profiles")
     .select(
-      "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on, plan_renewal_push_sent_on, tone",
+      "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on, plan_renewal_push_sent_on, tone, timezone",
     )
     .eq("onboarding_completed", true);
   if (error) throw error;
   const rows = (profiles ?? []) as ProfileRow[];
 
-  const morningMatches = rows.filter(
-    (p) => p.morning_push_sent_on !== today && inWindow(timeToMinutes(p.morning_time), nowMinutes),
-  );
-  const eveningMatches = rows.filter(
-    (p) => p.evening_push_sent_on !== today && inWindow(timeToMinutes(p.evening_time), nowMinutes),
-  );
+  // Un reloj por perfil, cada uno en su zona horaria. Todo lo que sigue ("¿cae
+  // en la ventana?", "¿ya se avisó hoy?", "¿quedan pocos días de mes?") se
+  // evalúa contra el reloj de esa persona.
+  const clocks = new Map(rows.map((p) => [p.id, clockFor(p.timezone)]));
+  const clockOf = (p: ProfileRow) => clocks.get(p.id) ?? clockFor(p.timezone);
+  const nextMonthOf = (p: ProfileRow) => nextMonthISO(clockOf(p).today);
+
+  const morningMatches = rows.filter((p) => {
+    const { nowMinutes, today } = clockOf(p);
+    return p.morning_push_sent_on !== today && inWindow(timeToMinutes(p.morning_time), nowMinutes);
+  });
+  const eveningMatches = rows.filter((p) => {
+    const { nowMinutes, today } = clockOf(p);
+    return p.evening_push_sent_on !== today && inWindow(timeToMinutes(p.evening_time), nowMinutes);
+  });
 
   // A `RENEWAL_DAYS_LEFT` días o menos de fin de mes, si todavía no hay plan del
   // mes siguiente (y no se avisó ya hoy), se avisa una vez al día hasta que lo
   // generen — a mano desde Plan (donde ese mismo umbral desbloquea el mes que
   // viene) o solo al entrar el día 1 (ver auto-generación en Hoy).
-  const nextMonth = nextMonthISO(today);
-  const renewalCandidates =
-    daysLeftInMonth(today) <= RENEWAL_DAYS_LEFT
-      ? rows.filter((p) => p.plan_renewal_push_sent_on !== today)
-      : [];
+  const renewalCandidates = rows.filter((p) => {
+    const { today } = clockOf(p);
+    return daysLeftInMonth(today) <= RENEWAL_DAYS_LEFT && p.plan_renewal_push_sent_on !== today;
+  });
   let renewalMatches: ProfileRow[] = [];
   if (renewalCandidates.length) {
+    const nextMonths = [...new Set(renewalCandidates.map(nextMonthOf))];
     const { data: nextPlans } = await supabaseAdmin
       .from("monthly_plans")
-      .select("user_id")
-      .eq("month", nextMonth)
+      .select("user_id, month")
+      .in("month", nextMonths)
       .in(
         "user_id",
         renewalCandidates.map((p) => p.id),
       );
     const alreadyPlanned = new Set(
-      (nextPlans ?? []).map((r) => (r as { user_id: string }).user_id),
+      (nextPlans ?? []).map((r) => {
+        const row = r as { user_id: string; month: string };
+        return `${row.user_id}|${row.month}`;
+      }),
     );
-    renewalMatches = renewalCandidates.filter((p) => !alreadyPlanned.has(p.id));
+    renewalMatches = renewalCandidates.filter(
+      (p) => !alreadyPlanned.has(`${p.id}|${nextMonthOf(p)}`),
+    );
   }
 
   if (!morningMatches.length && !eveningMatches.length && !renewalMatches.length) return summary;
@@ -270,6 +272,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   };
 
   await batch(morningMatches, async (p) => {
+    const { today } = clockOf(p);
     const { data: log } = await supabaseAdmin
       .from("daily_logs")
       .select("guide")
@@ -285,6 +288,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   });
 
   await batch(eveningMatches, async (p) => {
+    const { today } = clockOf(p);
     const tone = toneOf(p.tone);
     const { data: log } = await supabaseAdmin
       .from("daily_logs")
@@ -308,9 +312,6 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   });
 
   if (renewalMatches.length) {
-    const nextMonthLabel = new Date(`${nextMonth}-01T00:00:00`).toLocaleDateString("es-ES", {
-      month: "long",
-    });
     // Un no planificador del hogar recibe un aviso distinto: la renovación del
     // menú de la casa no es cosa suya (issue 08, D1).
     const { data: memberRows } = await supabaseAdmin
@@ -326,6 +327,11 @@ export async function dispatchPush(): Promise<DispatchSummary> {
         .map((m) => m.user_id as string),
     );
     await batch(renewalMatches, async (p) => {
+      const { today } = clockOf(p);
+      const nextMonth = nextMonthOf(p);
+      const nextMonthLabel = new Date(`${nextMonth}-01T00:00:00`).toLocaleDateString("es-ES", {
+        month: "long",
+      });
       const { title, body } = nonPlanner.has(p.id)
         ? renewalCopyMember(p.display_name, nextMonthLabel)
         : renewalCopy(toneOf(p.tone), p.display_name, nextMonthLabel);

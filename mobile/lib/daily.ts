@@ -73,6 +73,14 @@ export type Profile = {
   morning_time: string;
   evening_time: string;
   theme: string;
+  /** Idioma de la interfaz y del coach ('es' | 'en'). */
+  locale: string;
+  /** Zona horaria IANA detectada del dispositivo; la usa el push del servidor. */
+  timezone: string;
+  /** País elegido en el onboarding (ISO-3166 alpha-2), o null en perfiles previos. */
+  country: string | null;
+  /** Moneda para formatear importes ('EUR' | 'GBP' | 'USD'...). */
+  currency: string;
   onboarding_completed: boolean;
   /** Fecha de alta en la app (se fija al completar el onboarding). Suelo del
    * navegador de meses de la pantalla Plan; antes de esta fecha no hay nada. */

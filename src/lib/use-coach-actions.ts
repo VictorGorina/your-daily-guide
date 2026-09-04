@@ -9,11 +9,12 @@ import {
   updateTodayLog,
   type DailyGuide,
   type DailyLog,
+  type MonthlyPlanRow,
   type Profile,
 } from "@/lib/daily";
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { adjustMonthlyPlan, goalImpact, setChildMeal, setPlanMeal } from "@/lib/plan.functions";
-import { mealsForDate } from "@/lib/plan-shared";
+import { mealsForDate, type MonthlyPlan } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "@/lib/profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
@@ -21,8 +22,17 @@ const norm = (s: string) => s.toLowerCase().trim();
 /**
  * Acciones que el coach puede ejecutar sobre la pantalla y sobre el plan.
  * Se comparte entre la pestaña de chat y el botón flotante.
+ *
+ * `getPlan` devuelve el plan **compuesto** del mes en curso: para un no
+ * planificador de hogar incluye las comidas compartidas del planificador, que la
+ * fila propia no lleva. Al regenerar los macros tras un `cambiar_plato` de hoy se
+ * usa esta vista completa (con la comida cambiada sustituida) para que la barra de
+ * macros refleje TODAS las comidas, no solo las del slot que se acaba de tocar.
  */
-export function useCoachActions(getLog: () => DailyLog | undefined) {
+export function useCoachActions(
+  getLog: () => DailyLog | undefined,
+  getPlan?: () => MonthlyPlanRow | null | undefined,
+) {
   const qc = useQueryClient();
   const makeGuide = useServerFn(generateDailyGuide);
   const adjustPlan = useServerFn(adjustMonthlyPlan);
@@ -81,13 +91,9 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       if (toolName === "cambiar_plato") {
         const targetDate = String(input.fecha ?? "");
         const dish = String(input.plato ?? "").trim();
+        const slot = String(input.comida ?? "");
         const { plan, label, off, previousIdea } = await changeMeal({
-          data: {
-            date: targetDate,
-            slot: String(input.comida ?? ""),
-            dish,
-            today: date,
-          },
+          data: { date: targetDate, slot, dish, today: date },
         });
         // Si el plato cambiado es el de HOY, la estimación de macros guardada en
         // la guía (`macroEstimate`/`mealMacros`) queda desactualizada — todavía
@@ -95,9 +101,21 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
         // macros de Hoy refleje el plato real en cuanto el coach lo cambia, en
         // vez de esperar a la siguiente recarga.
         if (targetDate === date) {
-          const meals = mealsForDate(plan, date)
-            .filter((m) => m.idea)
-            .map((m) => ({ moment: m.moment, idea: m.idea }));
+          // Se parte del plan COMPUESTO (que para un no planificador trae las
+          // comidas compartidas del planificador, no de la fila propia donde
+          // están vacías), y se sustituye el slot cambiado por el plato nuevo.
+          // Así la regeneración de macros recibe TODAS las comidas de hoy, no
+          // solo la que se acaba de tocar. Para un usuario en solitario o un
+          // planificador, `composedPlan` y `plan` son equivalentes — el
+          // fallback a `plan` cubre el caso de que el caller no pase `getPlan`.
+          const composedPlan: MonthlyPlan | null = getPlan?.()?.plan ?? plan;
+          const meals = mealsForDate(composedPlan, date)
+            .map((m) =>
+              m.slot === slot
+                ? { moment: m.moment, idea: dish }
+                : { moment: m.moment, idea: m.idea },
+            )
+            .filter((m) => m.idea);
           const freshGuide = await makeGuide({ data: { meals } });
           // El objetivo de la barra de macros (`macroEstimate`) se fija la
           // primera vez que hay guía del día, a partir del plan original — un
@@ -218,7 +236,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       }
       return "Acción desconocida";
     },
-    [adjustPlan, changeMeal, changeChildMeal, checkGoal, date, getLog, makeGuide],
+    [adjustPlan, changeMeal, changeChildMeal, checkGoal, date, getLog, getPlan, makeGuide],
   );
 
   return { runTool, refresh };

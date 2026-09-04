@@ -2,14 +2,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { Activity, Check, ChevronDown, PencilLine, X } from "lucide-react";
+import { Activity, Check, ChevronDown, Info, Loader2, PencilLine, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdjustmentInfoSheet } from "@/components/adjustment-info-sheet";
 import { BottomNav } from "@/components/bottom-nav";
 import { DishRecipe } from "@/components/dish-recipe";
 import { DishCategoryIcon, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MacroBars } from "@/components/macro-bars";
+import { MealSwapSheet } from "@/components/meal-swap-sheet";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { WeekStrip } from "@/components/week-strip";
 import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
@@ -20,6 +22,7 @@ import {
   fetchProfile,
   impulsoFrom,
   monthISO,
+  saveProfile,
   todayISO,
   updateTodayLog,
   weeklyTrendFrom,
@@ -32,10 +35,18 @@ import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import { fetchHousehold } from "@/lib/household";
 import { isSharedSlot, type MealKey } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
-import { childMealsForDate, mealsForDate, offListNote, type MonthlyPlan } from "@/lib/plan-shared";
+import {
+  childMealsForDate,
+  mealsForDate,
+  offListNote,
+  type MealChange,
+  type MonthlyPlan,
+} from "@/lib/plan-shared";
 import { generateMonthlyPlan } from "@/lib/plan.functions";
+import { useMealSwap } from "@/lib/use-meal-swap";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
+import { resolveDeviceTimeZone } from "@/lib/zoned-date";
 
 export const Route = createFileRoute("/_authenticated/hoy")({
   component: Hoy,
@@ -144,12 +155,14 @@ function Hoy() {
   const makePlan = useServerFn(generateMonthlyPlan);
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
-  const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
   const autoPlanTriedRef = useRef(false);
   const [autoPlanThrottled, setAutoPlanThrottled] = useState(false);
+  // ---- Cambio de plato directo (sin pasar por el chat del coach) ----
+  const [swapIndex, setSwapIndex] = useState<number | null>(null);
+  const [infoIndex, setInfoIndex] = useState<number | null>(null);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -163,7 +176,7 @@ function Hoy() {
   // registro de hoy con comidas vacías mientras se genera.
   const noPlanYet = planQ.isFetched && !planQ.data;
   const autoPlan = useMutation({
-    mutationFn: () => makePlan({ data: { month } }),
+    mutationFn: () => makePlan({ data: { month, today: todayISO() } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
     onError: (e) => {
       toast.error(
@@ -234,6 +247,11 @@ function Hoy() {
   const profile = profileQ.data;
   const today = todayQ.data;
 
+  const mealSwap = useMealSwap(
+    () => todayQ.data,
+    () => planQ.data?.plan ?? null,
+  );
+
   useEffect(() => {
     if (profileQ.isFetching) return;
     if (profileQ.isSuccess && (!profile || !profile.onboarding_completed)) {
@@ -244,6 +262,19 @@ function Hoy() {
   useEffect(() => {
     if (profile?.theme) applyTheme(profile.theme);
   }, [profile?.theme]);
+
+  // Si la persona ha viajado (o el perfil trae la zona por defecto de antes de
+  // esta feature), se actualiza `profiles.timezone` en silencio para que el
+  // push del servidor siga usando su hora local. Barato: solo escribe si cambia.
+  useEffect(() => {
+    if (!profile?.onboarding_completed) return;
+    const deviceTz = resolveDeviceTimeZone();
+    if (deviceTz && profile.timezone !== deviceTz) {
+      // Best-effort: si la escritura falla (p. ej. la migración todavía no está
+      // aplicada) no pasa nada, se reintenta en la siguiente carga de Hoy.
+      saveProfile({ timezone: deviceTz }).catch(() => {});
+    }
+  }, [profile?.onboarding_completed, profile?.timezone]);
 
   const save = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateTodayLog(patch),
@@ -351,14 +382,12 @@ function Hoy() {
     save.mutate({ habits: next });
   };
 
-  const handleMealStatus = (index: number, status: MealStatus) => {
-    setMealStatus(index, status);
-    // "Comí distinto" queda registrado al instante, pero ofrecemos detallar qué
-    // ha cambiado para que el coach ajuste solo los días futuros del plan.
-    if (status === "distinto") setGuidedIndex(index);
-  };
-
-  const guidedMeal = guidedIndex != null ? habits[guidedIndex] : undefined;
+  // Datos para el swap sheet y el info sheet
+  const swapMeal =
+    swapIndex != null ? todayMeals.find((m) => m.moment === habits[swapIndex]?.label) : undefined;
+  const infoHabit = infoIndex != null ? habits[infoIndex] : undefined;
+  const infoChanges: MealChange[] =
+    ((infoHabit as Record<string, unknown> | undefined)?.adjustmentChanges as MealChange[]) ?? [];
 
   // La "siguiente comida" es la primera, en orden cronológico, que aún no
   // tiene un estado explícito. Importante: se filtra por `status`, no por
@@ -553,13 +582,36 @@ function Hoy() {
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      {/* Badge "i" / spinner de ajuste: aparece cuando el plato se
+                          ha cambiado y adjustMonthlyPlan ha terminado (o está en
+                          curso). El badge abre el AdjustmentInfoSheet con los
+                          cambios en el plan futuro. */}
+                      {mealSwap.adjustingIndex === i ? (
+                        <span
+                          className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10"
+                          title="Ajustando el plan…"
+                        >
+                          <Loader2 className="h-[14px] w-[14px] animate-spin text-primary" />
+                        </span>
+                      ) : (h as Record<string, unknown>).adjustmentChanges ? (
+                        <button
+                          type="button"
+                          title="Ver ajuste del plan"
+                          aria-label={`${h.label}: ver ajuste del plan`}
+                          onClick={() => setInfoIndex(i)}
+                          className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10 text-primary transition-transform active:scale-95"
+                        >
+                          <Info className="h-[14px] w-[14px]" />
+                        </button>
+                      ) : null}
+
                       {h.status == null ? (
                         <>
                           <button
                             type="button"
                             title="Comí otra cosa"
                             aria-label={`${h.label}: comí otra cosa`}
-                            onClick={() => handleMealStatus(i, "distinto")}
+                            onClick={() => setSwapIndex(i)}
                             className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
                           >
                             <PencilLine className="h-[15px] w-[15px]" />
@@ -667,24 +719,41 @@ function Hoy() {
         </p>
       </section>
 
-      <GuidedLogSheet
-        trigger={false}
-        initialMode="exceso"
-        open={guidedIndex != null}
+      {/* Cambio de plato directo: mini-sheet con solo texto libre. El swap
+          se aplica al instante (setPlanMeal) y el ajuste del plan futuro corre
+          en segundo plano (adjustMonthlyPlan) — sin navegar al chat. */}
+      <MealSwapSheet
+        open={swapIndex != null}
         onOpenChange={(v) => {
-          if (!v) setGuidedIndex(null);
+          if (!v) setSwapIndex(null);
         }}
-        contextNote={guidedMeal ? `Qué has comido en vez de: ${guidedMeal.label}` : undefined}
-        mealLabel={guidedMeal?.label}
+        mealLabel={swapMeal?.moment ?? ""}
+        plannedDish={swapMeal?.idea ?? ""}
+        disabled={mealSwap.isSwapping}
+        onSwap={(dish) => {
+          if (swapIndex == null || !swapMeal) return;
+          mealSwap.swap(swapIndex, swapMeal.slot, dish, swapMeal.moment);
+          setSwapIndex(null);
+        }}
         onSkip={() => {
-          if (guidedIndex != null) setMealStatus(guidedIndex, "salteo");
-          setGuidedIndex(null);
+          if (swapIndex != null) setMealStatus(swapIndex, "salteo");
+          setSwapIndex(null);
         }}
-        onSend={(text) => {
-          setPendingChatMessage(text);
-          setGuidedIndex(null);
-          navigate({ to: "/chat" });
+      />
+
+      {/* Info del ajuste del plan tras un swap: lista antes → después. */}
+      <AdjustmentInfoSheet
+        open={infoIndex != null}
+        onOpenChange={(v) => {
+          if (!v) setInfoIndex(null);
         }}
+        changes={infoChanges}
+        dish={
+          infoIndex != null
+            ? (todayMeals.find((m) => m.moment === habits[infoIndex]?.label)?.idea ??
+              "lo que comiste")
+            : "lo que comiste"
+        }
       />
 
       {/* Registrar deporte: mismo sheet, modo actividad, abierto desde el botón

@@ -8,6 +8,7 @@ import { describeSharedSlots } from "@/lib/household-shared";
 import { householdContext, type HouseholdContext } from "@/lib/household.server";
 import { addDays, weekdayName } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS } from "@/lib/profile-fields";
+import { zonedTodayISO } from "@/lib/zoned-date";
 
 /**
  * Reglas para el coach sobre quién puede tocar qué del plan del hogar, solo
@@ -164,7 +165,7 @@ export const Route = createFileRoute("/api/chat")({
         // convertir en la fecha que necesita cambiar_plato.
         const today = /^\d{4}-\d{2}-\d{2}$/.test(body.today ?? "")
           ? body.today!
-          : new Date().toISOString().slice(0, 10);
+          : zonedTodayISO((body.profile as { timezone?: string } | null)?.timezone ?? undefined);
         const tomorrow = addDays(today, 1);
 
         // Contexto del hogar (mesa, comidas compartidas, niños y quién

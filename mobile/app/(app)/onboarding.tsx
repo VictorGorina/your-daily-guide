@@ -29,6 +29,7 @@ import { apiPost } from "../../lib/api";
 import { ageFromDOB } from "../../lib/age";
 import { addMessage, fetchProfile, monthISO, saveProfile, todayISO } from "../../lib/daily";
 import type { OnboardingDraft } from "../../lib/onboarding";
+import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
 /**
  * Onboarding conversacional, port 1:1 de `src/routes/_authenticated/onboarding.tsx`
@@ -487,7 +488,7 @@ export default function Onboarding() {
   const qc = useQueryClient();
 
   const parse = (transcript: string) => apiPost<Draft>("onboarding/parse", { transcript });
-  const makePlan = (month: string) => apiPost("plan/generate", { month });
+  const makePlan = (month: string) => apiPost("plan/generate", { month, today: todayISO() });
   const brief = (month: string) => apiPost<{ text?: string }>("plan/welcome", { month });
 
   const [screen, setScreen] = useState(0);
@@ -541,6 +542,9 @@ export default function Onboarding() {
       const existing = await fetchProfile();
       await saveProfile({
         app_started_on: existing?.app_started_on ?? todayISO(),
+        // Zona horaria del dispositivo: la usa el push del servidor para
+        // disparar el resumen matutino y el repaso nocturno a la hora local.
+        timezone: resolveDeviceTimeZone(),
         display_name: d.display_name,
         age: d.age,
         date_of_birth: d.date_of_birth,
