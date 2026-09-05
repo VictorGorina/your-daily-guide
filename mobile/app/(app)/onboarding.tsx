@@ -496,6 +496,7 @@ export default function Onboarding() {
   // esté fijado, se muestra el RegionStep en lugar del onboarding conversacional.
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const [regionDone, setRegionDone] = useState(false);
+  const [introDismissed, setIntroDismissed] = useState(false);
 
   const [screen, setScreen] = useState(0);
   const [step, setStep] = useState(0);
@@ -875,6 +876,30 @@ export default function Onboarding() {
   if (profileQ.isLoading) return null;
   if (!regionDone && !profileQ.data?.country) {
     return <RegionStep profile={profileQ.data} onDone={() => setRegionDone(true)} />;
+  }
+
+  if (!introDismissed) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+        <View className="flex-1 items-center justify-center px-8">
+          <Sparkles size={40} color="#ff8a3d" />
+          <Text className="mt-6 text-center font-title text-2xl font-semibold tracking-tight text-foreground">
+            Vamos a conocerte
+          </Text>
+          <Text className="mt-4 max-w-[280px] text-center text-sm leading-relaxed text-muted-foreground">
+            Son unas {TOTAL} preguntas (~10-15 minutos). Solo se hace una vez — después podrás
+            modificar cualquier respuesta en Ajustes o hablando con el coach.
+          </Text>
+          <Pressable
+            onPress={() => setIntroDismissed(true)}
+            className="mt-8 flex-row items-center gap-2 rounded-full bg-primary px-8 py-3.5 active:scale-[0.98]"
+          >
+            <Text className="text-sm font-semibold text-primary-foreground">Empezar</Text>
+            <ArrowRight size={16} color="#fbfaf7" />
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   // --- Pantalla: generando plan ---

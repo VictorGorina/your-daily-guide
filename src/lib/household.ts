@@ -1,6 +1,11 @@
 import { currentUserId } from "@/lib/auth-headers";
 import { supabase } from "@/integrations/supabase/client";
-import { cleanSharedSlots, type SharedSlots } from "@/lib/household-shared";
+import {
+  cleanHomeSchedule,
+  cleanSharedSlots,
+  type HomeSchedule,
+  type SharedSlots,
+} from "@/lib/household-shared";
 
 export type HouseholdGoalType = "comportamiento" | "presupuesto";
 
@@ -29,6 +34,8 @@ export type HouseholdMember = {
   is_planner: boolean;
   /** Peso de ración para dimensionar la compra (1 = ración de adulto estándar). */
   portion: number;
+  /** En qué días de la semana come en casa, por comida. */
+  home_schedule: HomeSchedule | null;
 };
 
 export type HouseholdChild = {
@@ -40,6 +47,8 @@ export type HouseholdChild = {
   notes: string | null;
   /** Peso de ración para la compra (1 = ración de adulto estándar). Ver `childPortion`. */
   portion: number;
+  /** En qué días de la semana come en casa, por comida. */
+  home_schedule: HomeSchedule | null;
 };
 
 export type HouseholdState = {
@@ -83,7 +92,7 @@ export async function fetchHousehold(): Promise<HouseholdState> {
     supabase.rpc("household_member_list"),
     supabase
       .from("household_children")
-      .select("id, name, age, allergies, appetite, notes, portion")
+      .select("*")
       .eq("household_id", householdId)
       .order("created_at", { ascending: true }),
   ]);
@@ -97,6 +106,7 @@ export async function fetchHousehold(): Promise<HouseholdState> {
       uses_app: boolean;
       is_planner: boolean;
       portion: number;
+      home_schedule: unknown;
     }[]
   ).map((m) => ({
     id: m.id,
@@ -106,6 +116,7 @@ export async function fetchHousehold(): Promise<HouseholdState> {
     uses_app: m.uses_app,
     is_planner: m.is_planner,
     portion: Number(m.portion) || 1,
+    home_schedule: m.home_schedule ? cleanHomeSchedule(m.home_schedule) : null,
   }));
 
   const rawHousehold = household as (Household & { shared_slots?: unknown }) | null;
@@ -115,9 +126,26 @@ export async function fetchHousehold(): Promise<HouseholdState> {
       ? { ...rawHousehold, shared_slots: cleanSharedSlots(rawHousehold.shared_slots) }
       : null,
     members,
-    children: ((children ?? []) as (HouseholdChild & { portion: unknown })[]).map((c) => ({
-      ...c,
+    children: (
+      (children ?? []) as unknown as {
+        id: string;
+        name: string;
+        age: number | null;
+        allergies: string | null;
+        appetite: string | null;
+        notes: string | null;
+        portion: unknown;
+        home_schedule?: unknown;
+      }[]
+    ).map((c) => ({
+      id: c.id,
+      name: c.name,
+      age: c.age,
+      allergies: c.allergies,
+      appetite: c.appetite,
+      notes: c.notes,
       portion: Number(c.portion) || 0.5,
+      home_schedule: c.home_schedule ? cleanHomeSchedule(c.home_schedule) : null,
     })),
     me: members.find((m) => m.user_id === userId) ?? null,
     planner: members.find((m) => m.is_planner) ?? null,
@@ -271,7 +299,10 @@ export async function clearHouseholdGoal(id: string) {
   if (error) throw error;
 }
 
-export async function addChild(householdId: string, child: Omit<HouseholdChild, "id">) {
+export async function addChild(
+  householdId: string,
+  child: Omit<HouseholdChild, "id" | "home_schedule">,
+) {
   const { error } = await supabase
     .from("household_children")
     .insert({ household_id: householdId, ...child } as never);

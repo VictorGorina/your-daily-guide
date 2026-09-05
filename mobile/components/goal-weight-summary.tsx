@@ -10,6 +10,7 @@ import {
   normalizeGoalType,
   type DailyLog,
   type Profile,
+  type GoalProgress,
 } from "../lib/daily";
 
 // "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
@@ -40,33 +41,47 @@ export function GoalWeightSummary({
   const hasMetric = goal === "mantener" || progress.total > 0;
   const pct = Math.round(progress.pct * 100);
 
+  const progressLabel = () => {
+    if (goal === "mantener") return "Estabilidad";
+    if (progress.regressing) {
+      return `+${Math.abs(progress.done).toFixed(1)} kg (retroceso)`;
+    }
+    return `${progress.done.toFixed(1)} de ${progress.total} kg`;
+  };
+
+  const barColor = progress.regressing ? "#e2685f" : "#6dbe7b";
+  const pctColor = progress.regressing ? "text-destructive" : "text-foreground";
+
   return (
     <View className="rounded-3xl bg-surface p-5">
       {hasMetric ? (
         <>
           <View className="flex-row items-end justify-between gap-3">
             <View className="min-w-0 flex-1">
-              <Text className="text-sm font-sans-semibold text-foreground">
-                {goal === "mantener"
-                  ? "Estabilidad"
-                  : `${progress.done.toFixed(1)} de ${progress.total} kg`}
-              </Text>
+              <Text className="text-sm font-sans-semibold text-foreground">{progressLabel()}</Text>
               {profile?.goal_target_date ? (
                 <Text className="mt-1 font-mono-medium text-[10.5px] text-muted-foreground">
                   meta: {formatMetaDate(profile.goal_target_date)}
                 </Text>
               ) : null}
             </View>
-            <Text className="font-heading text-2xl text-foreground">{pct}%</Text>
+            <Text className={`font-heading text-2xl ${pctColor}`}>{pct}%</Text>
           </View>
           <View className="mt-3.5 h-2 overflow-hidden rounded-full bg-secondary">
-            <View className="h-full rounded-full bg-[#6dbe7b]" style={{ width: `${pct}%` }} />
+            <View
+              className="h-full rounded-full"
+              style={{ width: `${pct}%`, backgroundColor: barColor }}
+            />
           </View>
         </>
       ) : (
         <Text className="text-sm font-sans-semibold text-foreground">Tu peso</Text>
       )}
-      <WeightPanel logs={logs} lastKnown={profile?.current_weight_kg ?? null} />
+      <WeightPanel
+        logs={logs}
+        lastKnown={profile?.current_weight_kg ?? null}
+        regressing={progress.regressing}
+      />
     </View>
   );
 }
@@ -74,7 +89,15 @@ export function GoalWeightSummary({
 // Tendencia de los últimos pesajes + botón para anotar el peso de hoy. El
 // botón despliega un campo en la misma fila (sin diálogo) para que anotar sea
 // un gesto corto, como "registrar es un toque" del resto de la app.
-function WeightPanel({ logs, lastKnown }: { logs: DailyLog[]; lastKnown: number | null }) {
+function WeightPanel({
+  logs,
+  lastKnown,
+  regressing,
+}: {
+  logs: DailyLog[];
+  lastKnown: number | null;
+  regressing: boolean;
+}) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
@@ -104,7 +127,11 @@ function WeightPanel({ logs, lastKnown }: { logs: DailyLog[]; lastKnown: number 
 
   return (
     <View className="mt-4 flex-row items-center gap-3">
-      {points.length >= 2 ? <Sparkline weights={points} /> : <Scale size={28} color="#83796c" />}
+      {points.length >= 2 ? (
+        <Sparkline weights={points} regressing={regressing} />
+      ) : (
+        <Scale size={28} color="#83796c" />
+      )}
 
       {editing ? (
         <View className="min-w-0 flex-1 flex-row items-center gap-2">
@@ -180,7 +207,7 @@ function trendCaption(weights: number[]): string {
   return `${change} en tus últimos ${weights.length} pesajes`;
 }
 
-function Sparkline({ weights }: { weights: number[] }) {
+function Sparkline({ weights, regressing }: { weights: number[]; regressing: boolean }) {
   const min = Math.min(...weights);
   const max = Math.max(...weights);
   const span = max - min || 1;
@@ -199,7 +226,7 @@ function Sparkline({ weights }: { weights: number[] }) {
       <Polyline
         points={coords}
         fill="none"
-        stroke="#ff8a3d"
+        stroke={regressing ? "#e2685f" : "#ff8a3d"}
         strokeWidth={2.5}
         strokeLinecap="round"
         strokeLinejoin="round"

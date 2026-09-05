@@ -1,12 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  cleanHomeSchedule,
   cleanSharedSlots,
+  DAY_LABEL,
+  deriveSharedSlots,
   describeRoster,
   describeServings,
   describeSharedSlots,
+  EMPTY_SCHEDULE,
   MEAL_KEYS,
+  MEAL_LABEL,
+  servingsForMealDay,
   servingsPerSlot,
+  type HomeSchedule,
   type ServingsTable,
   type SharedSlots,
 } from "@/lib/household-shared";
@@ -21,6 +28,7 @@ export type HouseholdMemberLite = {
   isPlanner: boolean;
   usesApp: boolean;
   portion: number;
+  homeSchedule: HomeSchedule | null;
 };
 
 /** Un niño de la casa, lo mínimo para generar su plato aparte (issue 07). */
@@ -30,6 +38,7 @@ export type HouseholdChildLite = {
   age: number | null;
   allergies: string | null;
   portion: number;
+  homeSchedule: HomeSchedule | null;
 };
 
 export type HouseholdContext = {
@@ -90,7 +99,7 @@ export async function householdContext(
 ): Promise<HouseholdContext> {
   const { data: rawMembers } = await supabase
     .from("household_members")
-    .select("household_id, user_id, display_name, uses_app, is_planner, portion");
+    .select("household_id, user_id, display_name, uses_app, is_planner, portion, home_schedule");
   const rows = (rawMembers ?? []) as {
     household_id: string;
     user_id: string | null;
@@ -98,6 +107,7 @@ export async function householdContext(
     uses_app: boolean;
     is_planner: boolean;
     portion: number | string;
+    home_schedule: unknown;
   }[];
   const mine = rows.find((r) => r.user_id === userId);
   if (!mine) return emptyContext();
@@ -109,21 +119,25 @@ export async function householdContext(
     isPlanner: r.is_planner,
     usesApp: r.uses_app,
     portion: Number(r.portion) || 1,
+    homeSchedule: r.home_schedule ? cleanHomeSchedule(r.home_schedule) : null,
   }));
   const planner = members.find((m) => m.isPlanner) ?? null;
 
+  // Leemos el `shared_slots` heredado del hogar como fallback para hogares que
+  // aún no tienen `home_schedule` por miembro. Si hay horarios individuales,
+  // `deriveSharedSlots` los sustituye.
   const { data: household } = await supabase
     .from("households")
     .select("shared_slots")
     .eq("id", mine.household_id)
     .maybeSingle();
-  const sharedSlots = cleanSharedSlots(
+  const legacySharedSlots = cleanSharedSlots(
     (household as { shared_slots?: unknown } | null)?.shared_slots,
   );
 
   const { data: children } = await supabase
     .from("household_children")
-    .select("id, name, age, allergies, appetite, notes, portion")
+    .select("id, name, age, allergies, appetite, notes, portion, home_schedule")
     .eq("household_id", mine.household_id);
   const kids = (children ?? []) as {
     id: string;
@@ -133,6 +147,7 @@ export async function householdContext(
     appetite: string | null;
     notes: string | null;
     portion: number | string;
+    home_schedule: unknown;
   }[];
 
   // Notas libres de un niño ("no le gusta el pescado", "come poco a mediodía"):
@@ -142,27 +157,49 @@ export async function householdContext(
     .filter((k) => k.notes?.trim())
     .map((k) => `- ${k.name}: ${k.notes!.trim()}`);
 
+  const kidsLite: HouseholdChildLite[] = kids.map((k) => ({
+    id: k.id,
+    name: k.name,
+    age: k.age,
+    allergies: k.allergies,
+    portion: Number(k.portion) || 0.5,
+    homeSchedule: k.home_schedule ? cleanHomeSchedule(k.home_schedule) : null,
+  }));
+
+  // Determinar sharedSlots: si hay horarios individuales, derivarlos; si no,
+  // caer al shared_slots heredado del hogar (hogares sin migrar).
+  const hasAnySchedule =
+    members.some((m) => m.homeSchedule != null) || kidsLite.some((c) => c.homeSchedule != null);
+  const sharedSlots = hasAnySchedule
+    ? deriveSharedSlots(
+        members.map((m) => ({
+          id: m.userId ?? m.displayName,
+          isPlanner: m.isPlanner,
+          homeSchedule: m.homeSchedule,
+        })),
+        kidsLite.map((c) => ({ id: c.id, homeSchedule: c.homeSchedule })),
+      )
+    : legacySharedSlots;
+
   const servings = servingsPerSlot(
     members,
-    kids.map((k) => ({ portion: Number(k.portion) || 0.5 })),
+    kidsLite.map((k) => ({ portion: k.portion })),
     sharedSlots,
   );
 
   const plannerName = planner?.displayName ?? "quien lleva la cocina";
   const anyShared = MEAL_KEYS.some((m) => sharedSlots[m].length);
 
+  // Raciones por comida y día de la semana, para el prompt del coach —
+  // más detallado que el antiguo "Comida: 3 raciones" fijo.
+  const perDayServingsText = hasAnySchedule ? describePerDayServings(members, kidsLite) : "";
+
   return {
     householdId: mine.household_id,
     plannerId: planner?.userId ?? null,
     sharedSlots,
     members,
-    children: kids.map((k) => ({
-      id: k.id,
-      name: k.name,
-      age: k.age,
-      allergies: k.allergies,
-      portion: Number(k.portion) || 0.5,
-    })),
+    children: kidsLite,
     servings,
     text: [
       describeRoster(
@@ -181,13 +218,56 @@ export async function householdContext(
       kids.length
         ? "Las comidas de casa deben servir también a los niños: platos sencillos, sin sus alérgenos y con raciones adaptadas a su edad."
         : "",
-      anyShared
-        ? `Raciones exactas por comida compartida → ${describeServings(servings, sharedSlots)}. Las comidas en solitario (snack y días sin compartir) piden ${servings.plannerSolo} ración(es).`
-        : "",
+      perDayServingsText ||
+        (anyShared
+          ? `Raciones exactas por comida compartida → ${describeServings(servings, sharedSlots)}. Las comidas en solitario (snack y días sin compartir) piden ${servings.plannerSolo} ración(es).`
+          : ""),
     ]
       .filter(Boolean)
       .join("\n"),
   };
+}
+
+/**
+ * Genera una descripción detallada de las raciones por comida y día de la
+ * semana a partir de los horarios individuales: "Lunes comida: 2.5 raciones
+ * (Víctor 1.0 + Ana 1.0 + Lucía 0.5)".
+ */
+function describePerDayServings(
+  members: HouseholdMemberLite[],
+  children: HouseholdChildLite[],
+): string {
+  const lines: string[] = [];
+  for (let day = 0; day <= 6; day++) {
+    for (const meal of MEAL_KEYS) {
+      const portions = servingsForMealDay(
+        members.map((m) => ({ portion: m.portion, homeSchedule: m.homeSchedule })),
+        children.map((c) => ({ portion: c.portion, homeSchedule: c.homeSchedule })),
+        meal,
+        day,
+      );
+      if (portions <= 0) continue;
+      // Detalle de quién está en casa
+      const presentMembers = members.filter((m) =>
+        (m.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(day),
+      );
+      const presentKids = children.filter((c) =>
+        (c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(day),
+      );
+      const names = [
+        ...presentMembers.map((m) => `${m.displayName} ${m.portion}`),
+        ...presentKids.map((c) => `${c.name} ${c.portion}`),
+      ].join(" + ");
+      lines.push(`${DAY_LABEL[day]} ${MEAL_LABEL[meal]}: ${portions} raciones (${names})`);
+    }
+  }
+  if (!lines.length) return "";
+  const plannerPortion = members.find((m) => m.isPlanner)?.portion ?? 1;
+  return [
+    "Raciones por día y comida:",
+    ...lines,
+    `Comidas en solitario (snack y días sin compartir): ${plannerPortion} ración(es).`,
+  ].join("\n");
 }
 
 /**
@@ -263,10 +343,14 @@ export async function syncSharedMeals(opts: {
             if (!futureWeek && di <= cursor.dayIndex) return day;
             const sourceDay = sourceWeek.days[di];
             if (!sourceDay) return day;
-            // Solo se pisan las comidas que ese día son compartidas del hogar;
-            // el spread conserva lo propio del otro miembro (su snack, o su
-            // desayuno los días que el desayuno no es compartido).
-            const copied = sharedMeals.filter((m) => ctx.sharedSlots[m].includes(di));
+            // Solo se pisan las comidas que ese día son compartidas del hogar Y
+            // el miembro destino tiene ese día en su horario personal; si el
+            // destino come fuera aunque el planificador esté en casa, no se copia.
+            const targetSched = target.homeSchedule;
+            const copied = sharedMeals.filter(
+              (m) =>
+                ctx.sharedSlots[m].includes(di) && (!targetSched || targetSched[m].includes(di)),
+            );
             const copiedSet = new Set<string>(copied);
             const extras = { ...(day.extras ?? {}) };
             for (const meal of copied) {

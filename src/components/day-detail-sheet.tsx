@@ -1,4 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -12,6 +14,8 @@ import {
   type MealStatus,
   type Profile,
 } from "@/lib/daily";
+import { isSharedSlot, type SharedSlots } from "@/lib/household-shared";
+import { propagateLogToFamily } from "@/lib/household.functions";
 import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import {
   childMealsForDate,
@@ -41,6 +45,7 @@ export function DayDetailSheet({
   log,
   profile,
   householdChildren,
+  household,
   onClose,
 }: {
   date: string | null;
@@ -49,6 +54,8 @@ export function DayDetailSheet({
   profile: Profile | null;
   /** Niños de la casa, para el plato aparte de un niño ese día (issue 07). */
   householdChildren?: { id: string; name: string }[];
+  /** Contexto del hogar para el toggle "toda la familia comió esto". */
+  household?: DayDetailHousehold;
   onClose: () => void;
 }) {
   return (
@@ -64,6 +71,7 @@ export function DayDetailSheet({
             log={log}
             profile={profile}
             householdChildren={householdChildren}
+            household={household}
           />
         ) : null}
       </DialogContent>
@@ -71,21 +79,40 @@ export function DayDetailSheet({
   );
 }
 
-function DayDetailBody({
+/**
+ * Cuerpo del detalle de un día pasado, sin wrapper de diálogo. Se exporta para
+ * que Hoy lo pueda renderizar inline al tocar un día pasado en el WeekStrip.
+ */
+/** Contexto del hogar que necesita el toggle "toda la familia comió esto". */
+export type DayDetailHousehold = {
+  sharedSlots: SharedSlots;
+  /** Todos los miembros con user_id (para saber si hay alguien más a quien propagar). */
+  memberCount: number;
+};
+
+export function DayDetailBody({
   date,
   plan,
   log,
   profile,
   householdChildren,
+  household,
 }: {
   date: string;
   plan: MonthlyPlan | null;
   log: DailyLog | undefined;
   profile: Profile | null;
   householdChildren?: { id: string; name: string }[];
+  /** Si se pasa, habilita el toggle "toda la familia comió esto" en las comidas compartidas. */
+  household?: DayDetailHousehold;
 }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
+  // Texto libre de "qué comí realmente" por índice de habit, mientras se edita.
+  const [actualDraft, setActualDraft] = useState<Record<number, string>>({});
+  // Toggle "toda la familia comió esto" por índice de habit.
+  const [familyToggle, setFamilyToggle] = useState<Record<number, boolean>>({});
+  const propagate = useServerFn(propagateLogToFamily);
 
   const habits = log?.habits ?? [];
   const editable = date < todayISO();
@@ -99,12 +126,85 @@ function DayDetailBody({
     },
     onError: () => toast.error("No hemos podido guardar la corrección"),
   });
+
+  /** ¿Este habit corresponde a una comida compartida ese día? */
+  const isShared = (label: string): boolean => {
+    if (!household || household.memberCount <= 1) return false;
+    const labelToKey: Record<string, "desayuno" | "comida" | "cena"> = {
+      desayuno: "desayuno",
+      comida: "comida",
+      cena: "cena",
+    };
+    const mealKey = labelToKey[label.toLowerCase()];
+    if (!mealKey) return false;
+    const weekday = (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+    return isSharedSlot(household.sharedSlots, mealKey, weekday);
+  };
+
+  const maybePropagateToFamily = (index: number, status: MealStatus, actual?: string) => {
+    if (!familyToggle[index] || !habits[index]) return;
+    propagate({
+      data: {
+        date,
+        habitLabel: habits[index].label,
+        status,
+        actual,
+      },
+    }).then(
+      (r) => {
+        if (r.propagated > 0) toast.success(`Aplicado a ${r.propagated} familiar(es) más`);
+      },
+      () => {
+        // Silencioso: el log propio ya se guardó, la propagación es best-effort.
+      },
+    );
+  };
+
   const setStatus = (index: number, status: MealStatus) => {
+    const actual = status === "distinto" ? actualDraft[index]?.trim() : undefined;
     const next = habits.map((h, i) =>
-      i === index ? { ...h, status, done: status === "plan" || status === "distinto" } : h,
+      i === index
+        ? {
+            ...h,
+            status,
+            done: status === "plan" || status === "distinto",
+            ...(status === "distinto" ? { actual: actual || h.actual } : { actual: undefined }),
+          }
+        : h,
     );
     correct.mutate({ habits: next });
+    maybePropagateToFamily(index, status, actual || habits[index]?.actual);
     setEditing(null);
+    setActualDraft((d) => {
+      const copy = { ...d };
+      delete copy[index];
+      return copy;
+    });
+    setFamilyToggle((t) => {
+      const copy = { ...t };
+      delete copy[index];
+      return copy;
+    });
+  };
+
+  /** Guardar solo el texto de "qué comí" sin cambiar el status. */
+  const saveActual = (index: number) => {
+    const text = actualDraft[index]?.trim();
+    if (!text) return;
+    const next = habits.map((h, i) => (i === index ? { ...h, actual: text } : h));
+    correct.mutate({ habits: next });
+    maybePropagateToFamily(index, "distinto", text);
+    setEditing(null);
+    setActualDraft((d) => {
+      const copy = { ...d };
+      delete copy[index];
+      return copy;
+    });
+    setFamilyToggle((t) => {
+      const copy = { ...t };
+      delete copy[index];
+      return copy;
+    });
   };
 
   // Plato planificado de cada momento (comida/cena del día exacto, desayuno/snack
@@ -166,7 +266,13 @@ function DayDetailBody({
               <button
                 type="button"
                 disabled={!editable}
-                onClick={() => setEditing((prev) => (prev === i ? null : i))}
+                onClick={() => {
+                  setEditing((prev) => (prev === i ? null : i));
+                  // Pre-rellenar el draft con el valor existente si lo hay
+                  if (h.actual && !(i in actualDraft)) {
+                    setActualDraft((d) => ({ ...d, [i]: h.actual! }));
+                  }
+                }}
                 className="w-full rounded-xl bg-secondary/50 px-3 py-2.5 text-left disabled:opacity-70"
               >
                 <div className="flex items-center justify-between gap-2">
@@ -190,13 +296,19 @@ function DayDetailBody({
                     className={`mt-1 text-sm ${
                       skipped || unlogged
                         ? "text-muted-foreground line-through"
-                        : changed
-                          ? "text-primary"
-                          : "text-foreground"
+                        : changed && h.actual
+                          ? "text-muted-foreground line-through"
+                          : changed
+                            ? "text-primary"
+                            : "text-foreground"
                     }`}
                   >
                     {planned || wasIdea}
                   </p>
+                ) : null}
+                {/* Mostrar qué comió realmente si ya lo indicó */}
+                {changed && h.actual ? (
+                  <p className="mt-0.5 text-sm text-primary">Comí: {h.actual}</p>
                 ) : null}
                 {wasIdea ? (
                   <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
@@ -214,21 +326,76 @@ function DayDetailBody({
                 ))}
               </button>
               {editing === i ? (
-                <div className="mt-1.5 flex flex-wrap gap-2 rounded-xl bg-secondary/40 p-2.5">
-                  {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                <div className="mt-1.5 space-y-2 rounded-xl bg-secondary/40 p-2.5">
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          if (s === "distinto") {
+                            // Si no hay texto aún, no cerrar — esperar a que escriba
+                            if (!actualDraft[i]?.trim() && !h.actual) return;
+                          }
+                          setStatus(i, s);
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
+                          h.status === s
+                            ? "bg-foreground text-background"
+                            : "bg-surface text-muted-foreground"
+                        }`}
+                      >
+                        {MEAL_STATUS_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Toggle "toda la familia comió esto" para comidas compartidas */}
+                  {isShared(h.label) ? (
                     <button
-                      key={s}
                       type="button"
-                      onClick={() => setStatus(i, s)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
-                        h.status === s
-                          ? "bg-foreground text-background"
+                      onClick={() => setFamilyToggle((t) => ({ ...t, [i]: !t[i] }))}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                        familyToggle[i]
+                          ? "bg-primary/10 text-primary"
                           : "bg-surface text-muted-foreground"
                       }`}
                     >
-                      {MEAL_STATUS_LABEL[s]}
+                      <Users className="h-4 w-4" />
+                      Toda la familia comió esto
                     </button>
-                  ))}
+                  ) : null}
+                  {/* Campo de texto para indicar qué comió realmente */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                      ¿Qué comiste realmente?
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus={!h.actual}
+                      value={actualDraft[i] ?? h.actual ?? ""}
+                      onChange={(e) => setActualDraft((d) => ({ ...d, [i]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (h.status === "distinto") saveActual(i);
+                          else setStatus(i, "distinto");
+                        }
+                      }}
+                      placeholder="Ej.: pizza, ensalada de pollo..."
+                      className="w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                    <button
+                      type="button"
+                      disabled={!actualDraft[i]?.trim() && !h.actual}
+                      onClick={() => {
+                        if (h.status === "distinto") saveActual(i);
+                        else setStatus(i, "distinto");
+                      }}
+                      className="w-full rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                    >
+                      {h.status === "distinto" ? "Guardar" : "Comí esto"}
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>

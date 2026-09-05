@@ -836,6 +836,14 @@ export default function Plan() {
         log={monthLogsQ.data?.find((l) => l.log_date === openDay)}
         profile={profileQ.data ?? null}
         householdChildren={hh?.children}
+        household={
+          hh?.household?.shared_slots
+            ? {
+                sharedSlots: hh.household.shared_slots,
+                memberCount: (hh.members ?? []).filter((m) => m.user_id).length,
+              }
+            : undefined
+        }
         onClose={() => setOpenDay(null)}
       />
 

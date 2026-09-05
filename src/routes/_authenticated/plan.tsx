@@ -827,6 +827,14 @@ function PlanPage() {
         log={monthLogsQ.data?.find((l) => l.log_date === openDay)}
         profile={profileQ.data ?? null}
         householdChildren={hh?.children}
+        household={
+          sharedSlots
+            ? {
+                sharedSlots,
+                memberCount: (hh?.members ?? []).filter((m) => m.user_id).length,
+              }
+            : undefined
+        }
         onClose={() => setOpenDay(null)}
       />
 

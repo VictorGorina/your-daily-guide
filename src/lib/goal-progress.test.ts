@@ -32,30 +32,34 @@ describe("normalizeGoalType", () => {
 describe("goalProgress", () => {
   const base = { goal_type: "perder", goal_amount: 10, start_weight_kg: 100 };
 
-  it("devuelve 0% si el usuario sube de peso con objetivo perder", () => {
+  it("marca regressing cuando el usuario sube de peso con objetivo perder", () => {
     const r = goalProgress({ ...base, current_weight_kg: 110 } as never);
     expect(r.pct).toBe(0);
-    expect(r.done).toBe(0);
+    expect(r.done).toBe(-10);
+    expect(r.regressing).toBe(true);
   });
 
   it("devuelve 100% si el usuario pierde justo lo marcado", () => {
     const r = goalProgress({ ...base, current_weight_kg: 90 } as never);
     expect(r.pct).toBe(1);
     expect(r.done).toBe(10);
+    expect(r.regressing).toBe(false);
   });
 
   it("muestra progreso parcial (50%)", () => {
     const r = goalProgress({ ...base, current_weight_kg: 95 } as never);
     expect(r.pct).toBeCloseTo(0.5);
     expect(r.done).toBeCloseTo(5);
+    expect(r.regressing).toBe(false);
   });
 
   it("clampea a 100% si se supera el objetivo", () => {
     const r = goalProgress({ ...base, current_weight_kg: 85 } as never);
     expect(r.pct).toBe(1);
+    expect(r.regressing).toBe(false);
   });
 
-  it('funciona con goal_type="perder peso" (bug legacy)', () => {
+  it('marca regressing con goal_type="perder peso" (bug legacy)', () => {
     const r = goalProgress({
       goal_type: "perder peso",
       goal_amount: 10,
@@ -63,19 +67,21 @@ describe("goalProgress", () => {
       current_weight_kg: 110,
     } as never);
     expect(r.pct).toBe(0);
-    expect(r.done).toBe(0);
+    expect(r.done).toBe(-10);
+    expect(r.regressing).toBe(true);
   });
 
-  it('funciona con goal_type="ganar músculo" (bug legacy)', () => {
+  it('marca regressing con goal_type="ganar músculo" cuando baja', () => {
     const r = goalProgress({
       goal_type: "ganar músculo",
       goal_amount: 5,
       start_weight_kg: 70,
       current_weight_kg: 65,
     } as never);
-    // Perdió peso → 0%
+    // Perdió peso → regressing
     expect(r.pct).toBe(0);
-    expect(r.done).toBe(0);
+    expect(r.done).toBe(-5);
+    expect(r.regressing).toBe(true);
   });
 
   it("ganar 10 kg: subir es progreso", () => {
@@ -87,6 +93,7 @@ describe("goalProgress", () => {
     } as never);
     expect(r.pct).toBe(1);
     expect(r.done).toBe(10);
+    expect(r.regressing).toBe(false);
   });
 
   it("mantener: drift 0 es 100%", () => {
@@ -96,10 +103,45 @@ describe("goalProgress", () => {
       current_weight_kg: 70,
     } as never);
     expect(r.pct).toBe(1);
+    expect(r.regressing).toBe(false);
   });
 
-  it("sin perfil devuelve ceros", () => {
-    expect(goalProgress(null)).toEqual({ pct: 0, done: 0, total: 0, unit: "kg" });
+  it("mantener: drift > 1 kg marca regressing", () => {
+    const r = goalProgress({
+      goal_type: "mantener",
+      start_weight_kg: 70,
+      current_weight_kg: 72,
+    } as never);
+    expect(r.regressing).toBe(true);
+  });
+
+  it("sin perfil devuelve ceros sin regressing", () => {
+    const r = goalProgress(null);
+    expect(r).toEqual({ pct: 0, done: 0, total: 0, unit: "kg", regressing: false });
+  });
+
+  it("sin start_weight_kg devuelve ceros sin regressing", () => {
+    const r = goalProgress({
+      goal_type: "perder",
+      goal_amount: 10,
+      start_weight_kg: null,
+      current_weight_kg: 101,
+    } as never);
+    expect(r.pct).toBe(0);
+    expect(r.done).toBe(0);
+    expect(r.regressing).toBe(false);
+  });
+
+  it("perder +1 kg (100→101) marca regressing con done=-1", () => {
+    const r = goalProgress({
+      goal_type: "perder",
+      goal_amount: 10,
+      start_weight_kg: 100,
+      current_weight_kg: 101,
+    } as never);
+    expect(r.pct).toBe(0);
+    expect(r.done).toBe(-1);
+    expect(r.regressing).toBe(true);
   });
 });
 

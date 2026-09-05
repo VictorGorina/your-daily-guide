@@ -39,16 +39,21 @@ export function GoalWeightSummary({
   const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
   const hasMetric = goal === "mantener" || progress.total > 0;
 
+  const progressLabel = () => {
+    if (goal === "mantener") return "Estabilidad";
+    if (progress.regressing) {
+      return `+${Math.abs(progress.done).toFixed(1)} kg (retroceso)`;
+    }
+    return `${progress.done.toFixed(1)} de ${progress.total} kg`;
+  };
+
   return (
     <div className="surface-card animate-rise p-5">
       {hasMetric ? (
         <ProgressBar
           value={progress.pct}
-          label={
-            goal === "mantener"
-              ? "Estabilidad"
-              : `${progress.done.toFixed(1)} de ${progress.total} kg`
-          }
+          label={progressLabel()}
+          variant={progress.regressing ? "danger" : "success"}
           caption={
             profile?.goal_target_date
               ? `meta: ${formatMetaDate(profile.goal_target_date)}`
@@ -58,7 +63,11 @@ export function GoalWeightSummary({
       ) : (
         <p className="text-sm font-semibold text-foreground">Tu peso</p>
       )}
-      <WeightPanel logs={logs} lastKnown={profile?.current_weight_kg ?? null} />
+      <WeightPanel
+        logs={logs}
+        lastKnown={profile?.current_weight_kg ?? null}
+        regressing={progress.regressing}
+      />
     </div>
   );
 }
@@ -66,7 +75,15 @@ export function GoalWeightSummary({
 // Tendencia de los últimos pesajes + botón para anotar el peso de hoy. El
 // botón despliega un campo en la misma fila (sin diálogo) para que anotar sea
 // un gesto corto, como "registrar es un toque" del resto de la app.
-function WeightPanel({ logs, lastKnown }: { logs: DailyLog[]; lastKnown: number | null }) {
+function WeightPanel({
+  logs,
+  lastKnown,
+  regressing,
+}: {
+  logs: DailyLog[];
+  lastKnown: number | null;
+  regressing: boolean;
+}) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
@@ -98,7 +115,7 @@ function WeightPanel({ logs, lastKnown }: { logs: DailyLog[]; lastKnown: number 
   return (
     <div className="mt-4 flex items-center gap-3.5">
       {points.length >= 2 ? (
-        <Sparkline weights={points} />
+        <Sparkline weights={points} regressing={regressing} />
       ) : (
         <Scale className="h-8 w-8 shrink-0 text-muted-foreground" aria-hidden="true" />
       )}
@@ -182,7 +199,7 @@ function trendCaption(weights: number[]): string {
   return `${change} en tus últimos ${weights.length} pesajes`;
 }
 
-function Sparkline({ weights }: { weights: number[] }) {
+function Sparkline({ weights, regressing }: { weights: number[]; regressing: boolean }) {
   const min = Math.min(...weights);
   const max = Math.max(...weights);
   const span = max - min || 1;
@@ -206,7 +223,7 @@ function Sparkline({ weights }: { weights: number[] }) {
       <polyline
         points={coords}
         fill="none"
-        stroke="var(--color-primary)"
+        stroke={regressing ? "var(--color-destructive)" : "var(--color-primary)"}
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"

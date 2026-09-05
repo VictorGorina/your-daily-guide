@@ -30,6 +30,8 @@ import { Route as ApiPushUnsubscribeRouteImport } from './routes/api/push/unsubs
 import { Route as ApiV1GuideRouteImport } from './routes/api/v1/guide'
 import { Route as ApiV1AccountDeleteRouteImport } from './routes/api/v1/account/delete'
 import { Route as ApiV1AuthResetRouteImport } from './routes/api/v1/auth/reset'
+import { Route as ApiV1HouseholdHomeScheduleRouteImport } from './routes/api/v1/household/home-schedule'
+import { Route as ApiV1HouseholdPropagateLogRouteImport } from './routes/api/v1/household/propagate-log'
 import { Route as ApiV1HouseholdSharedSlotsRouteImport } from './routes/api/v1/household/shared-slots'
 import { Route as ApiV1HouseholdSyncRouteImport } from './routes/api/v1/household/sync'
 import { Route as ApiV1OnboardingParseRouteImport } from './routes/api/v1/onboarding/parse'
@@ -151,6 +153,18 @@ const ApiV1AuthResetRoute = ApiV1AuthResetRouteImport.update({
   path: '/api/v1/auth/reset',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1HouseholdHomeScheduleRoute =
+  ApiV1HouseholdHomeScheduleRouteImport.update({
+    id: '/api/v1/household/home-schedule',
+    path: '/api/v1/household/home-schedule',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1HouseholdPropagateLogRoute =
+  ApiV1HouseholdPropagateLogRouteImport.update({
+    id: '/api/v1/household/propagate-log',
+    path: '/api/v1/household/propagate-log',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1HouseholdSharedSlotsRoute =
   ApiV1HouseholdSharedSlotsRouteImport.update({
     id: '/api/v1/household/shared-slots',
@@ -254,6 +268,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
+  '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
   '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
@@ -292,6 +308,8 @@ export interface FileRoutesByTo {
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
+  '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
   '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
@@ -332,6 +350,8 @@ export interface FileRoutesById {
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
+  '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
   '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
@@ -372,6 +392,8 @@ export interface FileRouteTypes {
     | '/api/v1/guide'
     | '/api/v1/account/delete'
     | '/api/v1/auth/reset'
+    | '/api/v1/household/home-schedule'
+    | '/api/v1/household/propagate-log'
     | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
@@ -410,6 +432,8 @@ export interface FileRouteTypes {
     | '/api/v1/guide'
     | '/api/v1/account/delete'
     | '/api/v1/auth/reset'
+    | '/api/v1/household/home-schedule'
+    | '/api/v1/household/propagate-log'
     | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
@@ -449,6 +473,8 @@ export interface FileRouteTypes {
     | '/api/v1/guide'
     | '/api/v1/account/delete'
     | '/api/v1/auth/reset'
+    | '/api/v1/household/home-schedule'
+    | '/api/v1/household/propagate-log'
     | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
@@ -481,6 +507,8 @@ export interface RootRouteChildren {
   ApiV1GuideRoute: typeof ApiV1GuideRoute
   ApiV1AccountDeleteRoute: typeof ApiV1AccountDeleteRoute
   ApiV1AuthResetRoute: typeof ApiV1AuthResetRoute
+  ApiV1HouseholdHomeScheduleRoute: typeof ApiV1HouseholdHomeScheduleRoute
+  ApiV1HouseholdPropagateLogRoute: typeof ApiV1HouseholdPropagateLogRoute
   ApiV1HouseholdSharedSlotsRoute: typeof ApiV1HouseholdSharedSlotsRoute
   ApiV1HouseholdSyncRoute: typeof ApiV1HouseholdSyncRoute
   ApiV1OnboardingParseRoute: typeof ApiV1OnboardingParseRoute
@@ -648,6 +676,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AuthResetRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/household/home-schedule': {
+      id: '/api/v1/household/home-schedule'
+      path: '/api/v1/household/home-schedule'
+      fullPath: '/api/v1/household/home-schedule'
+      preLoaderRoute: typeof ApiV1HouseholdHomeScheduleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/household/propagate-log': {
+      id: '/api/v1/household/propagate-log'
+      path: '/api/v1/household/propagate-log'
+      fullPath: '/api/v1/household/propagate-log'
+      preLoaderRoute: typeof ApiV1HouseholdPropagateLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/household/shared-slots': {
       id: '/api/v1/household/shared-slots'
       path: '/api/v1/household/shared-slots'
@@ -802,6 +844,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1GuideRoute: ApiV1GuideRoute,
   ApiV1AccountDeleteRoute: ApiV1AccountDeleteRoute,
   ApiV1AuthResetRoute: ApiV1AuthResetRoute,
+  ApiV1HouseholdHomeScheduleRoute: ApiV1HouseholdHomeScheduleRoute,
+  ApiV1HouseholdPropagateLogRoute: ApiV1HouseholdPropagateLogRoute,
   ApiV1HouseholdSharedSlotsRoute: ApiV1HouseholdSharedSlotsRoute,
   ApiV1HouseholdSyncRoute: ApiV1HouseholdSyncRoute,
   ApiV1OnboardingParseRoute: ApiV1OnboardingParseRoute,

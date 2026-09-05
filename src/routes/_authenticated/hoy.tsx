@@ -2,11 +2,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { Activity, Check, ChevronDown, Info, Loader2, PencilLine, X } from "lucide-react";
+import {
+  Activity,
+  Briefcase,
+  Check,
+  ChevronDown,
+  Home,
+  Info,
+  Loader2,
+  PencilLine,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AdjustmentInfoSheet } from "@/components/adjustment-info-sheet";
 import { BottomNav } from "@/components/bottom-nav";
+import { DayDetailBody } from "@/components/day-detail-sheet";
 import { DishRecipe } from "@/components/dish-recipe";
 import { DishCategoryIcon, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
@@ -33,7 +44,13 @@ import {
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import { fetchHousehold } from "@/lib/household";
-import { isSharedSlot, type MealKey } from "@/lib/household-shared";
+import {
+  EMPTY_SCHEDULE,
+  isSharedSlot,
+  personColor,
+  whoIsHome,
+  type MealKey,
+} from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import {
   childMealsForDate,
@@ -208,15 +225,52 @@ function Hoy() {
   const today0 = todayISO();
   const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0);
   const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
-  const sharedWith = (label: string) => {
+  /** Who is eating at home for this meal today? Returns null if no household or not a main meal. */
+  const mealCompanions = (label: string) => {
     const mealKey = MOMENT_TO_MEAL_KEY[label];
+    if (!mealKey) return null;
+    const hMembers = householdQ.data?.members ?? [];
+    const hChildren = householdQ.data?.children ?? [];
+    if (!hMembers.length) return null;
+    const hasSchedules = hMembers.some((m) => m.home_schedule != null);
+    if (hasSchedules) {
+      const { people } = whoIsHome(
+        hMembers.map((m) => ({
+          id: m.id,
+          displayName: m.display_name,
+          portion: m.portion,
+          isPlanner: m.is_planner,
+          homeSchedule: m.home_schedule,
+        })),
+        hChildren.map((c) => ({
+          id: c.id,
+          name: c.name,
+          portion: c.portion,
+          homeSchedule: c.home_schedule,
+        })),
+        mealKey,
+        todayWeekday,
+      );
+      const myMemberId = householdQ.data?.me?.id;
+      const meHome = people.some((p) => p.id === myMemberId);
+      const others = people.filter((p) => p.id !== myMemberId);
+      return { meHome, others };
+    }
+    // Legacy: use shared_slots
     const slots = householdQ.data?.household?.shared_slots;
-    if (!mealKey || !slots || !isSharedSlot(slots, mealKey, todayWeekday)) return null;
-    const others = (householdQ.data?.members ?? []).filter(
-      (m) => m.user_id !== householdQ.data?.me?.user_id,
-    );
-    if (!others.length) return null;
-    return others.length === 1 ? others[0].display_name : "el resto del hogar";
+    if (!slots || !isSharedSlot(slots, mealKey, todayWeekday)) {
+      return { meHome: true, others: [] };
+    }
+    const others = hMembers
+      .filter((m) => m.user_id !== householdQ.data?.me?.user_id)
+      .map((m) => ({ id: m.id, displayName: m.display_name, portion: m.portion }));
+    return { meHome: true, others };
+  };
+  /** Backward-compat wrapper for callers that just need a name string or null. */
+  const sharedWith = (label: string) => {
+    const comp = mealCompanions(label);
+    if (!comp || !comp.others.length) return null;
+    return comp.others.length === 1 ? comp.others[0].displayName : "el resto del hogar";
   };
   // Platos aparte de los niños de la casa para ese momento de hoy (issue 07):
   // el plato compartido no les sirve ese día y el plan lleva el suyo.
@@ -664,11 +718,49 @@ function Hoy() {
                       {note}
                     </span>
                   ) : null}
-                  {shared ? (
-                    <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                      Base común con {shared} · marca “Comí otra cosa” si tu ración se sale de eso.
-                    </p>
-                  ) : null}
+                  {(() => {
+                    const comp = mealCompanions(h.label);
+                    if (!comp) return null;
+                    const hasOthers = comp.others.length > 0;
+                    return (
+                      <div className="mt-2 flex items-center gap-2">
+                        {comp.meHome ? (
+                          <Home className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                        {hasOthers ? (
+                          <>
+                            <span className="flex -space-x-1.5">
+                              {comp.others.slice(0, 4).map((p) => {
+                                const colors = personColor(p.id);
+                                return (
+                                  <span
+                                    key={p.id}
+                                    title={p.displayName}
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-background text-[9px] font-bold"
+                                    style={{
+                                      background: colors.soft,
+                                      color: colors.ink,
+                                    }}
+                                  >
+                                    {p.displayName.charAt(0)}
+                                  </span>
+                                );
+                              })}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">
+                              Base común · "Comí otra cosa" si tu ración cambia
+                            </span>
+                          </>
+                        ) : comp.meHome ? (
+                          <span className="text-[11px] text-muted-foreground">Comes solo hoy</span>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">Fuera de casa</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {kidMeals.map((k) => (
                     <p
                       key={`${k.name}-${k.dish}`}
@@ -704,15 +796,44 @@ function Hoy() {
           logs={logsQ.data ?? []}
           todayHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
         />
-        {openDay ? <DayMenu date={openDay} plan={planQ.data?.plan ?? null} /> : null}
+        {openDay && openDay < todayISO() ? (
+          <div className="mt-3 rounded-2xl bg-surface p-4">
+            <p className="mb-3 text-xs font-semibold capitalize text-foreground">
+              {new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+            <DayDetailBody
+              date={openDay}
+              plan={planQ.data?.plan ?? null}
+              log={logsQ.data?.find((l) => l.log_date === openDay)}
+              profile={profile ?? null}
+              householdChildren={householdQ.data?.children}
+              household={
+                householdQ.data?.household?.shared_slots
+                  ? {
+                      sharedSlots: householdQ.data.household.shared_slots,
+                      memberCount: (householdQ.data.members ?? []).filter((m) => m.user_id).length,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        ) : openDay ? (
+          <DayMenu date={openDay} plan={planQ.data?.plan ?? null} />
+        ) : null}
         <p className="mt-2.5 px-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-          Toca un día para ver su menú.
+          {openDay && openDay < todayISO()
+            ? "Toca una comida para corregir lo que comiste."
+            : "Toca un día para ver su menú."}
         </p>
       </section>
 
       <section className="mt-6 px-0.5">
         <p className="font-title text-sm leading-[1.45] tracking-[-0.01em] text-pretty text-muted-foreground">
-          “{quote.text}”
+          "{quote.text}"
         </p>
         <p className="mt-1.5 font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
           {quote.author}

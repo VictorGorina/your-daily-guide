@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  Baby,
   Check,
   ChevronDown,
   ChevronRight,
@@ -25,11 +26,16 @@ import { fetchMonthlyPlan, monthISO, todayISO } from "@/lib/daily";
 import {
   DAY_LABEL,
   DAY_SHORT,
+  EMPTY_SCHEDULE,
   MEAL_KEYS,
   MEAL_LABEL,
+  cleanHomeSchedule,
+  deriveSharedSlots,
+  describeSharedSlots,
   personColor,
   toggleDay,
   type Appetite,
+  type HomeSchedule,
   type SharedSlots,
 } from "@/lib/household-shared";
 import {
@@ -49,7 +55,7 @@ import {
   type HouseholdGoalType,
   type OpenSlot,
 } from "@/lib/household";
-import { saveSharedSlots, syncHouseholdPlan } from "@/lib/household.functions";
+import { saveHomeSchedule, saveSharedSlots, syncHouseholdPlan } from "@/lib/household.functions";
 import { eur, shoppingTotal } from "@/lib/plan-shared";
 
 export const Route = createFileRoute("/_authenticated/hogar")({
@@ -89,11 +95,13 @@ function Hogar() {
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
   const sync = useServerFn(syncHouseholdPlan);
   const saveSlots = useServerFn(saveSharedSlots);
+  const saveSched = useServerFn(saveHomeSchedule);
 
   const [name, setName] = useState("Mi casa");
   const [code, setCode] = useState("");
   const [slots, setSlots] = useState<OpenSlot[] | null>(null);
   const [shared, setShared] = useState<SharedSlots | null>(null);
+  const [addingType, setAddingType] = useState<"adult" | "child">("adult");
   const [newAdult, setNewAdult] = useState<{ name: string; usesApp: boolean; appetite: Appetite }>({
     name: "",
     usesApp: true,
@@ -109,6 +117,10 @@ function Hogar() {
     open: false,
     child: null,
   });
+  // Per-member schedule drafts (keyed by member id or child id).
+  const [schedDrafts, setSchedDrafts] = useState<Record<string, HomeSchedule>>({});
+  // Which member/child schedule grids are expanded.
+  const [schedExpanded, setSchedExpanded] = useState<Record<string, boolean>>({});
 
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
@@ -116,7 +128,18 @@ function Hogar() {
 
   useEffect(() => {
     if (state.data?.household) setShared(state.data.household.shared_slots);
-  }, [state.data?.household]);
+    // Initialize per-member schedule drafts from server data.
+    if (state.data?.members?.length || state.data?.children?.length) {
+      const drafts: Record<string, HomeSchedule> = {};
+      for (const m of state.data?.members ?? []) {
+        drafts[m.id] = m.home_schedule ?? EMPTY_SCHEDULE;
+      }
+      for (const c of state.data?.children ?? []) {
+        drafts[c.id] = c.home_schedule ?? EMPTY_SCHEDULE;
+      }
+      setSchedDrafts(drafts);
+    }
+  }, [state.data?.household, state.data?.members, state.data?.children]);
 
   useEffect(() => {
     const household = state.data?.household;
@@ -223,6 +246,20 @@ function Hogar() {
       qc.invalidateQueries({ queryKey: ["plan", monthISO()] });
     },
     onError: (e: Error) => toast.error(e.message || "No hemos podido guardar"),
+  });
+
+  const persistSchedule = useMutation({
+    mutationFn: async (opts: { memberId?: string; childId?: string; schedule: HomeSchedule }) => {
+      await saveSched({ data: opts });
+      // Sync plan after schedule change
+      await sync({ data: { month: monthISO(), today: todayISO() } });
+    },
+    onSuccess: () => {
+      toast.success("Horario guardado");
+      refresh();
+      qc.invalidateQueries({ queryKey: ["plan", monthISO()] });
+    },
+    onError: (e: Error) => toast.error(e.message || "No hemos podido guardar el horario"),
   });
 
   const syncNow = useMutation({
@@ -465,17 +502,15 @@ function Hogar() {
 
           <section className="surface-card mt-4 p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold">En casa</h2>
+              <h2 className="text-sm font-semibold">Familia</h2>
               <span className="text-[11px] text-muted-foreground">
-                {members.length} {members.length === 1 ? "adulto" : "adultos"} · {children.length}{" "}
-                {children.length === 1 ? "peque" : "peques"}
+                {members.length + children.length}{" "}
+                {members.length + children.length === 1 ? "miembro" : "miembros"}
               </span>
             </div>
 
-            <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-              Adultos
-            </p>
-            <div className="space-y-2">
+            {/* --- Lista unificada: adultos primero, luego peques --- */}
+            <div className="mt-4 space-y-2">
               {members.map((m) => {
                 const isMe = !!m.user_id && m.user_id === state.data?.me?.user_id;
                 const initial = (m.display_name.trim()[0] ?? "?").toUpperCase();
@@ -572,75 +607,7 @@ function Hogar() {
                   </div>
                 );
               })}
-            </div>
 
-            {isCreator ? (
-              <div className="mt-3 rounded-2xl bg-secondary/60 p-4">
-                <p className="text-xs font-semibold">Añadir a alguien a la mesa</p>
-                <input
-                  className={`${input} mt-2`}
-                  value={newAdult.name}
-                  onChange={(e) => setNewAdult((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Nombre"
-                />
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      [true, "Usa la app"],
-                      [false, "No usa la app"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={label}
-                      onClick={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
-                      className={`rounded-xl py-2 text-xs font-medium transition-colors ${
-                        newAdult.usesApp === value
-                          ? "bg-primary-soft text-primary"
-                          : "bg-surface text-muted-foreground"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground">Ración</span>
-                  {APPETITES.map(([key, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => setNewAdult((p) => ({ ...p, appetite: key }))}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                        newAdult.appetite === key
-                          ? "bg-primary-soft text-primary"
-                          : "bg-surface text-muted-foreground"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => addAdult.mutate()}
-                  disabled={addAdult.isPending || !newAdult.name.trim()}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-2.5 text-sm font-medium disabled:opacity-60"
-                >
-                  <UserPlus className="h-4 w-4" /> Añadir
-                </button>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  Si usa la app, podrá unirse con el código y elegir su nombre de esta lista.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                Peques
-              </p>
-              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Pencil className="h-3 w-3" /> Editables
-              </span>
-            </div>
-            <div className="mt-2 space-y-2">
               {children.map((c) => {
                 const pal = personColor(c.id);
                 return (
@@ -650,10 +617,10 @@ function Hogar() {
                     className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-left transition-colors hover:bg-border"
                   >
                     <span
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full font-title text-[15px] font-semibold"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full"
                       style={{ background: pal.soft, color: pal.ink }}
                     >
-                      {(c.name.trim()[0] ?? "?").toUpperCase()}
+                      <Baby className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium">
@@ -669,13 +636,101 @@ function Hogar() {
                   </button>
                 );
               })}
-              <button
-                onClick={() => openChild(null)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-secondary/50 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              >
-                <Plus className="h-4 w-4" /> Añadir peque
-              </button>
             </div>
+
+            {/* --- Añadir miembro: adulto o peque --- */}
+            {isCreator ? (
+              <div className="mt-3 rounded-2xl bg-secondary/60 p-4">
+                <p className="text-xs font-semibold">Añadir a alguien a la mesa</p>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setAddingType("adult")}
+                    className={`rounded-xl py-2.5 text-xs font-medium transition-colors ${
+                      addingType === "adult"
+                        ? "bg-primary-soft text-primary"
+                        : "bg-surface text-muted-foreground"
+                    }`}
+                  >
+                    Adulto
+                  </button>
+                  <button
+                    onClick={() => setAddingType("child")}
+                    className={`rounded-xl py-2.5 text-xs font-medium transition-colors ${
+                      addingType === "child"
+                        ? "bg-primary-soft text-primary"
+                        : "bg-surface text-muted-foreground"
+                    }`}
+                  >
+                    Peque
+                  </button>
+                </div>
+
+                {addingType === "adult" ? (
+                  <>
+                    <input
+                      className={`${input} mt-2`}
+                      value={newAdult.name}
+                      onChange={(e) => setNewAdult((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="Nombre"
+                    />
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {(
+                        [
+                          [true, "Usa la app"],
+                          [false, "No usa la app"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={label}
+                          onClick={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
+                          className={`rounded-xl py-2 text-xs font-medium transition-colors ${
+                            newAdult.usesApp === value
+                              ? "bg-primary-soft text-primary"
+                              : "bg-surface text-muted-foreground"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className="text-[11px] text-muted-foreground">Ración</span>
+                      {APPETITES.map(([key, label]) => (
+                        <button
+                          key={key}
+                          onClick={() => setNewAdult((p) => ({ ...p, appetite: key }))}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                            newAdult.appetite === key
+                              ? "bg-primary-soft text-primary"
+                              : "bg-surface text-muted-foreground"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => addAdult.mutate()}
+                      disabled={addAdult.isPending || !newAdult.name.trim()}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-2.5 text-sm font-medium disabled:opacity-60"
+                    >
+                      <UserPlus className="h-4 w-4" /> Añadir adulto
+                    </button>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Si usa la app, podrá unirse con el código y elegir su nombre de esta lista.
+                    </p>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => openChild(null)}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-2.5 text-sm font-medium text-foreground"
+                  >
+                    <Baby className="h-4 w-4" /> Añadir peque
+                  </button>
+                )}
+              </div>
+            ) : null}
 
             <div className="mt-4 flex items-start gap-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-[11.5px] leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -687,10 +742,10 @@ function Hogar() {
           </section>
 
           <section className="surface-card mt-4 p-5">
-            <h2 className="text-sm font-semibold">¿Qué comidas compartís?</h2>
+            <h2 className="text-sm font-semibold">¿Cuándo come cada uno en casa?</h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Estos días coméis lo mismo en casa. Lo planifica y lo compra {plannerName}; tú marcas
-              si ya lo tienes.
+              Cada persona marca los días que come en casa. Cuando coincidís, el plato es el mismo
+              para todos.
             </p>
             <button
               onClick={() => setShowHelp((v) => !v)}
@@ -703,71 +758,175 @@ function Hogar() {
             </button>
             {showHelp ? (
               <p className="mt-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
-                Los dos partís de un plato base común, salido de la misma compra. Si ese día quieres
-                tu ración distinta (menos cantidad, sin un ingrediente...), dilo en "Comí distinto"
-                desde Hoy — es tu ajuste personal, no cambia el plato de los demás.
+                Cada persona indica qué días come en casa para cada comida. Si varios coincidís,{" "}
+                {plannerName} planifica el plato compartido. Si comes solo, tu plan va aparte. El
+                snack siempre es individual.
               </p>
             ) : null}
-            {!isPlanner ? (
-              <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                Lo decide {plannerName}, que lleva la cocina en casa.
-              </p>
-            ) : null}
-            <div
-              className={`mt-4 space-y-4 ${isPlanner ? "" : "pointer-events-none opacity-70"}`}
-              aria-disabled={!isPlanner}
-            >
-              {MEAL_KEYS.map((meal) => {
-                const picked = shared?.[meal] ?? [];
+
+            {/* Per-member schedule grids */}
+            <div className="mt-4 space-y-3">
+              {[
+                ...members.map((m) => ({
+                  key: m.id,
+                  name: m.display_name,
+                  isChild: false,
+                  canEdit: m.user_id === state.data?.me?.user_id || isPlanner,
+                  colors: personColor(m.id),
+                  memberId: m.id,
+                  childId: undefined as string | undefined,
+                })),
+                ...children.map((c) => ({
+                  key: c.id,
+                  name: c.name,
+                  isChild: true,
+                  canEdit: isPlanner,
+                  colors: personColor(c.id),
+                  memberId: undefined as string | undefined,
+                  childId: c.id,
+                })),
+              ].map((person) => {
+                const expanded = schedExpanded[person.key] ?? false;
+                const draft = schedDrafts[person.key] ?? EMPTY_SCHEDULE;
+                const serverSched = person.isChild
+                  ? children.find((c) => c.id === person.key)?.home_schedule
+                  : members.find((m) => m.id === person.key)?.home_schedule;
+                const hasChanges =
+                  JSON.stringify(draft) !== JSON.stringify(serverSched ?? EMPTY_SCHEDULE);
+
                 return (
-                  <div key={meal}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <p className="text-xs font-medium">{MEAL_LABEL[meal]}</p>
-                      <span className="text-[11px] text-muted-foreground">
-                        {picked.length ? `${picked.length} de 7` : "ningún día"}
+                  <div key={person.key} className="rounded-[14px] bg-secondary/50 p-3">
+                    <button
+                      type="button"
+                      onClick={() => setSchedExpanded((p) => ({ ...p, [person.key]: !expanded }))}
+                      className="flex w-full items-center gap-2.5"
+                    >
+                      <span
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+                        style={{
+                          background: person.colors.soft,
+                          color: person.colors.ink,
+                        }}
+                      >
+                        {person.isChild ? (
+                          <Baby className="h-3.5 w-3.5" />
+                        ) : (
+                          person.name.charAt(0).toUpperCase()
+                        )}
                       </span>
-                    </div>
-                    <div className="mt-2 grid grid-cols-7 gap-1.5">
-                      {DAY_SHORT.map((label, day) => {
-                        const active = picked.includes(day);
-                        return (
+                      <span className="flex-1 text-left text-sm font-medium">
+                        {person.name}
+                        {person.memberId &&
+                        members.find((m) => m.id === person.memberId)?.is_planner ? (
+                          <ChefHat className="ml-1.5 inline h-3.5 w-3.5 text-primary" />
+                        ) : null}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {MEAL_KEYS.reduce((sum, m) => sum + draft[m].length, 0)} comidas/sem
+                      </span>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted-foreground transition-transform ${
+                          expanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {expanded ? (
+                      <div className="mt-3 space-y-3">
+                        {MEAL_KEYS.map((meal) => {
+                          const picked = draft[meal];
+                          return (
+                            <div key={meal}>
+                              <div className="flex items-baseline justify-between gap-3">
+                                <p className="text-xs font-medium">{MEAL_LABEL[meal]}</p>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {picked.length ? `${picked.length} de 7` : "—"}
+                                </span>
+                              </div>
+                              <div className="mt-1.5 grid grid-cols-7 gap-1.5">
+                                {DAY_SHORT.map((label, day) => {
+                                  const active = picked.includes(day);
+                                  return (
+                                    <button
+                                      key={day}
+                                      disabled={!person.canEdit}
+                                      aria-label={`${person.name} ${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
+                                      onClick={() =>
+                                        setSchedDrafts((prev) => ({
+                                          ...prev,
+                                          [person.key]: {
+                                            ...draft,
+                                            [meal]: toggleDay(draft[meal], day),
+                                          },
+                                        }))
+                                      }
+                                      className={`h-[38px] rounded-[12px] text-xs font-medium transition-colors ${
+                                        active
+                                          ? "bg-primary-soft text-primary"
+                                          : "bg-secondary text-muted-foreground"
+                                      } disabled:opacity-60`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {person.canEdit && hasChanges ? (
                           <button
-                            key={day}
-                            disabled={!isPlanner}
-                            aria-label={`${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
                             onClick={() =>
-                              setShared((prev) =>
-                                prev ? { ...prev, [meal]: toggleDay(prev[meal], day) } : prev,
-                              )
+                              persistSchedule.mutate({
+                                memberId: person.isChild ? undefined : person.memberId,
+                                childId: person.isChild ? person.childId : undefined,
+                                schedule: draft,
+                              })
                             }
-                            className={`h-[42px] rounded-[14px] text-xs font-medium transition-colors ${
-                              active
-                                ? "bg-primary-soft text-primary"
-                                : "bg-secondary text-muted-foreground"
-                            }`}
+                            disabled={persistSchedule.isPending}
+                            className="w-full rounded-full bg-primary py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
                           >
-                            {label}
+                            {persistSchedule.isPending ? "Guardando..." : "Guardar horario"}
                           </button>
-                        );
-                      })}
-                    </div>
+                        ) : null}
+                        {!person.canEdit ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            Solo {plannerName} puede cambiar este horario.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-            {isPlanner ? (
-              <button
-                onClick={() => shared && persistShared.mutate(shared)}
-                disabled={!shared || persistShared.isPending}
-                className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-              >
-                {persistShared.isPending ? "Guardando y ajustando..." : "Guardar y ajustar planes"}
-              </button>
-            ) : null}
+
+            {/* Derived shared-slots summary */}
+            {(() => {
+              const derivedSlots = deriveSharedSlots(
+                members.map((m) => ({
+                  id: m.id,
+                  isPlanner: m.is_planner,
+                  homeSchedule: schedDrafts[m.id] ?? m.home_schedule ?? null,
+                })),
+                children.map((c) => ({
+                  id: c.id,
+                  homeSchedule: schedDrafts[c.id] ?? c.home_schedule ?? null,
+                })),
+              );
+              const anyShared = MEAL_KEYS.some((m) => derivedSlots[m].length);
+              return anyShared ? (
+                <div className="mt-4 rounded-[14px] bg-muted px-3.5 py-3">
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    Comidas en común → {describeSharedSlots(derivedSlots)}
+                  </p>
+                </div>
+              ) : null;
+            })()}
+
             <button
               onClick={() => syncNow.mutate()}
               disabled={syncNow.isPending}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium disabled:opacity-60"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium disabled:opacity-60"
             >
               <RefreshCw className={`h-4 w-4 ${syncNow.isPending ? "animate-spin" : ""}`} />
               Sincronizar el plan del mes

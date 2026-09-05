@@ -534,22 +534,42 @@ export function normalizeGoalType(raw: string): string {
  * Progreso hacia el objetivo de peso, en 0-1 y en kg. "Mantener" mide la
  * estabilidad (cuánto te has alejado del peso inicial, hasta 3 kg de margen).
  */
-export function goalProgress(profile: Profile | null) {
-  if (!profile || !profile.goal_type) return { pct: 0, done: 0, total: 0, unit: "kg" };
+export type GoalProgress = {
+  pct: number;
+  done: number;
+  total: number;
+  unit: string;
+  /** True when weight is moving opposite to the goal direction. */
+  regressing: boolean;
+};
+
+export function goalProgress(profile: Profile | null): GoalProgress {
+  const zero: GoalProgress = { pct: 0, done: 0, total: 0, unit: "kg", regressing: false };
+  if (!profile || !profile.goal_type) return zero;
   const goal = normalizeGoalType(profile.goal_type);
   const start = Number(profile.start_weight_kg ?? 0);
   const current = Number(profile.current_weight_kg ?? start);
   const total = Number(profile.goal_amount ?? 0);
+  // Sin start_weight_kg fiable no podemos medir progreso real.
+  if (!profile.start_weight_kg) return zero;
   if (goal === "mantener" || total <= 0) {
     const drift = Math.abs(current - start);
-    return { pct: Math.max(0, Math.min(1, 1 - drift / 3)), done: drift, total: 0, unit: "kg" };
+    return {
+      pct: Math.max(0, Math.min(1, 1 - drift / 3)),
+      done: drift,
+      total: 0,
+      unit: "kg",
+      regressing: drift > 1,
+    };
   }
   const done = goal === "perder" ? start - current : current - start;
+  const regressing = done < 0;
   return {
     pct: Math.max(0, Math.min(1, done / total)),
-    done: Math.max(0, done),
+    done,
     total,
     unit: "kg",
+    regressing,
   };
 }
 

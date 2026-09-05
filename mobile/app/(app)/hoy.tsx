@@ -1,12 +1,22 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { Activity, Check, ChevronDown, MessageCircle, PencilLine, X } from "lucide-react-native";
+import {
+  Activity,
+  Briefcase,
+  Check,
+  ChevronDown,
+  Home,
+  MessageCircle,
+  PencilLine,
+  X,
+} from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { DayDetailBody } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
 import { DishCategoryIcon } from "../../components/food-category-bg";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
@@ -32,7 +42,7 @@ import {
 } from "../../lib/daily";
 import { sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
 import { fetchHousehold } from "../../lib/household";
-import { isSharedSlot, type MealKey } from "../../lib/household-shared";
+import { isSharedSlot, personColor, whoIsHome, type MealKey } from "../../lib/household-shared";
 import { setPendingChatMessage } from "../../lib/pending-chat-message";
 import {
   childMealsForDate,
@@ -194,15 +204,52 @@ export default function Hoy() {
   const today0 = todayISO();
   const todayMeals = mealsForDate((planQ.data?.plan as MonthlyPlan | null) ?? null, today0);
   const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
-  const sharedWith = (label: string) => {
+  /** Who is eating at home for this meal today? Returns null if no household or not a main meal. */
+  const mealCompanions = (label: string) => {
     const mealKey = MOMENT_TO_MEAL_KEY[label];
+    if (!mealKey) return null;
+    const hMembers = householdQ.data?.members ?? [];
+    const hChildren = householdQ.data?.children ?? [];
+    if (!hMembers.length) return null;
+    const hasSchedules = hMembers.some((m) => m.home_schedule != null);
+    if (hasSchedules) {
+      const { people } = whoIsHome(
+        hMembers.map((m) => ({
+          id: m.id,
+          displayName: m.display_name,
+          portion: m.portion,
+          isPlanner: m.is_planner,
+          homeSchedule: m.home_schedule,
+        })),
+        hChildren.map((c) => ({
+          id: c.id,
+          name: c.name,
+          portion: c.portion,
+          homeSchedule: c.home_schedule,
+        })),
+        mealKey,
+        todayWeekday,
+      );
+      const myMemberId = householdQ.data?.me?.id;
+      const meHome = people.some((p) => p.id === myMemberId);
+      const others = people.filter((p) => p.id !== myMemberId);
+      return { meHome, others };
+    }
+    // Legacy: use shared_slots
     const slots = householdQ.data?.household?.shared_slots;
-    if (!mealKey || !slots || !isSharedSlot(slots, mealKey, todayWeekday)) return null;
-    const others = (householdQ.data?.members ?? []).filter(
-      (m) => m.user_id !== householdQ.data?.me?.user_id,
-    );
-    if (!others.length) return null;
-    return others.length === 1 ? others[0].display_name : "el resto del hogar";
+    if (!slots || !isSharedSlot(slots, mealKey, todayWeekday)) {
+      return { meHome: true, others: [] as { id: string; displayName: string; portion: number }[] };
+    }
+    const others = hMembers
+      .filter((m) => m.user_id !== householdQ.data?.me?.user_id)
+      .map((m) => ({ id: m.id, displayName: m.display_name, portion: m.portion }));
+    return { meHome: true, others };
+  };
+  /** Backward-compat wrapper for callers that just need a name string or null. */
+  const sharedWith = (label: string) => {
+    const comp = mealCompanions(label);
+    if (!comp || !comp.others.length) return null;
+    return comp.others.length === 1 ? comp.others[0].displayName : "el resto del hogar";
   };
   // Platos aparte de los niños de la casa para ese momento de hoy (issue 07).
   const childMealsFor = (label: string) => {
@@ -580,12 +627,60 @@ export default function Hoy() {
                         <Text className="font-body-medium text-[11px] text-foreground">{note}</Text>
                       </View>
                     ) : null}
-                    {shared ? (
-                      <Text className="font-body mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                        Base común con {shared} · marca “Comí otra cosa” si tu ración se sale de
-                        eso.
-                      </Text>
-                    ) : null}
+                    {(() => {
+                      const comp = mealCompanions(h.label);
+                      if (!comp) return null;
+                      const hasOthers = comp.others.length > 0;
+                      return (
+                        <View className="mt-2 flex-row items-center gap-2">
+                          {comp.meHome ? (
+                            <Home size={14} color="#83796c" />
+                          ) : (
+                            <Briefcase size={14} color="#83796c" />
+                          )}
+                          {hasOthers ? (
+                            <>
+                              <View className="flex-row" style={{ marginLeft: -2 }}>
+                                {comp.others.slice(0, 4).map((p) => {
+                                  const colors = personColor(p.id);
+                                  return (
+                                    <View
+                                      key={p.id}
+                                      className="h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-background"
+                                      style={{
+                                        backgroundColor: colors.soft,
+                                        marginLeft: -3,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 9,
+                                          fontWeight: "700",
+                                          color: colors.ink,
+                                        }}
+                                      >
+                                        {p.displayName.charAt(0)}
+                                      </Text>
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                              <Text className="font-body text-[11px] text-muted-foreground">
+                                Base común · "Comí otra cosa" si tu ración cambia
+                              </Text>
+                            </>
+                          ) : comp.meHome ? (
+                            <Text className="font-body text-[11px] text-muted-foreground">
+                              Comes en casa
+                            </Text>
+                          ) : (
+                            <Text className="font-body text-[11px] text-muted-foreground">
+                              Fuera de casa
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })()}
                     {childMealsFor(h.label).map((k) => (
                       <Text
                         key={`${k.name}-${k.dish}`}
@@ -622,11 +717,44 @@ export default function Hoy() {
               habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)
             }
           />
-          {openDay ? (
+          {openDay && openDay < todayISO() ? (
+            <View className="mt-3 rounded-3xl bg-surface p-4">
+              <View className="flex-row items-center gap-2">
+                <ChevronDown size={16} color="#6dbe7b" />
+                <Text className="font-body-semibold text-sm capitalize text-foreground">
+                  {new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                  })}
+                </Text>
+              </View>
+              <View className="mt-3">
+                <DayDetailBody
+                  date={openDay}
+                  plan={(planQ.data?.plan as MonthlyPlan | null) ?? null}
+                  log={logsQ.data?.find((l) => l.log_date === openDay)}
+                  profile={profileQ.data ?? null}
+                  householdChildren={householdQ.data?.children}
+                  household={
+                    householdQ.data?.household?.shared_slots
+                      ? {
+                          sharedSlots: householdQ.data.household.shared_slots,
+                          memberCount: (householdQ.data.members ?? []).filter((m) => m.user_id)
+                            .length,
+                        }
+                      : undefined
+                  }
+                />
+              </View>
+            </View>
+          ) : openDay ? (
             <DayMenu date={openDay} plan={(planQ.data?.plan as MonthlyPlan | null) ?? null} />
           ) : null}
           <Text className="font-body mt-2 px-1 text-[10.5px] text-muted-foreground">
-            Toca un día para ver su menú.
+            {openDay && openDay < todayISO()
+              ? "Toca una comida para corregir lo que comiste."
+              : "Toca un día para ver su menú."}
           </Text>
         </View>
 

@@ -104,6 +104,144 @@ export function describeRoster(
   return lines.join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Per-member home schedules (Feature 5: "¿Cuándo come cada uno en casa?")
+// ---------------------------------------------------------------------------
+
+/**
+ * Horario individual: en qué días de la semana come en casa para cada comida.
+ * Mismo shape que `SharedSlots`, pero por persona en vez de por hogar.
+ */
+export type HomeSchedule = Record<MealKey, number[]>;
+
+export const EMPTY_SCHEDULE: HomeSchedule = { desayuno: [], comida: [], cena: [] };
+
+/** Parse + clean un home_schedule crudo de la BD (misma lógica que cleanSharedSlots). */
+export const cleanHomeSchedule = (raw: unknown): HomeSchedule => cleanSharedSlots(raw);
+
+/** Info de una persona presente en casa para un meal+día concreto. */
+export type AtHomePerson = {
+  id: string;
+  displayName: string;
+  portion: number;
+  isPlanner?: boolean;
+  isChild?: boolean;
+};
+
+/**
+ * Quién está en casa para una comida un día concreto de la semana.
+ * Examina el `homeSchedule` de cada miembro y niño.
+ */
+export function whoIsHome(
+  members: {
+    id: string;
+    displayName: string;
+    portion: number;
+    isPlanner?: boolean;
+    homeSchedule: HomeSchedule | null;
+  }[],
+  children: { id: string; name: string; portion: number; homeSchedule: HomeSchedule | null }[],
+  meal: MealKey,
+  weekday: number,
+): { people: AtHomePerson[]; totalPortions: number } {
+  const people: AtHomePerson[] = [];
+  for (const m of members) {
+    const sched = m.homeSchedule ?? EMPTY_SCHEDULE;
+    if (sched[meal].includes(weekday)) {
+      people.push({
+        id: m.id,
+        displayName: m.displayName,
+        portion: m.portion,
+        isPlanner: m.isPlanner,
+      });
+    }
+  }
+  for (const c of children) {
+    const sched = c.homeSchedule ?? EMPTY_SCHEDULE;
+    if (sched[meal].includes(weekday)) {
+      people.push({
+        id: c.id,
+        displayName: c.name,
+        portion: c.portion,
+        isChild: true,
+      });
+    }
+  }
+  const totalPortions = Math.round(people.reduce((s, p) => s + p.portion, 0) * 100) / 100;
+  return { people, totalPortions };
+}
+
+/**
+ * ¿Es esa comida "efectivamente compartida" ese día de la semana?
+ * Compartida = el planificador está en casa Y al menos otra persona también.
+ */
+export function isEffectivelyShared(
+  members: { id: string; isPlanner?: boolean; homeSchedule: HomeSchedule | null }[],
+  children: { id: string; homeSchedule: HomeSchedule | null }[],
+  meal: MealKey,
+  weekday: number,
+): boolean {
+  const planner = members.find((m) => m.isPlanner);
+  if (!planner) return false;
+  const plannerSched = planner.homeSchedule ?? EMPTY_SCHEDULE;
+  if (!plannerSched[meal].includes(weekday)) return false;
+  // ¿Hay alguien más en casa?
+  const othersHome =
+    members.some(
+      (m) => !m.isPlanner && (m.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday),
+    ) || children.some((c) => (c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday));
+  return othersHome;
+}
+
+/**
+ * Suma de raciones de todas las personas presentes en casa para una comida y
+ * día concretos (planificador, otros adultos, niños).
+ */
+export function servingsForMealDay(
+  members: { portion: number; homeSchedule: HomeSchedule | null }[],
+  children: { portion: number; homeSchedule: HomeSchedule | null }[],
+  meal: MealKey,
+  weekday: number,
+): number {
+  let total = 0;
+  for (const m of members) {
+    if ((m.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday)) total += Number(m.portion) || 1;
+  }
+  for (const c of children) {
+    if ((c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday))
+      total += Number(c.portion) || 0.5;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+/**
+ * Deriva un `SharedSlots` computado a partir de los horarios individuales:
+ * un slot está "compartido" si el planificador está en casa y al menos otra
+ * persona también. Así todo el código que ya usa `isSharedSlot(sharedSlots, …)`
+ * sigue funcionando sin cambios.
+ */
+export function deriveSharedSlots(
+  members: { isPlanner?: boolean; homeSchedule: HomeSchedule | null }[],
+  children: { homeSchedule: HomeSchedule | null }[],
+): SharedSlots {
+  const result: SharedSlots = { desayuno: [], comida: [], cena: [] };
+  for (const meal of MEAL_KEYS) {
+    for (let day = 0; day <= 6; day++) {
+      if (
+        isEffectivelyShared(
+          members as { id: string; isPlanner?: boolean; homeSchedule: HomeSchedule | null }[],
+          children as { id: string; homeSchedule: HomeSchedule | null }[],
+          meal,
+          day,
+        )
+      ) {
+        result[meal].push(day);
+      }
+    }
+  }
+  return result;
+}
+
 /** Apetito de una persona: ajusta su ración base ±0,2 (niños) o la fija directa (adultos). */
 export type Appetite = "poco" | "normal" | "mucho";
 
