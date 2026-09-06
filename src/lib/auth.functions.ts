@@ -8,13 +8,12 @@ export type ResetPlatform = "web" | "mobile";
 /**
  * Momento del último envío por correo, para no permitir que se pida un enlace
  * detrás de otro. Es memoria del proceso: en serverless cada instancia tiene la
- * suya, así que frena el caso normal (alguien pulsando repetido) pero no un
- * ataque repartido. La defensa real es la cuota de Resend (backstop externo).
+ * suya, así que solo frena el caso normal (alguien pulsando repetido).
  *
- * TODO: cuando escale, reemplazar por rate-limiting de Vercel Edge o un campo
- * `last_reset_sent_at` en la tabla `profiles` (ojo: solo cubre cuentas
- * existentes; la función no confirma si el email existe a propósito, para no
- * facilitar la enumeración de cuentas).
+ * El freno que sí aguanta un ataque repartido entre instancias es
+ * `checkEmailRateLimit` (tabla `rate_limits`), unas líneas más abajo. Este de
+ * aquí se queda porque es gratis y ahorra la ida y vuelta a la base de datos en
+ * el caso más común.
  */
 const lastSentAt = new Map<string, number>();
 const MIN_INTERVAL_MS = 60_000;
@@ -49,6 +48,12 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
     const previous = lastSentAt.get(email);
     if (previous && Date.now() - previous < MIN_INTERVAL_MS) return ok;
     lastSentAt.set(email, Date.now());
+
+    // Cuota compartida entre instancias, contada por correo (hasheado). Se
+    // responde `ok` igual que siempre: un error distinto delataría cuáles ya
+    // han pedido enlaces, que es justo lo que evita esta función.
+    const { checkEmailRateLimit } = await import("@/lib/rate-limit.server");
+    if (!(await checkEmailRateLimit(email, "password-reset"))) return ok;
 
     // El destino NO se acepta del cliente: se elige aquí a partir de `platform`.
     // Un `redirectTo` libre convertiría esto en un redirector abierto con un

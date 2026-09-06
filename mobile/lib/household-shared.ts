@@ -77,7 +77,7 @@ export const cleanHomeSchedule = (raw: unknown): HomeSchedule => cleanSharedSlot
  */
 export function isEffectivelyShared(
   members: { id: string; isPlanner?: boolean; homeSchedule: HomeSchedule | null }[],
-  children: { id: string; homeSchedule: HomeSchedule | null }[],
+  children: { id: string; homeSchedule: HomeSchedule | null; stage?: FeedingStage }[],
   meal: MealKey,
   weekday: number,
 ): boolean {
@@ -85,10 +85,16 @@ export function isEffectivelyShared(
   if (!planner) return false;
   const plannerSched = planner.homeSchedule ?? EMPTY_SCHEDULE;
   if (!plannerSched[meal].includes(weekday)) return false;
+  // Un bebé que aún no come de la mesa no cuenta como "alguien más en casa".
   const othersHome =
     members.some(
       (m) => !m.isPlanner && (m.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday),
-    ) || children.some((c) => (c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday));
+    ) ||
+    children.some(
+      (c) =>
+        eatsTableFood(c.stage ?? "mesa") &&
+        (c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday),
+    );
   return othersHome;
 }
 
@@ -100,7 +106,7 @@ export function isEffectivelyShared(
  */
 export function deriveSharedSlots(
   members: { isPlanner?: boolean; homeSchedule: HomeSchedule | null }[],
-  children: { homeSchedule: HomeSchedule | null }[],
+  children: { homeSchedule: HomeSchedule | null; stage?: FeedingStage }[],
 ): SharedSlots {
   const result: SharedSlots = { desayuno: [], comida: [], cena: [] };
   for (const meal of MEAL_KEYS) {
@@ -108,7 +114,7 @@ export function deriveSharedSlots(
       if (
         isEffectivelyShared(
           members as { id: string; isPlanner?: boolean; homeSchedule: HomeSchedule | null }[],
-          children as { id: string; homeSchedule: HomeSchedule | null }[],
+          children as { id: string; homeSchedule: HomeSchedule | null; stage?: FeedingStage }[],
           meal,
           day,
         )
@@ -141,7 +147,14 @@ export function whoIsHome(
     isPlanner?: boolean;
     homeSchedule: HomeSchedule | null;
   }[],
-  children: { id: string; name: string; portion: number; homeSchedule: HomeSchedule | null }[],
+  children: {
+    id: string;
+    name: string;
+    portion: number;
+    homeSchedule: HomeSchedule | null;
+    /** Bebés (pecho/triturados) no comen del plato: no cuentan como comensal. */
+    stage?: FeedingStage;
+  }[],
   meal: MealKey,
   weekday: number,
 ): { people: AtHomePerson[]; totalPortions: number } {
@@ -158,6 +171,7 @@ export function whoIsHome(
     }
   }
   for (const c of children) {
+    if (!eatsTableFood(c.stage ?? "mesa")) continue;
     const sched = c.homeSchedule ?? EMPTY_SCHEDULE;
     if (sched[meal].includes(weekday)) {
       people.push({
@@ -194,6 +208,47 @@ const CHILD_APPETITE_ADJUST: Record<Appetite, number> = { poco: -0.2, normal: 0,
 /** Ración de un niño: su base por edad, ajustada ±0,2 según su apetito. */
 export function childPortion(age: number | null, appetite: Appetite): number {
   return Math.max(0.1, round2(childBasePortion(age) + CHILD_APPETITE_ADJUST[appetite]));
+}
+
+/**
+ * Etapa de alimentación de un peque respecto al plato de la mesa:
+ * - `pecho` — pecho o biberón: no se le planifica comida ni entra en la compra.
+ * - `triturados` — potitos y triturados: su propio puré aparte, ración pequeña.
+ * - `mesa` — ya come del mismo plato que la familia (comportamiento de siempre).
+ */
+export type FeedingStage = "pecho" | "triturados" | "mesa";
+
+export const FEEDING_STAGE_LABEL: Record<FeedingStage, string> = {
+  pecho: "Pecho o biberón",
+  triturados: "Triturados y potitos",
+  mesa: "Ya come del plato",
+};
+
+/** Frase para la fila del peque en Familia cuando aún no come de la mesa. */
+export const FEEDING_STAGE_NOTE: Record<FeedingStage, string> = {
+  pecho: "toma pecho o biberón",
+  triturados: "triturados y potitos",
+  mesa: "",
+};
+
+export const cleanFeedingStage = (raw: unknown): FeedingStage =>
+  raw === "pecho" || raw === "triturados" ? raw : "mesa";
+
+/** ¿Come del mismo plato que la mesa? Los bebés (pecho/triturados) no. */
+export const eatsTableFood = (stage: FeedingStage): boolean => stage === "mesa";
+
+/** Ración de un bebé de triturados: pequeña, para su propio puré (no el plato de la mesa). */
+export const TRITURADOS_PORTION = 0.25;
+
+/**
+ * Ración de un peque para dimensionar la compra, según su etapa: pecho/biberón
+ * no lleva comida planificada (0), los triturados van aparte a ración pequeña, y
+ * quien ya come del plato usa `childPortion` por edad y apetito.
+ */
+export function childRation(stage: FeedingStage, age: number | null, appetite: Appetite): number {
+  if (stage === "pecho") return 0;
+  if (stage === "triturados") return TRITURADOS_PORTION;
+  return childPortion(age, appetite);
 }
 
 /**

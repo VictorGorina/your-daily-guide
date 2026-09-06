@@ -47,5 +47,25 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // El cliente con la clave de servicio se salta RLS. Importarlo arriba del
+    // todo solo es seguro dentro de otro `*.server.ts`: los archivos de ruta y
+    // los `*.functions.ts` se empaquetan también para el navegador, así que ahí
+    // hay que cargarlo dentro del handler con `await import(...)`. El selector
+    // mira solo los import estáticos, que son los que arrastran el módulo al
+    // bundle; los dinámicos siguen permitidos.
+    files: ["**/*.ts", "**/*.tsx"],
+    ignores: ["**/*.server.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: 'ImportDeclaration[source.value="@/integrations/supabase/client.server"]',
+          message:
+            'No importes aquí el cliente de servicio arriba del todo: cárgalo dentro del handler con await import("@/integrations/supabase/client.server").',
+        },
+      ],
+    },
+  },
   eslintPluginPrettier,
 );

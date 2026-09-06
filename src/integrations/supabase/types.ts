@@ -83,6 +83,7 @@ export type Database = {
           allergies: string | null;
           appetite: string | null;
           created_at: string;
+          feeding_stage: string;
           household_id: string;
           id: string;
           name: string;
@@ -95,6 +96,7 @@ export type Database = {
           allergies?: string | null;
           appetite?: string | null;
           created_at?: string;
+          feeding_stage?: string;
           household_id: string;
           id?: string;
           name: string;
@@ -107,6 +109,7 @@ export type Database = {
           allergies?: string | null;
           appetite?: string | null;
           created_at?: string;
+          feeding_stage?: string;
           household_id?: string;
           id?: string;
           name?: string;
@@ -419,6 +422,10 @@ export type Database = {
       claim_household_slot: {
         Args: { _invite_code: string; _member_id: string };
         Returns: string;
+      };
+      consume_rate_limit: {
+        Args: { _subject: string; _bucket: string; _limit: number; _window_seconds: number };
+        Returns: { allowed: boolean; retry_after_seconds: number }[];
       };
       household_member_list: {
         Args: never;

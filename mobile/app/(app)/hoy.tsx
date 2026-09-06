@@ -235,6 +235,7 @@ export default function Hoy() {
           name: c.name,
           portion: c.portion,
           homeSchedule: c.home_schedule ?? baseline,
+          stage: c.feeding_stage,
         })),
         mealKey,
         todayWeekday,

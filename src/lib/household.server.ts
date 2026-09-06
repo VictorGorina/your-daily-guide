@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  cleanFeedingStage,
   cleanHomeSchedule,
   cleanSharedSlots,
   DAY_LABEL,
@@ -8,7 +9,9 @@ import {
   describeRoster,
   describeServings,
   describeSharedSlots,
+  eatsTableFood,
   EMPTY_SCHEDULE,
+  type FeedingStage,
   MEAL_KEYS,
   MEAL_LABEL,
   servingsForMealDay,
@@ -37,6 +40,8 @@ export type HouseholdChildLite = {
   name: string;
   age: number | null;
   allergies: string | null;
+  /** `mesa` = come del plato de la familia; `triturados`/`pecho` = bebé aparte. */
+  stage: FeedingStage;
   portion: number;
   homeSchedule: HomeSchedule | null;
 };
@@ -93,27 +98,34 @@ export async function householdPlannerId(
 }
 
 /**
- * Lee una tabla del hogar con la columna opcional `home_schedule`. Si esa
- * columna aún no existe en la BD (migración `20260905120000` sin aplicar),
- * PostgREST devuelve un 400; en ese caso reintenta sin ella y sigue con
- * `home_schedule` = null en cada fila. Sin este reintento, el error se tragaba
- * silenciosamente y `householdContext` devolvía un contexto vacío para TODO
- * usuario de un hogar (coach sin familia, plan como solitario, espejo parado).
+ * Lee una tabla del hogar añadiendo columnas que puede que aún no existan en la
+ * BD si su migración no se ha aplicado (`home_schedule` → `20260905120000`,
+ * `feeding_stage` → `20260906150000`). PostgREST devuelve un 400 si falta
+ * cualquiera; en ese caso se reintenta quitándolas una a una hasta que la
+ * consulta pasa, y las filas siguen sin ese campo. Sin este reintento el error
+ * se tragaba en silencio y `householdContext` devolvía un contexto vacío para
+ * TODO usuario del hogar (coach sin familia, plan en solitario, espejo parado).
  */
-async function selectWithOptionalSchedule(
+async function selectWithOptionalColumns(
   supabase: AnyClient,
   table: "household_members" | "household_children",
   baseColumns: string,
+  optionalColumns: string[],
   householdId?: string,
 ): Promise<Record<string, unknown>[] | null> {
-  const run = (columns: string) => {
-    const q = supabase.from(table).select(columns);
+  const run = (columns: string[]) => {
+    const q = supabase.from(table).select(columns.join(", "));
     return householdId ? q.eq("household_id", householdId) : q;
   };
-  const full = await run(`${baseColumns}, home_schedule`);
-  if (!full.error) return (full.data ?? null) as Record<string, unknown>[] | null;
-  const base = await run(baseColumns);
-  return (base.data ?? null) as Record<string, unknown>[] | null;
+  // De más a menos columnas opcionales, quitando desde el final: la más nueva
+  // (`feeding_stage`) es la más probable que falte, así que se conserva
+  // `home_schedule` mientras se pueda. [a,b] → [a] → [].
+  let last: Awaited<ReturnType<typeof run>> | null = null;
+  for (let k = optionalColumns.length; k >= 0; k -= 1) {
+    last = await run([baseColumns, ...optionalColumns.slice(0, k)]);
+    if (!last.error) return (last.data ?? null) as Record<string, unknown>[] | null;
+  }
+  return (last?.data ?? null) as Record<string, unknown>[] | null;
 }
 
 /** Contexto del hogar (mesa, comidas compartidas e hijos) para los prompts del coach. */
@@ -121,10 +133,11 @@ export async function householdContext(
   supabase: AnyClient,
   userId: string,
 ): Promise<HouseholdContext> {
-  const rawMembers = await selectWithOptionalSchedule(
+  const rawMembers = await selectWithOptionalColumns(
     supabase,
     "household_members",
     "household_id, user_id, display_name, uses_app, is_planner, portion",
+    ["home_schedule"],
   );
   const rows = (rawMembers ?? []) as {
     household_id: string;
@@ -161,10 +174,11 @@ export async function householdContext(
     (household as { shared_slots?: unknown } | null)?.shared_slots,
   );
 
-  const children = await selectWithOptionalSchedule(
+  const children = await selectWithOptionalColumns(
     supabase,
     "household_children",
     "id, name, age, allergies, appetite, notes, portion",
+    ["home_schedule", "feeding_stage"],
     mine.household_id,
   );
   const kids = (children ?? []) as {
@@ -174,6 +188,7 @@ export async function householdContext(
     allergies: string | null;
     appetite: string | null;
     notes: string | null;
+    feeding_stage: unknown;
     portion: number | string;
     home_schedule: unknown;
   }[];
@@ -190,6 +205,7 @@ export async function householdContext(
     name: k.name,
     age: k.age,
     allergies: k.allergies,
+    stage: cleanFeedingStage(k.feeding_stage),
     portion: Number(k.portion) || 0.5,
     homeSchedule: k.home_schedule ? cleanHomeSchedule(k.home_schedule) : null,
   }));
@@ -214,18 +230,20 @@ export async function householdContext(
           isPlanner: m.isPlanner,
           homeSchedule: m.homeSchedule,
         })),
-        kidsLite.map((c) => ({ id: c.id, homeSchedule: c.homeSchedule })),
+        kidsLite.map((c) => ({ id: c.id, homeSchedule: c.homeSchedule, stage: c.stage })),
       )
     : legacySharedSlots;
 
   const servings = servingsPerSlot(
     members,
-    kidsLite.map((k) => ({ portion: k.portion })),
+    kidsLite.map((k) => ({ portion: k.portion, stage: k.stage })),
     sharedSlots,
   );
 
   const plannerName = planner?.displayName ?? "quien lleva la cocina";
   const anyShared = MEAL_KEYS.some((m) => sharedSlots[m].length);
+  const tableKids = kidsLite.filter((k) => eatsTableFood(k.stage));
+  const infantKids = kidsLite.filter((k) => !eatsTableFood(k.stage));
 
   // Raciones por comida y día de la semana, para el prompt del coach —
   // más detallado que el antiguo "Comida: 3 raciones" fijo.
@@ -245,15 +263,29 @@ export async function householdContext(
           hasAccount: !!m.userId,
           isPlanner: m.isPlanner,
         })),
-        kids.map((k) => ({ name: k.name, age: k.age, allergies: k.allergies })),
+        kids.map((k) => ({
+          name: k.name,
+          age: k.age,
+          allergies: k.allergies,
+          stage: cleanFeedingStage(k.feeding_stage),
+        })),
       ),
       `Comidas compartidas del hogar → ${describeSharedSlots(sharedSlots)}.`,
       anyShared
         ? `En una comida compartida el plato es EXACTAMENTE EL MISMO para toda la mesa y solo lo cambia ${plannerName}. Que alguien coma una ración distinta o se salte una comida es privado y no cambia el plato de los demás. Si un niño necesita otro plato un día, va aparte en "days[].kids"; el plato compartido no se toca.`
         : "",
       ...kidNotes,
-      kids.length
-        ? "Las comidas de casa deben servir también a los niños: platos sencillos, sin sus alérgenos y con raciones adaptadas a su edad."
+      tableKids.length
+        ? "Las comidas de casa deben servir también a los niños que comen del plato: platos sencillos, sin sus alérgenos y con raciones adaptadas a su edad."
+        : "",
+      infantKids.length
+        ? `Bebés que AÚN NO comen del plato de la mesa: ${infantKids
+            .map((k) =>
+              k.stage === "pecho"
+                ? `${k.name} (toma pecho o biberón, no necesita plato ni entra en la compra)`
+                : `${k.name} (triturados: lleva SIEMPRE su propio plato en "days[].kids" cada día que come en casa — puré/triturado sencillo sin sal, con sus ingredientes sumados al "weekQty" a ración de bebé)`,
+            )
+            .join("; ")}. La mesa NO se dimensiona para ellos.`
         : "",
       perDayServingsText ||
         (anyShared
@@ -279,17 +311,17 @@ function describePerDayServings(
     for (const meal of MEAL_KEYS) {
       const portions = servingsForMealDay(
         members.map((m) => ({ portion: m.portion, homeSchedule: m.homeSchedule })),
-        children.map((c) => ({ portion: c.portion, homeSchedule: c.homeSchedule })),
+        children.map((c) => ({ portion: c.portion, homeSchedule: c.homeSchedule, stage: c.stage })),
         meal,
         day,
       );
       if (portions <= 0) continue;
-      // Detalle de quién está en casa
+      // Detalle de quién está en casa (los bebés no comen del plato: fuera).
       const presentMembers = members.filter((m) =>
         (m.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(day),
       );
-      const presentKids = children.filter((c) =>
-        (c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(day),
+      const presentKids = children.filter(
+        (c) => eatsTableFood(c.stage) && (c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(day),
       );
       const names = [
         ...presentMembers.map((m) => `${m.displayName} ${m.portion}`),

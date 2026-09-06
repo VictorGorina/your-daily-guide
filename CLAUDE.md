@@ -158,6 +158,13 @@ querer:
   compartido no le vale. Lo emite la IA o lo cambia el planificador con `setChildMeal` (ruta
   `/api/v1/plan/child-meal`, hoy y pasado bloqueados, la compra no cambia). Se espeja con la
   comida compartida.
+- **`household_children.feeding_stage`** (`pecho` · `triturados` · `mesa`, default `mesa`):
+  los bebés que aún no comen de la mesa van aparte. `eatsTableFood`/`childRation`
+  (`household-shared.ts`) sacan a los no-`mesa` de las raciones del plato compartido
+  (`servingsPerSlot`, `deriveSharedSlots`) y de la compra de la casa; `pecho` no lleva plato,
+  `triturados` lleva SIEMPRE el suyo en `PlanDay.kids` (puré, ración pequeña). La ficha del
+  peque (`child-sheet.tsx`) tiene el selector "¿Qué come?" y Familia agrupa a los bebés en
+  "Bebés · aún no comen de la mesa".
 - **El coach conoce el hogar**: `householdContext` alimenta `generateMonthlyPlan`,
   `adjustMonthlyPlan`, `welcomeBriefing` y `/api/chat` (vía `supabaseFromRequest`). Revisa que
   el copy no dé por hecho "tu plan" para un no planificador (incluido el push de renovación).
@@ -173,6 +180,19 @@ periódico no usa un cron nativo de la plataforma — un workflow de GitHub Acti
 [src/lib/push-dispatch.server.ts](src/lib/push-dispatch.server.ts). El tono de perfil
 (`profiles.tone`) afecta al copy y a la frecuencia en tres sitios distintos (push, repaso nocturno,
 prompt del coach) a partir de un único campo.
+
+**Rate limiting (`rate_limits` + `consume_rate_limit`):** cuota por persona y operación para lo
+que cuesta dinero (cada llamada a la IA: coach, plan, guía, receta, tiquet) y para recuperar la
+contraseña. Vive en la base de datos, no en memoria del proceso, porque en serverless cada
+instancia tiene la suya y un contador local no frena un abuso repartido. Los límites se ajustan
+en `RATE_LIMITS` ([src/lib/rate-limit.server.ts](src/lib/rate-limit.server.ts)) sin tocar SQL;
+el `subject` lo construye siempre el servidor (`user:<uuid>` del JWT ya verificado, o
+`email:<sha256>` sin sesión), nunca el cliente. Dos avisos: la función SQL solo la puede ejecutar
+`service_role` — si se pudiera llamar con la sesión de una persona, esa persona podría gastarle
+la cuota a otra —, y si la consulta falla se **deja pasar** a propósito (un fallo de base de
+datos no debe dejar la app sin coach), así que un error de `consume_rate_limit` en los logs
+significa que ahora mismo no hay tope de gasto. Desde un `*.functions.ts` se carga con
+`await import(...)`: importa `client.server`, que no puede acabar en el bundle del navegador.
 
 ## Convenciones de código
 

@@ -156,6 +156,21 @@ en `kids[].off`; ruta espejo `/api/v1/plan/child-meal`). Es parte del plan compa
 el planificador lo toca (D2) y `syncSharedMeals` / `composeDayForUser` lo arrastran con su
 comida compartida. Solo las 3 comidas principales — el snack nunca.
 
+**Bebés que aún no comen de la mesa.** `household_children.feeding_stage` (`pecho` ·
+`triturados` · `mesa`, default `mesa`; migración `20260906150000`) separa esa etapa. Sin
+esto, un bebé de 2 meses se daba de alta como un peque más: contaba como comensal del plato
+compartido, inflaba la compra de la casa y la IA lo planificaba comiendo lo mismo que la
+mesa. `eatsTableFood(stage)` / `childRation(stage, age, appetite)` en
+[household-shared.ts](src/lib/household-shared.ts) sacan a los no-`mesa` de
+`servingsPerSlot`, `servingsForMealDay`, `deriveSharedSlots`/`isEffectivelyShared` y
+`whoIsHome` — no dimensionan el plato de la mesa ni la compra. `pecho` no lleva plato ni
+ingredientes; `triturados` lleva SIEMPRE su propio plato en `PlanDay.kids` cada día que come
+en casa (puré sin sal, ración pequeña, sus ingredientes al `weekQty`). El prompt de
+`generateMonthlyPlan` y `describeRoster` distinguen las dos categorías. UI: selector "¿Qué
+come?" en `child-sheet.tsx` (oculta Apetito si no es `mesa`), y Familia agrupa a los bebés
+bajo "Bebés · aún no comen de la mesa". `selectWithOptionalColumns`
+([household.server.ts](src/lib/household.server.ts)) tolera la columna sin migrar.
+
 **El coach conoce la mesa.** `householdContext` (roster con raciones vía `describeRoster`,
 `shared_slots`, niños con alergias, quién planifica) alimenta `generateMonthlyPlan`,
 `adjustMonthlyPlan`, `welcomeBriefing` y también `/api/chat`, que para leerlo con las

@@ -83,6 +83,9 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) return fallback;
 
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "guide");
+
     const { data: profile } = await context.supabase
       .from("profiles")
       .select("*")

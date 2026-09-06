@@ -57,6 +57,8 @@ import {
   MEAL_LABEL,
   deriveSharedSlots,
   describeSharedSlots,
+  eatsTableFood,
+  FEEDING_STAGE_NOTE,
   personColor,
   toggleDay,
   type Appetite,
@@ -308,6 +310,39 @@ export default function Hogar() {
   const household = state.data?.household;
   const members = state.data?.members ?? [];
   const children = state.data?.children ?? [];
+  // Los bebés que aún no comen de la mesa van en su propio grupo.
+  const tableKids = children.filter((c) => eatsTableFood(c.feeding_stage));
+  const babies = children.filter((c) => !eatsTableFood(c.feeding_stage));
+  const renderChildRow = (c: HouseholdChild) => {
+    const pal = personColor(c.id);
+    const note = FEEDING_STAGE_NOTE[c.feeding_stage];
+    return (
+      <Pressable
+        key={c.id}
+        onPress={() => setChildSheet({ open: true, child: c })}
+        className="flex-row items-center gap-3 rounded-2xl bg-secondary px-4 py-3 active:opacity-80"
+      >
+        <View
+          className="h-10 w-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: pal.soft }}
+        >
+          <Baby size={20} color={pal.ink} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-sm font-sans-medium text-foreground">
+            {c.name}
+            {c.age ? ` · ${c.age} años` : ""}
+          </Text>
+          <Text className="mt-0.5 text-xs text-muted-foreground">
+            {note
+              ? note
+              : `${c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"} · apetito ${c.appetite ?? "normal"}`}
+          </Text>
+        </View>
+        <ChevronRight size={18} color="#83796c" />
+      </Pressable>
+    );
+  };
   const goalDisabled =
     saveGoal.isPending || (goalType === "comportamiento" ? !goalText.trim() : !goalBudget.trim());
 
@@ -636,34 +671,16 @@ export default function Hogar() {
                   );
                 })}
 
-                {children.map((c) => {
-                  const pal = personColor(c.id);
-                  return (
-                    <Pressable
-                      key={c.id}
-                      onPress={() => setChildSheet({ open: true, child: c })}
-                      className="flex-row items-center gap-3 rounded-2xl bg-secondary px-4 py-3 active:opacity-80"
-                    >
-                      <View
-                        className="h-10 w-10 items-center justify-center rounded-full"
-                        style={{ backgroundColor: pal.soft }}
-                      >
-                        <Baby size={20} color={pal.ink} />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-sm font-sans-medium text-foreground">
-                          {c.name}
-                          {c.age ? ` · ${c.age} años` : ""}
-                        </Text>
-                        <Text className="mt-0.5 text-xs text-muted-foreground">
-                          {c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"}{" "}
-                          · apetito {c.appetite ?? "normal"}
-                        </Text>
-                      </View>
-                      <ChevronRight size={18} color="#83796c" />
-                    </Pressable>
-                  );
-                })}
+                {tableKids.map(renderChildRow)}
+
+                {babies.length ? (
+                  <View className="mt-1 gap-2">
+                    <Text className="text-[11px] font-sans-semibold uppercase tracking-wider text-muted-foreground">
+                      Bebés · aún no comen de la mesa
+                    </Text>
+                    {babies.map(renderChildRow)}
+                  </View>
+                ) : null}
               </View>
 
               {/* --- Añadir miembro: adulto o peque --- */}
@@ -989,6 +1006,7 @@ export default function Hogar() {
                   children.map((c) => ({
                     id: c.id,
                     homeSchedule: schedDrafts[c.id] ?? c.home_schedule ?? baseline,
+                    stage: c.feeding_stage,
                   })),
                 );
                 const anyShared = MEAL_KEYS.some((m) => derivedSlots[m].length);

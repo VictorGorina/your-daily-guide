@@ -15,6 +15,7 @@
 /** Firma común a las server functions, con o sin `inputValidator`. */
 type ServerFn<TOutput> = (opts: { data: never }) => Promise<TOutput>;
 
+import { RateLimitError } from "@/lib/rate-limit-error";
 import { ValidationError } from "@/lib/validation-error";
 
 export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
@@ -40,6 +41,14 @@ export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
       // en vez de reintentar.
       if (raw.startsWith("Unauthorized")) {
         return Response.json({ error: raw }, { status: 401 });
+      }
+      // Cuota agotada → 429, con `retry-after` para que el cliente sepa cuánto
+      // falta en vez de insistir a ciegas.
+      if (error instanceof RateLimitError) {
+        return Response.json(
+          { error: raw },
+          { status: 429, headers: { "retry-after": String(error.retryAfterSeconds) } },
+        );
       }
       // ValidationError = dato inválido del usuario → 400 con su mensaje
       // original, para que el cliente (y la observabilidad) distinga errores de

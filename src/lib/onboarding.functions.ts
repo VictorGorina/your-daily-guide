@@ -81,9 +81,12 @@ export const parseOnboarding = createServerFn({ method: "POST" })
   .validator((input: { transcript: string }) => ({
     transcript: String(input?.transcript ?? "").slice(0, 12000),
   }))
-  .handler(async ({ data }): Promise<OnboardingDraft> => {
+  .handler(async ({ data, context }): Promise<OnboardingDraft> => {
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
+
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "onboarding-parse");
 
     const ai = createAiProvider(key);
     const { text } = await generateText({

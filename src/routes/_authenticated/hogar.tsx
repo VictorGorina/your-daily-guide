@@ -32,6 +32,8 @@ import {
   cleanHomeSchedule,
   deriveSharedSlots,
   describeSharedSlots,
+  eatsTableFood,
+  FEEDING_STAGE_NOTE,
   personColor,
   toggleDay,
   type Appetite,
@@ -311,8 +313,43 @@ function Hogar() {
   const household = state.data?.household;
   const members = state.data?.members ?? [];
   const children = state.data?.children ?? [];
+  // Los bebés que aún no comen de la mesa van en su propio grupo, no con los
+  // peques que sí comparten plato.
+  const tableKids = children.filter((c) => eatsTableFood(c.feeding_stage));
+  const babies = children.filter((c) => !eatsTableFood(c.feeding_stage));
 
   const openChild = (child: HouseholdChild | null) => setChildSheet({ open: true, child });
+
+  const renderChildRow = (c: HouseholdChild) => {
+    const pal = personColor(c.id);
+    const note = FEEDING_STAGE_NOTE[c.feeding_stage];
+    return (
+      <button
+        key={c.id}
+        onClick={() => openChild(c)}
+        className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-left transition-colors hover:bg-border"
+      >
+        <span
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full"
+          style={{ background: pal.soft, color: pal.ink }}
+        >
+          <Baby className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">
+            {c.name}
+            {c.age ? ` · ${c.age} años` : ""}
+          </span>
+          <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+            {note
+              ? note
+              : `${c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"} · apetito ${c.appetite ?? "normal"}`}
+          </span>
+        </span>
+        <ChevronRight className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+      </button>
+    );
+  };
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
@@ -611,35 +648,17 @@ function Hogar() {
                 );
               })}
 
-              {children.map((c) => {
-                const pal = personColor(c.id);
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => openChild(c)}
-                    className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-4 py-3 text-left transition-colors hover:bg-border"
-                  >
-                    <span
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full"
-                      style={{ background: pal.soft, color: pal.ink }}
-                    >
-                      <Baby className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium">
-                        {c.name}
-                        {c.age ? ` · ${c.age} años` : ""}
-                      </span>
-                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
-                        {c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"} ·
-                        apetito {c.appetite ?? "normal"}
-                      </span>
-                    </span>
-                    <ChevronRight className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
-                  </button>
-                );
-              })}
+              {tableKids.map(renderChildRow)}
             </div>
+
+            {babies.length ? (
+              <div className="mt-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                  Bebés · aún no comen de la mesa
+                </p>
+                <div className="space-y-2">{babies.map(renderChildRow)}</div>
+              </div>
+            ) : null}
 
             {/* --- Añadir miembro: adulto o peque --- */}
             {isCreator ? (
@@ -918,6 +937,7 @@ function Hogar() {
                 children.map((c) => ({
                   id: c.id,
                   homeSchedule: schedDrafts[c.id] ?? c.home_schedule ?? baseline,
+                  stage: c.feeding_stage,
                 })),
               );
               const anyShared = MEAL_KEYS.some((m) => derivedSlots[m].length);

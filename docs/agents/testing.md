@@ -23,14 +23,15 @@ no `@/`. `bun test` descubre cualquier `*.test.ts` sin configuración.
 
 Qué hay cubierto hoy:
 
-| Archivo                   | Foco                                                                                                                                                                                                                             |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plan-shared.test.ts`     | `tripDayRange` (regresión "días 32-31"), `mergeFuturePlan` (un plato a mano sobrevive a una recolocación), cobertura del mes, totales de dinero, `repartitionTrips`/`groupByTrip`, `parseJsonLoose`, `cleanShopping`/`cleanPlan` |
-| `zoned-date.test.ts`      | `zonedTodayISO`/`zonedMinutesNow` por zona horaria (Madrid por defecto, Nueva York, México, Tokio, cruces de medianoche)                                                                                                         |
-| `age.test.ts`             | años cumplidos en el límite del cumpleaños                                                                                                                                                                                       |
-| `safe-next.test.ts`       | `safeInternalPath` rechaza redirects a otro origen                                                                                                                                                                               |
-| `macros.test.ts`          | `sumDoneMacros` (suma por status, matching moment↔label, platos fantasma, deshacer), `macroTargets` (fallback genérico, clamp), `ZERO_MACROS`                                                                                    |
-| `food-categories.test.ts` | `classifyDish` (precedencia multi-palabra, límites de palabra), paleta de acentos                                                                                                                                                |
+| Archivo                    | Foco                                                                                                                                                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan-shared.test.ts`      | `tripDayRange` (regresión "días 32-31"), `mergeFuturePlan` (un plato a mano sobrevive a una recolocación), cobertura del mes, totales de dinero, `repartitionTrips`/`groupByTrip`, `parseJsonLoose`, `cleanShopping`/`cleanPlan` |
+| `zoned-date.test.ts`       | `zonedTodayISO`/`zonedMinutesNow` por zona horaria (Madrid por defecto, Nueva York, México, Tokio, cruces de medianoche)                                                                                                         |
+| `age.test.ts`              | años cumplidos en el límite del cumpleaños                                                                                                                                                                                       |
+| `safe-next.test.ts`        | `safeInternalPath` rechaza redirects a otro origen                                                                                                                                                                               |
+| `macros.test.ts`           | `sumDoneMacros` (suma por status, matching moment↔label, platos fantasma, deshacer), `macroTargets` (fallback genérico, clamp), `ZERO_MACROS`                                                                                    |
+| `food-categories.test.ts`  | `classifyDish` (precedencia multi-palabra, límites de palabra), paleta de acentos                                                                                                                                                |
+| `rate-limit-error.test.ts` | `retryAfterText` (límites minuto/hora, singular/plural, sin encadenar dos redondeos) y el mensaje de `RateLimitError`                                                                                                            |
 
 ## Regla al tocar esta lógica
 

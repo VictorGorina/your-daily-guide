@@ -1,8 +1,10 @@
 import { currentUserId } from "@/lib/auth-headers";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  cleanFeedingStage,
   cleanHomeSchedule,
   cleanSharedSlots,
+  type FeedingStage,
   type HomeSchedule,
   type SharedSlots,
 } from "@/lib/household-shared";
@@ -45,7 +47,9 @@ export type HouseholdChild = {
   allergies: string | null;
   appetite: string | null;
   notes: string | null;
-  /** Peso de ración para la compra (1 = ración de adulto estándar). Ver `childPortion`. */
+  /** Etapa de alimentación: `mesa` (come del plato) · `triturados` · `pecho`. */
+  feeding_stage: FeedingStage;
+  /** Peso de ración para la compra (1 = ración de adulto estándar). Ver `childRation`. */
   portion: number;
   /** En qué días de la semana come en casa, por comida. */
   home_schedule: HomeSchedule | null;
@@ -134,6 +138,7 @@ export async function fetchHousehold(): Promise<HouseholdState> {
         allergies: string | null;
         appetite: string | null;
         notes: string | null;
+        feeding_stage?: unknown;
         portion: unknown;
         home_schedule?: unknown;
       }[]
@@ -144,6 +149,7 @@ export async function fetchHousehold(): Promise<HouseholdState> {
       allergies: c.allergies,
       appetite: c.appetite,
       notes: c.notes,
+      feeding_stage: cleanFeedingStage(c.feeding_stage),
       portion: Number(c.portion) || 0.5,
       home_schedule: c.home_schedule ? cleanHomeSchedule(c.home_schedule) : null,
     })),

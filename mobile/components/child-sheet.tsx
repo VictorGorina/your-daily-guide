@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { addChild, removeChild, updateChild, type HouseholdChild } from "../lib/household";
-import { childPortion, type Appetite } from "../lib/household-shared";
+import {
+  childRation,
+  cleanFeedingStage,
+  FEEDING_STAGE_LABEL,
+  type Appetite,
+  type FeedingStage,
+} from "../lib/household-shared";
 import { Sheet } from "./ui/sheet";
 
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
@@ -16,20 +22,31 @@ const APPETITES: readonly [Appetite, string][] = [
   ["mucho", "Mucho"],
 ];
 
+const STAGES: readonly FeedingStage[] = ["pecho", "triturados", "mesa"];
+
 type Draft = {
   name: string;
   age: string;
   appetite: Appetite;
+  stage: FeedingStage;
   allergies: string;
   notes: string;
 };
 
-const emptyDraft: Draft = { name: "", age: "", appetite: "normal", allergies: "", notes: "" };
+const emptyDraft: Draft = {
+  name: "",
+  age: "",
+  appetite: "normal",
+  stage: "mesa",
+  allergies: "",
+  notes: "",
+};
 
 const toDraft = (c: HouseholdChild): Draft => ({
   name: c.name,
   age: c.age != null ? String(c.age) : "",
   appetite: (c.appetite as Appetite) ?? "normal",
+  stage: cleanFeedingStage(c.feeding_stage),
   allergies: c.allergies ?? "",
   notes: c.notes ?? "",
 });
@@ -37,7 +54,7 @@ const toDraft = (c: HouseholdChild): Draft => ({
 /**
  * Panel inferior para dar de alta o editar a un peque de la casa. Equivalente RN
  * de `src/components/child-sheet.tsx`. Solo escribe columnas que ya existen en
- * `household_children`; la ración se recalcula con `childPortion` al guardar.
+ * `household_children`; la ración se recalcula con `childRation` al guardar.
  */
 export function ChildSheet({
   open,
@@ -73,7 +90,8 @@ export function ChildSheet({
         age,
         allergies: draft.allergies.trim() || null,
         appetite: draft.appetite,
-        portion: childPortion(age, draft.appetite),
+        feeding_stage: draft.stage,
+        portion: childRation(draft.stage, age, draft.appetite),
         notes: draft.notes.trim() || null,
       };
       if (child) await updateChild(child.id, payload);
@@ -139,28 +157,61 @@ export function ChildSheet({
         </View>
 
         <View className="gap-1.5">
-          <Text className={FIELD}>Apetito</Text>
-          <View className="flex-row gap-1.5 rounded-full bg-muted p-1">
-            {APPETITES.map(([key, label]) => {
-              const active = draft.appetite === key;
+          <Text className={FIELD}>¿Qué come?</Text>
+          <View className="gap-1.5">
+            {STAGES.map((key) => {
+              const active = draft.stage === key;
               return (
                 <Pressable
                   key={key}
-                  onPress={() => patch({ appetite: key })}
-                  className={`flex-1 items-center rounded-full py-2 ${active ? "bg-surface" : ""}`}
+                  onPress={() => patch({ stage: key })}
+                  className={`rounded-2xl px-4 py-2.5 ${active ? "bg-primary-soft" : "bg-muted"}`}
                 >
                   <Text
                     className={`text-[13px] font-sans-medium ${
-                      active ? "text-foreground" : "text-muted-foreground"
+                      active ? "text-primary" : "text-muted-foreground"
                     }`}
                   >
-                    {label}
+                    {FEEDING_STAGE_LABEL[key]}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
+          {draft.stage !== "mesa" ? (
+            <Text className="text-[11.5px] leading-relaxed text-muted-foreground">
+              {draft.stage === "pecho"
+                ? "No entra en el plan de comidas ni en la compra de la casa."
+                : "Lleva su propio triturado en el plan, aparte del plato de la mesa."}
+            </Text>
+          ) : null}
         </View>
+
+        {draft.stage === "mesa" ? (
+          <View className="gap-1.5">
+            <Text className={FIELD}>Apetito</Text>
+            <View className="flex-row gap-1.5 rounded-full bg-muted p-1">
+              {APPETITES.map(([key, label]) => {
+                const active = draft.appetite === key;
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => patch({ appetite: key })}
+                    className={`flex-1 items-center rounded-full py-2 ${active ? "bg-surface" : ""}`}
+                  >
+                    <Text
+                      className={`text-[13px] font-sans-medium ${
+                        active ? "text-foreground" : "text-muted-foreground"
+                      }`}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         <View className="gap-1.5">
           <Text className={FIELD}>Alergias e intolerancias</Text>

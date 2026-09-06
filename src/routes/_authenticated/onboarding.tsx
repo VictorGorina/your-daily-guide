@@ -3,15 +3,20 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   Info,
   Pencil,
+  Save,
   Send,
   SkipForward,
   Sparkles,
+  X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { DictateButton } from "@/components/dictate-button";
@@ -26,7 +31,6 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
 });
 
-type Turn = { role: "coach" | "me"; text: string };
 type Question = {
   q: string;
   hint?: string;
@@ -441,8 +445,6 @@ const SCREENS: Screen[] = [
   },
 ];
 
-const TOTAL = SCREENS.reduce((n, s) => n + s.questions.length, 0);
-
 type Draft = Awaited<ReturnType<typeof parseOnboarding>>;
 type GapKey = "current_weight_kg" | "height_cm" | "morning_time" | "evening_time";
 
@@ -469,10 +471,60 @@ const GAP_LABEL: Record<GapKey, { label: string; help: string; type: "number" | 
   },
 };
 
-type Answer = { key: string; q: string; section: string; a: string };
-type Review = { draft: Draft; missing: GapKey[] };
-
 const KEY_FIELDS: GapKey[] = ["current_weight_kg", "height_cm", "morning_time", "evening_time"];
+
+// --- Modelo plano y navegable -------------------------------------------------
+// El rediseño (proyecto de Claude Design "Onboarding Peppers", artboard 1b) pasa
+// de un chat de una sola dirección a un recorrido navegable: se puede saltar a
+// cualquier pregunta, corregir cualquier respuesta y aparcar preguntas. Para eso
+// aplanamos SCREENS a una lista de nodos con clave estable. Los follow-ups
+// condicionales (embarazo, pareja, gravedad de alergia...) se insertan justo
+// detrás de su pregunta madre cuando la respuesta cumple el `test`, así que la
+// lista crece y encoge con las respuestas — de ahí que se recalcule con useMemo.
+
+type FlatNode = {
+  q: Question;
+  key: string;
+  si: number;
+  screenTitle: string;
+  screenSub: string;
+  isFollowUp: boolean;
+  lastOfScreen: boolean;
+};
+
+const buildFlat = (answers: Record<string, string>): FlatNode[] => {
+  const out: FlatNode[] = [];
+
+  const pushChain = (q: Question, key: string, si: number, screen: Screen, isFollowUp: boolean) => {
+    out.push({
+      q,
+      key,
+      si,
+      screenTitle: screen.title,
+      screenSub: screen.subtitle,
+      isFollowUp,
+      lastOfScreen: false,
+    });
+    const ans = answers[key];
+    if (q.followUp && ans !== undefined && ans.trim() !== "" && q.followUp.test(ans)) {
+      pushChain(q.followUp.question, `${key}>fu`, si, screen, true);
+    }
+  };
+
+  SCREENS.forEach((screen, si) => {
+    screen.questions.forEach((baseQ, qi) => pushChain(baseQ, `${si}-${qi}`, si, screen, false));
+  });
+
+  for (let i = 0; i < out.length; i++) {
+    const next = out[i + 1];
+    out[i].lastOfScreen = !next || next.si !== out[i].si;
+  }
+  return out;
+};
+
+const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v1";
+
+type View = "chat" | "index" | "resumen" | "saved";
 
 function Onboarding() {
   const navigate = useNavigate();
@@ -487,78 +539,292 @@ function Onboarding() {
   const [regionDone, setRegionDone] = useState(false);
   const [introDismissed, setIntroDismissed] = useState(false);
 
-  const [screen, setScreen] = useState(0);
-  const [step, setStep] = useState(0);
-  const [screenDone, setScreenDone] = useState(false);
-  const [history, setHistory] = useState<Turn[]>([]);
-  const [turns, setTurns] = useState<Turn[]>([{ role: "coach", text: SCREENS[0].questions[0].q }]);
+  // Respuestas y saltos por clave de nodo (no por índice): la lista plana cambia
+  // de longitud con los follow-ups, así que navegamos por clave estable.
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [skipped, setSkipped] = useState<Record<string, true>>({});
+  const [curKey, setCurKey] = useState("0-0");
+  const [view, setView] = useState<View>("chat");
+  const [stageEnd, setStageEnd] = useState(false);
+
   const [value, setValue] = useState("");
   const [selectedChips, setSelectedChips] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+
   const [saving, setSaving] = useState(false);
-  // Se activa justo al confirmar la revisión final: mientras esté en true (y aún
-  // no haya terminado), sustituimos toda la pantalla por la animación de "generando
-  // tu plan" en vez del formulario de chat deshabilitado.
+  // Se activa al confirmar el resumen: mientras esté en true (y aún no haya
+  // terminado), sustituimos toda la pantalla por la animación de "generando tu
+  // plan" en vez del formulario de chat deshabilitado.
   const [finishing, setFinishing] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [welcomeText, setWelcomeText] = useState<string | null>(null);
+
   const [gapValues, setGapValues] = useState<Record<string, string>>({});
-  // Fecha de nacimiento en ISO (YYYY-MM-DD), capturada directamente del selector de
-  // fecha: no dependemos de que la IA la extraiga bien del texto, así que se usa
-  // siempre como fuente de verdad para la edad, tanto al guardar como más adelante.
+  const [gapMissing, setGapMissing] = useState<GapKey[]>([]);
+  const [reviewDraft, setReviewDraft] = useState<Draft | null>(null);
+  // Fecha de nacimiento en ISO (YYYY-MM-DD), capturada directamente del selector
+  // de fecha: no dependemos de que la IA la extraiga bien del texto.
   const [dob, setDob] = useState<string | null>(null);
-
-  const [answers, setAnswers] = useState<Answer[]>([]);
-  const [review, setReview] = useState<Review | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-
-  // Pregunta dinámica ("¿tu pareja también usa la app?"), insertada solo cuando
-  // la respuesta a LIVES_WITH_Q menciona a la pareja. Mientras esté activa, sustituye
-  // a la pregunta de la pantalla actual sin consumir un "step" del flujo fijo.
-  const [pending, setPending] = useState<Question | null>(null);
-  const [partnerHasApp, setPartnerHasApp] = useState<boolean | null>(null);
 
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const hydrated = useRef(false);
+
+  const flat = useMemo(() => buildFlat(answers), [answers]);
+  const curIndex = flat.findIndex((n) => n.key === curKey);
+  const cur = curIndex >= 0 ? flat[curIndex] : flat[0];
+
+  // Si un follow-up que era la pregunta actual desaparece (porque se corrigió la
+  // respuesta madre), reencauzamos a un nodo que sí exista.
+  useEffect(() => {
+    if (curIndex < 0 && flat.length) setCurKey(flat[Math.min(flat.length - 1, 0)].key);
+  }, [curIndex, flat]);
+
+  // Hidratación del progreso guardado ("Guardar y salir"): se lee una vez al
+  // montar. Si el perfil ya está completo no restauramos nada.
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    try {
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        answers?: Record<string, string>;
+        skipped?: Record<string, true>;
+        curKey?: string;
+        dob?: string | null;
+        introDismissed?: boolean;
+      };
+      if (saved.answers) setAnswers(saved.answers);
+      if (saved.skipped) setSkipped(saved.skipped);
+      if (saved.curKey) setCurKey(saved.curKey);
+      if (saved.dob) setDob(saved.dob);
+      if (saved.introDismissed) setIntroDismissed(true);
+    } catch {
+      /* progreso corrupto: se ignora y se empieza de cero */
+    }
+  }, []);
+
+  // Persistencia del progreso: cualquier cambio en respuestas/saltos/posición se
+  // guarda en local. Se borra al completar el onboarding con éxito.
+  useEffect(() => {
+    if (!hydrated.current || done) return;
+    try {
+      localStorage.setItem(
+        DRAFT_STORAGE_KEY,
+        JSON.stringify({ answers, skipped, curKey, dob, introDismissed }),
+      );
+    } catch {
+      /* almacenamiento lleno o bloqueado: no es crítico */
+    }
+  }, [answers, skipped, curKey, dob, introDismissed, done]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-    if (!saving && !screenDone && !done) inputRef.current?.focus();
-  }, [turns, saving, screenDone, done]);
+    if (view === "chat" && !saving && !stageEnd && !done) inputRef.current?.focus();
+  }, [flat, curKey, view, saving, stageEnd, done]);
 
-  useEffect(() => {
-    setSelectedChips(new Set());
-  }, [screen, step]);
+  // Si la pareja no va a usar la app, no hay quien más registre su parte del
+  // gasto: pedimos el presupuesto total de la casa en vez del personal.
+  const partnerNode = flat.find((n) => n.q === PARTNER_APP_Q);
+  const partnerAnswer = partnerNode ? answers[partnerNode.key] : undefined;
+  const partnerHasApp =
+    partnerAnswer == null
+      ? null
+      : /^\s*s[ií]\b/i.test(partnerAnswer)
+        ? true
+        : /^\s*no\b/i.test(partnerAnswer)
+          ? false
+          : null;
 
-  const answered = SCREENS.slice(0, screen).reduce((n, s) => n + s.questions.length, 0) + step;
-  const progress = Math.min(1, (answered + 1) / TOTAL);
-
-  // Si la pareja no va a usar la app, no hay quien más registre su parte del gasto:
-  // pedimos el presupuesto total de la casa en vez del personal.
-  const resolveQuestion = (base: Question): Question => {
-    if (base === BUDGET_Q && partnerHasApp === false) {
+  const displayQ = (node: FlatNode): Question => {
+    if (node.q === BUDGET_Q && partnerHasApp === false) {
       return {
-        ...base,
+        ...node.q,
         q: "¿Cuánto tiempo tienes para cocinar al día y cuál es el presupuesto mensual TOTAL de la casa (contando a tu pareja) en comida?",
         hint: "Como tu pareja no va a usar la app, planificamos la compra para los dos. Ej.: 20 min al día y unos 400 € al mes en total",
       };
     }
-    return base;
+    return node.q;
   };
 
-  const current = pending ?? resolveQuestion(SCREENS[screen].questions[step]);
+  const answeredNodes = flat.filter((n) => answers[n.key] !== undefined);
+  const answeredCount = answeredNodes.length;
+  const total = flat.length;
+  const remaining = total - answeredCount;
+  const allAnswered = flat.every((n) => answers[n.key] !== undefined || n.q.optional === true);
+  const requiredPending = flat.filter((n) => answers[n.key] === undefined && n.q.optional !== true);
+
+  const chipsForAnswer = (node: FlatNode, text: string) =>
+    new Set((node.q.chips ?? []).filter((c) => text.split(", ").includes(c)));
+
+  // El textarea guarda el texto tal cual; el `<input type="date">` necesita ISO,
+  // pero la respuesta almacenada está en dd/mm/aaaa (más legible en el chat).
+  const inputValueFor = (node: FlatNode | undefined, existing: string) => {
+    if (!node?.q.dateInput) return existing;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(existing)) return existing;
+    return parseDatePretty(existing) ?? "";
+  };
+
+  const goTo = (key: string) => {
+    const node = flat.find((n) => n.key === key);
+    const existing = answers[key] ?? "";
+    setCurKey(key);
+    setView("chat");
+    setStageEnd(false);
+    setError(null);
+    setValue(inputValueFor(node, existing));
+    setSelectedChips(node ? chipsForAnswer(node, existing) : new Set());
+  };
+
+  const advanceFrom = (key: string, nextAnswers: Record<string, string>) => {
+    const nextFlat = buildFlat(nextAnswers);
+    const idx = nextFlat.findIndex((n) => n.key === key);
+    const node = nextFlat[idx];
+    setError(null);
+    if (!node || node.lastOfScreen) {
+      setValue("");
+      setSelectedChips(new Set());
+      setStageEnd(true);
+      return;
+    }
+    // Prefijamos la respuesta que ya tuviera la siguiente pregunta (al corregir
+    // una del medio se puede aterrizar en una ya contestada) — como el prototipo.
+    const next = nextFlat[idx + 1];
+    const existing = nextAnswers[next.key] ?? "";
+    setCurKey(next.key);
+    setValue(inputValueFor(next, existing));
+    setSelectedChips(chipsForAnswer(next, existing));
+  };
+
+  const commit = (raw: string) => {
+    const text = raw.trim();
+    if (!text || saving) return;
+
+    const q = displayQ(cur);
+    const problem = q.validate?.(text);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    if (cur.q.dateInput) setDob(text);
+
+    const stored = cur.q.dateInput ? formatDatePretty(text) : text;
+    const nextAnswers = { ...answers, [cur.key]: stored };
+    setAnswers(nextAnswers);
+    setSkipped((s) => {
+      const n = { ...s };
+      delete n[cur.key];
+      return n;
+    });
+    advanceFrom(cur.key, nextAnswers);
+  };
+
+  const skipCurrent = () => {
+    if (saving) return;
+    const nextAnswers = { ...answers };
+    delete nextAnswers[cur.key];
+    setAnswers(nextAnswers);
+    setSkipped((s) => ({ ...s, [cur.key]: true }));
+    advanceFrom(cur.key, nextAnswers);
+  };
+
+  const toggleChip = (c: string) => {
+    if (!cur?.q.multi) {
+      setSelectedChips(new Set([c]));
+      setValue(c);
+      inputRef.current?.focus();
+      return;
+    }
+    setSelectedChips((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      const ordered = cur.q.chips?.filter((chip) => next.has(chip)) ?? [];
+      setValue(ordered.join(", "));
+      return next;
+    });
+    inputRef.current?.focus();
+  };
+
+  const back = () => {
+    if (stageEnd) {
+      setStageEnd(false);
+      setValue(inputValueFor(cur, answers[cur.key] ?? ""));
+      setSelectedChips(chipsForAnswer(cur, answers[cur.key] ?? ""));
+      return;
+    }
+    if (curIndex > 0) goTo(flat[curIndex - 1].key);
+  };
+
+  const isLastStage = cur.si === SCREENS.length - 1;
+
+  // Cerrar un overlay vuelve al chat; si la pregunta actual es la última de una
+  // etapa ya respondida, mostramos su tarjeta de fin de etapa en lugar de dejar
+  // un textarea sin salida visible.
+  const closeToChat = () => {
+    setView("chat");
+    if (cur.lastOfScreen && answers[cur.key] !== undefined) setStageEnd(true);
+  };
+
+  const advanceStage = () => {
+    if (isLastStage) {
+      void openResumen();
+      return;
+    }
+    const first = flat.find((n) => n.si === cur.si + 1);
+    if (first) goTo(first.key);
+  };
+
+  const transcriptFromAnswers = (map: Record<string, string>) =>
+    buildFlat(map)
+      .map((n) => {
+        if (map[n.key] !== undefined) return `Coach: ${displayQ(n).q}\nPersona: ${map[n.key]}`;
+        if (n.q.optional) return `Coach: ${displayQ(n).q}\nPersona: Nada que destacar`;
+        return null;
+      })
+      .filter(Boolean)
+      .join("\n");
+
+  const openResumen = async () => {
+    setView("resumen");
+    if (!allAnswered) return;
+    setSaving(true);
+    try {
+      const map = { ...answers };
+      const parsed = (await parse({ data: { transcript: transcriptFromAnswers(map) } })) as Draft;
+      const bioNode = flat.find((n) => n.q === BIO_Q);
+      const bio = parseBiometrics(bioNode ? (map[bioNode.key] ?? "") : "");
+      const draft: Draft = {
+        ...parsed,
+        date_of_birth: dob ?? parsed.date_of_birth,
+        age: dob ? ageFromDOB(dob) : (parsed.age ?? bio.age),
+        current_weight_kg: parsed.current_weight_kg ?? bio.weight,
+        height_cm: parsed.height_cm ?? bio.height,
+      };
+      const missing = KEY_FIELDS.filter((k) => !draft[k as keyof Draft]);
+      setReviewDraft(draft);
+      setGapMissing(missing);
+      setGapValues({
+        current_weight_kg: draft.current_weight_kg ? String(draft.current_weight_kg) : "",
+        height_cm: draft.height_cm ? String(draft.height_cm) : "",
+        morning_time: draft.morning_time ?? "",
+        evening_time: draft.evening_time ?? "",
+      });
+      setError(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No hemos podido preparar la revisión");
+    }
+    setSaving(false);
+  };
 
   const saveAll = async (draft: Draft, extra: Partial<Draft>) => {
     setSaving(true);
     const d = { ...draft, ...extra };
     try {
-      // Fecha de alta: se fija la primera vez que se completa el onboarding y no
-      // se vuelve a tocar si ya existía (reeditar el onboarding no la reinicia).
       const existing = await fetchProfile();
       await saveProfile({
         app_started_on: existing?.app_started_on ?? todayISO(),
-        // Zona horaria del dispositivo: la usa el push del servidor para
-        // disparar el resumen matutino y el repaso nocturno a la hora local.
         timezone: resolveDeviceTimeZone(),
         display_name: d.display_name,
         age: d.age,
@@ -616,12 +882,18 @@ function Onboarding() {
       qc.removeQueries({ queryKey: ["today"] });
       qc.removeQueries({ queryKey: ["logs"] });
 
+      try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch {
+        /* nada que limpiar */
+      }
+
       const month = monthISO();
       try {
         await makePlan({ data: { month, today: todayISO() } });
         const { text } = await brief({ data: { month } });
         if (text) {
-          setTurns((prev) => [...prev, { role: "coach", text }]);
+          setWelcomeText(text);
           void addMessage("assistant", text);
         }
         setDone(true);
@@ -634,59 +906,23 @@ function Onboarding() {
       setSaving(false);
       setFinishing(false);
       navigate({ to: "/hoy", replace: true });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No hemos podido guardar");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No hemos podido guardar");
       setSaving(false);
       setFinishing(false);
     }
   };
 
-  const transcriptFrom = (list: Answer[]) =>
-    list.map((a) => `Coach: ${a.q}\nPersona: ${a.a}`).join("\n");
-
-  const buildReview = async (list: Answer[]) => {
-    setSaving(true);
-    try {
-      const parsed = (await parse({ data: { transcript: transcriptFrom(list) } })) as Draft;
-      // Respaldo local: si la IA no ha leído bien peso o altura, los sacamos del texto.
-      const bio = parseBiometrics(list.find((a) => a.q === BIO_Q.q)?.a ?? "");
-      const draft: Draft = {
-        ...parsed,
-        // La fecha de nacimiento (y la edad que sacamos de ella) vienen siempre del
-        // selector de fecha, nunca del parseo por IA: es la fuente exacta.
-        date_of_birth: dob ?? parsed.date_of_birth,
-        age: dob ? ageFromDOB(dob) : (parsed.age ?? bio.age),
-        current_weight_kg: parsed.current_weight_kg ?? bio.weight,
-        height_cm: parsed.height_cm ?? bio.height,
-      };
-      const missing = KEY_FIELDS.filter((k) => !draft[k as keyof Draft]);
-      setGapValues({
-        current_weight_kg: draft.current_weight_kg ? String(draft.current_weight_kg) : "",
-        height_cm: draft.height_cm ? String(draft.height_cm) : "",
-        morning_time: draft.morning_time ?? "",
-        evening_time: draft.evening_time ?? "",
-      });
-      setReview({ draft, missing });
-
-      setDirty(false);
-      setError(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No hemos podido preparar la revisión");
-    }
-    setSaving(false);
-  };
-
-  const confirmReview = async () => {
-    if (!review) return;
+  const confirmAndSave = async () => {
     const extra: Partial<Draft> = {};
     for (const key of KEY_FIELDS) {
-      const raw = (gapValues[key] ?? "").trim();
-      if (!raw) {
+      const rawVal = (gapValues[key] ?? "").trim();
+      if (!rawVal) {
         setError(`Necesito ${GAP_LABEL[key].label.toLowerCase()} para poder guardar.`);
         return;
       }
       if (GAP_LABEL[key].type === "number") {
-        const n = Number(raw.replace(",", "."));
+        const n = Number(rawVal.replace(",", "."));
         const ok = key === "current_weight_kg" ? n >= 25 && n <= 350 : n >= 100 && n <= 250;
         if (!ok) {
           setError(
@@ -698,198 +934,45 @@ function Onboarding() {
         }
         (extra as Record<string, unknown>)[key] = n;
       } else {
-        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(rawVal)) {
           setError(`${GAP_LABEL[key].label} debe tener formato HH:MM.`);
           return;
         }
-        (extra as Record<string, unknown>)[key] = raw;
+        (extra as Record<string, unknown>)[key] = rawVal;
       }
     }
     setError(null);
 
-    let draft = review.draft;
-    if (dirty) {
-      setSaving(true);
-      try {
-        const reparsed = (await parse({ data: { transcript: transcriptFrom(answers) } })) as Draft;
-        const bio = parseBiometrics(answers.find((a) => a.q === BIO_Q.q)?.a ?? "");
-        draft = {
-          ...reparsed,
-          date_of_birth: dob ?? reparsed.date_of_birth,
-          age: dob ? ageFromDOB(dob) : (reparsed.age ?? bio.age),
-          current_weight_kg: reparsed.current_weight_kg ?? bio.weight,
-          height_cm: reparsed.height_cm ?? bio.height,
-        };
-      } catch {
-        toast.error("No he podido releer tus cambios, guardo con lo que ya tenía");
-      }
+    // Releemos siempre la transcripción al confirmar: con navegación libre no hay
+    // un único "momento final", cualquier respuesta puede haber cambiado.
+    setSaving(true);
+    let draft = reviewDraft;
+    try {
+      const map = { ...answers };
+      const reparsed = (await parse({ data: { transcript: transcriptFromAnswers(map) } })) as Draft;
+      const bioNode = flat.find((n) => n.q === BIO_Q);
+      const bio = parseBiometrics(bioNode ? (map[bioNode.key] ?? "") : "");
+      draft = {
+        ...reparsed,
+        date_of_birth: dob ?? reparsed.date_of_birth,
+        age: dob ? ageFromDOB(dob) : (reparsed.age ?? bio.age),
+        current_weight_kg: reparsed.current_weight_kg ?? bio.weight,
+        height_cm: reparsed.height_cm ?? bio.height,
+      };
+    } catch {
+      toast.error("No he podido releer tus cambios, guardo con lo que ya tenía");
     }
-    setReview(null);
+    if (!draft) {
+      setSaving(false);
+      setError("No hemos podido preparar tu perfil. Inténtalo de nuevo.");
+      return;
+    }
+    setView("chat");
     setFinishing(true);
     await saveAll(draft, extra);
   };
 
-  const toggleChip = (c: string) => {
-    // La mayoría de estas preguntas piden un único valor (nivel de actividad, tono,
-    // número de comidas...), así que elegir un chip sustituye al anterior en vez de
-    // sumarse. Solo las preguntas marcadas con `multi` permiten combinar varios.
-    if (!current?.multi) {
-      setSelectedChips(new Set([c]));
-      setValue(c);
-      inputRef.current?.focus();
-      return;
-    }
-    setSelectedChips((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
-      const ordered = current?.chips?.filter((chip) => next.has(chip)) ?? [];
-      setValue(ordered.join(", "));
-      return next;
-    });
-    inputRef.current?.focus();
-  };
-
-  /**
-   * Respuesta a una pregunta insertada por `followUp` (PARTNER_APP_Q y las demás
-   * definidas junto a BIO_Q/LIVES_WITH_Q/objetivo): guarda la respuesta y retoma
-   * el flujo fijo. Solo PARTNER_APP_Q tiene un efecto secundario propio
-   * (partnerHasApp, que reescribe BUDGET_Q vía resolveQuestion) — el resto son
-   * inserciones simples sin más lógica.
-   */
-  const answerPending = (text: string) => {
-    const q = pending;
-    if (!q) return;
-    const isPartnerQ = q === PARTNER_APP_Q;
-    const hasApp = isPartnerQ
-      ? /^\s*s[ií]\b/i.test(text)
-        ? true
-        : /^\s*no\b/i.test(text)
-          ? false
-          : null
-      : null;
-    if (isPartnerQ) setPartnerHasApp(hasApp);
-
-    setAnswers((prev) => [
-      ...prev,
-      // `prev.length` (no fija en `step`) desambigua encadenados: PREGNANCY_Q y
-      // MENSTRUAL_CYCLE_Q comparten el mismo `step` porque el segundo no lo
-      // incrementa (no consume hueco del flujo fijo), así que `step` solo no basta.
-      {
-        key: `${screen}-followup-${step}-${prev.length}`,
-        q: q.q,
-        section: SCREENS[screen].title,
-        a: text,
-      },
-    ]);
-    setValue("");
-    setError(null);
-
-    const next: Turn[] = [...turns, { role: "me", text }];
-    const note = isPartnerQ
-      ? hasApp === true
-        ? "Genial, cuando termines podéis uniros en Tu hogar (dentro de Ajustes) para compartir comidas y compra. "
-        : hasApp === false
-          ? "Entendido, más adelante te pido el presupuesto total de la casa para que la compra os cubra a los dos. "
-          : ""
-      : "";
-
-    // La pregunta insertada puede tener su propio follow-up encadenado (p.ej.
-    // PREGNANCY_Q -> MENSTRUAL_CYCLE_Q): si aplica, sustituye a `pending` en vez
-    // de retomar ya el flujo fijo.
-    const chained = q.followUp?.test(text) ? q.followUp.question : null;
-    if (chained) {
-      setTurns([...next, { role: "coach", text: note + chained.q }]);
-      setPending(chained);
-      return;
-    }
-    setPending(null);
-
-    const following = SCREENS[screen].questions[step];
-    if (following) {
-      setTurns([...next, { role: "coach", text: note + resolveQuestion(following).q }]);
-      return;
-    }
-    if (screen + 1 < SCREENS.length) {
-      setTurns(next);
-      setScreenDone(true);
-      return;
-    }
-    setTurns(next);
-  };
-
-  const send = (raw: string) => {
-    const text = raw.trim();
-    if (!text || saving || screenDone) return;
-
-    if (pending) {
-      answerPending(text);
-      return;
-    }
-
-    const problem = current?.validate?.(text);
-    if (problem) {
-      setError(problem);
-      const shown = current?.dateInput ? formatDatePretty(text) : text;
-      setTurns((prev) => [...prev, { role: "me", text: shown }, { role: "coach", text: problem }]);
-      setValue("");
-      return;
-    }
-    setError(null);
-
-    // La fecha de nacimiento se guarda tal cual (ISO) para poder recalcular la edad
-    // más adelante; en el chat mostramos el formato dd/mm/aaaa, más legible.
-    if (current?.dateInput) setDob(text);
-    const shown = current?.dateInput ? formatDatePretty(text) : text;
-
-    const next: Turn[] = [...turns, { role: "me", text: shown }];
-    const nextAnswers: Answer[] = [
-      ...answers,
-      { key: `${screen}-${step}`, q: current.q, section: SCREENS[screen].title, a: shown },
-    ];
-    setAnswers(nextAnswers);
-    setValue("");
-
-    const fu = current?.followUp;
-    if (fu && fu.test(text)) {
-      setTurns([...next, { role: "coach", text: fu.question.q }]);
-      setStep(step + 1);
-      setPending(fu.question);
-      return;
-    }
-
-    const following = SCREENS[screen].questions[step + 1];
-    if (following) {
-      setTurns([...next, { role: "coach", text: resolveQuestion(following).q }]);
-      setStep(step + 1);
-      return;
-    }
-
-    if (screen + 1 < SCREENS.length) {
-      setTurns(next);
-      setScreenDone(true);
-      return;
-    }
-
-    setTurns([
-      ...next,
-      {
-        role: "coach",
-        text: "Gracias por contármelo todo. Antes de guardar, repasa conmigo tus respuestas y corrige lo que quieras.",
-      },
-    ]);
-    setHistory((h) => [...h, ...next]);
-    void buildReview(nextAnswers);
-  };
-
-  const nextScreen = () => {
-    const nextIndex = screen + 1;
-    setHistory((h) => [...h, ...turns]);
-    setTurns([{ role: "coach", text: resolveQuestion(SCREENS[nextIndex].questions[0]).q }]);
-    setScreen(nextIndex);
-    setStep(0);
-    setScreenDone(false);
-  };
+  // --- Render --------------------------------------------------------------
 
   if (profileQ.isLoading) return null;
   if (!regionDone && !profileQ.data?.country) {
@@ -905,8 +988,8 @@ function Onboarding() {
             Vamos a conocerte
           </h1>
           <p className="mx-auto max-w-xs text-sm leading-relaxed text-muted-foreground">
-            Son unas {TOTAL} preguntas (~10-15 minutos). Solo se hace una vez — después podrás
-            modificar cualquier respuesta en Ajustes o hablando con el coach.
+            Son unas {total} preguntas (~10-15 minutos). Puedes saltar cualquiera, volver atrás y
+            corregir lo que quieras — y si lo dejas a medias, retomas justo donde ibas.
           </p>
           <button
             type="button"
@@ -920,108 +1003,201 @@ function Onboarding() {
     );
   }
 
-  if (review) {
-    const sections = SCREENS.map((s) => ({
+  if (finishing && !done) return <PlanGeneratingScreen />;
+
+  if (done) {
+    return (
+      <main className="mx-auto flex h-[100dvh] max-w-lg flex-col items-center justify-center gap-8 px-8 text-center">
+        <span className="relative grid h-24 w-24 place-items-center">
+          <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/12" />
+          <span className="relative grid h-14 w-14 place-items-center rounded-full bg-primary-soft text-primary">
+            <Check className="h-6 w-6" strokeWidth={2.6} />
+          </span>
+        </span>
+        <div className="space-y-2.5">
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Tu plan está listo</h1>
+          {welcomeText ? (
+            <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">
+              {welcomeText}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/hoy", replace: true })}
+          className="w-full max-w-xs rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+        >
+          Empezar mi primer día
+        </button>
+      </main>
+    );
+  }
+
+  const stage = SCREENS[cur.si];
+  const screenNodes = flat.filter((n) => n.si === cur.si);
+  const posInScreen = screenNodes.findIndex((n) => n.key === cur.key);
+  const visibleTurns = screenNodes.slice(0, posInScreen + 1);
+
+  const segments = SCREENS.map((_, si) => {
+    const nodes = flat.filter((n) => n.si === si);
+    const done = nodes.filter((n) => answers[n.key] !== undefined).length;
+    const pct = nodes.length ? done / nodes.length : 0;
+    return si === cur.si ? Math.max(pct, 0.08) : pct;
+  });
+
+  const currentQ = displayQ(cur);
+
+  if (view === "index") {
+    return (
+      <Shell>
+        <OverlayHeader eyebrow="índice" title="Todo el recorrido" onClose={closeToChat} />
+        <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
+          Ve a cualquier etapa cuando quieras. Lo respondido se guarda tal cual.
+        </p>
+        <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pb-2">
+          {SCREENS.map((s, si) => {
+            const nodes = flat.filter((n) => n.si === si);
+            const doneN = nodes.filter((n) => answers[n.key] !== undefined).length;
+            const complete = doneN === nodes.length;
+            const isCur = si === cur.si;
+            const first = nodes[0];
+            return (
+              <button
+                key={s.title}
+                type="button"
+                onClick={() => first && goTo(first.key)}
+                className="flex w-full items-center gap-3.5 rounded-2xl bg-surface p-4 text-left transition-transform active:scale-[0.99]"
+              >
+                <span
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-num text-xs ${
+                    complete
+                      ? "bg-success text-success-foreground"
+                      : isCur
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {complete ? <Check className="h-4 w-4" strokeWidth={2.6} /> : si + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold tracking-tight">
+                    {s.title}
+                  </span>
+                  <span className="font-num text-[10.5px] text-muted-foreground">
+                    {s.subtitle.toLowerCase()} · {doneN}/{nodes.length}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => void openResumen()}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+        >
+          Ver mi resumen <ArrowRight className="h-4 w-4" />
+        </button>
+      </Shell>
+    );
+  }
+
+  if (view === "resumen") {
+    const pending = flat.filter((n) => skipped[n.key]);
+    const sections = SCREENS.map((s, si) => ({
       title: s.title,
-      items: answers.filter((a) => a.section === s.title),
+      items: flat.filter((n) => n.si === si && answers[n.key] !== undefined),
     })).filter((s) => s.items.length);
+    const emptyResumen = pending.length === 0 && sections.length === 0;
+    const canConfirm = allAnswered;
 
     return (
-      <main className="mx-auto flex h-[100dvh] max-w-lg flex-col px-5 pb-5 pt-10">
-        <OnboardingProgress
-          stage={SCREENS.length}
-          stageFill={1}
-          answeredUnits={TOTAL}
+      <Shell>
+        <OverlayHeader
+          eyebrow={`resumen · ${answeredCount} de ${total}`}
           title="Repasa tus respuestas"
-          subtitle="Revisión final"
+          onClose={closeToChat}
         />
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
           Toca cualquier respuesta para corregirla. Sin prisa: cuando esté bien, confirmamos.
         </p>
 
-        <div className="mt-5 min-h-0 flex-1 space-y-5 overflow-y-auto pb-2">
-          <section className="space-y-3 rounded-3xl bg-surface p-4">
-            <p className="text-sm font-medium">Datos clave</p>
-            {KEY_FIELDS.map((key) => (
-              <label key={key} className="block text-xs text-muted-foreground">
-                {GAP_LABEL[key].label}
-                {review.missing.includes(key) ? (
-                  <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary">
-                    falta
+        <div className="mt-4 min-h-0 flex-1 space-y-5 overflow-y-auto pb-2">
+          {canConfirm ? (
+            <section className="space-y-3 rounded-3xl bg-surface p-4">
+              <p className="text-sm font-medium">Datos clave</p>
+              {KEY_FIELDS.map((key) => (
+                <label key={key} className="block text-xs text-muted-foreground">
+                  {GAP_LABEL[key].label}
+                  {gapMissing.includes(key) ? (
+                    <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary">
+                      falta
+                    </span>
+                  ) : null}
+                  <input
+                    type={GAP_LABEL[key].type === "time" ? "time" : "text"}
+                    inputMode={GAP_LABEL[key].type === "number" ? "decimal" : undefined}
+                    value={gapValues[key] ?? ""}
+                    onChange={(e) => setGapValues((v) => ({ ...v, [key]: e.target.value }))}
+                    className="mt-1 h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
+                  />
+                  <span className="mt-1 block text-[11px]">{GAP_LABEL[key].help}</span>
+                </label>
+              ))}
+            </section>
+          ) : null}
+
+          {pending.length ? (
+            <section className="space-y-2.5 rounded-3xl bg-primary-soft p-4">
+              <p className="text-[13px] font-semibold text-foreground">
+                Pendientes · {pending.length}
+              </p>
+              {pending.map((n) => (
+                <button
+                  key={n.key}
+                  type="button"
+                  onClick={() => goTo(n.key)}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-surface p-3.5 text-left"
+                >
+                  <span className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                    {displayQ(n).q}
                   </span>
-                ) : null}
-                <input
-                  type={GAP_LABEL[key].type === "time" ? "time" : "text"}
-                  inputMode={GAP_LABEL[key].type === "number" ? "decimal" : undefined}
-                  value={gapValues[key] ?? ""}
-                  onChange={(e) => setGapValues((v) => ({ ...v, [key]: e.target.value }))}
-                  className="mt-1 h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
-                />
-                <span className="mt-1 block text-[11px]">{GAP_LABEL[key].help}</span>
-              </label>
-            ))}
-          </section>
+                  <span className="shrink-0 text-xs font-semibold text-primary">Responder</span>
+                </button>
+              ))}
+            </section>
+          ) : null}
 
           {sections.map((s) => (
             <section key={s.title} className="space-y-2">
-              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="px-1 font-num text-[10.5px] uppercase tracking-wide text-muted-foreground">
                 {s.title}
               </p>
-              {s.items.map((a) => (
-                <div key={a.key} className="rounded-3xl bg-surface p-4">
-                  <p className="text-xs leading-relaxed text-muted-foreground">{a.q}</p>
-                  {editing === a.key ? (
-                    <div className="mt-2 space-y-2">
-                      <textarea
-                        rows={3}
-                        value={a.a}
-                        onChange={(e) => {
-                          const text = e.target.value;
-                          setAnswers((prev) =>
-                            prev.map((x) => (x.key === a.key ? { ...x, a: text } : x)),
-                          );
-                          // Si corrige la fecha de nacimiento aquí, releemos su fecha exacta
-                          // (dd/mm/aaaa); si no encaja, dejamos que la IA la reinterprete al confirmar.
-                          if (a.q === BIRTHDATE_Q.q) setDob(parseDatePretty(text));
-                          setDirty(true);
-                        }}
-                        className="w-full resize-none rounded-2xl bg-muted px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/40"
-                      />
-                      <div className="flex items-center justify-between">
-                        <DictateButton
-                          onText={(t) => {
-                            setAnswers((prev) =>
-                              prev.map((x) =>
-                                x.key === a.key ? { ...x, a: x.a ? `${x.a.trim()} ${t}` : t } : x,
-                              ),
-                            );
-                            setDirty(true);
-                          }}
-                          label="Dictar"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setEditing(null)}
-                          className="rounded-full bg-secondary px-3.5 py-1.5 text-xs font-medium"
-                        >
-                          Listo
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setEditing(a.key)}
-                      className="mt-1.5 flex w-full items-start justify-between gap-3 text-left"
-                    >
-                      <span className="text-sm text-foreground">{a.a}</span>
-                      <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    </button>
-                  )}
-                </div>
+              {s.items.map((n) => (
+                <button
+                  key={n.key}
+                  type="button"
+                  onClick={() => goTo(n.key)}
+                  className="block w-full rounded-3xl bg-surface p-4 text-left"
+                >
+                  <span className="block text-xs leading-relaxed text-muted-foreground">
+                    {displayQ(n).q}
+                  </span>
+                  <span className="mt-1.5 flex items-start justify-between gap-3">
+                    <span className="text-sm text-foreground">{answers[n.key]}</span>
+                    <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  </span>
+                </button>
               ))}
             </section>
           ))}
+
+          {emptyResumen ? (
+            <p className="px-1 py-6 text-[13px] leading-relaxed text-muted-foreground">
+              Aún no hay respuestas guardadas. Vuelve al chat y empieza por donde quieras.
+            </p>
+          ) : null}
         </div>
 
         {error ? (
@@ -1029,240 +1205,328 @@ function Onboarding() {
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {error}
           </p>
         ) : null}
-        {dirty ? (
+        {!canConfirm && requiredPending.length ? (
           <p className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" /> He anotado tus cambios,
-            los releo al confirmar.
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" /> Te quedan{" "}
+            {requiredPending.length} preguntas por responder antes de guardar.
           </p>
         ) : null}
 
         <button
           type="button"
           disabled={saving}
-          onClick={() => void confirmReview()}
+          onClick={() => (canConfirm ? void confirmAndSave() : closeToChat())}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
         >
-          {saving ? "Guardando..." : "Confirmar y guardar mi perfil"}
-          {saving ? null : <Check className="h-4 w-4" />}
+          {saving
+            ? "Guardando..."
+            : canConfirm
+              ? "Confirmar y guardar mi perfil"
+              : "Volver al chat"}
+          {saving ? null : canConfirm ? (
+            <Check className="h-4 w-4" strokeWidth={2.6} />
+          ) : (
+            <ArrowRight className="h-4 w-4" />
+          )}
         </button>
-      </main>
+      </Shell>
     );
   }
 
-  if (finishing && !done) {
-    return <PlanGeneratingScreen />;
+  if (view === "saved") {
+    return (
+      <Shell>
+        <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
+          <span className="relative grid h-24 w-24 place-items-center">
+            <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/12" />
+            <span className="relative grid h-14 w-14 place-items-center rounded-full bg-primary-soft text-primary">
+              <Check className="h-6 w-6" strokeWidth={2.6} />
+            </span>
+          </span>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Guardado</h1>
+          <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
+            Llevas {answeredCount} de {total} respuestas. Cuando vuelvas, retomas justo aquí — nada
+            se pierde.
+          </p>
+          <div className="flex w-full max-w-xs flex-col gap-2.5">
+            <button
+              type="button"
+              onClick={closeToChat}
+              className="rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+            >
+              Seguir ahora
+            </button>
+            <button
+              type="button"
+              onClick={() => void openResumen()}
+              className="rounded-full bg-surface py-4 text-sm font-semibold text-muted-foreground transition-transform active:scale-[0.98]"
+            >
+              Ver lo que llevo
+            </button>
+          </div>
+        </div>
+      </Shell>
+    );
   }
 
+  // view === "chat"
   return (
-    <main className="mx-auto flex h-[100dvh] max-w-lg flex-col px-5 pb-5 pt-10">
-      <OnboardingProgress
-        stage={screen}
-        stageFill={done ? 1 : screenDone ? 1 : (step + 1) / SCREENS[screen].questions.length}
-        answeredUnits={done ? TOTAL + 1 : answers.length}
-        title={SCREENS[screen].title}
-        subtitle={SCREENS[screen].subtitle}
-      />
+    <Shell>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={back}
+          aria-label="Atrás"
+          disabled={curIndex <= 0 && !stageEnd}
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-foreground transition-transform active:scale-95 disabled:opacity-40"
+        >
+          <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={2.2} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("index")}
+          className="flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-full bg-surface px-4 text-left transition-transform active:scale-[0.99]"
+        >
+          <span className="flex min-w-0 flex-col">
+            <span className="font-num text-[9.5px] uppercase tracking-[0.09em] text-muted-foreground">
+              etapa {cur.si + 1} de {SCREENS.length}
+            </span>
+            <span className="truncate text-[13.5px] font-semibold tracking-tight">
+              {stage.title}
+            </span>
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2.4} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("saved")}
+          aria-label="Guardar y salir"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
+        >
+          <Save className="h-[18px] w-[18px]" strokeWidth={2.2} />
+        </button>
+      </div>
 
-      <div className="mt-6 min-h-0 flex-1 space-y-3 overflow-y-auto pb-2">
-        {turns.map((t, i) => (
-          <div
-            key={`${screen}-${i}-${t.text.slice(0, 12)}`}
-            className={`animate-rise flex ${t.role === "me" ? "justify-end" : "justify-start"}`}
+      <div className="mt-3.5 flex gap-1.5">
+        {segments.map((w, i) => (
+          <span
+            key={i}
+            className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary"
+            aria-hidden
           >
-            <p
-              className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-relaxed ${
-                t.role === "me"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-surface text-foreground"
-              }`}
-            >
-              {t.text}
-            </p>
+            <span
+              className="block h-1.5 rounded-full bg-primary transition-[width] duration-500"
+              style={{ width: `${Math.round(w * 100)}%` }}
+            />
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 flex items-baseline justify-between gap-2.5">
+        <p className="font-num text-[11px] text-muted-foreground">
+          pregunta {Math.max(1, curIndex + 1)} de {total}
+        </p>
+        <p className="font-num text-[11px] text-muted-foreground">quedan {remaining}</p>
+      </div>
+
+      <div className="mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto pb-2">
+        {visibleTurns.map((n) => (
+          <div key={n.key} className="space-y-3">
+            <div className="animate-rise flex justify-start">
+              <p className="max-w-[85%] rounded-3xl bg-surface px-4 py-3 text-sm leading-relaxed text-foreground">
+                {displayQ(n).q}
+              </p>
+            </div>
+            {answers[n.key] !== undefined ? (
+              <div className="animate-rise flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => goTo(n.key)}
+                  className="flex max-w-[85%] items-center gap-2 rounded-3xl bg-primary px-4 py-3 text-left text-sm leading-relaxed text-primary-foreground transition-transform active:scale-[0.98]"
+                >
+                  <span>{answers[n.key]}</span>
+                  <Pencil className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={2.2} />
+                </button>
+              </div>
+            ) : skipped[n.key] ? (
+              <div className="animate-rise flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => goTo(n.key)}
+                  className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2.5 text-[13px] font-medium text-muted-foreground transition-transform active:scale-95"
+                >
+                  <SkipForward className="h-3.5 w-3.5" strokeWidth={2.2} />
+                  Saltada — la retomo luego
+                </button>
+              </div>
+            ) : null}
           </div>
         ))}
         <div ref={endRef} />
       </div>
 
-      {!saving && !screenDone && !done && current?.chips?.length ? (
-        <div className="mb-2 flex flex-wrap gap-2">
-          {current.chips.map((c) => {
-            const active = selectedChips.has(c);
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => toggleChip(c)}
-                aria-pressed={active}
-                className={`rounded-full px-3.5 py-2 text-xs font-medium transition-transform active:scale-95 ${
-                  active ? "bg-foreground text-background" : "bg-surface"
-                }`}
-              >
-                {c}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {error && !done ? (
+      {error ? (
         <div className="animate-rise mb-2 flex items-start gap-2 rounded-2xl bg-primary-soft px-3.5 py-2.5 text-xs text-foreground">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           <span>{error}</span>
         </div>
       ) : null}
 
-      {done ? (
-        <button
-          type="button"
-          onClick={() => navigate({ to: "/hoy", replace: true })}
-          className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
-        >
-          Empezar mi primer día
-        </button>
-      ) : screenDone ? (
-        <div className="animate-rise space-y-3 rounded-3xl bg-surface p-4">
-          <p className="text-sm text-muted-foreground">
-            Perfecto, ya tengo {SCREENS[screen].subtitle.toLowerCase()}. Seguimos con{" "}
-            <span className="font-medium text-foreground">
-              {SCREENS[screen + 1].subtitle.toLowerCase()}
-            </span>
-            .
+      {stageEnd ? (
+        <div className="animate-rise space-y-3.5 rounded-3xl bg-surface p-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Etapa completa:{" "}
+            <span className="font-medium text-foreground">{stage.subtitle.toLowerCase()}</span>.{" "}
+            {isLastStage
+              ? "Es la última: ya podemos repasarlo todo."
+              : `Seguimos con ${SCREENS[cur.si + 1].subtitle.toLowerCase()}.`}
           </p>
-          <button
-            type="button"
-            onClick={nextScreen}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
-          >
-            Continuar <ArrowRight className="h-4 w-4" />
-          </button>
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={back}
+              className="flex items-center justify-center gap-1.5 rounded-full bg-secondary px-4 py-3 text-[13.5px] font-semibold text-muted-foreground transition-transform active:scale-95"
+            >
+              <ArrowLeft className="h-[15px] w-[15px]" strokeWidth={2.2} />
+              Repasar
+            </button>
+            <button
+              type="button"
+              onClick={advanceStage}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+            >
+              {isLastStage ? "Ver mi resumen" : "Continuar"}
+              <ArrowRight className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
       ) : (
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            send(value);
+            commit(value);
           }}
-          className="rounded-3xl bg-surface p-2"
+          className="space-y-2.5"
         >
-          {current?.dateInput ? (
-            <input
-              type="date"
-              autoFocus
-              disabled={saving}
-              value={value}
-              min={DOB_MIN}
-              max={DOB_MAX}
-              onChange={(e) => setValue(e.target.value)}
-              className="w-full bg-transparent px-2 py-2.5 text-sm outline-none"
-            />
-          ) : (
-            <textarea
-              ref={inputRef}
-              rows={2}
-              disabled={saving}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send(value);
+          {currentQ.chips?.length ? (
+            <div className="flex flex-wrap gap-2">
+              {currentQ.chips.map((c) => {
+                const active = selectedChips.has(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => toggleChip(c)}
+                    aria-pressed={active}
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[13.5px] font-medium transition-transform active:scale-95 ${
+                      active
+                        ? "bg-foreground font-semibold text-background"
+                        : "bg-surface text-foreground"
+                    }`}
+                  >
+                    {active ? <Check className="h-3.5 w-3.5" strokeWidth={2.6} /> : null}
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="rounded-3xl bg-surface p-2">
+            {currentQ.dateInput ? (
+              <input
+                type="date"
+                autoFocus
+                disabled={saving}
+                value={value}
+                min={DOB_MIN}
+                max={DOB_MAX}
+                onChange={(e) => setValue(e.target.value)}
+                className="w-full bg-transparent px-2 py-2.5 text-sm outline-none"
+              />
+            ) : (
+              <textarea
+                ref={inputRef}
+                rows={2}
+                disabled={saving}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    commit(value);
+                  }
+                }}
+                placeholder={
+                  saving ? "Preparando tu plan..." : (currentQ.hint ?? "Escribe aquí...")
                 }
-              }}
-              placeholder={saving ? "Preparando tu plan..." : (current?.hint ?? "Escribe aquí...")}
-              className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
-            />
-          )}
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1">
-              {current?.dateInput ? null : (
-                <DictateButton
-                  onText={(t) => setValue((v) => (v ? `${v.trim()} ${t}` : t))}
-                  label="Dictar"
-                />
-              )}
-              {current?.optional ? (
+                className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
+              />
+            )}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-1">
+                {currentQ.dateInput ? null : (
+                  <DictateButton
+                    onText={(t) => setValue((v) => (v ? `${v.trim()} ${t}` : t))}
+                    label="Dictar"
+                  />
+                )}
                 <button
                   type="button"
-                  onClick={() => send("Nada que destacar")}
+                  onClick={skipCurrent}
                   disabled={saving}
                   className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
                 >
-                  <SkipForward className="h-3.5 w-3.5" /> Saltar
+                  <SkipForward className="h-3.5 w-3.5" /> Saltar y volver luego
                 </button>
-              ) : null}
+              </div>
+              <button
+                type="submit"
+                disabled={saving || !value.trim()}
+                aria-label="Enviar"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+              >
+                <Send className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={saving || !value.trim()}
-              aria-label="Enviar"
-              className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
-            >
-              <Send className="h-4 w-4" />
-            </button>
           </div>
         </form>
       )}
-    </main>
+    </Shell>
   );
 }
 
-const STAGES = [...SCREENS.map((s) => s.title), "Revisión"];
-const TOTAL_UNITS = TOTAL + 1;
-
-function OnboardingProgress({
-  stage,
-  stageFill,
-  answeredUnits,
-  title,
-  subtitle,
-}: {
-  stage: number;
-  stageFill: number;
-  answeredUnits: number;
-  title: string;
-  subtitle: string;
-}) {
-  const pct = Math.round(Math.min(1, Math.max(0, answeredUnits / TOTAL_UNITS)) * 100);
-  const left = STAGES.length - stage - 1;
-
+function Shell({ children }: { children: ReactNode }) {
   return (
-    <header>
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">
-            Etapa {stage + 1} de {STAGES.length} · {subtitle}
-          </p>
-          <h1 className="truncate text-lg font-semibold tracking-tight">{title}</h1>
-        </div>
-        <div className="shrink-0 text-right">
-          <span className="text-xs font-medium text-foreground">{pct}%</span>
-          <p className="text-[11px] text-muted-foreground">
-            {left > 0 ? `Quedan ${left} ${left === 1 ? "etapa" : "etapas"}` : "Última etapa"}
-          </p>
-        </div>
+    <main className="mx-auto flex h-[100dvh] max-w-lg flex-col px-5 pb-5 pt-10">{children}</main>
+  );
+}
+
+function OverlayHeader({
+  eyebrow,
+  title,
+  onClose,
+}: {
+  eyebrow: string;
+  title: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="font-num text-[9.5px] uppercase tracking-[0.09em] text-muted-foreground">
+          {eyebrow}
+        </p>
+        <h1 className="mt-0.5 font-display text-[22px] font-semibold tracking-tight">{title}</h1>
       </div>
-      <div className="mt-3 flex gap-1.5">
-        {STAGES.map((label, i) => (
-          <span
-            key={label}
-            aria-label={label}
-            className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary"
-          >
-            <span
-              className="block h-1.5 rounded-full bg-primary transition-all duration-500"
-              style={{
-                width:
-                  i < stage
-                    ? "100%"
-                    : i === stage
-                      ? `${Math.round(Math.min(1, Math.max(0.08, stageFill)) * 100)}%`
-                      : "0%",
-              }}
-            />
-          </span>
-        ))}
-      </div>
-    </header>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Cerrar"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-foreground transition-transform active:scale-95"
+      >
+        <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
+      </button>
+    </div>
   );
 }
 

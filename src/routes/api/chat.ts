@@ -8,6 +8,8 @@ import { describeSharedSlots } from "@/lib/household-shared";
 import { householdContext, type HouseholdContext } from "@/lib/household.server";
 import { addDays, weekdayName } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS } from "@/lib/profile-fields";
+import { RateLimitError } from "@/lib/rate-limit-error";
+import { enforceUserRateLimit } from "@/lib/rate-limit.server";
 import { zonedTodayISO } from "@/lib/zoned-date";
 
 /**
@@ -158,6 +160,20 @@ export const Route = createFileRoute("/api/chat")({
         }
         const key = process.env.OPENROUTER_API_KEY;
         if (!key) return new Response("Falta OPENROUTER_API_KEY", { status: 500 });
+
+        // Esta ruta no pasa por `apiPost`, así que traduce ella misma la cuota
+        // agotada a un 429 en vez de dejar que suba como error del servidor.
+        try {
+          await enforceUserRateLimit(userId, "chat");
+        } catch (error) {
+          if (error instanceof RateLimitError) {
+            return new Response(error.message, {
+              status: 429,
+              headers: { "retry-after": String(error.retryAfterSeconds) },
+            });
+          }
+          throw error;
+        }
 
         const ai = createAiProvider(key);
         // La fecha se dice explícita (y con el día de la semana) porque el

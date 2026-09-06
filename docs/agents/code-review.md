@@ -112,6 +112,12 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
       `household_members`: al salir el planificador (`leaveHousehold`) o borrar su cuenta,
       `is_planner` salta al miembro con cuenta de más edad. No hay que llamar a nada desde el
       código de aplicación.
+- [ ] **Bebés que aún no comen de la mesa** (`household_children.feeding_stage`
+      `pecho`/`triturados`/`mesa`). Cualquier cálculo de raciones del plato compartido o de la
+      compra de la casa filtra por `eatsTableFood(stage)` (`servingsPerSlot`,
+      `servingsForMealDay`, `deriveSharedSlots`, `whoIsHome`). `pecho` = ración 0, sin plato;
+      `triturados` = plato propio en `PlanDay.kids` cada día, ración pequeña. No mezclar al
+      bebé con los adultos ni con los niños que sí comen del plato (roster, prompt, UI).
 
 ## Diseño y paridad web / móvil
 

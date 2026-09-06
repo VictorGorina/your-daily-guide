@@ -1,16 +1,22 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   Info,
   Pencil,
+  Save,
   Send,
   SkipForward,
   Sparkles,
+  X,
 } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -33,17 +39,22 @@ import type { OnboardingDraft } from "../../lib/onboarding";
 import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
 /**
- * Onboarding conversacional, port 1:1 de `src/routes/_authenticated/onboarding.tsx`
- * de la web. La lógica (máquina de estados del chat, revisión final, guardado +
- * generación de plan) es idéntica; cambia el transporte de las operaciones de IA
- * (server functions → `/api/v1/*` vía apiPost) y la UI (DOM → React Native).
+ * Onboarding conversacional navegable — mismo UI que la web
+ * (`src/routes/_authenticated/onboarding.tsx`, artboard 1b del proyecto de Claude
+ * Design "Onboarding Peppers"): recorrido en el que se puede saltar a cualquier
+ * pregunta, corregir cualquier respuesta tocando su burbuja, aparcar preguntas en
+ * "Pendientes", abrir el índice de las 6 etapas y "Guardar y salir" retomando
+ * justo donde ibas.
  *
- * Diferencia respecto a la web: la fecha de nacimiento se teclea como DD/MM/AAAA
- * (RN no trae un `<input type="date">`); la validación y el guardado en ISO son
- * los mismos.
+ * La lógica de negocio (parseo por IA de la transcripción, validaciones, huecos
+ * peso/altura/horarios, guardado + generación de plan) es idéntica a la web;
+ * cambia el transporte de la IA (server functions → `/api/v1/*` vía apiPost), el
+ * almacenamiento del progreso (localStorage → AsyncStorage) y la UI (DOM → RN).
+ *
+ * La fecha de nacimiento se teclea como DD/MM/AAAA (RN no trae `<input
+ * type="date">`); la validación y el guardado en ISO son los mismos.
  */
 
-type Turn = { role: "coach" | "me"; text: string };
 type Question = {
   q: string;
   hint?: string;
@@ -441,8 +452,6 @@ const SCREENS: Screen[] = [
   },
 ];
 
-const TOTAL = SCREENS.reduce((n, s) => n + s.questions.length, 0);
-
 type Draft = OnboardingDraft;
 type GapKey = "current_weight_kg" | "height_cm" | "morning_time" | "evening_time";
 
@@ -469,12 +478,7 @@ const GAP_LABEL: Record<GapKey, { label: string; help: string; type: "number" | 
   },
 };
 
-type Answer = { key: string; q: string; section: string; a: string };
-type Review = { draft: Draft; missing: GapKey[] };
-
 const KEY_FIELDS: GapKey[] = ["current_weight_kg", "height_cm", "morning_time", "evening_time"];
-const STAGES = [...SCREENS.map((s) => s.title), "Revisión"];
-const TOTAL_UNITS = TOTAL + 1;
 
 const GENERATING_MESSAGES = [
   "Leyendo todo lo que me has contado...",
@@ -484,6 +488,68 @@ const GENERATING_MESSAGES = [
   "Dando los últimos retoques a tu plan...",
 ];
 
+// --- Modelo plano y navegable -------------------------------------------------
+// Igual que la web: aplanamos SCREENS a una lista de nodos con clave estable para
+// poder saltar a cualquier pregunta. Los follow-ups condicionales (embarazo,
+// pareja, gravedad de alergia...) se insertan detrás de su pregunta madre cuando
+// la respuesta cumple el `test`, así que la lista crece y encoge con las
+// respuestas — se recalcula con useMemo.
+
+type FlatNode = {
+  q: Question;
+  key: string;
+  si: number;
+  screenTitle: string;
+  screenSub: string;
+  isFollowUp: boolean;
+  lastOfScreen: boolean;
+};
+
+const buildFlat = (answers: Record<string, string>): FlatNode[] => {
+  const out: FlatNode[] = [];
+
+  const pushChain = (q: Question, key: string, si: number, screen: Screen, isFollowUp: boolean) => {
+    out.push({
+      q,
+      key,
+      si,
+      screenTitle: screen.title,
+      screenSub: screen.subtitle,
+      isFollowUp,
+      lastOfScreen: false,
+    });
+    const ans = answers[key];
+    if (q.followUp && ans !== undefined && ans.trim() !== "" && q.followUp.test(ans)) {
+      pushChain(q.followUp.question, `${key}>fu`, si, screen, true);
+    }
+  };
+
+  SCREENS.forEach((screen, si) => {
+    screen.questions.forEach((baseQ, qi) => pushChain(baseQ, `${si}-${qi}`, si, screen, false));
+  });
+
+  for (let i = 0; i < out.length; i++) {
+    const next = out[i + 1];
+    out[i]!.lastOfScreen = !next || next.si !== out[i]!.si;
+  }
+  return out;
+};
+
+const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v1";
+
+type Panel = "chat" | "index" | "resumen" | "saved";
+
+// Colores de icono (RN no entiende currentColor): el tema móvil es monocolor
+// naranja, ver tailwind.config.js.
+const C = {
+  primary: "#ff8a3d",
+  onPrimary: "#fbfaf7",
+  fg: "#3e3d39",
+  muted: "#83796c",
+  success: "#4cae64",
+  danger: "#e2685f",
+};
+
 export default function Onboarding() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -492,65 +558,282 @@ export default function Onboarding() {
   const makePlan = (month: string) => apiPost("plan/generate", { month, today: todayISO() });
   const brief = (month: string) => apiPost<{ text?: string }>("plan/welcome", { month });
 
-  // País e idioma van antes del chat guionizado: mientras `profile.country` no
-  // esté fijado, se muestra el RegionStep en lugar del onboarding conversacional.
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const [regionDone, setRegionDone] = useState(false);
   const [introDismissed, setIntroDismissed] = useState(false);
 
-  const [screen, setScreen] = useState(0);
-  const [step, setStep] = useState(0);
-  const [screenDone, setScreenDone] = useState(false);
-  const [turns, setTurns] = useState<Turn[]>([
-    { role: "coach", text: SCREENS[0]!.questions[0]!.q },
-  ]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [skipped, setSkipped] = useState<Record<string, true>>({});
+  const [curKey, setCurKey] = useState("0-0");
+  const [view, setView] = useState<Panel>("chat");
+  const [stageEnd, setStageEnd] = useState(false);
+
   const [value, setValue] = useState("");
   const [selectedChips, setSelectedChips] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [welcomeText, setWelcomeText] = useState<string | null>(null);
+
   const [gapValues, setGapValues] = useState<Record<string, string>>({});
+  const [gapMissing, setGapMissing] = useState<GapKey[]>([]);
+  const [reviewDraft, setReviewDraft] = useState<Draft | null>(null);
   const [dob, setDob] = useState<string | null>(null);
-
-  const [answers, setAnswers] = useState<Answer[]>([]);
-  const [review, setReview] = useState<Review | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-
-  const [pending, setPending] = useState<Question | null>(null);
-  const [partnerHasApp, setPartnerHasApp] = useState<boolean | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const scrollRef = useRef<ScrollView | null>(null);
 
-  useEffect(() => {
-    setSelectedChips(new Set());
-  }, [screen, step]);
+  const flat = useMemo(() => buildFlat(answers), [answers]);
+  const curIndex = flat.findIndex((n) => n.key === curKey);
+  const cur = curIndex >= 0 ? flat[curIndex]! : flat[0]!;
 
-  const resolveQuestion = (base: Question): Question => {
-    if (base === BUDGET_Q && partnerHasApp === false) {
+  useEffect(() => {
+    if (curIndex < 0 && flat.length) setCurKey(flat[0]!.key);
+  }, [curIndex, flat]);
+
+  // Hidratación del progreso guardado ("Guardar y salir"): se lee una vez al
+  // montar. Bloqueamos el render hasta tenerlo para no parpadear el chat vacío.
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(DRAFT_STORAGE_KEY)
+      .then((raw) => {
+        if (!alive || !raw) return;
+        const saved = JSON.parse(raw) as {
+          answers?: Record<string, string>;
+          skipped?: Record<string, true>;
+          curKey?: string;
+          dob?: string | null;
+          introDismissed?: boolean;
+        };
+        if (saved.answers) setAnswers(saved.answers);
+        if (saved.skipped) setSkipped(saved.skipped);
+        if (saved.curKey) setCurKey(saved.curKey);
+        if (saved.dob) setDob(saved.dob);
+        if (saved.introDismissed) setIntroDismissed(true);
+      })
+      .catch(() => {
+        /* progreso corrupto: se empieza de cero */
+      })
+      .finally(() => {
+        if (alive) setHydrated(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Persistencia del progreso: se borra al completar el onboarding con éxito.
+  useEffect(() => {
+    if (!hydrated || done) return;
+    AsyncStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({ answers, skipped, curKey, dob, introDismissed }),
+    ).catch(() => {
+      /* almacenamiento bloqueado: no es crítico */
+    });
+  }, [answers, skipped, curKey, dob, introDismissed, hydrated, done]);
+
+  // --- Derivados ---------------------------------------------------------------
+
+  const partnerNode = flat.find((n) => n.q === PARTNER_APP_Q);
+  const partnerAnswer = partnerNode ? answers[partnerNode.key] : undefined;
+  const partnerHasApp =
+    partnerAnswer == null
+      ? null
+      : /^\s*s[ií]\b/i.test(partnerAnswer)
+        ? true
+        : /^\s*no\b/i.test(partnerAnswer)
+          ? false
+          : null;
+
+  const displayQ = (node: FlatNode): Question => {
+    if (node.q === BUDGET_Q && partnerHasApp === false) {
       return {
-        ...base,
+        ...node.q,
         q: "¿Cuánto tiempo tienes para cocinar al día y cuál es el presupuesto mensual TOTAL de la casa (contando a tu pareja) en comida?",
         hint: "Como tu pareja no va a usar la app, planificamos la compra para los dos. Ej.: 20 min al día y unos 400 € al mes en total",
       };
     }
-    return base;
+    return node.q;
   };
 
-  const current = pending ?? resolveQuestion(SCREENS[screen]!.questions[step]!);
+  const answeredCount = flat.filter((n) => answers[n.key] !== undefined).length;
+  const total = flat.length;
+  const remaining = total - answeredCount;
+  const allAnswered = flat.every((n) => answers[n.key] !== undefined || n.q.optional === true);
+  const requiredPending = flat.filter((n) => answers[n.key] === undefined && n.q.optional !== true);
+
+  const chipsForAnswer = (node: FlatNode, text: string) =>
+    new Set((node.q.chips ?? []).filter((c) => text.split(", ").includes(c)));
+
+  // --- Navegación ------------------------------------------------------------
+
+  const goTo = (key: string) => {
+    const node = flat.find((n) => n.key === key);
+    const existing = answers[key] ?? "";
+    setCurKey(key);
+    setView("chat");
+    setStageEnd(false);
+    setError(null);
+    setValue(existing);
+    setSelectedChips(node ? chipsForAnswer(node, existing) : new Set());
+  };
+
+  const advanceFrom = (key: string, nextAnswers: Record<string, string>) => {
+    const nextFlat = buildFlat(nextAnswers);
+    const idx = nextFlat.findIndex((n) => n.key === key);
+    const node = nextFlat[idx];
+    setError(null);
+    if (!node || node.lastOfScreen) {
+      setValue("");
+      setSelectedChips(new Set());
+      setStageEnd(true);
+      return;
+    }
+    const next = nextFlat[idx + 1]!;
+    const existing = nextAnswers[next.key] ?? "";
+    setCurKey(next.key);
+    setValue(existing);
+    setSelectedChips(chipsForAnswer(next, existing));
+  };
+
+  const commit = (raw: string) => {
+    const text = raw.trim();
+    if (!text || saving) return;
+
+    const q = displayQ(cur);
+    let stored = text;
+    if (cur.q.dateInput) {
+      const iso = parseDatePretty(text) ?? text;
+      const problem = q.validate?.(iso);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      setDob(iso);
+      stored = formatDatePretty(iso);
+    } else {
+      const problem = q.validate?.(text);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
+
+    const nextAnswers = { ...answers, [cur.key]: stored };
+    setAnswers(nextAnswers);
+    setSkipped((s) => {
+      const n = { ...s };
+      delete n[cur.key];
+      return n;
+    });
+    advanceFrom(cur.key, nextAnswers);
+  };
+
+  const skipCurrent = () => {
+    if (saving) return;
+    const nextAnswers = { ...answers };
+    delete nextAnswers[cur.key];
+    setAnswers(nextAnswers);
+    setSkipped((s) => ({ ...s, [cur.key]: true }));
+    advanceFrom(cur.key, nextAnswers);
+  };
+
+  const toggleChip = (c: string) => {
+    if (!cur?.q.multi) {
+      setSelectedChips(new Set([c]));
+      setValue(c);
+      return;
+    }
+    setSelectedChips((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      const ordered = cur.q.chips?.filter((chip) => next.has(chip)) ?? [];
+      setValue(ordered.join(", "));
+      return next;
+    });
+  };
+
+  const back = () => {
+    if (stageEnd) {
+      setStageEnd(false);
+      setValue(answers[cur.key] ?? "");
+      setSelectedChips(chipsForAnswer(cur, answers[cur.key] ?? ""));
+      return;
+    }
+    if (curIndex > 0) goTo(flat[curIndex - 1]!.key);
+  };
+
+  const isLastStage = cur.si === SCREENS.length - 1;
+
+  const closeToChat = () => {
+    setView("chat");
+    if (cur.lastOfScreen && answers[cur.key] !== undefined) setStageEnd(true);
+  };
+
+  const advanceStage = () => {
+    if (isLastStage) {
+      void openResumen();
+      return;
+    }
+    const first = flat.find((n) => n.si === cur.si + 1);
+    if (first) goTo(first.key);
+  };
+
+  // --- Guardado -------------------------------------------------------------
+
+  const transcriptFromAnswers = (map: Record<string, string>) =>
+    buildFlat(map)
+      .map((n) => {
+        if (map[n.key] !== undefined) return `Coach: ${displayQ(n).q}\nPersona: ${map[n.key]}`;
+        if (n.q.optional) return `Coach: ${displayQ(n).q}\nPersona: Nada que destacar`;
+        return null;
+      })
+      .filter(Boolean)
+      .join("\n");
+
+  const openResumen = async () => {
+    setView("resumen");
+    if (!allAnswered) return;
+    setSaving(true);
+    try {
+      const map = { ...answers };
+      const parsed = await parse(transcriptFromAnswers(map));
+      const bioNode = flat.find((n) => n.q === BIO_Q);
+      const bio = parseBiometrics(bioNode ? (map[bioNode.key] ?? "") : "");
+      const draft: Draft = {
+        ...parsed,
+        date_of_birth: dob ?? parsed.date_of_birth,
+        age: dob ? ageFromDOB(dob) : (parsed.age ?? bio.age),
+        current_weight_kg: parsed.current_weight_kg ?? bio.weight,
+        height_cm: parsed.height_cm ?? bio.height,
+      };
+      const missing = KEY_FIELDS.filter((k) => !draft[k as keyof Draft]);
+      setReviewDraft(draft);
+      setGapMissing(missing);
+      setGapValues({
+        current_weight_kg: draft.current_weight_kg ? String(draft.current_weight_kg) : "",
+        height_cm: draft.height_cm ? String(draft.height_cm) : "",
+        morning_time: draft.morning_time ?? "",
+        evening_time: draft.evening_time ?? "",
+      });
+      setError(null);
+    } catch (err) {
+      Alert.alert(err instanceof Error ? err.message : "No hemos podido preparar la revisión");
+    }
+    setSaving(false);
+  };
 
   const saveAll = async (draft: Draft, extra: Partial<Draft>) => {
     setSaving(true);
     const d = { ...draft, ...extra };
     try {
-      // Fecha de alta: se fija la primera vez que se completa el onboarding y no
-      // se vuelve a tocar si ya existía (reeditar el onboarding no la reinicia).
       const existing = await fetchProfile();
       await saveProfile({
         app_started_on: existing?.app_started_on ?? todayISO(),
-        // Zona horaria del dispositivo: la usa el push del servidor para
-        // disparar el resumen matutino y el repaso nocturno a la hora local.
         timezone: resolveDeviceTimeZone(),
         display_name: d.display_name,
         age: d.age,
@@ -607,13 +890,14 @@ export default function Onboarding() {
       await qc.refetchQueries({ queryKey: ["profile"] });
       qc.removeQueries({ queryKey: ["today"] });
       qc.removeQueries({ queryKey: ["logs"] });
+      AsyncStorage.removeItem(DRAFT_STORAGE_KEY).catch(() => {});
 
       const month = monthISO();
       try {
         await makePlan(month);
         const { text } = await brief(month);
         if (text) {
-          setTurns((prev) => [...prev, { role: "coach", text }]);
+          setWelcomeText(text);
           void addMessage("assistant", text);
         }
         setDone(true);
@@ -633,48 +917,16 @@ export default function Onboarding() {
     }
   };
 
-  const transcriptFrom = (list: Answer[]) =>
-    list.map((a) => `Coach: ${a.q}\nPersona: ${a.a}`).join("\n");
-
-  const buildReview = async (list: Answer[]) => {
-    setSaving(true);
-    try {
-      const parsed = await parse(transcriptFrom(list));
-      const bio = parseBiometrics(list.find((a) => a.q === BIO_Q.q)?.a ?? "");
-      const draft: Draft = {
-        ...parsed,
-        date_of_birth: dob ?? parsed.date_of_birth,
-        age: dob ? ageFromDOB(dob) : (parsed.age ?? bio.age),
-        current_weight_kg: parsed.current_weight_kg ?? bio.weight,
-        height_cm: parsed.height_cm ?? bio.height,
-      };
-      const missing = KEY_FIELDS.filter((k) => !draft[k as keyof Draft]);
-      setGapValues({
-        current_weight_kg: draft.current_weight_kg ? String(draft.current_weight_kg) : "",
-        height_cm: draft.height_cm ? String(draft.height_cm) : "",
-        morning_time: draft.morning_time ?? "",
-        evening_time: draft.evening_time ?? "",
-      });
-      setReview({ draft, missing });
-      setDirty(false);
-      setError(null);
-    } catch (err) {
-      Alert.alert(err instanceof Error ? err.message : "No hemos podido preparar la revisión");
-    }
-    setSaving(false);
-  };
-
-  const confirmReview = async () => {
-    if (!review) return;
+  const confirmAndSave = async () => {
     const extra: Partial<Draft> = {};
     for (const key of KEY_FIELDS) {
-      const raw = (gapValues[key] ?? "").trim();
-      if (!raw) {
+      const rawVal = (gapValues[key] ?? "").trim();
+      if (!rawVal) {
         setError(`Necesito ${GAP_LABEL[key].label.toLowerCase()} para poder guardar.`);
         return;
       }
       if (GAP_LABEL[key].type === "number") {
-        const n = Number(raw.replace(",", "."));
+        const n = Number(rawVal.replace(",", "."));
         const ok = key === "current_weight_kg" ? n >= 25 && n <= 350 : n >= 100 && n <= 250;
         if (!ok) {
           setError(
@@ -686,194 +938,45 @@ export default function Onboarding() {
         }
         (extra as Record<string, unknown>)[key] = n;
       } else {
-        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(rawVal)) {
           setError(`${GAP_LABEL[key].label} debe tener formato HH:MM.`);
           return;
         }
-        (extra as Record<string, unknown>)[key] = raw;
+        (extra as Record<string, unknown>)[key] = rawVal;
       }
     }
     setError(null);
 
-    let draft = review.draft;
-    if (dirty) {
-      setSaving(true);
-      try {
-        const reparsed = await parse(transcriptFrom(answers));
-        const bio = parseBiometrics(answers.find((a) => a.q === BIO_Q.q)?.a ?? "");
-        draft = {
-          ...reparsed,
-          date_of_birth: dob ?? reparsed.date_of_birth,
-          age: dob ? ageFromDOB(dob) : (reparsed.age ?? bio.age),
-          current_weight_kg: reparsed.current_weight_kg ?? bio.weight,
-          height_cm: reparsed.height_cm ?? bio.height,
-        };
-      } catch {
-        Alert.alert("No he podido releer tus cambios, guardo con lo que ya tenía");
-      }
+    setSaving(true);
+    let draft = reviewDraft;
+    try {
+      const map = { ...answers };
+      const reparsed = await parse(transcriptFromAnswers(map));
+      const bioNode = flat.find((n) => n.q === BIO_Q);
+      const bio = parseBiometrics(bioNode ? (map[bioNode.key] ?? "") : "");
+      draft = {
+        ...reparsed,
+        date_of_birth: dob ?? reparsed.date_of_birth,
+        age: dob ? ageFromDOB(dob) : (reparsed.age ?? bio.age),
+        current_weight_kg: reparsed.current_weight_kg ?? bio.weight,
+        height_cm: reparsed.height_cm ?? bio.height,
+      };
+    } catch {
+      Alert.alert("No he podido releer tus cambios, guardo con lo que ya tenía");
     }
-    setReview(null);
+    if (!draft) {
+      setSaving(false);
+      setError("No hemos podido preparar tu perfil. Inténtalo de nuevo.");
+      return;
+    }
+    setView("chat");
     setFinishing(true);
     await saveAll(draft, extra);
   };
 
-  const toggleChip = (c: string) => {
-    if (!current?.multi) {
-      setSelectedChips(new Set([c]));
-      setValue(c);
-      return;
-    }
-    setSelectedChips((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
-      const ordered = current?.chips?.filter((chip) => next.has(chip)) ?? [];
-      setValue(ordered.join(", "));
-      return next;
-    });
-  };
+  // --- Render --------------------------------------------------------------
 
-  const answerPending = (text: string) => {
-    const q = pending;
-    if (!q) return;
-    const isPartnerQ = q === PARTNER_APP_Q;
-    const hasApp = isPartnerQ
-      ? /^\s*s[ií]\b/i.test(text)
-        ? true
-        : /^\s*no\b/i.test(text)
-          ? false
-          : null
-      : null;
-    if (isPartnerQ) setPartnerHasApp(hasApp);
-
-    setAnswers((prev) => [
-      ...prev,
-      // `prev.length` (no fija en `step`) desambigua encadenados: PREGNANCY_Q y
-      // MENSTRUAL_CYCLE_Q comparten el mismo `step` porque el segundo no lo
-      // incrementa (no consume hueco del flujo fijo), así que `step` solo no basta.
-      {
-        key: `${screen}-followup-${step}-${prev.length}`,
-        q: q.q,
-        section: SCREENS[screen]!.title,
-        a: text,
-      },
-    ]);
-    setValue("");
-    setError(null);
-
-    const next: Turn[] = [...turns, { role: "me", text }];
-    const note = isPartnerQ
-      ? hasApp === true
-        ? "Genial, cuando termines podéis uniros en Tu hogar (dentro de Ajustes) para compartir comidas y compra. "
-        : hasApp === false
-          ? "Entendido, más adelante te pido el presupuesto total de la casa para que la compra os cubra a los dos. "
-          : ""
-      : "";
-
-    // La pregunta insertada puede tener su propio follow-up encadenado (p.ej.
-    // PREGNANCY_Q -> MENSTRUAL_CYCLE_Q): si aplica, sustituye a `pending` en vez
-    // de retomar ya el flujo fijo.
-    const chained = q.followUp?.test(text) ? q.followUp.question : null;
-    if (chained) {
-      setTurns([...next, { role: "coach", text: note + chained.q }]);
-      setPending(chained);
-      return;
-    }
-    setPending(null);
-
-    const following = SCREENS[screen]!.questions[step];
-    if (following) {
-      setTurns([...next, { role: "coach", text: note + resolveQuestion(following).q }]);
-      return;
-    }
-    if (screen + 1 < SCREENS.length) {
-      setTurns(next);
-      setScreenDone(true);
-      return;
-    }
-    setTurns(next);
-  };
-
-  const send = (raw: string) => {
-    const text = raw.trim();
-    if (!text || saving || screenDone) return;
-
-    if (pending) {
-      answerPending(text);
-      return;
-    }
-
-    const problem = current?.validate?.(text);
-    if (problem) {
-      setError(problem);
-      const shown = current?.dateInput ? formatDatePretty(text) : text;
-      setTurns((prev) => [...prev, { role: "me", text: shown }, { role: "coach", text: problem }]);
-      setValue("");
-      return;
-    }
-    setError(null);
-
-    if (current?.dateInput) setDob(text);
-    const shown = current?.dateInput ? formatDatePretty(text) : text;
-
-    const next: Turn[] = [...turns, { role: "me", text: shown }];
-    const nextAnswers: Answer[] = [
-      ...answers,
-      { key: `${screen}-${step}`, q: current.q, section: SCREENS[screen]!.title, a: shown },
-    ];
-    setAnswers(nextAnswers);
-    setValue("");
-
-    const fu = current?.followUp;
-    if (fu && fu.test(text)) {
-      setTurns([...next, { role: "coach", text: fu.question.q }]);
-      setStep(step + 1);
-      setPending(fu.question);
-      return;
-    }
-
-    const following = SCREENS[screen]!.questions[step + 1];
-    if (following) {
-      setTurns([...next, { role: "coach", text: resolveQuestion(following).q }]);
-      setStep(step + 1);
-      return;
-    }
-
-    if (screen + 1 < SCREENS.length) {
-      setTurns(next);
-      setScreenDone(true);
-      return;
-    }
-
-    setTurns([
-      ...next,
-      {
-        role: "coach",
-        text: "Gracias por contármelo todo. Antes de guardar, repasa conmigo tus respuestas y corrige lo que quieras.",
-      },
-    ]);
-    void buildReview(nextAnswers);
-  };
-
-  const submit = () => {
-    if (current?.dateInput) {
-      const iso = parseDatePretty(value);
-      send(iso ?? value);
-    } else {
-      send(value);
-    }
-  };
-
-  const nextScreen = () => {
-    const nextIndex = screen + 1;
-    setTurns([{ role: "coach", text: resolveQuestion(SCREENS[nextIndex]!.questions[0]!).q }]);
-    setScreen(nextIndex);
-    setStep(0);
-    setScreenDone(false);
-  };
-
-  // --- Pantalla: país e idioma (antes que nada más) ---
-  if (profileQ.isLoading) return null;
+  if (profileQ.isLoading || !hydrated) return null;
   if (!regionDone && !profileQ.data?.country) {
     return <RegionStep profile={profileQ.data} onDone={() => setRegionDone(true)} />;
   }
@@ -882,180 +985,312 @@ export default function Onboarding() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
         <View className="flex-1 items-center justify-center px-8">
-          <Sparkles size={40} color="#ff8a3d" />
-          <Text className="mt-6 text-center font-title text-2xl font-semibold tracking-tight text-foreground">
+          <Sparkles size={40} color={C.primary} />
+          <Text className="mt-6 text-center font-heading text-2xl text-foreground">
             Vamos a conocerte
           </Text>
-          <Text className="mt-4 max-w-[280px] text-center text-sm leading-relaxed text-muted-foreground">
-            Son unas {TOTAL} preguntas (~10-15 minutos). Solo se hace una vez — después podrás
-            modificar cualquier respuesta en Ajustes o hablando con el coach.
+          <Text className="mt-4 max-w-[300px] text-center text-sm leading-relaxed text-muted-foreground">
+            Son unas {total} preguntas (~10-15 minutos). Puedes saltar cualquiera, volver atrás y
+            corregir lo que quieras — y si lo dejas a medias, retomas justo donde ibas.
           </Text>
           <Pressable
             onPress={() => setIntroDismissed(true)}
-            className="mt-8 flex-row items-center gap-2 rounded-full bg-primary px-8 py-3.5 active:scale-[0.98]"
+            className="mt-8 flex-row items-center gap-2 rounded-full bg-primary px-8 py-3.5 active:opacity-90"
           >
-            <Text className="text-sm font-semibold text-primary-foreground">Empezar</Text>
-            <ArrowRight size={16} color="#fbfaf7" />
+            <Text className="text-sm font-sans-semibold text-primary-foreground">Empezar</Text>
+            <ArrowRight size={16} color={C.onPrimary} />
           </Pressable>
         </View>
       </SafeAreaView>
     );
   }
 
-  // --- Pantalla: generando plan ---
   if (finishing && !done) return <PlanGeneratingScreen />;
 
-  // --- Pantalla: revisión final ---
-  if (review) {
-    const sections = SCREENS.map((s) => ({
-      title: s.title,
-      items: answers.filter((a) => a.section === s.title),
-    })).filter((s) => s.items.length);
-
+  if (done) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <View className="flex-1 px-5 pt-2">
-            <OnboardingProgress
-              stage={SCREENS.length}
-              stageFill={1}
-              answeredUnits={TOTAL}
-              title="Repasa tus respuestas"
-              subtitle="Revisión final"
-            />
-            <Text className="mt-2 text-xs text-muted-foreground">
-              Toca cualquier respuesta para corregirla. Sin prisa: cuando esté bien, confirmamos.
-            </Text>
-
-            <ScrollView className="mt-5 flex-1" contentContainerClassName="gap-5 pb-4">
-              <View className="gap-3 rounded-3xl bg-surface p-4">
-                <Text className="text-sm font-sans-medium text-foreground">Datos clave</Text>
-                {KEY_FIELDS.map((key) => (
-                  <View key={key}>
-                    <View className="flex-row items-center gap-1.5">
-                      <Text className="text-xs text-muted-foreground">{GAP_LABEL[key].label}</Text>
-                      {review.missing.includes(key) ? (
-                        <View className="rounded-full bg-primary-soft px-2 py-0.5">
-                          <Text className="text-[10px] font-sans-medium text-primary">falta</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <TextInput
-                      value={gapValues[key] ?? ""}
-                      onChangeText={(t) => setGapValues((v) => ({ ...v, [key]: t }))}
-                      keyboardType={GAP_LABEL[key].type === "number" ? "decimal-pad" : "default"}
-                      placeholder={GAP_LABEL[key].type === "time" ? "HH:MM" : ""}
-                      placeholderTextColor="#83796c"
-                      className="mt-1 h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
-                    />
-                    <Text className="mt-1 text-[11px] text-muted-foreground">
-                      {GAP_LABEL[key].help}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-
-              {sections.map((s) => (
-                <View key={s.title} className="gap-2">
-                  <Text className="px-1 text-xs font-sans-semibold uppercase tracking-wide text-muted-foreground">
-                    {s.title}
-                  </Text>
-                  {s.items.map((a) => (
-                    <View key={a.key} className="rounded-3xl bg-surface p-4">
-                      <Text className="text-xs leading-relaxed text-muted-foreground">{a.q}</Text>
-                      {editing === a.key ? (
-                        <View className="mt-2 gap-2">
-                          <TextInput
-                            multiline
-                            value={a.a}
-                            onChangeText={(t) => {
-                              setAnswers((prev) =>
-                                prev.map((x) => (x.key === a.key ? { ...x, a: t } : x)),
-                              );
-                              if (a.q === BIRTHDATE_Q.q) setDob(parseDatePretty(t));
-                              setDirty(true);
-                            }}
-                            className="min-h-[72px] rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-foreground"
-                            textAlignVertical="top"
-                          />
-                          <View className="flex-row items-center justify-between">
-                            {a.q !== BIRTHDATE_Q.q ? (
-                              <DictateButton
-                                onText={(t) => {
-                                  setAnswers((prev) =>
-                                    prev.map((x) =>
-                                      x.key === a.key
-                                        ? { ...x, a: x.a.trim() ? `${x.a.trim()} ${t}` : t }
-                                        : x,
-                                    ),
-                                  );
-                                  setDirty(true);
-                                }}
-                              />
-                            ) : (
-                              <View />
-                            )}
-                            <Pressable
-                              onPress={() => setEditing(null)}
-                              className="self-end rounded-full bg-secondary px-3.5 py-1.5"
-                            >
-                              <Text className="text-xs font-sans-medium text-secondary-foreground">
-                                Listo
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      ) : (
-                        <Pressable
-                          onPress={() => setEditing(a.key)}
-                          className="mt-1.5 flex-row items-start justify-between gap-3"
-                        >
-                          <Text className="flex-1 text-sm text-foreground">{a.a}</Text>
-                          <Pencil size={14} color="#83796c" />
-                        </Pressable>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </ScrollView>
-
-            {error ? (
-              <View className="mb-2 flex-row items-start gap-1.5">
-                <AlertCircle size={14} color="#e2685f" />
-                <Text className="flex-1 text-xs text-destructive">{error}</Text>
-              </View>
-            ) : null}
-            {dirty ? (
-              <View className="mb-2 flex-row items-start gap-1.5">
-                <Info size={14} color="#6dbe7b" />
-                <Text className="flex-1 text-xs text-muted-foreground">
-                  He anotado tus cambios, los releo al confirmar.
-                </Text>
-              </View>
-            ) : null}
-
-            <Pressable
-              disabled={saving}
-              onPress={() => void confirmReview()}
-              className="mb-2 flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-50"
-            >
-              <Text className="text-sm font-sans-semibold text-primary-foreground">
-                {saving ? "Guardando..." : "Confirmar y guardar mi perfil"}
-              </Text>
-              {saving ? null : <Check size={16} color="#3e3d39" />}
-            </Pressable>
+        <View className="flex-1 items-center justify-center gap-7 px-8">
+          <View className="h-24 w-24 items-center justify-center">
+            <View className="absolute h-24 w-24 rounded-full bg-primary/10" />
+            <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
+              <Check size={24} color={C.primary} />
+            </View>
           </View>
-        </KeyboardAvoidingView>
+          <Text className="font-display text-2xl text-foreground">Tu plan está listo</Text>
+          {welcomeText ? (
+            <Text className="max-w-[320px] text-center text-sm leading-relaxed text-muted-foreground">
+              {welcomeText}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() => router.replace("/hoy")}
+            className="w-full max-w-[320px] items-center rounded-full bg-primary py-4 active:opacity-90"
+          >
+            <Text className="text-sm font-sans-semibold text-primary-foreground">
+              Empezar mi primer día
+            </Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
 
-  // --- Pantalla: chat del cuestionario ---
-  const stageFill = done ? 1 : screenDone ? 1 : (step + 1) / SCREENS[screen]!.questions.length;
+  // --- Overlay: índice ---
+  if (view === "index") {
+    return (
+      <Shell>
+        <OverlayHeader eyebrow="índice" title="Todo el recorrido" onClose={closeToChat} />
+        <Text className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
+          Ve a cualquier etapa cuando quieras. Lo respondido se guarda tal cual.
+        </Text>
+        <ScrollView className="mt-4 flex-1" contentContainerClassName="gap-2 pb-2">
+          {SCREENS.map((s, si) => {
+            const nodes = flat.filter((n) => n.si === si);
+            const doneN = nodes.filter((n) => answers[n.key] !== undefined).length;
+            const complete = doneN === nodes.length;
+            const isCur = si === cur.si;
+            const first = nodes[0];
+            return (
+              <Pressable
+                key={s.title}
+                onPress={() => first && goTo(first.key)}
+                className="flex-row items-center gap-3.5 rounded-2xl bg-surface p-4 active:opacity-90"
+              >
+                <View
+                  className={`h-9 w-9 items-center justify-center rounded-full ${
+                    complete ? "bg-success" : isCur ? "bg-primary" : "bg-secondary"
+                  }`}
+                >
+                  {complete ? (
+                    <Check size={16} color={C.onPrimary} />
+                  ) : (
+                    <Text
+                      className={`font-mono text-xs ${
+                        isCur ? "text-primary-foreground" : "text-muted-foreground"
+                      }`}
+                    >
+                      {si + 1}
+                    </Text>
+                  )}
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="text-[15px] font-sans-semibold text-foreground"
+                    numberOfLines={1}
+                  >
+                    {s.title}
+                  </Text>
+                  <Text className="font-mono text-[10.5px] text-muted-foreground">
+                    {s.subtitle.toLowerCase()} · {doneN}/{nodes.length}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color={C.muted} />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <Pressable
+          onPress={() => void openResumen()}
+          className="mt-3 flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90"
+        >
+          <Text className="text-sm font-sans-semibold text-primary-foreground">Ver mi resumen</Text>
+          <ArrowRight size={16} color={C.onPrimary} />
+        </Pressable>
+      </Shell>
+    );
+  }
+
+  // --- Overlay: resumen ---
+  if (view === "resumen") {
+    const pending = flat.filter((n) => skipped[n.key]);
+    const sections = SCREENS.map((s, si) => ({
+      title: s.title,
+      items: flat.filter((n) => n.si === si && answers[n.key] !== undefined),
+    })).filter((s) => s.items.length);
+    const emptyResumen = pending.length === 0 && sections.length === 0;
+    const canConfirm = allAnswered;
+
+    return (
+      <Shell>
+        <OverlayHeader
+          eyebrow={`resumen · ${answeredCount} de ${total}`}
+          title="Repasa tus respuestas"
+          onClose={closeToChat}
+        />
+        <Text className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
+          Toca cualquier respuesta para corregirla. Sin prisa: cuando esté bien, confirmamos.
+        </Text>
+
+        <ScrollView className="mt-4 flex-1" contentContainerClassName="gap-5 pb-2">
+          {canConfirm ? (
+            <View className="gap-3 rounded-3xl bg-surface p-4">
+              <Text className="text-sm font-sans-medium text-foreground">Datos clave</Text>
+              {KEY_FIELDS.map((key) => (
+                <View key={key}>
+                  <View className="flex-row items-center gap-1.5">
+                    <Text className="text-xs text-muted-foreground">{GAP_LABEL[key].label}</Text>
+                    {gapMissing.includes(key) ? (
+                      <View className="rounded-full bg-primary-soft px-2 py-0.5">
+                        <Text className="text-[10px] font-sans-medium text-primary">falta</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <TextInput
+                    value={gapValues[key] ?? ""}
+                    onChangeText={(t) => setGapValues((v) => ({ ...v, [key]: t }))}
+                    keyboardType={GAP_LABEL[key].type === "number" ? "decimal-pad" : "default"}
+                    placeholder={GAP_LABEL[key].type === "time" ? "HH:MM" : ""}
+                    placeholderTextColor={C.muted}
+                    className="mt-1 h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
+                  />
+                  <Text className="mt-1 text-[11px] text-muted-foreground">
+                    {GAP_LABEL[key].help}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {pending.length ? (
+            <View className="gap-2.5 rounded-3xl bg-primary-soft p-4">
+              <Text className="text-[13px] font-sans-semibold text-foreground">
+                Pendientes · {pending.length}
+              </Text>
+              {pending.map((n) => (
+                <Pressable
+                  key={n.key}
+                  onPress={() => goTo(n.key)}
+                  className="flex-row items-center gap-3 rounded-2xl bg-surface p-3.5 active:opacity-90"
+                >
+                  <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
+                    {displayQ(n).q}
+                  </Text>
+                  <Text className="text-xs font-sans-semibold text-primary">Responder</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {sections.map((s) => (
+            <View key={s.title} className="gap-2">
+              <Text className="px-1 font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+                {s.title}
+              </Text>
+              {s.items.map((n) => (
+                <Pressable
+                  key={n.key}
+                  onPress={() => goTo(n.key)}
+                  className="rounded-3xl bg-surface p-4 active:opacity-90"
+                >
+                  <Text className="text-xs leading-relaxed text-muted-foreground">
+                    {displayQ(n).q}
+                  </Text>
+                  <View className="mt-1.5 flex-row items-start justify-between gap-3">
+                    <Text className="flex-1 text-sm text-foreground">{answers[n.key]}</Text>
+                    <Pencil size={14} color={C.muted} />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ))}
+
+          {emptyResumen ? (
+            <Text className="px-1 py-6 text-[13px] leading-relaxed text-muted-foreground">
+              Aún no hay respuestas guardadas. Vuelve al chat y empieza por donde quieras.
+            </Text>
+          ) : null}
+        </ScrollView>
+
+        {error ? (
+          <View className="mb-2 flex-row items-start gap-1.5">
+            <AlertCircle size={14} color={C.danger} />
+            <Text className="flex-1 text-xs text-destructive">{error}</Text>
+          </View>
+        ) : null}
+        {!canConfirm && requiredPending.length ? (
+          <View className="mb-2 flex-row items-start gap-1.5">
+            <Info size={14} color={C.primary} />
+            <Text className="flex-1 text-xs text-muted-foreground">
+              Te quedan {requiredPending.length} preguntas por responder antes de guardar.
+            </Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          disabled={saving}
+          onPress={() => (canConfirm ? void confirmAndSave() : closeToChat())}
+          className="flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-50"
+        >
+          <Text className="text-sm font-sans-semibold text-primary-foreground">
+            {saving
+              ? "Guardando..."
+              : canConfirm
+                ? "Confirmar y guardar mi perfil"
+                : "Volver al chat"}
+          </Text>
+          {saving ? null : canConfirm ? (
+            <Check size={16} color={C.onPrimary} />
+          ) : (
+            <ArrowRight size={16} color={C.onPrimary} />
+          )}
+        </Pressable>
+      </Shell>
+    );
+  }
+
+  // --- Overlay: guardado ---
+  if (view === "saved") {
+    return (
+      <Shell>
+        <View className="flex-1 items-center justify-center gap-6">
+          <View className="h-24 w-24 items-center justify-center">
+            <View className="absolute h-24 w-24 rounded-full bg-primary/10" />
+            <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
+              <Check size={24} color={C.primary} />
+            </View>
+          </View>
+          <Text className="font-display text-2xl text-foreground">Guardado</Text>
+          <Text className="max-w-[300px] text-center text-sm leading-relaxed text-muted-foreground">
+            Llevas {answeredCount} de {total} respuestas. Cuando vuelvas, retomas justo aquí — nada
+            se pierde.
+          </Text>
+          <View className="w-full max-w-[320px] gap-2.5">
+            <Pressable
+              onPress={closeToChat}
+              className="items-center rounded-full bg-primary py-4 active:opacity-90"
+            >
+              <Text className="text-sm font-sans-semibold text-primary-foreground">
+                Seguir ahora
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void openResumen()}
+              className="items-center rounded-full bg-surface py-4 active:opacity-90"
+            >
+              <Text className="text-sm font-sans-semibold text-muted-foreground">
+                Ver lo que llevo
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Shell>
+    );
+  }
+
+  // --- Pantalla: chat ---
+  const stage = SCREENS[cur.si]!;
+  const screenNodes = flat.filter((n) => n.si === cur.si);
+  const posInScreen = screenNodes.findIndex((n) => n.key === cur.key);
+  const visibleTurns = screenNodes.slice(0, posInScreen + 1);
+  const currentQ = displayQ(cur);
+
+  const segments = SCREENS.map((_, si) => {
+    const nodes = flat.filter((n) => n.si === si);
+    const done2 = nodes.filter((n) => answers[n.key] !== undefined).length;
+    const pct = nodes.length ? done2 / nodes.length : 0;
+    return si === cur.si ? Math.max(pct, 0.08) : pct;
+  });
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -1064,151 +1299,218 @@ export default function Onboarding() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View className="flex-1 px-5 pt-2">
-          <OnboardingProgress
-            stage={screen}
-            stageFill={stageFill}
-            answeredUnits={done ? TOTAL + 1 : answers.length}
-            title={SCREENS[screen]!.title}
-            subtitle={SCREENS[screen]!.subtitle}
-          />
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={back}
+              disabled={curIndex <= 0 && !stageEnd}
+              accessibilityLabel="Atrás"
+              className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80 disabled:opacity-40"
+            >
+              <ArrowLeft size={18} color={C.fg} />
+            </Pressable>
+            <Pressable
+              onPress={() => setView("index")}
+              className="h-11 flex-1 flex-row items-center justify-between rounded-full bg-surface px-4 active:opacity-90"
+            >
+              <View className="flex-1">
+                <Text className="font-mono text-[9.5px] uppercase tracking-[1px] text-muted-foreground">
+                  etapa {cur.si + 1} de {SCREENS.length}
+                </Text>
+                <Text
+                  className="text-[13.5px] font-sans-semibold text-foreground"
+                  numberOfLines={1}
+                >
+                  {stage.title}
+                </Text>
+              </View>
+              <ChevronDown size={16} color={C.muted} />
+            </Pressable>
+            <Pressable
+              onPress={() => setView("saved")}
+              accessibilityLabel="Guardar y salir"
+              className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80"
+            >
+              <Save size={18} color={C.muted} />
+            </Pressable>
+          </View>
+
+          <View className="mt-3.5 flex-row gap-1.5">
+            {segments.map((w, i) => (
+              <View key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                <View
+                  className="h-1.5 rounded-full bg-primary"
+                  style={{ width: `${Math.round(w * 100)}%` as `${number}%` }}
+                />
+              </View>
+            ))}
+          </View>
+          <View className="mt-2 flex-row items-baseline justify-between">
+            <Text className="font-mono text-[11px] text-muted-foreground">
+              pregunta {Math.max(1, curIndex + 1)} de {total}
+            </Text>
+            <Text className="font-mono text-[11px] text-muted-foreground">quedan {remaining}</Text>
+          </View>
 
           <ScrollView
             ref={scrollRef}
-            className="mt-6 flex-1"
+            className="mt-5 flex-1"
             contentContainerClassName="gap-3 pb-2"
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
             keyboardShouldPersistTaps="handled"
           >
-            {turns.map((t, i) => (
-              <View
-                key={`${screen}-${i}-${t.text.slice(0, 12)}`}
-                className={t.role === "me" ? "items-end" : "items-start"}
-              >
-                <View
-                  className={`max-w-[85%] rounded-3xl px-4 py-3 ${
-                    t.role === "me" ? "bg-primary" : "bg-surface"
-                  }`}
-                >
-                  <Text
-                    className={`text-sm leading-relaxed ${
-                      t.role === "me" ? "text-primary-foreground" : "text-foreground"
-                    }`}
-                  >
-                    {t.text}
-                  </Text>
+            {visibleTurns.map((n) => (
+              <View key={n.key} className="gap-3">
+                <View className="items-start">
+                  <View className="max-w-[85%] rounded-3xl bg-surface px-4 py-3">
+                    <Text className="text-sm leading-relaxed text-foreground">{displayQ(n).q}</Text>
+                  </View>
                 </View>
+                {answers[n.key] !== undefined ? (
+                  <View className="items-end">
+                    <Pressable
+                      onPress={() => goTo(n.key)}
+                      className="max-w-[85%] flex-row items-center gap-2 rounded-3xl bg-primary px-4 py-3 active:opacity-90"
+                    >
+                      <Text className="text-sm leading-relaxed text-primary-foreground">
+                        {answers[n.key]}
+                      </Text>
+                      <Pencil size={14} color={C.onPrimary} />
+                    </Pressable>
+                  </View>
+                ) : skipped[n.key] ? (
+                  <View className="items-end">
+                    <Pressable
+                      onPress={() => goTo(n.key)}
+                      className="flex-row items-center gap-2 rounded-full bg-secondary px-4 py-2.5 active:opacity-80"
+                    >
+                      <SkipForward size={14} color={C.muted} />
+                      <Text className="text-[13px] font-sans-medium text-muted-foreground">
+                        Saltada — la retomo luego
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
             ))}
           </ScrollView>
 
-          {!saving && !screenDone && !done && current?.chips?.length ? (
-            <View className="mb-2 flex-row flex-wrap gap-2">
-              {current.chips.map((c) => {
-                const active = selectedChips.has(c);
-                return (
-                  <Pressable
-                    key={c}
-                    onPress={() => toggleChip(c)}
-                    className={`rounded-full px-3.5 py-2 active:opacity-80 ${
-                      active ? "bg-foreground" : "bg-surface"
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-sans-medium ${
-                        active ? "text-primary-foreground" : "text-foreground"
-                      }`}
-                    >
-                      {c}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-
-          {error && !done ? (
+          {error ? (
             <View className="mb-2 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-3.5 py-2.5">
-              <Info size={14} color="#6dbe7b" />
+              <Info size={14} color={C.primary} />
               <Text className="flex-1 text-xs text-foreground">{error}</Text>
             </View>
           ) : null}
 
-          {done ? (
-            <Pressable
-              onPress={() => router.replace("/hoy")}
-              className="mb-2 w-full items-center rounded-full bg-primary py-4 active:opacity-90"
-            >
-              <Text className="text-sm font-sans-semibold text-primary-foreground">
-                Empezar mi primer día
-              </Text>
-            </Pressable>
-          ) : screenDone ? (
-            <View className="mb-2 gap-3 rounded-3xl bg-surface p-4">
-              <Text className="text-sm text-muted-foreground">
-                Perfecto, ya tengo {SCREENS[screen]!.subtitle.toLowerCase()}. Seguimos con{" "}
+          {stageEnd ? (
+            <View className="mb-2 gap-3.5 rounded-3xl bg-surface p-4">
+              <Text className="text-sm leading-relaxed text-muted-foreground">
+                Etapa completa:{" "}
                 <Text className="font-sans-medium text-foreground">
-                  {SCREENS[screen + 1]!.subtitle.toLowerCase()}
+                  {stage.subtitle.toLowerCase()}
                 </Text>
-                .
+                .{" "}
+                {isLastStage
+                  ? "Es la última: ya podemos repasarlo todo."
+                  : `Seguimos con ${SCREENS[cur.si + 1]!.subtitle.toLowerCase()}.`}
               </Text>
-              <Pressable
-                onPress={nextScreen}
-                className="flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
-              >
-                <Text className="text-sm font-sans-semibold text-primary-foreground">
-                  Continuar
-                </Text>
-                <ArrowRight size={16} color="#3e3d39" />
-              </Pressable>
+              <View className="flex-row gap-2.5">
+                <Pressable
+                  onPress={back}
+                  className="flex-row items-center justify-center gap-1.5 rounded-full bg-secondary px-4 py-3 active:opacity-80"
+                >
+                  <ArrowLeft size={15} color={C.muted} />
+                  <Text className="text-[13.5px] font-sans-semibold text-muted-foreground">
+                    Repasar
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={advanceStage}
+                  className="flex-1 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3 active:opacity-90"
+                >
+                  <Text className="text-[13.5px] font-sans-semibold text-primary-foreground">
+                    {isLastStage ? "Ver mi resumen" : "Continuar"}
+                  </Text>
+                  <ArrowRight size={16} color={C.onPrimary} />
+                </Pressable>
+              </View>
             </View>
           ) : (
-            <View className="mb-2 rounded-3xl bg-surface p-2">
-              <TextInput
-                editable={!saving}
-                value={value}
-                onChangeText={setValue}
-                multiline={!current?.dateInput}
-                keyboardType={current?.dateInput ? "numbers-and-punctuation" : "default"}
-                onSubmitEditing={current?.dateInput ? submit : undefined}
-                placeholder={
-                  saving
-                    ? "Preparando tu plan..."
-                    : current?.dateInput
-                      ? "DD/MM/AAAA"
-                      : (current?.hint ?? "Escribe aquí...")
-                }
-                placeholderTextColor="#83796c"
-                className="min-h-[44px] px-2 py-2 text-sm text-foreground"
-                textAlignVertical="top"
-              />
-              <View className="flex-row items-center justify-between px-1">
-                <View className="flex-row items-center gap-1">
-                  {current?.optional ? (
-                    <Pressable
-                      onPress={() => send("Nada que destacar")}
-                      disabled={saving}
-                      className="flex-row items-center gap-1.5 rounded-full px-2.5 py-1.5"
-                    >
-                      <SkipForward size={14} color="#83796c" />
-                      <Text className="text-xs font-sans-medium text-muted-foreground">Saltar</Text>
-                    </Pressable>
-                  ) : null}
+            <View className="mb-2 gap-2.5">
+              {currentQ.chips?.length ? (
+                <View className="flex-row flex-wrap gap-2">
+                  {currentQ.chips.map((c) => {
+                    const active = selectedChips.has(c);
+                    return (
+                      <Pressable
+                        key={c}
+                        onPress={() => toggleChip(c)}
+                        className={`min-h-[44px] flex-row items-center gap-1.5 rounded-full px-4 active:opacity-80 ${
+                          active ? "bg-foreground" : "bg-surface"
+                        }`}
+                      >
+                        {active ? <Check size={14} color={C.onPrimary} /> : null}
+                        <Text
+                          className={`text-[13.5px] ${
+                            active
+                              ? "font-sans-semibold text-primary-foreground"
+                              : "font-sans-medium text-foreground"
+                          }`}
+                        >
+                          {c}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-                <View className="flex-row items-center gap-2">
-                  {!current?.dateInput ? (
-                    <DictateButton
-                      onText={(t) => setValue((v) => (v.trim() ? `${v.trim()} ${t}` : t))}
-                    />
-                  ) : null}
+              ) : null}
+
+              <View className="rounded-3xl bg-surface p-2">
+                <TextInput
+                  editable={!saving}
+                  value={value}
+                  onChangeText={setValue}
+                  multiline={!currentQ.dateInput}
+                  keyboardType={currentQ.dateInput ? "numbers-and-punctuation" : "default"}
+                  onSubmitEditing={currentQ.dateInput ? () => commit(value) : undefined}
+                  placeholder={
+                    saving
+                      ? "Preparando tu plan..."
+                      : currentQ.dateInput
+                        ? "DD/MM/AAAA"
+                        : (currentQ.hint ?? "Escribe aquí...")
+                  }
+                  placeholderTextColor={C.muted}
+                  className="min-h-[44px] px-2 py-2 text-sm text-foreground"
+                  textAlignVertical="top"
+                />
+                <View className="flex-row items-center justify-between px-1">
                   <Pressable
-                    onPress={submit}
-                    disabled={saving || !value.trim()}
-                    className={`h-9 w-9 items-center justify-center rounded-full bg-primary ${
-                      saving || !value.trim() ? "opacity-40" : ""
-                    }`}
+                    onPress={skipCurrent}
+                    disabled={saving}
+                    className="flex-row items-center gap-1.5 rounded-full px-2.5 py-1.5 active:opacity-70"
                   >
-                    <Send size={16} color="#3e3d39" />
+                    <SkipForward size={14} color={C.muted} />
+                    <Text className="text-xs font-sans-medium text-muted-foreground">
+                      Saltar y volver luego
+                    </Text>
                   </Pressable>
+                  <View className="flex-row items-center gap-2">
+                    {!currentQ.dateInput ? (
+                      <DictateButton
+                        onText={(t) => setValue((v) => (v.trim() ? `${v.trim()} ${t}` : t))}
+                      />
+                    ) : null}
+                    <Pressable
+                      onPress={() => commit(value)}
+                      disabled={saving || !value.trim()}
+                      accessibilityLabel="Enviar"
+                      className={`h-11 w-11 items-center justify-center rounded-full bg-primary ${
+                        saving || !value.trim() ? "opacity-40" : ""
+                      }`}
+                    >
+                      <Send size={16} color={C.onPrimary} />
+                    </Pressable>
+                  </View>
                 </View>
               </View>
             </View>
@@ -1219,58 +1521,43 @@ export default function Onboarding() {
   );
 }
 
-function OnboardingProgress({
-  stage,
-  stageFill,
-  answeredUnits,
-  title,
-  subtitle,
-}: {
-  stage: number;
-  stageFill: number;
-  answeredUnits: number;
-  title: string;
-  subtitle: string;
-}) {
-  const pct = Math.round(Math.min(1, Math.max(0, answeredUnits / TOTAL_UNITS)) * 100);
-  const left = STAGES.length - stage - 1;
-
+function Shell({ children }: { children: ReactNode }) {
   return (
-    <View>
-      <View className="flex-row items-end justify-between gap-3">
-        <View className="min-w-0 flex-1">
-          <Text className="text-xs font-sans-medium text-muted-foreground">
-            Etapa {stage + 1} de {STAGES.length} · {subtitle}
-          </Text>
-          <Text className="text-lg font-sans-semibold text-foreground" numberOfLines={1}>
-            {title}
-          </Text>
-        </View>
-        <View className="items-end">
-          <Text className="text-xs font-sans-medium text-foreground">{pct}%</Text>
-          <Text className="text-[11px] text-muted-foreground">
-            {left > 0 ? `Quedan ${left} ${left === 1 ? "etapa" : "etapas"}` : "Última etapa"}
-          </Text>
-        </View>
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View className="flex-1 px-5 pt-2">{children}</View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+function OverlayHeader({
+  eyebrow,
+  title,
+  onClose,
+}: {
+  eyebrow: string;
+  title: string;
+  onClose: () => void;
+}) {
+  return (
+    <View className="flex-row items-center justify-between gap-3">
+      <View className="flex-1">
+        <Text className="font-mono text-[9.5px] uppercase tracking-[1px] text-muted-foreground">
+          {eyebrow}
+        </Text>
+        <Text className="mt-0.5 font-display text-[22px] text-foreground">{title}</Text>
       </View>
-      <View className="mt-3 flex-row gap-1.5">
-        {STAGES.map((label, i) => {
-          const width =
-            i < stage
-              ? "100%"
-              : i === stage
-                ? `${Math.round(Math.min(1, Math.max(0.08, stageFill)) * 100)}%`
-                : "0%";
-          return (
-            <View key={label} className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <View
-                className="h-1.5 rounded-full bg-primary"
-                style={{ width: width as `${number}%` }}
-              />
-            </View>
-          );
-        })}
-      </View>
+      <Pressable
+        onPress={onClose}
+        accessibilityLabel="Cerrar"
+        className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80"
+      >
+        <X size={18} color={C.fg} />
+      </Pressable>
     </View>
   );
 }
@@ -1289,7 +1576,7 @@ function PlanGeneratingScreen() {
         <View className="absolute h-32 w-32 rounded-full bg-primary/10" />
         <View className="absolute h-24 w-24 rounded-full bg-primary/15" />
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary">
-          <Sparkles size={28} color="#3e3d39" />
+          <Sparkles size={28} color={C.onPrimary} />
         </View>
       </View>
 
@@ -1300,7 +1587,7 @@ function PlanGeneratingScreen() {
         </Text>
       </View>
 
-      <ActivityIndicator color="#6dbe7b" />
+      <ActivityIndicator color={C.primary} />
     </SafeAreaView>
   );
 }

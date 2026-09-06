@@ -150,6 +150,18 @@ async function readShoppingRow<T>(
   return (data as T | null) ?? null;
 }
 
+/** Las únicas columnas que `writeShoppingState` puede tocar: el estado de la
+ *  compra, que es del hogar. Los platos (`plan`), las cantidades y la cadencia
+ *  son solo del planificador (issue 06). */
+const SHOPPING_STATE_COLUMNS: readonly string[] = [
+  "shopping",
+  "pantry_extras",
+  "trip_actuals",
+  "trip_receipts",
+  "confirmed_trips",
+  "confirmed_at",
+];
+
 /** Escribe SOLO columnas de estado de compra en la fila objetivo. El `patch`
  *  nunca incluye `plan` ni `weekQty`: un no planificador jamás toca los platos
  *  ni las cantidades de la lista de la casa (issue 06). */
@@ -159,6 +171,13 @@ async function writeShoppingState(
   month: string,
   patch: Record<string, unknown>,
 ): Promise<{ error: unknown }> {
+  // Barandilla, no comentario: cuando la fila es de otra persona esto escribe
+  // con `supabaseAdmin`, que se salta RLS. Se comprueba aquí en vez de confiar
+  // en que cada sitio que llama respete la lista.
+  const forbidden = Object.keys(patch).filter((c) => !SHOPPING_STATE_COLUMNS.includes(c));
+  if (forbidden.length) {
+    throw new Error(`writeShoppingState: columna no permitida (${forbidden.join(", ")})`);
+  }
   if (target.isMine) {
     const { error } = await (supabase as SupabaseClient<never, never, never>)
       .from("monthly_plans")
@@ -365,6 +384,9 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "plan-generate");
+
     const { data: profile } = await context.supabase
       .from("profiles")
       .select("*")
@@ -437,17 +459,44 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
 
     // Plato aparte de un niño (issue 07): solo lo genera el planificador (o un
     // usuario en solitario con niños en casa, caso raro pero posible).
+    const tableKids = home.children.filter((c) => c.stage === "mesa");
+    const puréeKids = home.children.filter((c) => c.stage === "triturados");
+    const milkKids = home.children.filter((c) => c.stage === "pecho");
     const kidsLine =
       !isNonPlannerInHousehold && home.children.length
-        ? `NIÑOS DE LA CASA: ${JSON.stringify(
-            home.children.map((c) => ({
-              childId: c.id,
-              nombre: c.name,
-              edad: c.age,
-              alergias: c.allergies || "ninguna",
-              racion: c.portion,
-            })),
-          )}. Si un plato compartido no le sirve a un niño (lleva su alérgeno, no encaja con su edad, o no se lo va a comer), añade para ESE niño ESE día un plato alternativo sencillo en "days[].kids" — objeto {"childId" (el de la lista), "slot": "desayuno"|"comida"|"cena", "dish": plato corto} — y suma sus ingredientes al "weekQty" a ración de ese niño. Si el plato compartido le vale, no pongas nada: por defecto el niño come lo mismo que la mesa. `
+        ? [
+            tableKids.length
+              ? `NIÑOS QUE COMEN DEL PLATO: ${JSON.stringify(
+                  tableKids.map((c) => ({
+                    childId: c.id,
+                    nombre: c.name,
+                    edad: c.age,
+                    alergias: c.allergies || "ninguna",
+                    racion: c.portion,
+                  })),
+                )}. Si un plato compartido no le sirve a un niño (lleva su alérgeno, no encaja con su edad, o no se lo va a comer), añade para ESE niño ESE día un plato alternativo sencillo en "days[].kids" — objeto {"childId" (el de la lista), "slot": "desayuno"|"comida"|"cena", "dish": plato corto} — y suma sus ingredientes al "weekQty" a ración de ese niño. Si el plato compartido le vale, no pongas nada: por defecto el niño come lo mismo que la mesa.`
+              : "",
+            puréeKids.length
+              ? `BEBÉS DE TRITURADOS (comen aparte, NO del plato de la mesa): ${JSON.stringify(
+                  puréeKids.map((c) => ({
+                    childId: c.id,
+                    nombre: c.name,
+                    edad: c.age,
+                    alergias: c.allergies || "ninguna",
+                    racion: c.portion,
+                  })),
+                )}. Para CADA uno, añade en "days[].kids" su propio plato en comida y cena de cada día: un puré o triturado sencillo, sin sal ni azúcar, adaptado a su edad y sin sus alérgenos. Suma sus ingredientes al "weekQty" a su ración (pequeña). El plato de la mesa NO se dimensiona para ellos.`
+              : "",
+            milkKids.length
+              ? `BEBÉS DE PECHO O BIBERÓN: ${milkKids
+                  .map((c) => c.name)
+                  .join(
+                    ", ",
+                  )}. No comen alimentos sólidos: no les pongas plato en "days[].kids" ni sumes nada a la compra por ellos.`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ")
         : "";
 
     const { plan: rawPlan, shopping: rawShopping } = await askForJson(
@@ -785,6 +834,9 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "receipt");
+
     // La foto del tiquet la sube quien va al súper — puede no ser el
     // planificador (issue 06). El perfil para clasificar los productos es
     // siempre el de quien llama; la fila de compra, la que resuelva el hogar.
@@ -1046,6 +1098,9 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; summary: string }> => {
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
+
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "plan-adjust");
 
     const { data: row } = await ownPlanRow(
       context.supabase as never,
@@ -1461,6 +1516,9 @@ export const goalImpact = createServerFn({ method: "POST" })
       const key = process.env.OPENROUTER_API_KEY;
       if (!key) throw new Error("Falta la clave de IA");
 
+      const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+      await enforceUserRateLimit(context.userId, "coach-aux");
+
       const [{ data: profile }, { data: logs }] = await Promise.all([
         context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
         context.supabase
@@ -1507,6 +1565,9 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ text: string }> => {
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
+
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "coach-aux");
 
     const { householdContext } = await import("@/lib/household.server");
     const [{ data: profile }, { data: row }, home] = await Promise.all([
@@ -1568,6 +1629,9 @@ export const dishRecipe = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<DishRecipe> => {
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
+
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "recipe");
 
     let pantry = "";
     if (data.month) {

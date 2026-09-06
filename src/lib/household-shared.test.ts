@@ -3,10 +3,13 @@ import { describe, expect, it } from "bun:test";
 import {
   childBasePortion,
   childPortion,
+  childRation,
+  cleanFeedingStage,
   cleanSharedSlots,
   describeRoster,
   describeServings,
   describeSharedSlots,
+  eatsTableFood,
   isSharedSlot,
   PERSON_COLORS,
   personColor,
@@ -89,6 +92,21 @@ describe("describeRoster", () => {
     expect(text).toContain("Planifica el menú y hace la compra de la casa: Ana.");
   });
 
+  it("separa a los bebés que aún no comen de la mesa de los niños que sí", () => {
+    const text = describeRoster(
+      [{ displayName: "Ana", hasAccount: true, isPlanner: true }],
+      [
+        { name: "Leo", age: 5, allergies: null, stage: "mesa" },
+        { name: "Bruno", age: 0, allergies: null, stage: "pecho" },
+        { name: "Sara", age: 1, allergies: null, stage: "triturados" },
+      ],
+    );
+    expect(text).toContain("Niños que comen del plato: Leo (5 años), sin alergias.");
+    expect(text).toContain("Bebés que aún no comen de la mesa:");
+    expect(text).toContain("Bruno (0 años) — pecho o biberón");
+    expect(text).toContain("Sara (1 años) — triturados y potitos");
+  });
+
   it("sin planificador lo dice explícitamente y omite la línea de niños si no hay", () => {
     const text = describeRoster([{ displayName: "Ana", hasAccount: true, isPlanner: false }], []);
     expect(text).toContain("Ana (con la app)");
@@ -126,6 +144,39 @@ describe("childPortion", () => {
   });
 });
 
+describe("cleanFeedingStage", () => {
+  it("acepta las tres etapas y cae en 'mesa' para cualquier otra cosa", () => {
+    expect(cleanFeedingStage("pecho")).toBe("pecho");
+    expect(cleanFeedingStage("triturados")).toBe("triturados");
+    expect(cleanFeedingStage("mesa")).toBe("mesa");
+    expect(cleanFeedingStage(null)).toBe("mesa");
+    expect(cleanFeedingStage("otra")).toBe("mesa");
+  });
+});
+
+describe("childRation", () => {
+  it("un bebé de pecho o biberón no lleva ración (no entra en la compra)", () => {
+    expect(childRation("pecho", 0, "normal")).toBe(0);
+  });
+
+  it("un bebé de triturados lleva una ración pequeña fija para su puré", () => {
+    expect(childRation("triturados", 0, "normal")).toBe(0.25);
+    expect(childRation("triturados", 1, "mucho")).toBe(0.25);
+  });
+
+  it("quien ya come del plato usa la ración por edad y apetito", () => {
+    expect(childRation("mesa", 6, "normal")).toBe(childPortion(6, "normal"));
+  });
+});
+
+describe("eatsTableFood", () => {
+  it("solo 'mesa' come del mismo plato que la familia", () => {
+    expect(eatsTableFood("mesa")).toBe(true);
+    expect(eatsTableFood("triturados")).toBe(false);
+    expect(eatsTableFood("pecho")).toBe(false);
+  });
+});
+
 describe("servingsPerSlot", () => {
   const members = [
     { portion: 1, isPlanner: true },
@@ -148,6 +199,17 @@ describe("servingsPerSlot", () => {
   it("plannerSolo es la ración de quien planifica, no la del hogar", () => {
     const slots: SharedSlots = { desayuno: [], comida: [], cena: [] };
     expect(servingsPerSlot(members, children, slots).plannerSolo).toBe(1);
+  });
+
+  it("los bebés (pecho/triturados) no engordan la ración del plato compartido", () => {
+    const slots: SharedSlots = { desayuno: [], comida: [0, 1, 2, 3, 4, 5, 6], cena: [] };
+    const withBabies = [
+      { portion: 0.5, stage: "mesa" as const },
+      { portion: 0, stage: "pecho" as const },
+      { portion: 0.25, stage: "triturados" as const },
+    ];
+    // 1 + 1.2 + 0.5 (solo el niño 'mesa'); pecho y triturados quedan fuera.
+    expect(servingsPerSlot(members, withBabies, slots).shared.comida).toBe(2.7);
   });
 });
 
