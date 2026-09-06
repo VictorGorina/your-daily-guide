@@ -16,6 +16,7 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
+import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { DayDetailBody } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
 import { DishCategoryIcon } from "../../components/food-category-bg";
@@ -52,6 +53,7 @@ import {
 import { setPendingChatMessage } from "../../lib/pending-chat-message";
 import {
   childMealsForDate,
+  childPureeGaps,
   mealsForDate,
   offListNote,
   type MonthlyPlan,
@@ -273,6 +275,35 @@ export default function Hoy() {
     );
   };
 
+  // Peques de triturados a los que les falta su puré HOY en el plan — pasa
+  // cuando se dan de alta o cambian de etapa después de generar el plan del
+  // mes. Dispara el aviso "Actualizar" (`ChildMealGapBanner`).
+  const householdBaseline = householdQ.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
+  const pendingKidMeals = (householdQ.data?.children ?? []).filter(
+    (c) =>
+      c.feeding_stage === "triturados" &&
+      childPureeGaps(
+        (planQ.data?.plan as MonthlyPlan | null) ?? null,
+        { id: c.id, stage: c.feeding_stage, homeSchedule: c.home_schedule ?? householdBaseline },
+        today0,
+      ).some((g) => g.date === today0),
+  );
+
+  const fillKidsMut = useMutation({
+    mutationFn: () =>
+      apiPost<{ plan: MonthlyPlan; filled: number; children: string[] }>("plan/child-meal-fill", {
+        today: today0,
+      }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      Alert.alert(res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día");
+    },
+    onError: (e) =>
+      Alert.alert(
+        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
+      ),
+  });
+
   const todayQ = useQuery({
     queryKey: ["today"],
     queryFn: () => ensureTodayLog(todayMeals.map((m) => m.moment)),
@@ -482,6 +513,12 @@ export default function Hoy() {
               {doneCount} de {habits.length}
             </Text>
           </View>
+
+          <ChildMealGapBanner
+            names={pendingKidMeals.map((c) => c.name)}
+            pending={fillKidsMut.isPending}
+            onUpdate={() => fillKidsMut.mutate()}
+          />
 
           {!habits.length ? (
             <View className="rounded-[20px] bg-surface p-4">

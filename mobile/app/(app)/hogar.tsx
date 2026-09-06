@@ -27,6 +27,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { ChildSheet } from "../../components/child-sheet";
 import { apiPost } from "../../lib/api";
 import { fetchMonthlyPlan, monthISO, todayISO } from "../../lib/daily";
@@ -65,7 +66,7 @@ import {
   type HomeSchedule,
   type SharedSlots,
 } from "../../lib/household-shared";
-import { eur, shoppingTotal } from "../../lib/plan-shared";
+import { childPureeGaps, eur, shoppingTotal, type MonthlyPlan } from "../../lib/plan-shared";
 
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 
@@ -313,6 +314,34 @@ export default function Hogar() {
   // Los bebés que aún no comen de la mesa van en su propio grupo.
   const tableKids = children.filter((c) => eatsTableFood(c.feeding_stage));
   const babies = children.filter((c) => !eatsTableFood(c.feeding_stage));
+  // A un bebé de triturados recién dado de alta (o recién cambiado de etapa)
+  // le falta su puré en el plan hasta que se regenera — `childPureeGaps` mira
+  // de hoy en adelante. Dispara el aviso "Actualizar" bajo la lista.
+  const today = todayISO();
+  const householdBaseline = household?.shared_slots ?? EMPTY_SCHEDULE;
+  const pendingKidMeals = babies.filter(
+    (c) =>
+      c.feeding_stage === "triturados" &&
+      childPureeGaps(
+        (planQ.data?.plan as MonthlyPlan | null) ?? null,
+        { id: c.id, stage: c.feeding_stage, homeSchedule: c.home_schedule ?? householdBaseline },
+        today,
+      ).length > 0,
+  );
+  const fillKidsMut = useMutation({
+    mutationFn: () =>
+      apiPost<{ plan: MonthlyPlan; filled: number; children: string[] }>("plan/child-meal-fill", {
+        today,
+      }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      Alert.alert(res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día");
+    },
+    onError: (e) =>
+      Alert.alert(
+        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
+      ),
+  });
   const renderChildRow = (c: HouseholdChild) => {
     const pal = personColor(c.id);
     const note = FEEDING_STAGE_NOTE[c.feeding_stage];
@@ -679,6 +708,11 @@ export default function Hogar() {
                       Bebés · aún no comen de la mesa
                     </Text>
                     {babies.map(renderChildRow)}
+                    <ChildMealGapBanner
+                      names={pendingKidMeals.map((c) => c.name)}
+                      pending={fillKidsMut.isPending}
+                      onUpdate={() => fillKidsMut.mutate()}
+                    />
                   </View>
                 ) : null}
               </View>
