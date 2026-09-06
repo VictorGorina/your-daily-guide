@@ -43,6 +43,15 @@
       "cta": "Empezar ahora",
       "disclaimer": "Guía flexible de bienestar. Calorías y macros son estimaciones orientativas, no un conteo nutricional exacto. No sustituye consejo médico."
     },
+    "intro": {
+      "title": "Comer bien\nsin pensarlo tanto",
+      "body": "Cada mañana sabes lo que vas a comer. Cada noche lo repasas en un minuto. Tu plan y el de tu familia se adapta. Nada más.",
+      "start": "Empezar",
+      "haveAccount": "Ya tengo cuenta",
+      "disclaimer": "Guía de bienestar, no una dieta. Las calorías son estimaciones orientativas."
+    },
+    "back": "Atrás",
+    "tryNoAccount": "Probar sin cuenta",
     "titleIn": "Bienvenido de vuelta",
     "titleUp": "Empecemos",
     "titleForgot": "Recupera tu acceso",

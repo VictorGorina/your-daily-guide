@@ -2,11 +2,13 @@ import { makeRedirectUri } from "expo-auth-session";
 import * as Linking from "expo-linking";
 import { Redirect } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import { Bean, Beef, Carrot, Drumstick, Fish, Milk, Wheat } from "lucide-react-native";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -33,16 +35,61 @@ WebBrowser.maybeCompleteAuthSession();
 // de Supabase (Authentication → URL Configuration → Redirect URLs).
 const redirectTo = makeRedirectUri({ scheme: "dailyguide" });
 
+// ── Fila de pimientos ────────────────────────────────────────────────────────
+// El mismo motivo decorativo del artboard 3a del rediseño ("Rediseño Peppers
+// nutrición"): siete círculos, uno por familia de alimento, con el icono Lucide
+// de categoría (la misma familia que `DishCategoryIcon` en food-category-bg.tsx
+// y los encabezados de Ingredientes). RN no tiene `color-mix`, así que el tinte
+// del círculo y el color del icono se calculan a mano igual que `mixHex` allí.
+const SURFACE = "#fbfaf7";
+const FOREGROUND = "#3e3d39";
+
+function mix(a: string, b: string, t: number): string {
+  const ch = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  const c = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
+  return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+const PEPPERS: { accent: string; Icon: typeof Carrot }[] = [
+  { accent: "#6dbe7b", Icon: Carrot }, // verduras
+  { accent: "#4c9bd6", Icon: Fish }, // pescado
+  { accent: "#9a7655", Icon: Bean }, // legumbres
+  { accent: "#d7b58a", Icon: Wheat }, // cereales
+  { accent: "#f2c14e", Icon: Drumstick }, // aves
+  { accent: "#f5e6c8", Icon: Milk }, // lácteos
+  { accent: "#e57373", Icon: Beef }, // carne
+];
+
+function PepperRow() {
+  return (
+    <View className="mb-5 flex-row items-center justify-between px-1">
+      {PEPPERS.map(({ accent, Icon }, i) => (
+        <View
+          key={i}
+          className="h-9 w-9 items-center justify-center rounded-full"
+          style={{ backgroundColor: mix(SURFACE, accent, 0.2) }}
+        >
+          <Icon size={18} color={mix(FOREGROUND, accent, 0.45)} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
- * Entrada a la app. Mismos textos y mismo orden que la pantalla /auth de la
- * web, para que las dos se sientan la misma app. Cuando el login crea sesión,
- * el `onAuthStateChange` de `AuthProvider` la refleja y el Redirect de abajo
- * saca de aquí: no se navega a mano tras cada método de entrada.
+ * Entrada a la app. Una sola pantalla con dos estados, como el artboard 3a del
+ * rediseño: primero la portada (marca, claim y un botón), y al pulsar "Empezar"
+ * / "ya tengo cuenta" se despliega el formulario de acceso sin cambiar de
+ * pantalla. Los textos y el orden del formulario son los mismos que la ruta
+ * /auth de la web para que las dos se sientan la misma app. Cuando el login
+ * crea sesión, el `onAuthStateChange` de `AuthProvider` la refleja y el
+ * Redirect de abajo saca de aquí: no se navega a mano tras cada método.
  */
 export default function Auth() {
   const { session } = useAuth();
   const { t } = useTranslation();
   const { locale, setLocale } = useLocale();
+  const [stage, setStage] = useState<"intro" | "access">("intro");
   const [mode, setMode] = useState<"in" | "up" | "forgot">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,6 +97,17 @@ export default function Auth() {
   const [demoLoading, setDemoLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [sent, setSent] = useState(false);
+
+  const openAccess = (m: "in" | "up") => {
+    setMode(m);
+    setSent(false);
+    setStage("access");
+  };
+  const backToIntro = () => {
+    setSent(false);
+    setMode("in");
+    setStage("intro");
+  };
 
   // Sesión anónima + perfil aleatorio con el onboarding ya dado por completado,
   // igual que el "perfil aleatorio" de la web (src/routes/auth.tsx): entra
@@ -165,6 +223,26 @@ export default function Auth() {
   // onboarding.
   if (session && !demoLoading) return <Redirect href="/hoy" />;
 
+  const primaryLabel =
+    stage === "intro"
+      ? t("auth.intro.start")
+      : mode === "forgot"
+        ? t("auth.sendLink")
+        : mode === "up"
+          ? t("auth.signUp")
+          : t("auth.signIn");
+
+  const onPrimary = () => {
+    if (stage === "intro") {
+      openAccess("up");
+      return;
+    }
+    if (mode === "forgot") void forgotPassword();
+    else void submit();
+  };
+
+  const disclaimer = stage === "intro" ? t("auth.intro.disclaimer") : t("auth.landing.disclaimer");
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
@@ -172,186 +250,216 @@ export default function Auth() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerClassName="flex-grow justify-center px-6 py-14"
+          contentContainerClassName="flex-grow px-5 pb-8 pt-4"
           keyboardShouldPersistTaps="handled"
         >
-          <View className="flex-row items-start justify-between gap-2">
-            <Text className="flex-1 text-4xl font-display text-foreground">
-              {mode === "in"
-                ? t("auth.titleIn")
-                : mode === "up"
-                  ? t("auth.titleUp")
-                  : t("auth.titleForgot")}
-            </Text>
-            <View className="mt-1 flex-row gap-1 rounded-full bg-secondary p-0.5">
-              {SUPPORTED_LOCALES.map((l) => (
+          {/* Cabecera: marca + (en acceso) botón atrás. La marca encoge al
+              pasar al formulario, como en el artboard 3a. */}
+          <View className="flex-row items-start justify-between">
+            {stage === "intro" ? (
+              <View className="pt-2">
+                <Image
+                  source={require("../assets/splash-icon.png")}
+                  style={{ width: 104, height: 104, marginLeft: -8 }}
+                  resizeMode="contain"
+                />
+                <Text className="-mt-1 text-xl font-heading text-foreground">Peppers</Text>
+              </View>
+            ) : (
+              <View className="flex-row items-center gap-2.5 pt-1">
+                <Image
+                  source={require("../assets/splash-icon.png")}
+                  style={{ width: 40, height: 40 }}
+                  resizeMode="contain"
+                />
+                <Text className="text-base font-heading text-foreground">Peppers</Text>
+              </View>
+            )}
+
+            <View className="flex-row items-center gap-2 pt-1">
+              {stage === "access" && (
                 <Pressable
-                  key={l}
-                  onPress={() => void setLocale(l)}
-                  className={`rounded-full px-2 py-1 ${l === locale ? "bg-foreground" : ""}`}
+                  onPress={backToIntro}
+                  className="rounded-full bg-surface px-3.5 py-2 active:opacity-80"
                 >
-                  <Text
-                    className={`text-[11px] font-sans-medium uppercase ${l === locale ? "text-background" : "text-muted-foreground"}`}
-                  >
-                    {l}
+                  <Text className="text-xs font-body-medium text-muted-foreground">
+                    {t("auth.back")}
                   </Text>
                 </Pressable>
-              ))}
+              )}
+              {stage === "intro" && (
+                <View className="flex-row gap-1 rounded-full bg-secondary p-0.5">
+                  {SUPPORTED_LOCALES.map((l) => (
+                    <Pressable
+                      key={l}
+                      onPress={() => void setLocale(l)}
+                      className={`rounded-full px-2 py-1 ${l === locale ? "bg-foreground" : ""}`}
+                    >
+                      <Text
+                        className={`text-[11px] font-body-medium uppercase ${l === locale ? "text-background" : "text-muted-foreground"}`}
+                      >
+                        {l}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
-          <Text className="mt-2 text-sm text-muted-foreground">
-            {mode === "in"
-              ? t("auth.subtitleIn")
-              : mode === "up"
-                ? t("auth.subtitleUp")
-                : t("auth.subtitleForgot")}
-          </Text>
 
-          {sent ? (
-            <View className="mt-8 gap-3">
-              <View className="rounded-2xl border border-primary bg-primary-soft px-4 py-4">
-                <Text className="text-sm text-foreground">
-                  {mode === "forgot" ? t("auth.sentReset") : t("auth.sentConfirm")}
-                </Text>
-              </View>
-              {mode === "forgot" && (
-                <Pressable
-                  onPress={() => {
-                    setSent(false);
-                    setMode("in");
-                  }}
-                  className="w-full py-2"
-                >
-                  <Text className="text-center text-xs text-muted-foreground">
-                    {t("auth.backToSignIn")}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          ) : mode === "forgot" ? (
-            <View className="mt-8 gap-3">
-              <TextInput
-                className="h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder={t("auth.emailPlaceholder")}
-                placeholderTextColor="#83796c"
-              />
-
-              <Pressable
-                onPress={forgotPassword}
-                disabled={loading}
-                className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
-              >
-                {loading ? (
-                  <ActivityIndicator color="#3e3d39" />
-                ) : (
-                  <Text className="text-sm font-sans-semibold text-primary-foreground">
-                    {t("auth.sendLink")}
-                  </Text>
-                )}
-              </Pressable>
-
-              <Pressable onPress={() => setMode("in")} className="w-full py-2">
-                <Text className="text-center text-xs text-muted-foreground">
-                  {t("auth.rememberLink")}
-                </Text>
-              </Pressable>
+          {/* Cuerpo */}
+          {stage === "intro" ? (
+            <View className="mt-6">
+              <Text className="text-[36px] font-heading leading-[1.02] tracking-[-0.03em] text-foreground">
+                {t("auth.intro.title")}
+              </Text>
+              <Text className="mt-3.5 max-w-[300px] text-[13.5px] font-body leading-[1.55] text-muted-foreground">
+                {t("auth.intro.body")}
+              </Text>
             </View>
           ) : (
-            <View className="mt-8 gap-3">
-              <TextInput
-                className="h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder={t("auth.emailPlaceholder")}
-                placeholderTextColor="#83796c"
-              />
-              <TextInput
-                className="h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
-                secureTextEntry
-                autoCapitalize="none"
-                autoComplete={mode === "in" ? "current-password" : "new-password"}
-                value={password}
-                onChangeText={setPassword}
-                placeholder={t("auth.passwordPlaceholder")}
-                placeholderTextColor="#83796c"
-              />
+            <View className="mt-6">
+              <Text className="text-[26px] font-heading leading-[1.05] tracking-[-0.03em] text-foreground">
+                {mode === "in"
+                  ? t("auth.titleIn")
+                  : mode === "up"
+                    ? t("auth.titleUp")
+                    : t("auth.titleForgot")}
+              </Text>
+              <Text className="mt-2 max-w-[300px] text-[13px] font-body leading-[1.5] text-muted-foreground">
+                {mode === "in"
+                  ? t("auth.subtitleIn")
+                  : mode === "up"
+                    ? t("auth.subtitleUp")
+                    : t("auth.subtitleForgot")}
+              </Text>
 
-              {mode === "in" && (
-                <Pressable onPress={() => setMode("forgot")} className="w-full py-1">
-                  <Text className="text-right text-xs text-muted-foreground">
-                    {t("auth.forgotLink")}
-                  </Text>
-                </Pressable>
+              {sent ? (
+                <View className="mt-5 gap-2.5">
+                  <View className="rounded-3xl bg-primary-soft px-4 py-4">
+                    <Text className="text-sm font-body text-foreground">
+                      {mode === "forgot" ? t("auth.sentReset") : t("auth.sentConfirm")}
+                    </Text>
+                  </View>
+                  <Pressable onPress={backToIntro} className="w-full py-2">
+                    <Text className="text-center text-xs font-body text-muted-foreground">
+                      {t("auth.backToSignIn")}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View className="mt-5 gap-2.5">
+                  <TextInput
+                    className="h-[52px] w-full rounded-full bg-muted px-5 text-sm font-body text-foreground"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder={t("auth.emailPlaceholder")}
+                    placeholderTextColor="#a8a093"
+                  />
+                  {mode !== "forgot" && (
+                    <TextInput
+                      className="h-[52px] w-full rounded-full bg-muted px-5 text-sm font-body text-foreground"
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoComplete={mode === "in" ? "current-password" : "new-password"}
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder={t("auth.passwordPlaceholder")}
+                      placeholderTextColor="#a8a093"
+                    />
+                  )}
+
+                  {mode === "in" && (
+                    <Pressable onPress={() => setMode("forgot")} className="w-full py-1">
+                      <Text className="text-right text-xs font-body text-muted-foreground">
+                        {t("auth.forgotLink")}
+                      </Text>
+                    </Pressable>
+                  )}
+
+                  {mode !== "forgot" && (
+                    <>
+                      <View className="my-1 flex-row items-center gap-3">
+                        <View className="h-px flex-1 bg-border" />
+                        <Text className="text-xs font-body text-muted-foreground">
+                          {t("auth.or")}
+                        </Text>
+                        <View className="h-px flex-1 bg-border" />
+                      </View>
+
+                      <Pressable
+                        onPress={google}
+                        disabled={googleLoading}
+                        className="w-full flex-row items-center justify-center rounded-full bg-surface py-3.5 active:opacity-90 disabled:opacity-60"
+                      >
+                        {googleLoading ? (
+                          <ActivityIndicator color="#83796c" />
+                        ) : (
+                          <Text className="text-sm font-body-medium text-foreground">
+                            {t("auth.google")}
+                          </Text>
+                        )}
+                      </Pressable>
+
+                      <Pressable
+                        onPress={demo}
+                        disabled={demoLoading}
+                        className="w-full items-center py-2.5 active:opacity-80 disabled:opacity-60"
+                      >
+                        <Text className="text-xs font-body-medium text-muted-foreground">
+                          {demoLoading ? t("auth.demoCreating") : t("auth.tryNoAccount")}
+                        </Text>
+                      </Pressable>
+                    </>
+                  )}
+                </View>
               )}
-
-              <Pressable
-                onPress={submit}
-                disabled={loading}
-                className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
-              >
-                {loading ? (
-                  <ActivityIndicator color="#3e3d39" />
-                ) : (
-                  <Text className="text-sm font-sans-semibold text-primary-foreground">
-                    {mode === "in" ? t("auth.signIn") : t("auth.signUp")}
-                  </Text>
-                )}
-              </Pressable>
-
-              <Pressable
-                onPress={() => setMode(mode === "in" ? "up" : "in")}
-                className="w-full py-2"
-              >
-                <Text className="text-center text-xs text-muted-foreground">
-                  {mode === "in" ? t("auth.toSignUp") : t("auth.toSignIn")}
-                </Text>
-              </Pressable>
             </View>
           )}
 
-          {/* Google y perfil demo salen en todos los modos, igual que en la web:
-              si te has quedado fuera, entrar con Google es una salida directa. */}
-          {!sent && (
-            <>
-              <View className="my-3 flex-row items-center gap-3">
-                <View className="h-px flex-1 bg-border" />
-                <Text className="text-xs text-muted-foreground">{t("auth.or")}</Text>
-                <View className="h-px flex-1 bg-border" />
-              </View>
+          <View className="flex-grow" />
 
-              <Pressable
-                onPress={google}
-                disabled={googleLoading}
-                className="w-full flex-row items-center justify-center rounded-full border border-input bg-surface py-4 active:opacity-90 disabled:opacity-60"
-              >
-                {googleLoading ? (
-                  <ActivityIndicator color="#83796c" />
-                ) : (
-                  <Text className="text-sm font-sans-medium text-foreground">
-                    {t("auth.google")}
-                  </Text>
-                )}
-              </Pressable>
+          <PepperRow />
 
-              <Pressable
-                onPress={demo}
-                disabled={demoLoading}
-                className="mt-3 w-full items-center rounded-full border border-dashed border-input bg-surface py-3.5 active:opacity-90 disabled:opacity-60"
-              >
-                <Text className="text-sm font-sans-medium text-muted-foreground">
-                  {demoLoading ? t("auth.demoCreating") : t("auth.demo")}
-                </Text>
-              </Pressable>
-            </>
+          <Pressable
+            onPress={onPrimary}
+            disabled={loading}
+            className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
+          >
+            {loading ? (
+              <ActivityIndicator color="#fbfaf7" />
+            ) : (
+              <Text className="text-sm font-body-semibold text-primary-foreground">
+                {primaryLabel}
+              </Text>
+            )}
+          </Pressable>
+
+          {stage === "intro" && (
+            <Pressable onPress={() => openAccess("in")} className="w-full py-2.5 active:opacity-80">
+              <Text className="text-center text-xs font-body-medium text-muted-foreground">
+                {t("auth.intro.haveAccount")}
+              </Text>
+            </Pressable>
           )}
+
+          {stage === "access" && !sent && (
+            <Pressable
+              onPress={() => setMode(mode === "in" ? "up" : mode === "up" ? "in" : "in")}
+              className="w-full py-2.5 active:opacity-80"
+            >
+              <Text className="text-center text-xs font-body text-muted-foreground">
+                {mode === "in" ? t("auth.toSignUp") : t("auth.toSignIn")}
+              </Text>
+            </Pressable>
+          )}
+
+          <Text className="mt-3 text-center text-[11px] font-body leading-[1.45] text-muted-foreground">
+            {disclaimer}
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

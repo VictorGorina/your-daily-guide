@@ -43,6 +43,15 @@
       "cta": "Get started",
       "disclaimer": "A flexible wellbeing guide. Calories and macros are rough estimates, not exact nutritional tracking. It does not replace medical advice."
     },
+    "intro": {
+      "title": "Eat well\nwithout the mental load",
+      "body": "Every morning you know what you'll eat. Every night you review it in a minute. Your plan and your family's adapt. Nothing else.",
+      "start": "Get started",
+      "haveAccount": "I already have an account",
+      "disclaimer": "A wellbeing guide, not a diet. Calorie figures are rough estimates."
+    },
+    "back": "Back",
+    "tryNoAccount": "Try without an account",
     "titleIn": "Welcome back",
     "titleUp": "Let's begin",
     "titleForgot": "Recover your access",
