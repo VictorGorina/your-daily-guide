@@ -198,4 +198,43 @@ describe("deriveSharedSlots", () => {
     expect(slots.comida).toEqual([]);
     expect(slots.cena).toEqual([]);
   });
+
+  // Regresión: un horario a medias (solo un miembro lo configura) NO debe borrar
+  // las comidas compartidas del hogar. El planificador sin horario propio hereda
+  // los días compartidos del hogar; sin esa resolución en los llamadores
+  // (`householdContext`, `hoy.tsx`, `hogar.tsx`), `deriveSharedSlots` colapsaba a
+  // cero porque el planificador contaba como "nunca en casa".
+  describe("horario parcial + fallback al shared_slots del hogar", () => {
+    const householdBaseline: HomeSchedule = {
+      desayuno: [],
+      comida: [0, 1, 2, 3, 4, 5, 6],
+      cena: [0, 1, 2, 3, 4, 5, 6],
+    };
+
+    test("planificador sin horario → colapsa si NO se resuelve el fallback", () => {
+      const slots = deriveSharedSlots(
+        [
+          { ...planner, homeSchedule: null },
+          { ...partner, homeSchedule: partnerSchedule },
+        ],
+        [],
+      );
+      expect(slots.comida).toEqual([]);
+      expect(slots.cena).toEqual([]);
+    });
+
+    test("planificador sin horario → se mantiene si se resuelve al baseline del hogar", () => {
+      const slots = deriveSharedSlots(
+        [
+          { ...planner, homeSchedule: householdBaseline },
+          { ...partner, homeSchedule: partnerSchedule },
+        ],
+        [],
+      );
+      // cena: baseline L-D ∩ (alguien más en casa) → partner cena L-D
+      expect(slots.cena).toEqual([0, 1, 2, 3, 4, 5, 6]);
+      // comida: baseline L-D ∩ partner L,X,V
+      expect(slots.comida).toEqual([0, 2, 4]);
+    });
+  });
 });

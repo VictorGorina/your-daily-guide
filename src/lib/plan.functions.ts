@@ -3,7 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText, streamText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
+import {
+  COACH_MODEL,
+  coachSystemPrompt,
+  createAiProvider,
+  currencySymbol,
+} from "@/lib/ai-provider.server";
 import { normalizeGoalType } from "@/lib/daily";
 import {
   describeServings,
@@ -274,6 +279,7 @@ async function enforceBudget(
   system: string,
   shopping: ShoppingList,
   target: number,
+  sym = "€",
 ): Promise<ShoppingList> {
   if (!(target > 0) || shoppingTotal(shopping) <= target * 1.02) return shopping;
 
@@ -286,8 +292,8 @@ async function enforceBudget(
       temperature: 0.2,
       prompt:
         `Lista de la compra actual (JSON): ${JSON.stringify(shopping)}\n` +
-        `Suma ${shoppingTotal(shopping)} € y el tope es ${target} €.\n` +
-        `Recórtala hasta NO superar ${target} €: baja "weekQty" y "weekPrice" a la vez, elige alternativas más baratas y quita lo prescindible, manteniendo una compra equilibrada y platos cocinables. ` +
+        `Suma ${shoppingTotal(shopping)} ${sym} y el tope es ${target} ${sym}.\n` +
+        `Recórtala hasta NO superar ${target} ${sym}: baja "weekQty" y "weekPrice" a la vez, elige alternativas más baratas y quita lo prescindible, manteniendo una compra equilibrada y platos cocinables. ` +
         "Conserva EXACTAMENTE la misma estructura (claves category/items/name/unit/weekQty/weekPrice/perishable; weekQty y weekPrice son arrays de 4, uno por semana). " +
         'Devuelve solo JSON: {"shopping": [...]}',
     });
@@ -380,10 +386,15 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     // Presupuesto prorrateado a los días que cubre el plan: un plan que empieza a
     // media de mes solo puede gastar la parte proporcional del mes que le queda.
     const proratedBudget = budget > 0 ? Math.round(budget * ratio) : 0;
+    // Moneda/país para las referencias de precio (la salida estructurada del
+    // plan sigue en español canónico; solo cambian el símbolo y el país).
+    const sym = currencySymbol((profile as { currency?: string | null } | null)?.currency);
+    const country = (profile as { country?: string | null } | null)?.country || "ES";
+    const marketRef = country === "ES" ? "supermercado en España" : `supermercado de ${country}`;
     const budgetLine =
       proratedBudget > 0
-        ? `El coste total de la lista de la compra NO puede superar ${proratedBudget} € para el periodo que cubre el plan. Ajusta cantidades y elige alimentos económicos hasta encajar en ese presupuesto.`
-        : "Ajusta la lista a un presupuesto contenido y realista de supermercado en España.";
+        ? `El coste total de la lista de la compra NO puede superar ${proratedBudget} ${sym} para el periodo que cubre el plan. Ajusta cantidades y elige alimentos económicos hasta encajar en ese presupuesto.`
+        : `Ajusta la lista a un presupuesto contenido y realista de ${marketRef}.`;
 
     const coverageLine =
       coverage.fromDay > 1
@@ -448,7 +459,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
           '{"shopping": [objetos {"category": "Verdura y fruta"|"Proteína"|"Despensa"|"Lácteos"|"Otros", ' +
           '"items": [{"name": string (ingrediente), "unit": "g"|"ml"|"ud" (g para sólidos, ml para líquidos, ud para piezas/manojos/latas), ' +
           '"weekQty": [4 números] (cantidad en "unit" que piden los platos de CADA semana del mes para las raciones del hogar; 0 si esa semana no se usa), ' +
-          '"weekPrice": [4 números] (€ orientativo de supermercado en España para la cantidad de cada semana), ' +
+          `"weekPrice": [4 números] (${sym} orientativo de ${marketRef} para la cantidad de cada semana), ` +
           '"perishable": boolean (true si es fresco y aguanta pocos días)}]}], ' +
           '"plan": {"intro": string (2 frases motivadoras y comprensivas), "focus": [3 focos del mes, cortos], ' +
           '"weeks": [4 objetos {"label": "Semana 1".."Semana 4", "focus": string corto, "breakfasts": [2 ideas de desayuno], "snacks": [2 ideas de snack], ' +
@@ -480,6 +491,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       coachSystemPrompt(profile as never, home.text),
       rawShopping,
       proratedBudget,
+      sym,
     );
     // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
     // una comida compartida, se vacía aquí — la fila de un no planificador
@@ -814,7 +826,12 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
                   {
                     type: "text",
                     text:
-                      "Esta es la foto de un tiquet de compra de supermercado en España. " +
+                      `Esta es la foto de un tiquet de compra de supermercado${
+                        (profile as { country?: string | null } | null)?.country &&
+                        (profile as { country?: string | null }).country !== "ES"
+                          ? ` de ${(profile as { country?: string | null }).country}`
+                          : " en España"
+                      }. ` +
                       "Extrae el importe total pagado y la lista de productos con su precio. " +
                       "Ignora descuentos, puntos, IVA desglosado y medios de pago. " +
                       'Devuelve SOLO JSON: {"total_eur": number, "store": string, "items": [{"name": string (producto, en minúsculas y sin marca si se puede), "price_eur": number}]}. ' +
@@ -1520,7 +1537,7 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
           "3) que el botón flotante sirve para hablar conmigo cuando quiera. " +
           "Tono motivador y cercano, sin presiones."
         : `Plan del mes creado: ${plan ? JSON.stringify({ intro: plan.intro, focus: plan.focus, semanas: plan.weeks.map((w) => w.focus) }) : "sin plan"}\n` +
-          `Lista de la compra (${shoppingTotal(shopping)} € aprox.): ${ingredientNames(shopping) || "sin lista"}\n\n` +
+          `Lista de la compra (${shoppingTotal(shopping)} ${currencySymbol((profile as { currency?: string | null } | null)?.currency)} aprox.): ${ingredientNames(shopping) || "sin lista"}\n\n` +
           "Escribe un mensaje de bienvenida corto (máx. 10 líneas, sin markdown) que: " +
           "1) resuma en 2 frases el enfoque de su plan del mes y su coste aproximado; " +
           "2) explique cómo funciona la app: la pestaña Hoy con su guía, platos y hábitos; la pestaña Plan con el mes y la lista de la compra que confirma cuando ya ha comprado; el botón flotante para hablar conmigo en cualquier momento; " +

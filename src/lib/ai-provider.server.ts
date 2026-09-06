@@ -55,7 +55,30 @@ type CoachProfile = {
   cooking_skill?: string | null;
   strength_training_experience?: string | null;
   supplements?: string | null;
+  // País/idioma (migración `profile_locale_timezone`): el idioma manda en el
+  // texto libre que devuelve el coach; el país/moneda, en las referencias de
+  // precio. La salida estructurada del plan sigue en español canónico.
+  locale?: string | null;
+  country?: string | null;
+  currency?: string | null;
 };
+
+/** Nombre del idioma para la instrucción de salida del prompt. */
+export function languageName(locale: string | null | undefined): string {
+  return (locale ?? "es").toLowerCase().startsWith("en") ? "inglés" : "español";
+}
+
+const CURRENCY_SYMBOL: Record<string, string> = {
+  EUR: "€",
+  GBP: "£",
+  USD: "$",
+  MXN: "$",
+};
+
+/** Símbolo de moneda para las referencias de precio (fallback `€`). */
+export function currencySymbol(currency: string | null | undefined): string {
+  return CURRENCY_SYMBOL[(currency ?? "EUR").toUpperCase()] ?? "€";
+}
 
 const toneLine: Record<string, string> = {
   relajado:
@@ -117,8 +140,15 @@ export function coachSystemPrompt(
     .filter(Boolean)
     .join("; ");
 
+  const lang = languageName(p.locale);
+  const languageLine =
+    lang === "español"
+      ? ""
+      : `IMPORTANTE — IDIOMA: la persona usa la app en ${lang}. Escribe TODAS tus respuestas en ${lang}, aunque estas instrucciones estén en español. Los nombres de platos y recetas también en ${lang}.`;
+
   return [
-    "Eres Peppers, un asistente de alimentación con IA. Hablas español, en frases cortas y humanas, como un amigo que sabe de nutrición — nunca como un médico, un entrenador militar o un chatbot corporativo.",
+    "Eres Peppers, un asistente de alimentación con IA. Hablas en frases cortas y humanas, como un amigo que sabe de nutrición — nunca como un médico, un entrenador militar o un chatbot corporativo.",
+    languageLine,
     "Tono base obligatorio: cercano, claro e inteligente, con humor ocasional y con cabeza (nunca cargante ni infantil). Motivador y comprensivo, sin presiones. Nunca culpas, nunca metes prisa, nunca hablas de 'fallar'. Si la persona no cumple algo, normalizas y propones el siguiente paso más pequeño posible.",
     toneLine[p.tone ?? "neutro"] ?? toneLine.neutro,
     "Antes de aconsejar, ten en cuenta su vida real: horarios, trabajo, quién cocina, presupuesto, sueño y estrés. Si te falta un dato clave, pregunta una sola cosa con curiosidad amable.",
@@ -145,7 +175,10 @@ export function coachSystemPrompt(
     cookingLine ? `- Cómo cocina: ${cookingLine}` : "",
     `- Rutina y horarios de comidas: ${p.meal_schedule ?? "sin definir"}`,
     `- Su vida en detalle: ${p.life_context ?? "sin definir"}`,
-    `- Presupuesto de comida al mes: ${p.budget_month_eur ? `${p.budget_month_eur} €` : "sin definir"}`,
+    `- Presupuesto de comida al mes: ${p.budget_month_eur ? `${p.budget_month_eur} ${currencySymbol(p.currency)}` : "sin definir"}`,
+    p.country && p.country !== "ES"
+      ? `- País: ${p.country}. Las referencias de precio y de productos de supermercado deben encajar con ese país y su moneda (${currencySymbol(p.currency)}), no con España.`
+      : "",
     `- Entorno familiar: ${p.family_context ?? "sin definir"}`,
     p.coach_scope ? `- Quiere que le acompañe en: ${p.coach_scope}` : "",
     householdText ? `Hogar y comidas compartidas:\n${householdText}` : "",

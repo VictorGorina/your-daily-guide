@@ -37,29 +37,50 @@ export function GoalWeightSummary({
 }) {
   const progress = goalProgress(profile ?? null);
   const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
-  const hasMetric = goal === "mantener" || progress.total > 0;
+
+  const metaCaption = profile?.goal_target_date
+    ? `meta: ${formatMetaDate(profile.goal_target_date)}`
+    : undefined;
 
   const progressLabel = () => {
     if (goal === "mantener") return "Estabilidad";
     if (progress.regressing) {
-      return `+${Math.abs(progress.done).toFixed(1)} kg (retroceso)`;
+      const kg = Math.abs(progress.done).toFixed(1);
+      // "Retroceso" = te alejas de la dirección del objetivo.
+      return goal === "perder" ? `+${kg} kg (retroceso)` : `−${kg} kg (retroceso)`;
     }
-    return `${progress.done.toFixed(1)} de ${progress.total} kg`;
+    if (progress.hasTarget) return `${progress.done.toFixed(1)} de ${progress.total} kg`;
+    // Objetivo de peso sin meta numérica: solo la tendencia hasta ahora.
+    const kg = progress.done.toFixed(1);
+    return goal === "ganar" ? `${kg} kg más` : `${kg} kg menos`;
   };
+
+  // Con meta numérica (o "mantener") se enseña la barra de porcentaje; sin meta,
+  // solo un dato de tendencia — un 0 % con la barra vacía induciría a error.
+  const showBar = progress.measurable && (progress.hasTarget || goal === "mantener");
 
   return (
     <div className="surface-card animate-rise p-5">
-      {hasMetric ? (
+      {showBar ? (
         <ProgressBar
           value={progress.pct}
           label={progressLabel()}
           variant={progress.regressing ? "danger" : "success"}
-          caption={
-            profile?.goal_target_date
-              ? `meta: ${formatMetaDate(profile.goal_target_date)}`
-              : undefined
-          }
+          caption={metaCaption}
         />
+      ) : progress.measurable ? (
+        <div className="min-w-0">
+          <p
+            className={`truncate text-sm font-semibold ${
+              progress.regressing ? "text-destructive" : "text-foreground"
+            }`}
+          >
+            {progressLabel()}
+          </p>
+          <p className="truncate font-num text-[10.5px] text-muted-foreground">
+            {metaCaption ?? "sin meta de kg — anótala en Ajustes"}
+          </p>
+        </div>
       ) : (
         <p className="text-sm font-semibold text-foreground">Tu peso</p>
       )}

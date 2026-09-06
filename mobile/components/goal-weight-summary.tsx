@@ -38,30 +38,38 @@ export function GoalWeightSummary({
 }) {
   const progress = goalProgress(profile ?? null);
   const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
-  const hasMetric = goal === "mantener" || progress.total > 0;
   const pct = Math.round(progress.pct * 100);
+
+  const metaCaption = profile?.goal_target_date
+    ? `meta: ${formatMetaDate(profile.goal_target_date)}`
+    : null;
 
   const progressLabel = () => {
     if (goal === "mantener") return "Estabilidad";
     if (progress.regressing) {
-      return `+${Math.abs(progress.done).toFixed(1)} kg (retroceso)`;
+      const kg = Math.abs(progress.done).toFixed(1);
+      return goal === "perder" ? `+${kg} kg (retroceso)` : `−${kg} kg (retroceso)`;
     }
-    return `${progress.done.toFixed(1)} de ${progress.total} kg`;
+    if (progress.hasTarget) return `${progress.done.toFixed(1)} de ${progress.total} kg`;
+    const kg = progress.done.toFixed(1);
+    return goal === "ganar" ? `${kg} kg más` : `${kg} kg menos`;
   };
 
+  // Con meta numérica (o "mantener") se enseña la barra; sin meta, solo un dato.
+  const showBar = progress.measurable && (progress.hasTarget || goal === "mantener");
   const barColor = progress.regressing ? "#e2685f" : "#6dbe7b";
   const pctColor = progress.regressing ? "text-destructive" : "text-foreground";
 
   return (
     <View className="rounded-3xl bg-surface p-5">
-      {hasMetric ? (
+      {showBar ? (
         <>
           <View className="flex-row items-end justify-between gap-3">
             <View className="min-w-0 flex-1">
               <Text className="text-sm font-sans-semibold text-foreground">{progressLabel()}</Text>
-              {profile?.goal_target_date ? (
+              {metaCaption ? (
                 <Text className="mt-1 font-mono-medium text-[10.5px] text-muted-foreground">
-                  meta: {formatMetaDate(profile.goal_target_date)}
+                  {metaCaption}
                 </Text>
               ) : null}
             </View>
@@ -74,6 +82,19 @@ export function GoalWeightSummary({
             />
           </View>
         </>
+      ) : progress.measurable ? (
+        <View className="min-w-0">
+          <Text
+            className={`text-sm font-sans-semibold ${
+              progress.regressing ? "text-destructive" : "text-foreground"
+            }`}
+          >
+            {progressLabel()}
+          </Text>
+          <Text className="mt-1 font-mono-medium text-[10.5px] text-muted-foreground">
+            {metaCaption ?? "sin meta de kg — anótala en Ajustes"}
+          </Text>
+        </View>
       ) : (
         <Text className="text-sm font-sans-semibold text-foreground">Tu peso</Text>
       )}

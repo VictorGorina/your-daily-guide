@@ -234,19 +234,22 @@ function Hoy() {
     if (!hMembers.length) return null;
     const hasSchedules = hMembers.some((m) => m.home_schedule != null);
     if (hasSchedules) {
+      // Quien no ha configurado su horario hereda los días compartidos del
+      // hogar, no "nunca en casa" — así un horario a medias no borra la mesa.
+      const baseline = householdQ.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
       const { people } = whoIsHome(
         hMembers.map((m) => ({
           id: m.id,
           displayName: m.display_name,
           portion: m.portion,
           isPlanner: m.is_planner,
-          homeSchedule: m.home_schedule,
+          homeSchedule: m.home_schedule ?? baseline,
         })),
         hChildren.map((c) => ({
           id: c.id,
           name: c.name,
           portion: c.portion,
-          homeSchedule: c.home_schedule,
+          homeSchedule: c.home_schedule ?? baseline,
         })),
         mealKey,
         todayWeekday,

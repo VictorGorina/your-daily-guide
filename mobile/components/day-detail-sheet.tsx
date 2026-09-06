@@ -100,9 +100,18 @@ export function DayDetailBody({
   // Toggle "toda la familia comió esto" por índice de habit.
   const [familyToggle, setFamilyToggle] = useState<Record<number, boolean>>({});
 
-  const habits = log?.habits ?? [];
   const editable = date < todayISO();
   const beforeStart = isBeforeAppStart(date, profile?.app_started_on);
+
+  // Si ese día no tiene registro (la persona no abrió la app), se parte de las
+  // comidas del plan para poder rellenarlo. Solo para días editables y
+  // posteriores al alta; `updateLogByDate` crea la fila en el primer cambio.
+  const planHabits: DailyLog["habits"] = mealsForDate(plan, date).map((m) => ({
+    label: m.moment,
+    done: false,
+  }));
+  const isBackfill = !log?.habits?.length && editable && !beforeStart && planHabits.length > 0;
+  const habits = log?.habits?.length ? log.habits : isBackfill ? planHabits : [];
 
   const correct = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateLogByDate(date, patch),
@@ -134,6 +143,7 @@ export function DayDetailBody({
       habitLabel: habits[index].label,
       status,
       actual,
+      today: todayISO(),
     }).then(
       (r) => {
         if (r.propagated > 0) Alert.alert(`Aplicado a ${r.propagated} familiar(es) más`);
@@ -216,7 +226,9 @@ export function DayDetailBody({
   }
 
   const doneCount = habits.filter((h) => h.done).length;
-  const failedCount = habits.filter((h) => h.status === "salteo" || h.status == null).length;
+  // Solo cuenta como "saltada" lo que se marcó explícitamente así; una comida
+  // sin registrar es neutra, no un fallo (roadmap UX).
+  const skippedCount = habits.filter((h) => h.status === "salteo").length;
   const consumed = sumDoneMacros(log?.guide?.mealMacros, habits) ?? ZERO_MACROS;
   const hasMacros = !!(log?.guide?.macroEstimate || log?.guide?.mealMacros?.length);
 
@@ -229,7 +241,7 @@ export function DayDetailBody({
           </Text>
           <Text className="font-mono-medium text-[11px] text-muted-foreground">
             {doneCount} de {habits.length}
-            {failedCount ? ` · ${failedCount} sin cumplir` : ""}
+            {skippedCount ? ` · ${skippedCount} saltada${skippedCount > 1 ? "s" : ""}` : ""}
           </Text>
         </View>
         {habits.map((h, i) => {

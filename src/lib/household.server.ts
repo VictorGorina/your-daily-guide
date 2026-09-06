@@ -92,14 +92,40 @@ export async function householdPlannerId(
   return planner?.user_id ?? null;
 }
 
+/**
+ * Lee una tabla del hogar con la columna opcional `home_schedule`. Si esa
+ * columna aún no existe en la BD (migración `20260905120000` sin aplicar),
+ * PostgREST devuelve un 400; en ese caso reintenta sin ella y sigue con
+ * `home_schedule` = null en cada fila. Sin este reintento, el error se tragaba
+ * silenciosamente y `householdContext` devolvía un contexto vacío para TODO
+ * usuario de un hogar (coach sin familia, plan como solitario, espejo parado).
+ */
+async function selectWithOptionalSchedule(
+  supabase: AnyClient,
+  table: "household_members" | "household_children",
+  baseColumns: string,
+  householdId?: string,
+): Promise<Record<string, unknown>[] | null> {
+  const run = (columns: string) => {
+    const q = supabase.from(table).select(columns);
+    return householdId ? q.eq("household_id", householdId) : q;
+  };
+  const full = await run(`${baseColumns}, home_schedule`);
+  if (!full.error) return (full.data ?? null) as Record<string, unknown>[] | null;
+  const base = await run(baseColumns);
+  return (base.data ?? null) as Record<string, unknown>[] | null;
+}
+
 /** Contexto del hogar (mesa, comidas compartidas e hijos) para los prompts del coach. */
 export async function householdContext(
   supabase: AnyClient,
   userId: string,
 ): Promise<HouseholdContext> {
-  const { data: rawMembers } = await supabase
-    .from("household_members")
-    .select("household_id, user_id, display_name, uses_app, is_planner, portion, home_schedule");
+  const rawMembers = await selectWithOptionalSchedule(
+    supabase,
+    "household_members",
+    "household_id, user_id, display_name, uses_app, is_planner, portion",
+  );
   const rows = (rawMembers ?? []) as {
     household_id: string;
     user_id: string | null;
@@ -135,10 +161,12 @@ export async function householdContext(
     (household as { shared_slots?: unknown } | null)?.shared_slots,
   );
 
-  const { data: children } = await supabase
-    .from("household_children")
-    .select("id, name, age, allergies, appetite, notes, portion, home_schedule")
-    .eq("household_id", mine.household_id);
+  const children = await selectWithOptionalSchedule(
+    supabase,
+    "household_children",
+    "id, name, age, allergies, appetite, notes, portion",
+    mine.household_id,
+  );
   const kids = (children ?? []) as {
     id: string;
     name: string;
@@ -170,6 +198,15 @@ export async function householdContext(
   // caer al shared_slots heredado del hogar (hogares sin migrar).
   const hasAnySchedule =
     members.some((m) => m.homeSchedule != null) || kidsLite.some((c) => c.homeSchedule != null);
+
+  // Quien no ha configurado su horario NO está "nunca en casa": hereda los días
+  // compartidos del hogar (`households.shared_slots`). Sin esto, en cuanto una
+  // sola persona configura su horario, el resto (incluido el planificador) cae
+  // en "nunca en casa" y `deriveSharedSlots` colapsa a cero comidas compartidas.
+  const resolveSchedule = (s: HomeSchedule | null): HomeSchedule => s ?? legacySharedSlots;
+  for (const m of members) m.homeSchedule = resolveSchedule(m.homeSchedule);
+  for (const c of kidsLite) c.homeSchedule = resolveSchedule(c.homeSchedule);
+
   const sharedSlots = hasAnySchedule
     ? deriveSharedSlots(
         members.map((m) => ({

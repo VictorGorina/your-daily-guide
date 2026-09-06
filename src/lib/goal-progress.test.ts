@@ -117,7 +117,65 @@ describe("goalProgress", () => {
 
   it("sin perfil devuelve ceros sin regressing", () => {
     const r = goalProgress(null);
-    expect(r).toEqual({ pct: 0, done: 0, total: 0, unit: "kg", regressing: false });
+    expect(r).toEqual({
+      pct: 0,
+      done: 0,
+      total: 0,
+      unit: "kg",
+      regressing: false,
+      measurable: false,
+      hasTarget: false,
+    });
+  });
+
+  it('objetivo "energia" no es medible aunque el peso cambie', () => {
+    const r = goalProgress({
+      goal_type: "energia",
+      start_weight_kg: 80,
+      current_weight_kg: 83,
+    } as never);
+    expect(r.measurable).toBe(false);
+    expect(r.regressing).toBe(false);
+  });
+
+  describe("objetivo de peso SIN goal_amount (cantidad opcional en blanco)", () => {
+    it("perder sin meta: bajar 2 kg es progreso, no retroceso", () => {
+      const r = goalProgress({
+        goal_type: "perder",
+        goal_amount: null,
+        start_weight_kg: 80,
+        current_weight_kg: 78,
+      } as never);
+      expect(r.measurable).toBe(true);
+      expect(r.hasTarget).toBe(false);
+      expect(r.done).toBe(2);
+      expect(r.regressing).toBe(false);
+      expect(r.pct).toBe(0);
+    });
+
+    it("perder sin meta: subir marca regressing con done negativo", () => {
+      const r = goalProgress({
+        goal_type: "perder peso",
+        goal_amount: null,
+        start_weight_kg: 80,
+        current_weight_kg: 81.5,
+      } as never);
+      expect(r.done).toBe(-1.5);
+      expect(r.regressing).toBe(true);
+    });
+
+    it("ganar sin meta: subir 3 kg es progreso", () => {
+      const r = goalProgress({
+        goal_type: "ganar",
+        goal_amount: null,
+        start_weight_kg: 60,
+        current_weight_kg: 63,
+      } as never);
+      expect(r.measurable).toBe(true);
+      expect(r.hasTarget).toBe(false);
+      expect(r.done).toBe(3);
+      expect(r.regressing).toBe(false);
+    });
   });
 
   it("sin start_weight_kg devuelve ceros sin regressing", () => {

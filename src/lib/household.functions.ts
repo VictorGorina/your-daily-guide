@@ -82,21 +82,33 @@ export const syncHouseholdPlan = createServerFn({ method: "POST" })
  */
 export const propagateLogToFamily = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { date: string; habitLabel: string; status: MealStatus; actual?: string }) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? ""))
-      throw new ValidationError("Fecha no válida");
-    if (!input.habitLabel?.trim()) throw new ValidationError("Falta el momento de la comida");
-    if (!["plan", "distinto", "salteo"].includes(input.status))
-      throw new ValidationError("Estado no válido");
-    return {
-      date: input.date,
-      habitLabel: input.habitLabel.trim(),
-      status: input.status as MealStatus,
-      actual: input.actual?.trim() || undefined,
-    };
-  })
+  .validator(
+    (input: {
+      date: string;
+      habitLabel: string;
+      status: MealStatus;
+      actual?: string;
+      /** "hoy" según el reloj del dispositivo — el servidor corre en UTC/Madrid. */
+      today?: string;
+    }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? ""))
+        throw new ValidationError("Fecha no válida");
+      if (!input.habitLabel?.trim()) throw new ValidationError("Falta el momento de la comida");
+      if (!["plan", "distinto", "salteo"].includes(input.status))
+        throw new ValidationError("Estado no válido");
+      return {
+        date: input.date,
+        habitLabel: input.habitLabel.trim(),
+        status: input.status as MealStatus,
+        actual: input.actual?.trim() || undefined,
+        today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : undefined,
+      };
+    },
+  )
   .handler(async ({ data, context }): Promise<{ propagated: number }> => {
-    const today = zonedTodayISO();
+    // Preferimos el "hoy" del cliente (su zona horaria); si no llega, la del
+    // servidor (Europe/Madrid), que puede ir un día por delante para México/EE.UU.
+    const today = data.today ?? zonedTodayISO();
     if (data.date >= today) throw new ValidationError("Solo se pueden corregir días pasados");
 
     const { householdContext } = await import("@/lib/household.server");
@@ -208,11 +220,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
     }
 
     if (data.memberId) {
-      // Cambiar el horario de otro miembro: solo el planificador puede.
-      const target = ctx.members.find(
-        (m) => m.userId === null && ctx.members.some((mm) => mm.userId === context.userId),
-      );
-      // Más seguro: buscar por memberId directamente en la BD
+      // Cambiar el horario de otro miembro (hueco sin cuenta): solo el planificador.
       if (!isPlanner)
         throw new ValidationError(
           "Solo quien lleva la cocina puede cambiar el horario de otra persona",

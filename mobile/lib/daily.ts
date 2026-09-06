@@ -134,6 +134,10 @@ export type DailyLog = {
      * use-coach-actions.ts). Solo se guarda la primera vez que se cambia ese
      * momento en el día. Mismo criterio que la web (src/lib/daily.ts). */
     wasIdea?: string;
+    /** Qué comió realmente cuando status === "distinto". Se escribe desde el
+     * DayDetailSheet al corregir un día pasado — el plan no cambia, pero el
+     * historial queda correcto. Mismo criterio que la web. */
+    actual?: string;
   }[];
   guide: DailyGuide | null;
   mood: string | null;
@@ -536,15 +540,31 @@ export function normalizeGoalType(raw: string): string {
  */
 export type GoalProgress = {
   pct: number;
+  /** Progreso con signo en la dirección del objetivo, en kg (negativo = va al revés). */
   done: number;
+  /** Meta numérica en kg. 0 cuando la persona no dio un número. */
   total: number;
   unit: string;
   /** True when weight is moving opposite to the goal direction. */
   regressing: boolean;
+  /** Hay datos para enseñar progreso (objetivo de peso + peso de partida). */
+  measurable: boolean;
+  /** Hay una meta numérica (`goal_amount`) contra la que medir un porcentaje. */
+  hasTarget: boolean;
 };
 
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
 export function goalProgress(profile: Profile | null): GoalProgress {
-  const zero: GoalProgress = { pct: 0, done: 0, total: 0, unit: "kg", regressing: false };
+  const zero: GoalProgress = {
+    pct: 0,
+    done: 0,
+    total: 0,
+    unit: "kg",
+    regressing: false,
+    measurable: false,
+    hasTarget: false,
+  };
   if (!profile || !profile.goal_type) return zero;
   const goal = normalizeGoalType(profile.goal_type);
   const start = Number(profile.start_weight_kg ?? 0);
@@ -552,25 +572,38 @@ export function goalProgress(profile: Profile | null): GoalProgress {
   const total = Number(profile.goal_amount ?? 0);
   // Sin start_weight_kg fiable no podemos medir progreso real.
   if (!profile.start_weight_kg) return zero;
-  if (goal === "mantener" || total <= 0) {
+
+  if (goal === "mantener") {
     const drift = Math.abs(current - start);
     return {
-      pct: Math.max(0, Math.min(1, 1 - drift / 3)),
+      pct: clamp01(1 - drift / 3),
       done: drift,
       total: 0,
       unit: "kg",
       regressing: drift > 1,
+      measurable: true,
+      hasTarget: false,
     };
   }
-  const done = goal === "perder" ? start - current : current - start;
-  const regressing = done < 0;
-  return {
-    pct: Math.max(0, Math.min(1, done / total)),
-    done,
-    total,
-    unit: "kg",
-    regressing,
-  };
+
+  if (goal === "perder" || goal === "ganar") {
+    // Progreso con signo: perder → bajar suma; ganar → subir suma.
+    const done = goal === "perder" ? start - current : current - start;
+    const hasTarget = total > 0;
+    return {
+      // Sin meta numérica no hay porcentaje; se enseña "X kg menos/más".
+      pct: hasTarget ? clamp01(done / total) : 0,
+      done,
+      total: hasTarget ? total : 0,
+      unit: "kg",
+      regressing: done < 0,
+      measurable: true,
+      hasTarget,
+    };
+  }
+
+  // "habitos" / "energia": no hay métrica de peso que enseñar.
+  return zero;
 }
 
 /**
@@ -586,5 +619,17 @@ export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
     .eq("log_date", date)
     .select("id");
   if (error) throw error;
-  if (!data || data.length === 0) throw new Error("No se ha podido guardar la corrección");
+  if (data && data.length > 0) return;
+
+  // No había registro de ese día (la persona no abrió la app ese día): se crea
+  // ahora con la corrección. La policy de INSERT cubre los últimos ~45 días
+  // (migración `daily_logs_backfill_window`); más atrás, PostgREST rechaza.
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Sin sesión");
+  const { error: insertError } = await supabase
+    .from("daily_logs")
+    .insert({ user_id: auth.user.id, log_date: date, habits: [], ...patch } as never);
+  if (insertError) {
+    throw new Error("Este día es demasiado antiguo para rellenarlo");
+  }
 }

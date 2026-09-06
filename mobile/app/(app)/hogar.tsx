@@ -115,12 +115,15 @@ export default function Hogar() {
     if (state.data?.household) setShared(state.data.household.shared_slots);
     // Initialize per-member schedule drafts from server data.
     if (state.data?.members?.length || state.data?.children?.length) {
+      // Sin horario propio se parte de los días compartidos del hogar (no de
+      // vacío): así "Guardar horario" no deja a nadie en "nunca en casa".
+      const baseline = state.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
       const drafts: Record<string, HomeSchedule> = {};
       for (const m of state.data?.members ?? []) {
-        drafts[m.id] = m.home_schedule ?? EMPTY_SCHEDULE;
+        drafts[m.id] = m.home_schedule ?? baseline;
       }
       for (const c of state.data?.children ?? []) {
-        drafts[c.id] = c.home_schedule ?? EMPTY_SCHEDULE;
+        drafts[c.id] = c.home_schedule ?? baseline;
       }
       setSchedDrafts(drafts);
     }
@@ -842,12 +845,15 @@ export default function Hogar() {
                   })),
                 ].map((person) => {
                   const expanded = schedExpanded[person.key] ?? false;
-                  const draft = schedDrafts[person.key] ?? EMPTY_SCHEDULE;
+                  const scheduleBaseline = state.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
+                  const draft = schedDrafts[person.key] ?? scheduleBaseline;
                   const serverSched = person.isChild
                     ? children.find((ch) => ch.id === person.key)?.home_schedule
                     : members.find((mm) => mm.id === person.key)?.home_schedule;
+                  // Sin horario propio, el punto de partida es el del hogar: así
+                  // no se marca "sin guardar" nada más abrir.
                   const hasChanges =
-                    JSON.stringify(draft) !== JSON.stringify(serverSched ?? EMPTY_SCHEDULE);
+                    JSON.stringify(draft) !== JSON.stringify(serverSched ?? scheduleBaseline);
 
                   return (
                     <View key={person.key} className="rounded-[14px] bg-secondary/50 p-3">
@@ -973,15 +979,16 @@ export default function Hogar() {
 
               {/* Derived shared-slots summary */}
               {(() => {
+                const baseline = state.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
                 const derivedSlots = deriveSharedSlots(
                   members.map((m) => ({
                     id: m.id,
                     isPlanner: m.is_planner,
-                    homeSchedule: schedDrafts[m.id] ?? m.home_schedule ?? null,
+                    homeSchedule: schedDrafts[m.id] ?? m.home_schedule ?? baseline,
                   })),
                   children.map((c) => ({
                     id: c.id,
-                    homeSchedule: schedDrafts[c.id] ?? c.home_schedule ?? null,
+                    homeSchedule: schedDrafts[c.id] ?? c.home_schedule ?? baseline,
                   })),
                 );
                 const anyShared = MEAL_KEYS.some((m) => derivedSlots[m].length);
