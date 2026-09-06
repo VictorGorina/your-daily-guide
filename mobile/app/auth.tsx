@@ -301,9 +301,10 @@ export default function Auth() {
           </View>
 
           {stage === "intro" && (
-            <View className="mt-2 items-center">
+            <View className="mt-2 items-center self-start">
               {/* El PNG lleva aire alrededor de los pimientos; el contenedor
-                  recortado y el margen negativo pegan la palabra al dibujo. */}
+                  recortado y el margen negativo pegan la palabra al dibujo. El
+                  bloque va a la izquierda, con la palabra centrada bajo el logo. */}
               <View style={{ height: 84, width: 104, overflow: "hidden", alignItems: "center" }}>
                 <Image
                   source={require("../assets/splash-icon.png")}

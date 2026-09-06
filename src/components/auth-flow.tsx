@@ -274,9 +274,10 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
       </div>
 
       {stage === "intro" && (
-        <div className="mt-2 flex flex-col items-center">
+        <div className="mt-2 flex w-fit flex-col items-center">
           {/* El SVG lleva bastante aire por debajo de los pimientos; se recorta
-              con un contenedor de altura fija para pegar la palabra al dibujo. */}
+              con un contenedor de altura fija para pegar la palabra al dibujo.
+              El bloque va a la izquierda, con la palabra centrada bajo el logo. */}
           <span className="block h-20 w-24 overflow-hidden">
             <img src="/logo-icon.svg" alt="" className="h-24 w-24" />
           </span>
