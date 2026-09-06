@@ -13,6 +13,7 @@ import { normalizeGoalType } from "@/lib/daily";
 import {
   describeServings,
   describeSharedSlots,
+  EMPTY_SCHEDULE,
   isSharedSlot,
   MEAL_KEYS as HOUSEHOLD_MEAL_KEYS,
   type MealKey,
@@ -21,6 +22,7 @@ import {
 import {
   cadenceOf,
   carryOwnedByName,
+  childPureeGaps,
   cleanPantryExtras,
   cleanPlan,
   cleanShopping,
@@ -53,6 +55,7 @@ import {
   planSlotIndex,
   shoppingTotal,
   normName,
+  weekdayName,
   type ChildMeal,
   type MealSlot,
   type MonthlyPlan,
@@ -1500,6 +1503,221 @@ export const setChildMeal = createServerFn({ method: "POST" })
         label: MEAL_SLOT_LABEL[data.slot],
         dish: data.dish,
         off,
+      };
+    },
+  );
+
+/**
+ * Rellena los platos de los bebés de triturados que faltan en el plan del mes
+ * en curso — pasa cuando se da de alta o se cambia de etapa a un bebé DESPUÉS
+ * de que `generateMonthlyPlan` ya generó el mes, porque solo esa IA rellena
+ * `days[].kids`. Detecta los huecos con `childPureeGaps` (comida/cena, de hoy
+ * en adelante) y le pide a la IA SOLO el plato de cada hueco, a partir del
+ * plato de la mesa de ese día. Incluso con la IA de por medio, el contrato es
+ * el mismo que `setChildMeal`: nunca toca `lunch`/`dinner`/`breakfast` de los
+ * adultos ni la lista de la compra — un ingrediente que falte se guarda igual
+ * y queda en `kids[].off` para avisar.
+ */
+export const fillChildMeals = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input?: { today?: string }) => ({
+    today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input!.today! : zonedTodayISO(),
+  }))
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ plan: MonthlyPlan; filled: number; children: string[] }> => {
+      const key = process.env.OPENROUTER_API_KEY;
+      if (!key) throw new Error("Falta la clave de IA");
+
+      const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+      await enforceUserRateLimit(context.userId, "child-meals");
+
+      const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
+      const home = await householdContext(context.supabase as never, context.userId);
+
+      // El plato de un peque va con la comida compartida: lo pone el
+      // planificador (D2), igual que `setChildMeal`.
+      if (home.plannerId && home.plannerId !== context.userId) {
+        const plannerName =
+          home.members.find((m) => m.userId === home.plannerId)?.displayName ??
+          "quien lleva la cocina";
+        throw new ValidationError(`Los platos de los peques los pone ${plannerName} de tu casa.`);
+      }
+
+      const month = data.today.slice(0, 7);
+      const { data: row } = await ownPlanRow(
+        context.supabase as never,
+        context.userId,
+        month,
+        "plan, shopping, pantry_extras",
+      );
+      const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
+      if (!current) throw new ValidationError(`Todavía no hay plan del mes ${month}`);
+
+      const pending = home.children
+        .map((child) => ({
+          child,
+          gaps: childPureeGaps(
+            current,
+            {
+              id: child.id,
+              stage: child.stage,
+              homeSchedule: child.homeSchedule ?? EMPTY_SCHEDULE,
+            },
+            data.today,
+          ),
+        }))
+        .filter((p) => p.gaps.length > 0);
+
+      if (!pending.length) return { plan: current, filled: 0, children: [] };
+
+      const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+      const pantryExtras = cleanPantryExtras(
+        (row as { pantry_extras?: unknown } | null)?.pantry_extras,
+      );
+      const available = [ingredientNames(shopping), pantryExtras.map((e) => e.name).join(", ")]
+        .filter(Boolean)
+        .join(", ");
+
+      const { data: profile } = await context.supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", context.userId)
+        .maybeSingle();
+
+      const items = pending.flatMap(({ child, gaps }) =>
+        gaps.map((g) => ({
+          childId: child.id,
+          name: child.name,
+          age: child.age,
+          allergies: child.allergies,
+          date: g.date,
+          slot: g.slot,
+          adultDish:
+            (g.slot === "comida"
+              ? planForDate(current, g.date)?.day?.lunch
+              : planForDate(current, g.date)?.day?.dinner) || "",
+        })),
+      );
+
+      const proposals = await askForJson(
+        {
+          key,
+          system: coachSystemPrompt(profile as never, home.text),
+          prompt:
+            "A un plan del mes ya hecho le faltan platos de bebés de triturados (se dieron de alta después de generar el plan). NO cambies ni menciones el plato de la mesa: solo propón, para CADA hueco de esta lista, el puré o triturado de ese bebé:\n" +
+            JSON.stringify(
+              items.map((it) => ({
+                childId: it.childId,
+                nombre: it.name,
+                edad: it.age,
+                alergias: it.allergies || "ninguna",
+                fecha: it.date,
+                dia: weekdayName(it.date),
+                slot: it.slot,
+                platoDeLaMesaEseDia: it.adultDish || "(sin plato de mesa ese día)",
+              })),
+            ) +
+            (available
+              ? `\nIngredientes ya en la lista de la compra o en casa: ${available}\n`
+              : "\n") +
+            'Cada plato: sencillo, sin sal ni azúcar, adaptado a la edad y sin sus alérgenos — normalmente una versión triturada de "platoDeLaMesaEseDia" cuando tenga sentido, o algo sencillo y de temporada si no lo tiene. ' +
+            "Devuelve solo JSON: " +
+            '{"kids": [objetos {"childId", "fecha", "slot": "comida"|"cena", "dish": plato corto, ' +
+            '"off": [ingredientes de ese plato que NO estén ya disponibles, minúsculas, máx. 3, vacío si no falta ninguno]}]}, ' +
+            "uno por cada hueco de la lista de arriba, mismo childId/fecha/slot.",
+        },
+        (parsed) => {
+          const o = (parsed ?? {}) as { kids?: unknown };
+          const known = new Set(items.map((it) => `${it.childId}|${it.date}|${it.slot}`));
+          const out = (Array.isArray(o.kids) ? o.kids : [])
+            .map((k) => {
+              const r = (k ?? {}) as Record<string, unknown>;
+              const childId = String(r.childId ?? "").trim();
+              const date = String(r.fecha ?? "").trim();
+              const slot =
+                r.slot === "cena"
+                  ? ("cena" as const)
+                  : r.slot === "comida"
+                    ? ("comida" as const)
+                    : null;
+              const dish = String(r.dish ?? "")
+                .trim()
+                .slice(0, 200);
+              if (!slot || !dish || !known.has(`${childId}|${date}|${slot}`)) return null;
+              const off = (Array.isArray(r.off) ? r.off : [])
+                .map((x) => String(x).trim().toLowerCase())
+                .filter(Boolean)
+                .slice(0, 3);
+              return { childId, date, slot, dish, off };
+            })
+            .filter((x): x is NonNullable<typeof x> => x != null);
+          return out.length ? out : null;
+        },
+      );
+
+      let next = current;
+      let filled = 0;
+      const filledChildIds = new Set<string>();
+      for (const p of proposals) {
+        const at = planSlotIndex(next, p.date);
+        if (!at) continue;
+        next = {
+          ...next,
+          weeks: next.weeks.map((week, wi) =>
+            wi !== at.weekIndex
+              ? week
+              : {
+                  ...week,
+                  days: week.days.map((dayItem, di) => {
+                    if (di !== at.dayIndex) return dayItem;
+                    const already = (dayItem.kids ?? []).some(
+                      (k) => k.childId === p.childId && k.slot === p.slot,
+                    );
+                    if (already) return dayItem;
+                    const kid: ChildMeal = {
+                      childId: p.childId,
+                      slot: p.slot,
+                      dish: p.dish,
+                      ...(p.off.length ? { off: p.off } : {}),
+                    };
+                    filled++;
+                    filledChildIds.add(p.childId);
+                    return { ...dayItem, kids: [...(dayItem.kids ?? []), kid] };
+                  }),
+                },
+          ),
+        };
+      }
+
+      if (filled) {
+        const { error } = await context.supabase
+          .from("monthly_plans")
+          .update({ plan: next as never } as never)
+          .eq("month", month)
+          .eq("user_id", context.userId);
+        if (error) {
+          console.error("fillChildMeals", error);
+          throw new Error("No hemos podido guardar el menú de los peques");
+        }
+
+        await syncSharedMeals({
+          supabase: context.supabase as never,
+          userId: context.userId,
+          month,
+          today: data.today,
+        });
+      }
+
+      return {
+        plan: next,
+        filled,
+        children: pending
+          .map((p) => p.child)
+          .filter((c) => filledChildIds.has(c.id))
+          .map((c) => c.name),
       };
     },
   );

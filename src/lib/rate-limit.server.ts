@@ -23,6 +23,7 @@ const RATE_LIMITS = {
   chat: { limit: 60, windowSeconds: HOUR, action: "hablar con el coach" },
   "plan-generate": { limit: 8, windowSeconds: HOUR, action: "generar el plan" },
   "plan-adjust": { limit: 30, windowSeconds: HOUR, action: "reajustar el plan" },
+  "child-meals": { limit: 20, windowSeconds: HOUR, action: "actualizar el menú de los peques" },
   guide: { limit: 30, windowSeconds: HOUR, action: "pedir la guía de hoy" },
   "onboarding-parse": { limit: 30, windowSeconds: HOUR, action: "guardar tus respuestas" },
   receipt: { limit: 20, windowSeconds: HOUR, action: "escanear un tiquet" },

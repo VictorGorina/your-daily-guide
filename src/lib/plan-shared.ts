@@ -1,4 +1,11 @@
-import { isSharedSlot, MEAL_KEYS, type MealKey, type SharedSlots } from "@/lib/household-shared";
+import {
+  isSharedSlot,
+  MEAL_KEYS,
+  type FeedingStage,
+  type HomeSchedule,
+  type MealKey,
+  type SharedSlots,
+} from "@/lib/household-shared";
 
 /** Las cuatro comidas que se pueden cambiar una a una desde el chat. */
 export const MEAL_SLOTS = ["desayuno", "comida", "cena", "snack"] as const;
@@ -1158,6 +1165,40 @@ export function childMealsForDate(
   return day.kids
     .filter((k) => k.childId === childId && k.dish)
     .map((k) => ({ slot: k.slot, dish: k.dish, off: k.off ?? [] }));
+}
+
+export type ChildPureeGap = { date: string; slot: "comida" | "cena" };
+
+/**
+ * Días (de `today` a fin de mes) en los que un bebé de triturados come en casa
+ * pero el plan todavía no tiene su puré para esa comida — pasa cuando se da de
+ * alta o se cambia de etapa a un bebé DESPUÉS de generar el plan del mes, ya
+ * que solo la IA de `generateMonthlyPlan` rellena `days[].kids`. Solo mira
+ * comida y cena (igual que el prompt de generación): el desayuno y el snack no
+ * llevan plato aparte de un niño. Nunca mira hacia atrás: un día pasado no se
+ * puede recolocar.
+ */
+export function childPureeGaps(
+  plan: MonthlyPlan | null,
+  child: { id: string; stage: FeedingStage; homeSchedule: HomeSchedule },
+  today: string,
+): ChildPureeGap[] {
+  if (!plan || child.stage !== "triturados") return [];
+  const month = today.slice(0, 7);
+  const gaps: ChildPureeGap[] = [];
+  for (let i = 0; ; i++) {
+    const date = addDays(today, i);
+    if (date.slice(0, 7) !== month) break;
+    const day = planForDate(plan, date)?.day;
+    if (!day) continue;
+    const { dayIndex } = planCursor(date);
+    for (const slot of ["comida", "cena"] as const) {
+      if (!isSharedSlot(child.homeSchedule, slot, dayIndex)) continue;
+      const hasEntry = (day.kids ?? []).some((k) => k.childId === child.id && k.slot === slot);
+      if (!hasEntry) gaps.push({ date, slot });
+    }
+  }
+  return gaps;
 }
 
 /**

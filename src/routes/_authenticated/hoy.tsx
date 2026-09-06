@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { AdjustmentInfoSheet } from "@/components/adjustment-info-sheet";
 import { BottomNav } from "@/components/bottom-nav";
+import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
 import { DayDetailBody } from "@/components/day-detail-sheet";
 import { DishRecipe } from "@/components/dish-recipe";
 import { DishCategoryIcon, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
@@ -54,12 +55,13 @@ import {
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import {
   childMealsForDate,
+  childPureeGaps,
   mealsForDate,
   offListNote,
   type MealChange,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
-import { generateMonthlyPlan } from "@/lib/plan.functions";
+import { fillChildMeals, generateMonthlyPlan } from "@/lib/plan.functions";
 import { useMealSwap } from "@/lib/use-meal-swap";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
@@ -170,6 +172,7 @@ function Hoy() {
   const qc = useQueryClient();
   const makeGuide = useServerFn(generateDailyGuide);
   const makePlan = useServerFn(generateMonthlyPlan);
+  const fillKids = useServerFn(fillChildMeals);
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -288,6 +291,35 @@ function Hoy() {
         .map((k) => ({ name: c.name, dish: k.dish, off: k.off })),
     );
   };
+
+  // Peques de triturados a los que les falta su puré HOY en el plan — pasa
+  // cuando se dan de alta o cambian de etapa después de generar el plan del
+  // mes, porque solo la IA de `generateMonthlyPlan` rellena `days[].kids`.
+  // Dispara el aviso de "Actualizar" (`ChildMealGapBanner`).
+  const householdBaseline = householdQ.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
+  const pendingKidMeals = (householdQ.data?.children ?? []).filter(
+    (c) =>
+      c.feeding_stage === "triturados" &&
+      childPureeGaps(
+        planQ.data?.plan ?? null,
+        { id: c.id, stage: c.feeding_stage, homeSchedule: c.home_schedule ?? householdBaseline },
+        today0,
+      ).some((g) => g.date === today0),
+  );
+
+  const fillKidsMut = useMutation({
+    mutationFn: () => fillKids({ data: { today: today0 } }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      toast.success(
+        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+      );
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
+      ),
+  });
 
   const todayQ = useQuery({
     queryKey: ["today"],
@@ -537,6 +569,12 @@ function Hoy() {
             </span>
           ) : null}
         </div>
+
+        <ChildMealGapBanner
+          names={pendingKidMeals.map((c) => c.name)}
+          pending={fillKidsMut.isPending}
+          onUpdate={() => fillKidsMut.mutate()}
+        />
 
         {!habits.length ? (
           autoPlan.isError || todayQ.isError ? (

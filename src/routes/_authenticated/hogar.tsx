@@ -21,6 +21,7 @@ import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
 import { ChildSheet } from "@/components/child-sheet";
 import { fetchMonthlyPlan, monthISO, todayISO } from "@/lib/daily";
 import {
@@ -58,7 +59,8 @@ import {
   type OpenSlot,
 } from "@/lib/household";
 import { saveHomeSchedule, saveSharedSlots, syncHouseholdPlan } from "@/lib/household.functions";
-import { eur, shoppingTotal } from "@/lib/plan-shared";
+import { childPureeGaps, eur, shoppingTotal } from "@/lib/plan-shared";
+import { fillChildMeals } from "@/lib/plan.functions";
 
 export const Route = createFileRoute("/_authenticated/hogar")({
   head: () => ({
@@ -98,6 +100,7 @@ function Hogar() {
   const sync = useServerFn(syncHouseholdPlan);
   const saveSlots = useServerFn(saveSharedSlots);
   const saveSched = useServerFn(saveHomeSchedule);
+  const fillKids = useServerFn(fillChildMeals);
 
   const [name, setName] = useState("Mi casa");
   const [code, setCode] = useState("");
@@ -317,6 +320,33 @@ function Hogar() {
   // peques que sí comparten plato.
   const tableKids = children.filter((c) => eatsTableFood(c.feeding_stage));
   const babies = children.filter((c) => !eatsTableFood(c.feeding_stage));
+  // A un bebé de triturados recién dado de alta (o recién cambiado de etapa)
+  // le falta su puré en el plan hasta que se regenera — `childPureeGaps` mira
+  // de hoy en adelante. Dispara el aviso de "Actualizar" bajo la lista.
+  const today = todayISO();
+  const householdBaseline = state.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
+  const pendingKidMeals = babies.filter(
+    (c) =>
+      c.feeding_stage === "triturados" &&
+      childPureeGaps(
+        planQ.data?.plan ?? null,
+        { id: c.id, stage: c.feeding_stage, homeSchedule: c.home_schedule ?? householdBaseline },
+        today,
+      ).length > 0,
+  );
+  const fillKidsMut = useMutation({
+    mutationFn: () => fillKids({ data: { today } }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      toast.success(
+        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+      );
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
+      ),
+  });
 
   const openChild = (child: HouseholdChild | null) => setChildSheet({ open: true, child });
 
@@ -657,6 +687,11 @@ function Hogar() {
                   Bebés · aún no comen de la mesa
                 </p>
                 <div className="space-y-2">{babies.map(renderChildRow)}</div>
+                <ChildMealGapBanner
+                  names={pendingKidMeals.map((c) => c.name)}
+                  pending={fillKidsMut.isPending}
+                  onUpdate={() => fillKidsMut.mutate()}
+                />
               </div>
             ) : null}
 

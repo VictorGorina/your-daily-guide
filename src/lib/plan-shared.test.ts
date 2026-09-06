@@ -9,6 +9,7 @@ import {
   cleanPlan,
   cleanShopping,
   childMealsForDate,
+  childPureeGaps,
   cleanTripActuals,
   cleanTripReceipts,
   composeDayForUser,
@@ -645,6 +646,80 @@ describe("childMealsForDate", () => {
 
   it("un día sin platos de niño devuelve lista vacía", () => {
     expect(childMealsForDate(plan(), "2026-08-05", "leo")).toEqual([]);
+  });
+});
+
+describe("childPureeGaps", () => {
+  // 2026-08-05 es miércoles → índice de día 2 (lunes=0).
+  const HOME_ALL_WEEK = {
+    desayuno: [],
+    comida: [0, 1, 2, 3, 4, 5, 6],
+    cena: [0, 1, 2, 3, 4, 5, 6],
+  };
+
+  it("un bebé de triturados sin puré en el plan tiene hueco en comida y cena de hoy en adelante", () => {
+    const gaps = childPureeGaps(
+      plan(),
+      { id: "mia", stage: "triturados", homeSchedule: HOME_ALL_WEEK },
+      "2026-08-05",
+    );
+    expect(gaps).toContainEqual({ date: "2026-08-05", slot: "comida" });
+    expect(gaps).toContainEqual({ date: "2026-08-05", slot: "cena" });
+    expect(gaps).toContainEqual({ date: "2026-08-31", slot: "cena" });
+    // Nunca mira hacia atrás ni se sale del mes en curso.
+    expect(gaps.some((g) => g.date < "2026-08-05")).toBe(false);
+    expect(gaps.some((g) => g.date.startsWith("2026-09"))).toBe(false);
+  });
+
+  it("un slot que ya tiene su puré no cuenta como hueco", () => {
+    const p = plan();
+    p.weeks[0]!.days[2] = day("Miércoles", "Lentejas", "Merluza", {
+      kids: [{ childId: "mia", slot: "comida", dish: "Puré de lentejas" }],
+    });
+    const gaps = childPureeGaps(
+      p,
+      { id: "mia", stage: "triturados", homeSchedule: HOME_ALL_WEEK },
+      "2026-08-05",
+    ).filter((g) => g.date === "2026-08-05");
+    expect(gaps).toEqual([{ date: "2026-08-05", slot: "cena" }]);
+  });
+
+  it("un día que no come en casa no genera hueco", () => {
+    // Sin el miércoles (índice 2) en el horario del bebé.
+    const homeExceptWed = { desayuno: [], comida: [0, 1, 3, 4, 5, 6], cena: [0, 1, 3, 4, 5, 6] };
+    const gaps = childPureeGaps(
+      plan(),
+      { id: "mia", stage: "triturados", homeSchedule: homeExceptWed },
+      "2026-08-05",
+    ).filter((g) => g.date === "2026-08-05");
+    expect(gaps).toEqual([]);
+  });
+
+  it("un niño que come de la mesa o toma pecho nunca genera hueco", () => {
+    expect(
+      childPureeGaps(
+        plan(),
+        { id: "leo", stage: "mesa", homeSchedule: HOME_ALL_WEEK },
+        "2026-08-05",
+      ),
+    ).toEqual([]);
+    expect(
+      childPureeGaps(
+        plan(),
+        { id: "bebe", stage: "pecho", homeSchedule: HOME_ALL_WEEK },
+        "2026-08-05",
+      ),
+    ).toEqual([]);
+  });
+
+  it("sin plan devuelve lista vacía", () => {
+    expect(
+      childPureeGaps(
+        null,
+        { id: "mia", stage: "triturados", homeSchedule: HOME_ALL_WEEK },
+        "2026-08-05",
+      ),
+    ).toEqual([]);
   });
 });
 
