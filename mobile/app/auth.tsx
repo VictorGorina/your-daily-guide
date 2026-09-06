@@ -255,17 +255,8 @@ export default function Auth() {
         >
           {/* Cabecera: marca + (en acceso) botón atrás. La marca encoge al
               pasar al formulario, como en el artboard 3a. */}
-          <View className="flex-row items-start justify-between">
-            {stage === "intro" ? (
-              <View className="pt-2">
-                <Image
-                  source={require("../assets/splash-icon.png")}
-                  style={{ width: 104, height: 104, marginLeft: -8 }}
-                  resizeMode="contain"
-                />
-                <Text className="-mt-1 text-xl font-heading text-foreground">Peppers</Text>
-              </View>
-            ) : (
+          <View className="min-h-9 flex-row items-start justify-between">
+            {stage === "access" ? (
               <View className="flex-row items-center gap-2.5 pt-1">
                 <Image
                   source={require("../assets/splash-icon.png")}
@@ -274,6 +265,8 @@ export default function Auth() {
                 />
                 <Text className="text-base font-heading text-foreground">Peppers</Text>
               </View>
+            ) : (
+              <View />
             )}
 
             <View className="flex-row items-center gap-2 pt-1">
@@ -306,6 +299,21 @@ export default function Auth() {
               )}
             </View>
           </View>
+
+          {stage === "intro" && (
+            <View className="mt-2 items-center">
+              {/* El PNG lleva aire alrededor de los pimientos; el contenedor
+                  recortado y el margen negativo pegan la palabra al dibujo. */}
+              <View style={{ height: 84, width: 104, overflow: "hidden", alignItems: "center" }}>
+                <Image
+                  source={require("../assets/splash-icon.png")}
+                  style={{ width: 104, height: 104 }}
+                  resizeMode="contain"
+                />
+              </View>
+              <Text className="-mt-1 text-xl font-heading text-foreground">Peppers</Text>
+            </View>
+          )}
 
           {/* Cuerpo */}
           {stage === "intro" ? (

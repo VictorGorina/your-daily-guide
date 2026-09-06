@@ -248,29 +248,17 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[26rem] flex-col px-5 pb-8 pt-6 font-ui">
-      {/* Cabecera: marca + conmutador de idioma / botón atrás. La marca encoge
-          al pasar al formulario, igual que en el artboard 3a. */}
-      <div className="flex items-start justify-between gap-2">
-        <div
-          className={`flex transition-all duration-300 ${
-            stage === "access" ? "flex-row items-center gap-2.5" : "flex-col items-start"
-          }`}
-        >
-          <img
-            src="/logo-icon.svg"
-            alt=""
-            className={`transition-all duration-300 ${
-              stage === "access" ? "h-10 w-10" : "-ml-1 h-24 w-24"
-            }`}
-          />
-          <span
-            className={`font-title font-semibold tracking-[-0.02em] transition-all duration-300 ${
-              stage === "access" ? "text-base" : "-mt-1 text-xl"
-            }`}
-          >
-            Peppers
-          </span>
-        </div>
+      {/* Cabecera: en acceso, marca pequeña a la izquierda + botón atrás; en la
+          portada solo el conmutador de idioma (la marca va centrada, debajo). */}
+      <div className="flex min-h-9 items-start justify-between gap-2">
+        {stage === "access" ? (
+          <div className="flex flex-row items-center gap-2.5">
+            <img src="/logo-icon.svg" alt="" className="h-10 w-10" />
+            <span className="font-title text-base font-semibold tracking-[-0.02em]">Peppers</span>
+          </div>
+        ) : (
+          <span aria-hidden />
+        )}
         <div className="flex shrink-0 items-center gap-2">
           {stage === "access" && (
             <button
@@ -284,6 +272,17 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
           {stage === "intro" && <LocaleSwitch />}
         </div>
       </div>
+
+      {stage === "intro" && (
+        <div className="mt-2 flex flex-col items-center">
+          {/* El SVG lleva bastante aire por debajo de los pimientos; se recorta
+              con un contenedor de altura fija para pegar la palabra al dibujo. */}
+          <span className="block h-20 w-24 overflow-hidden">
+            <img src="/logo-icon.svg" alt="" className="h-24 w-24" />
+          </span>
+          <span className="font-title text-xl font-semibold tracking-[-0.02em]">Peppers</span>
+        </div>
+      )}
 
       {/* Cuerpo */}
       {stage === "intro" ? (
