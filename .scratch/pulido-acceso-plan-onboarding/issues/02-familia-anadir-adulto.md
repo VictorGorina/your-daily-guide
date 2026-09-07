@@ -1,6 +1,6 @@
 # 02 — Familia: por qué falla "Añadir adulto" y dejar de ocultarlo
 
-Status: sin empezar
+Status: implementado y verificado en producción (2026-09-07)
 Incidencia del usuario: ⓷
 
 ## Objetivo
@@ -48,3 +48,32 @@ síntoma original sigue sin reproducirse.
 
 Si tras esto el usuario sigue diciendo que "no funciona", conviene descartar que lo que
 esperaba fuese el issue 05: añadir a alguien y que el plan y la compra se recalculen solos.
+
+
+## Hecho — sesión 2026-09-07
+
+Todas las tareas 1-4 implementadas en web y móvil. Verificado en real:
+
+- **Migración `20260907120000_household_roster_planner_manages.sql`** aplicada a mano en el
+  SQL Editor de Supabase (dashboard-only, sin CLI en este proyecto). Amplía INSERT/UPDATE/DELETE
+  de `household_members` a "creador O planificador de ese hogar", con `is_household_planner` como
+  helper `SECURITY DEFINER` (mismo patrón que `is_household_member`, necesario para no entrar en
+  recursión de RLS).
+- **Prueba antes/después contra la API REST real** (no una hipótesis): con dos cuentas anónimas
+  de usar y tirar — "Alex" (creadora) y "Compi" (se une, se promociona a planificadora sin ser la
+  creadora) — el mismo `INSERT` en `household_members` devolvió **403**
+  (`new row violates row-level security policy`) antes de aplicar la migración y **201** justo
+  después, sin cambiar nada más. Confirmado también por la UI real: tras la migración, a Compi le
+  aparece el formulario "Añadir a alguien a la mesa" y los controles de renombrar/ración/quitar
+  para el resto de la mesa, que antes no veía.
+- **Explicar en vez de ocultar**: un miembro normal (ni creador ni planificador) ve
+  "Solo quien creó la familia o quien planifica puede añadir gente a la mesa." en el mismo hueco
+  donde antes no había nada.
+- Hogar y las dos cuentas de prueba borrados al terminar (households.household_id en cascada +
+  `auth.admin.deleteUser`).
+- Estáticas verdes: `bun run lint` / `typecheck` / `test` (220 tests) y `tsc` de `mobile/`.
+
+No verificado en esta sesión: el caso "un adulto sin cuenta" (`uses_app: false`) no se probó
+explícitamente, aunque no lo toca este cambio. Y no se ha vuelto a preguntar al usuario si su
+síntoma original ("añadir adulto no funciona") queda resuelto con esto — sigue pendiente el aviso
+del propio issue: puede que lo que vio fuera en realidad el issue 05 (plan/compra sin recalcular).

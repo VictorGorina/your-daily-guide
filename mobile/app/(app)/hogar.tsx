@@ -172,6 +172,13 @@ export default function Hogar() {
   const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
   const isPlanner = !!state.data?.me?.is_planner;
   const plannerName = state.data?.planner?.display_name ?? "quien lleva la cocina";
+  // Gestionar la mesa (añadir, renombrar, quitar, cambiar ración, ceder quién
+  // planifica) lo puede hacer el creador o quien planifica ese hogar — así lo
+  // permite ahora la policy de household_members (migración
+  // 20260907120000_household_roster_planner_manages.sql). Antes solo miraba
+  // isCreator: la base de datos ya dejaba pasar a un planificador que no fuera
+  // el creador, pero el formulario seguía escondido.
+  const canManageRoster = isCreator || isPlanner;
 
   const addAdult = useMutation({
     mutationFn: () => {
@@ -188,7 +195,10 @@ export default function Hogar() {
       Alert.alert("Añadido a la mesa");
       refresh();
     },
-    onError: () => Alert.alert("No hemos podido añadir a esa persona"),
+    // Antes se descartaba el error real y siempre salía el mismo texto
+    // genérico, así que un fallo (RLS, validación, lo que fuera) no se podía
+    // diagnosticar ni por el usuario ni por nosotros.
+    onError: (e: Error) => Alert.alert(e.message),
   });
 
   const markUsesApp = useMutation({
@@ -608,7 +618,7 @@ export default function Hogar() {
                             {initial}
                           </Text>
                         </View>
-                        {isCreator && !isMe ? (
+                        {canManageRoster && !isMe ? (
                           <TextInput
                             className="flex-1 rounded-lg bg-muted px-2 py-1 text-sm text-foreground"
                             defaultValue={m.display_name}
@@ -652,12 +662,12 @@ export default function Hogar() {
                           return (
                             <Pressable
                               key={key}
-                              disabled={!isCreator}
+                              disabled={!canManageRoster}
                               onPress={() => setMemberPortion(m.id, value)}
                               className={`rounded-full px-2 py-0.5 ${
                                 active ? "bg-primary-soft" : "bg-surface"
                               }`}
-                              style={isCreator ? undefined : { opacity: 0.7 }}
+                              style={canManageRoster ? undefined : { opacity: 0.7 }}
                             >
                               <Text
                                 className={`text-[11px] font-sans-medium ${
@@ -671,7 +681,7 @@ export default function Hogar() {
                         })}
                       </View>
 
-                      {isCreator && !isMe ? (
+                      {canManageRoster && !isMe ? (
                         <View className="mt-2 flex-row flex-wrap gap-x-3 gap-y-1">
                           {!m.uses_app ? (
                             <Pressable onPress={() => markUsesApp.mutate(m.id)}>
@@ -716,7 +726,7 @@ export default function Hogar() {
               </View>
 
               {/* --- Añadir miembro: adulto o peque --- */}
-              {isCreator ? (
+              {canManageRoster ? (
                 <View className="mt-3 gap-2 rounded-2xl bg-secondary/60 p-4">
                   <Text className="text-xs font-sans-semibold text-foreground">
                     Añadir a alguien a la mesa
@@ -829,7 +839,15 @@ export default function Hogar() {
                     </Pressable>
                   )}
                 </View>
-              ) : null}
+              ) : (
+                // Explicar en vez de ocultar: antes este bloque simplemente
+                // desaparecía para quien no era el creador, sin decir por qué.
+                <View className="mt-3 rounded-2xl bg-secondary/60 px-4 py-3">
+                  <Text className="text-[11.5px] leading-5 text-muted-foreground">
+                    Solo quien creó la familia o quien planifica puede añadir gente a la mesa.
+                  </Text>
+                </View>
+              )}
 
               <View className="mt-4 flex-row items-start gap-2.5 rounded-2xl bg-muted px-3.5 py-3">
                 <ShieldCheck size={14} color="#83796c" style={{ marginTop: 1 }} />

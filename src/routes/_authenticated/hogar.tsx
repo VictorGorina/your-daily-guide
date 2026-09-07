@@ -188,6 +188,13 @@ function Hogar() {
   const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
   const isPlanner = !!state.data?.me?.is_planner;
   const plannerName = state.data?.planner?.display_name ?? "quien lleva la cocina";
+  // Gestionar la mesa (añadir, renombrar, quitar, cambiar ración, ceder quién
+  // planifica) lo puede hacer el creador o quien planifica ese hogar — así lo
+  // permite ahora la policy de household_members (migración
+  // 20260907120000_household_roster_planner_manages.sql). Antes solo miraba
+  // isCreator: la base de datos ya dejaba pasar a un planificador que no fuera
+  // el creador, pero el formulario seguía escondido.
+  const canManageRoster = isCreator || isPlanner;
 
   const addAdult = useMutation({
     mutationFn: () => {
@@ -204,7 +211,10 @@ function Hogar() {
       toast.success("Añadido a la mesa");
       refresh();
     },
-    onError: () => toast.error("No hemos podido añadir a esa persona"),
+    // Antes se descartaba el error real y siempre salía el mismo texto
+    // genérico, así que un fallo (RLS, validación, lo que fuera) no se podía
+    // diagnosticar ni por el usuario ni por nosotros.
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const markUsesApp = useMutation({
@@ -589,7 +599,7 @@ function Hogar() {
                       >
                         {initial}
                       </span>
-                      {isCreator && !isMe ? (
+                      {canManageRoster && !isMe ? (
                         <input
                           className="min-w-0 flex-1 rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none focus:ring-2 focus:ring-ring/40"
                           defaultValue={m.display_name}
@@ -629,13 +639,13 @@ function Hogar() {
                         return (
                           <button
                             key={key}
-                            disabled={!isCreator}
+                            disabled={!canManageRoster}
                             onClick={() => setMemberPortion(m.id, value)}
                             className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
                               active
                                 ? "bg-primary-soft text-primary"
                                 : "bg-surface text-muted-foreground"
-                            } ${isCreator ? "" : "opacity-70"}`}
+                            } ${canManageRoster ? "" : "opacity-70"}`}
                           >
                             {label}
                           </button>
@@ -643,7 +653,7 @@ function Hogar() {
                       })}
                     </div>
 
-                    {isCreator && !isMe ? (
+                    {canManageRoster && !isMe ? (
                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
                         {!m.uses_app ? (
                           <button
@@ -691,7 +701,7 @@ function Hogar() {
             ) : null}
 
             {/* --- Añadir miembro: adulto o peque --- */}
-            {isCreator ? (
+            {canManageRoster ? (
               <div className="mt-3 rounded-2xl bg-secondary/60 p-4">
                 <p className="text-xs font-semibold">Añadir a alguien a la mesa</p>
 
@@ -782,7 +792,13 @@ function Hogar() {
                   </button>
                 )}
               </div>
-            ) : null}
+            ) : (
+              // Explicar en vez de ocultar: antes este bloque simplemente
+              // desaparecía para quien no era el creador, sin decir por qué.
+              <p className="mt-3 rounded-2xl bg-secondary/60 px-4 py-3 text-[11.5px] leading-relaxed text-muted-foreground">
+                Solo quien creó la familia o quien planifica puede añadir gente a la mesa.
+              </p>
+            )}
 
             <div className="mt-4 flex items-start gap-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-[11.5px] leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />

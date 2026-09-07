@@ -236,7 +236,7 @@ export async function joinHousehold(code: string) {
   if (error) throw new Error(error.message);
 }
 
-/** El creador añade a alguien a la mesa (hueco sin reclamar). */
+/** El creador o quien planifica añade a alguien a la mesa (hueco sin reclamar). */
 export async function addAdultSlot(
   householdId: string,
   slot: { display_name: string; uses_app: boolean; portion?: number },
@@ -264,7 +264,7 @@ export async function updateMember(
   if (error) throw error;
 }
 
-/** Quita un hueco de la mesa (lo hace el creador). */
+/** Quita un hueco de la mesa (lo hace el creador o quien planifica). */
 export async function removeMember(id: string) {
   const { error } = await supabase.from("household_members").delete().eq("id", id);
   if (error) throw error;
