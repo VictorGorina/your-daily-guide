@@ -437,12 +437,25 @@ function Ajustes() {
         Datos y cuenta
       </span>
 
-      <button
-        onClick={signOut}
-        className="mt-2 w-full rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground"
-      >
-        Cerrar sesión
-      </button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button className="mt-2 w-full rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground">
+            Cerrar sesión
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tendrás que volver a entrar para retomar tu plan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={signOut}>Cerrar sesión</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog>
         <AlertDialogTrigger asChild>

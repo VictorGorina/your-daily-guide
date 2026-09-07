@@ -44,6 +44,7 @@ import {
   boughtTotal,
   cadenceOf,
   CADENCES,
+  capitalizeFirst,
   coverageRatio,
   daysInMonth,
   eur,
@@ -501,8 +502,8 @@ function PlanPage() {
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <h1 className="min-w-0 flex-1 truncate text-center font-title text-[28px] font-semibold capitalize tracking-[-0.03em]">
-              {monthTitle(month)}
+            <h1 className="min-w-0 flex-1 truncate text-center font-title text-[28px] font-semibold tracking-[-0.03em]">
+              {capitalizeFirst(monthTitle(month))}
             </h1>
             <button
               type="button"

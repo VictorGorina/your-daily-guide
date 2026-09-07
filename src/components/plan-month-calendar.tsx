@@ -5,6 +5,7 @@ import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ratioSignal, todayISO, type DailyLog } from "@/lib/daily";
 import {
+  capitalizeFirst,
   childMealsForDate,
   isBeforeAppStart,
   mealsForDate,
@@ -159,13 +160,15 @@ export function PlanMonthCalendar({
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <DialogContent className="max-w-[92vw] sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="capitalize">
+            <DialogTitle>
               {selected
-                ? new Date(`${selected}T00:00:00`).toLocaleDateString("es-ES", {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                  })
+                ? capitalizeFirst(
+                    new Date(`${selected}T00:00:00`).toLocaleDateString("es-ES", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                    }),
+                  )
                 : ""}
             </DialogTitle>
           </DialogHeader>

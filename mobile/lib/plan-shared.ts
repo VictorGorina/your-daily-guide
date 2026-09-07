@@ -488,6 +488,15 @@ export const addMonths = (month: string, delta: number): string => {
 export const monthTitle = (month: string): string =>
   new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
 
+/**
+ * Pone en mayúscula solo la primera letra ("agosto de 2026" → "Agosto de 2026").
+ * Para títulos: en español el mes y la preposición van en minúscula, así que
+ * `text-transform: capitalize` / `textTransform: "capitalize"` (que sube cada
+ * palabra) da "Agosto De 2026", que está mal.
+ */
+export const capitalizeFirst = (s: string): string =>
+  s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
 /** Días que quedan del mes de `dateISO`, contando hoy (1 = hoy es el último día). */
 export const daysLeftInMonth = (dateISO: string): number =>
   daysInMonth(dateISO.slice(0, 7)) - Number(dateISO.slice(8, 10)) + 1;

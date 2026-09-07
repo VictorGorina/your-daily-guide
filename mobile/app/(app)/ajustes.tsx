@@ -97,6 +97,12 @@ export default function Ajustes() {
     // El guardia de (app)/_layout redirige a /auth al quedarse sin sesión.
   };
 
+  const confirmSignOut = () =>
+    Alert.alert("¿Cerrar sesión?", "Tendrás que volver a entrar para retomar tu plan.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Cerrar sesión", style: "destructive", onPress: () => void signOut() },
+    ]);
+
   const [deleting, setDeleting] = useState(false);
   const removeAccount = async () => {
     setDeleting(true);
@@ -350,7 +356,7 @@ export default function Ajustes() {
           Datos y cuenta
         </Text>
         <Pressable
-          onPress={() => void signOut()}
+          onPress={confirmSignOut}
           className="mt-2 w-full items-center rounded-full bg-surface py-4 active:opacity-80"
         >
           <Text className="text-sm font-sans-medium text-muted-foreground">Cerrar sesión</Text>

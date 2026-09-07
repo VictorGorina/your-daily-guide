@@ -27,6 +27,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { BottomNav } from "../../components/bottom-nav";
 import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { ChildSheet } from "../../components/child-sheet";
 import { apiPost } from "../../lib/api";
@@ -335,7 +336,9 @@ export default function Hogar() {
       }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
-      Alert.alert(res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día");
+      Alert.alert(
+        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+      );
     },
     onError: (e) =>
       Alert.alert(
@@ -360,7 +363,7 @@ export default function Hogar() {
         <View className="flex-1">
           <Text className="text-sm font-sans-medium text-foreground">
             {c.name}
-            {c.age ? ` · ${c.age} años` : ""}
+            {c.age ? ` · ${c.age} ${c.age === 1 ? "año" : "años"}` : ""}
           </Text>
           <Text className="mt-0.5 text-xs text-muted-foreground">
             {note
@@ -378,7 +381,7 @@ export default function Hogar() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
-        contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-28 pt-4"
+        contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-4"
         keyboardShouldPersistTaps="handled"
       >
         {!household ? (
@@ -559,14 +562,9 @@ export default function Hogar() {
             </View>
 
             <View className="mt-4 gap-2.5 rounded-3xl bg-primary-soft p-5">
-              <View className="flex-row items-baseline justify-between">
-                <Text className="text-[11px] font-sans-semibold uppercase tracking-widest text-muted-foreground">
-                  Código de la familia
-                </Text>
-                <Text className="text-[11px] text-muted-foreground">
-                  {members.length} {members.length === 1 ? "miembro" : "miembros"}
-                </Text>
-              </View>
+              <Text className="text-[11px] font-sans-semibold uppercase tracking-widest text-muted-foreground">
+                Código de la familia
+              </Text>
               <View className="flex-row items-center gap-3">
                 <Text className="flex-1 font-heading text-3xl tracking-widest text-foreground">
                   {household.invite_code}
@@ -1212,6 +1210,8 @@ export default function Hogar() {
           </>
         )}
       </ScrollView>
+
+      <BottomNav />
     </SafeAreaView>
   );
 }

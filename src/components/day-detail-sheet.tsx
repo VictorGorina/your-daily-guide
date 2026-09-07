@@ -18,6 +18,7 @@ import { isSharedSlot, type SharedSlots } from "@/lib/household-shared";
 import { propagateLogToFamily } from "@/lib/household.functions";
 import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import {
+  capitalizeFirst,
   childMealsForDate,
   isBeforeAppStart,
   mealsForDate,
@@ -26,11 +27,13 @@ import {
 } from "@/lib/plan-shared";
 
 const longDate = (date: string) =>
-  new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  capitalizeFirst(
+    new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }),
+  );
 
 /**
  * Detalle reducido de un día pasado: qué se comió, qué se falló y las macros del
@@ -62,7 +65,7 @@ export function DayDetailSheet({
     <Dialog open={!!date} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[92vw] sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="capitalize">{date ? longDate(date) : ""}</DialogTitle>
+          <DialogTitle>{date ? longDate(date) : ""}</DialogTitle>
         </DialogHeader>
         {date ? (
           <DayDetailBody

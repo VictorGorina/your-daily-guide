@@ -54,6 +54,7 @@ import {
 } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import {
+  capitalizeFirst,
   childMealsForDate,
   childPureeGaps,
   mealsForDate,
@@ -840,12 +841,14 @@ function Hoy() {
         />
         {openDay && openDay < todayISO() ? (
           <div className="mt-3 rounded-2xl bg-surface p-4">
-            <p className="mb-3 text-xs font-semibold capitalize text-foreground">
-              {new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
+            <p className="mb-3 text-xs font-semibold text-foreground">
+              {capitalizeFirst(
+                new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                }),
+              )}
             </p>
             <DayDetailBody
               date={openDay}
@@ -953,17 +956,19 @@ function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
   // para ese día), no la lista entera de desayunos de la semana.
   const meals = mealsForDate(plan, date).filter((m) => m.idea);
-  const label = new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const label = capitalizeFirst(
+    new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }),
+  );
 
   return (
     <div className="surface-card animate-sheet-up mt-3 p-4">
       <div className="flex items-center gap-2">
         <ChevronDown className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-semibold capitalize">{label}</h3>
+        <h3 className="text-sm font-semibold">{label}</h3>
       </div>
       {meals.length ? (
         <div className="mt-3 space-y-2">

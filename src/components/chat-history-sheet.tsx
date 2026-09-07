@@ -12,13 +12,16 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { fetchChatDays, fetchMessages } from "@/lib/daily";
+import { capitalizeFirst } from "@/lib/plan-shared";
 
 function formatDay(date: string) {
-  return new Date(`${date}T12:00:00`).toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  return capitalizeFirst(
+    new Date(`${date}T12:00:00`).toLocaleDateString("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }),
+  );
 }
 
 export function ChatHistorySheet() {
@@ -58,7 +61,7 @@ export function ChatHistorySheet() {
                 <ChevronLeft className="size-3.5" aria-hidden />
                 Todos los días
               </button>
-              <SheetTitle className="font-title font-semibold tracking-[-0.02em] capitalize">
+              <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
                 {formatDay(day)}
               </SheetTitle>
               <SheetDescription>Conversación guardada, solo lectura.</SheetDescription>
@@ -90,7 +93,7 @@ export function ChatHistorySheet() {
                       onClick={() => setDay(d.date)}
                       className="flex w-full items-center justify-between rounded-xl bg-secondary/60 px-4 py-3 text-left"
                     >
-                      <span className="text-sm capitalize">{formatDay(d.date)}</span>
+                      <span className="text-sm">{formatDay(d.date)}</span>
                       <span className="text-xs text-muted-foreground">{d.count} mensajes</span>
                     </button>
                   </li>

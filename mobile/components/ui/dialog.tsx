@@ -30,9 +30,7 @@ export function Dialog({
         />
         <View className="max-h-[80%] w-full max-w-md rounded-3xl bg-background p-5">
           {title ? (
-            <Text className="font-heading-medium mb-3 text-lg capitalize text-foreground">
-              {title}
-            </Text>
+            <Text className="font-heading-medium mb-3 text-lg text-foreground">{title}</Text>
           ) : null}
           <ScrollView contentContainerClassName="gap-4">{children}</ScrollView>
         </View>

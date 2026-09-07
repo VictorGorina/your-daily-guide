@@ -368,7 +368,7 @@ function Hogar() {
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium">
             {c.name}
-            {c.age ? ` · ${c.age} años` : ""}
+            {c.age ? ` · ${c.age} ${c.age === 1 ? "año" : "años"}` : ""}
           </span>
           <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
             {note
@@ -540,14 +540,9 @@ function Hogar() {
           </div>
 
           <section className="mt-4 rounded-[1.25rem] bg-primary-soft p-5">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                Código de la familia
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                {members.length} {members.length === 1 ? "miembro" : "miembros"}
-              </span>
-            </div>
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              Código de la familia
+            </span>
             <div className="mt-2.5 flex items-center gap-3">
               <span className="flex-1 font-title text-[32px] font-semibold leading-none tracking-[0.14em]">
                 {household.invite_code}

@@ -52,6 +52,7 @@ import {
 } from "../../lib/household-shared";
 import { setPendingChatMessage } from "../../lib/pending-chat-message";
 import {
+  capitalizeFirst,
   childMealsForDate,
   childPureeGaps,
   mealsForDate,
@@ -296,7 +297,9 @@ export default function Hoy() {
       }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
-      Alert.alert(res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día");
+      Alert.alert(
+        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+      );
     },
     onError: (e) =>
       Alert.alert(
@@ -768,12 +771,14 @@ export default function Hoy() {
             <View className="mt-3 rounded-3xl bg-surface p-4">
               <View className="flex-row items-center gap-2">
                 <ChevronDown size={16} color="#6dbe7b" />
-                <Text className="font-body-semibold text-sm capitalize text-foreground">
-                  {new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                  })}
+                <Text className="font-body-semibold text-sm text-foreground">
+                  {capitalizeFirst(
+                    new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                    }),
+                  )}
                 </Text>
               </View>
               <View className="mt-3">
@@ -886,17 +891,19 @@ export default function Hoy() {
 // ── Menú de un día expandido ──
 function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
   const meals = mealsForDate(plan, date).filter((m) => m.idea);
-  const label = new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const label = capitalizeFirst(
+    new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }),
+  );
 
   return (
     <View className="mt-3 rounded-3xl bg-surface p-4">
       <View className="flex-row items-center gap-2">
         <ChevronDown size={16} color="#6dbe7b" />
-        <Text className="font-body-semibold text-sm capitalize text-foreground">{label}</Text>
+        <Text className="font-body-semibold text-sm text-foreground">{label}</Text>
       </View>
       {meals.length ? (
         <View className="mt-3 gap-2">

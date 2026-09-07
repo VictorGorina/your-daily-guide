@@ -57,6 +57,7 @@ import {
   boughtTotal,
   cadenceOf,
   CADENCES,
+  capitalizeFirst,
   childMealsForDate,
   coverageRatio,
   daysInMonth,
@@ -506,10 +507,10 @@ export default function Plan() {
                 <ChevronLeft size={20} color="#83796c" />
               </Pressable>
               <Text
-                className="min-w-0 flex-1 text-center font-heading text-[26px] capitalize text-foreground"
+                className="min-w-0 flex-1 text-center font-heading text-[26px] text-foreground"
                 numberOfLines={1}
               >
-                {monthTitle(month)}
+                {capitalizeFirst(monthTitle(month))}
               </Text>
               <Pressable
                 onPress={() =>
@@ -1007,11 +1008,13 @@ function PlanMonthCalendar({
         onOpenChange={(o) => !o && setSelected(null)}
         title={
           selected
-            ? new Date(`${selected}T00:00:00`).toLocaleDateString("es-ES", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })
+            ? capitalizeFirst(
+                new Date(`${selected}T00:00:00`).toLocaleDateString("es-ES", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                }),
+              )
             : ""
         }
       >

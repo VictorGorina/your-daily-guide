@@ -15,6 +15,7 @@ import {
 import { isSharedSlot, type SharedSlots } from "../lib/household-shared";
 import { sumDoneMacros, ZERO_MACROS } from "../lib/macros";
 import {
+  capitalizeFirst,
   childMealsForDate,
   isBeforeAppStart,
   mealsForDate,
@@ -25,11 +26,13 @@ import { MacroBars } from "./macro-bars";
 import { Dialog } from "./ui/dialog";
 
 const longDate = (date: string) =>
-  new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  capitalizeFirst(
+    new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }),
+  );
 
 /**
  * Detalle reducido de un día pasado: qué se comió, qué se falló y las macros del
