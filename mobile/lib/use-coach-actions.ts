@@ -208,6 +208,9 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
           updated.push(PROFILE_FIELD_LABELS[field.key] ?? field.key);
         }
         if (!updated.length) return "No había ningún dato válido que actualizar en el perfil";
+        // Si el coach tocó `meals_to_plan` (texto libre), `saveProfile` limpia
+        // solo el `meal_slots` estructurado del onboarding — si no,
+        // `effectiveMealSlots` seguiría prefiriendo la elección vieja.
         await saveProfile(patch);
         return `Perfil actualizado: ${updated.join(", ")}.`;
       }

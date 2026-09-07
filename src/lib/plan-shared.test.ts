@@ -5,6 +5,7 @@ import {
   addMonths,
   cadenceOf,
   carryOwnedByName,
+  cleanMealSlots,
   cleanPantryExtras,
   cleanPlan,
   cleanShopping,
@@ -16,6 +17,7 @@ import {
   composeMonthlyPlanForMember,
   coverageRatio,
   daysLeftInMonth,
+  effectiveMealSlots,
   formatQty,
   groupByTrip,
   isBeforeAppStart,
@@ -24,6 +26,7 @@ import {
   isNextMonthUnlocked,
   mealsForDate,
   monthParts,
+  parseMealSlotsLegacy,
   mergeFuturePlan,
   type MonthlyPlan,
   monthCoverage,
@@ -558,6 +561,83 @@ describe("planForDate / mealsForDate", () => {
   it("comida y cena salen del día exacto del plan", () => {
     const found = planForDate(plan(), "2026-08-05");
     expect(found!.day!.lunch).toBe("Comida S0D2");
+  });
+
+  it("un slot sin plato no aparece — antes solo pasaba con el snack", () => {
+    const p = plan();
+    p.weeks[0]!.days[2] = day("Miércoles", "", "Tortilla"); // sin comida ese día
+    const meals = mealsForDate(p, "2026-08-05");
+    expect(meals.some((m) => m.slot === "comida")).toBe(false);
+    expect(meals.some((m) => m.slot === "cena")).toBe(true);
+  });
+
+  it("selectedSlots descarta un slot con contenido si la persona no lo planifica (bug de la merienda espejada)", () => {
+    // Caso del issue: un plato mirado desde el compartido del hogar puede
+    // traer contenido en un slot que esta persona excluyó a propósito.
+    const meals = mealsForDate(plan(), "2026-08-05", ["comida", "cena"]);
+    expect(meals.map((m) => m.slot).sort()).toEqual(["cena", "comida"]);
+  });
+
+  it("selectedSlots vacío deja el día sin ninguna comida", () => {
+    expect(mealsForDate(plan(), "2026-08-05", [])).toEqual([]);
+  });
+});
+
+describe("cleanMealSlots", () => {
+  it("descarta valores desconocidos y duplicados, conservando el orden de MEAL_SLOTS", () => {
+    expect(cleanMealSlots(["cena", "cena", "comida", "friolento"])).toEqual(["comida", "cena"]);
+  });
+
+  it("vuelve a las cuatro si no queda ningún valor válido o el dato no es un array", () => {
+    expect(cleanMealSlots(["nada-reconocible"])).toEqual(["desayuno", "comida", "cena", "snack"]);
+    expect(cleanMealSlots(null)).toEqual(["desayuno", "comida", "cena", "snack"]);
+    expect(cleanMealSlots(undefined)).toEqual(["desayuno", "comida", "cena", "snack"]);
+  });
+});
+
+describe("parseMealSlotsLegacy", () => {
+  it("reconoce cada comida por su nombre en una frase libre", () => {
+    expect(parseMealSlotsLegacy("Comida y cena")).toEqual(["comida", "cena"]);
+    expect(parseMealSlotsLegacy("desayuno, comida, cena")).toEqual(["desayuno", "comida", "cena"]);
+    expect(parseMealSlotsLegacy("Solo quiero la merienda")).toEqual(["snack"]);
+    expect(parseMealSlotsLegacy("almuerzo y cena, nada más")).toEqual(["comida", "cena"]);
+  });
+
+  it("no confunde 'comida' dentro de otra palabra (límite de palabra)", () => {
+    // "comidas" en "todas las comidas" no debe colarse como si dijera "comida".
+    expect(parseMealSlotsLegacy("todas las comidas por favor")).toBeNull();
+  });
+
+  it("devuelve null sin ninguna comida reconocible, o con texto vacío", () => {
+    expect(parseMealSlotsLegacy("no sé, lo que sea")).toBeNull();
+    expect(parseMealSlotsLegacy("")).toBeNull();
+    expect(parseMealSlotsLegacy(null)).toBeNull();
+    expect(parseMealSlotsLegacy(undefined)).toBeNull();
+  });
+});
+
+describe("effectiveMealSlots", () => {
+  it("meal_slots estructurado manda si lo hay", () => {
+    expect(
+      effectiveMealSlots({ meal_slots: ["comida", "cena"], meals_to_plan: "desayuno" }),
+    ).toEqual(["comida", "cena"]);
+  });
+
+  it("sin meal_slots, cae a interpretar el texto libre antiguo", () => {
+    expect(effectiveMealSlots({ meal_slots: null, meals_to_plan: "Comida y cena" })).toEqual([
+      "comida",
+      "cena",
+    ]);
+  });
+
+  it("sin ninguno de los dos, todas las comidas (el comportamiento de siempre)", () => {
+    expect(effectiveMealSlots({})).toEqual(["desayuno", "comida", "cena", "snack"]);
+    expect(effectiveMealSlots({ meal_slots: [], meals_to_plan: null })).toEqual([
+      "desayuno",
+      "comida",
+      "cena",
+      "snack",
+    ]);
   });
 });
 

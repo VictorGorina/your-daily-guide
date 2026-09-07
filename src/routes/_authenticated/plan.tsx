@@ -47,6 +47,7 @@ import {
   capitalizeFirst,
   coverageRatio,
   daysInMonth,
+  effectiveMealSlots,
   eur,
   homeTotal,
   isMonthActionable,
@@ -558,7 +559,7 @@ function PlanPage() {
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
             {isSoloPlanner
-              ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, snacks y los días que no compartís).`
+              ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, meriendas y los días que no compartís).`
               : monthStatus === "next-unlocked"
                 ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
                 : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
@@ -655,6 +656,7 @@ function PlanPage() {
                 monthStatus={monthStatus}
                 appStartedOn={appStartedOn}
                 householdChildren={hh?.children}
+                selectedMealSlots={effectiveMealSlots(profileQ.data ?? {})}
                 onOpenDay={setOpenDay}
               />
 
@@ -779,7 +781,7 @@ function PlanPage() {
                   <div className="surface-card p-5 text-center">
                     <p className="text-sm text-muted-foreground">
                       Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
-                      snacks y los días que no compartís) y aparecerá aquí.
+                      meriendas y los días que no compartís) y aparecerá aquí.
                     </p>
                     {actionable ? (
                       <button

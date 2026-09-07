@@ -52,7 +52,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:ios": "eas build --platform ios --profile production",
-    "submit:ios": "eas submit --platform ios --latest"
+    "submit:ios": "eas submit --platform ios --latest",
+    "lint": "expo lint"
   },
   "private": true
 }

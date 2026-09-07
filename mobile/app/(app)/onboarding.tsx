@@ -36,6 +36,7 @@ import { apiPost } from "../../lib/api";
 import { ageFromDOB } from "../../lib/age";
 import { addMessage, fetchProfile, monthISO, saveProfile, todayISO } from "../../lib/daily";
 import type { OnboardingDraft } from "../../lib/onboarding";
+import type { MealSlot } from "../../lib/plan-shared";
 import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
 /**
@@ -224,9 +225,35 @@ const CUISINE_Q: Question = {
 
 const MEALS_TO_PLAN_Q: Question = {
   q: "¿Qué comidas quieres que te planifique y te incluya en la compra?",
-  chips: ["Desayuno", "Comida", "Cena", "Snacks"],
+  chips: ["Desayuno", "Comida", "Cena", "Merienda"],
   multi: true,
 };
+
+/**
+ * De la etiqueta de cada chip a la clave interna de la comida. Se usa para
+ * guardar `meal_slots` directamente de la respuesta elegida, sin pasar por
+ * `parseOnboarding`: ese paso manda toda la conversación a la IA para
+ * resumirla en frases, y una selección de chips clara ("Comida, Cena") podía
+ * volver convertida en una frase que ya no se podía interpretar de vuelta con
+ * seguridad. Aquí no hace falta adivinar nada — el chip ya dice exactamente
+ * qué slot es.
+ */
+const MEAL_CHIP_TO_SLOT: Record<string, MealSlot> = {
+  Desayuno: "desayuno",
+  Comida: "comida",
+  Cena: "cena",
+  Merienda: "snack",
+};
+
+/** `meal_slots` a partir de la respuesta cruda a `MEALS_TO_PLAN_Q` ("Comida, Cena"). */
+function mealSlotsFromRawAnswer(raw: string | undefined): MealSlot[] | null {
+  if (!raw) return null;
+  const slots = raw
+    .split(",")
+    .map((s) => MEAL_CHIP_TO_SLOT[s.trim()])
+    .filter((s): s is MealSlot => !!s);
+  return slots.length ? slots : null;
+}
 
 const KITCHEN_EQUIPMENT_Q: Question = {
   q: "¿Con qué cuentas en la cocina?",
@@ -830,10 +857,15 @@ export default function Onboarding() {
   const saveAll = async (draft: Draft, extra: Partial<Draft>) => {
     setSaving(true);
     const d = { ...draft, ...extra };
+    // La clave en `answers` es posicional ("2-5"), así que se busca el nodo
+    // por identidad del objeto Question en vez de asumir una posición fija.
+    const mealsKey = buildFlat(answers).find((n) => n.q === MEALS_TO_PLAN_Q)?.key;
+    const meal_slots = mealSlotsFromRawAnswer(mealsKey ? answers[mealsKey] : undefined);
     try {
       const existing = await fetchProfile();
       await saveProfile({
         app_started_on: existing?.app_started_on ?? todayISO(),
+        meal_slots,
         timezone: resolveDeviceTimeZone(),
         display_name: d.display_name,
         age: d.age,

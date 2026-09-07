@@ -110,7 +110,7 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
         key: "meals_to_plan",
         label: "Comidas que quieres que te planifique",
         kind: "text",
-        help: "desayuno, comida, cena, snacks",
+        help: "desayuno, comida, cena, merienda",
       },
       { key: "meal_schedule", label: "Dónde y cuándo comes", kind: "long" },
       { key: "diet_pattern", label: "Tipo de alimentación", kind: "text" },

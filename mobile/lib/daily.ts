@@ -2,6 +2,7 @@ import { cleanSharedSlots, type SharedSlots } from "./household-shared";
 import { composeMonthlyPlanForMember, mealsForDate } from "./plan-shared";
 import { supabase } from "./supabase";
 import type {
+  MealSlot,
   MonthlyPlan,
   PantryExtra,
   ShoppingList,
@@ -61,6 +62,10 @@ export type Profile = {
   cuisine_preference: string | null;
   portions_per_meal: string | null;
   meals_to_plan: string | null;
+  /** Slots elegidos en el onboarding — ver `effectiveMealSlots` en
+   *  plan-shared.ts, que es quien de verdad decide qué se planifica: esta
+   *  columna manda si está, si no cae a interpretar `meals_to_plan`. */
+  meal_slots: MealSlot[] | null;
   kitchen_equipment: string | null;
   cooking_skill: string | null;
   strength_training_experience: string | null;
@@ -166,9 +171,18 @@ export async function fetchProfile(): Promise<Profile | null> {
 export async function saveProfile(patch: Partial<Profile>) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Sin sesión");
+  // `meal_slots` (slots elegidos para el plan, issue 04) manda sobre el texto
+  // libre `meals_to_plan` cuando los dos están presentes. Si un cambio toca
+  // solo el texto —lo hacen el coach (`actualizar_perfil`) y la pantalla "Mis
+  // respuestas"— hay que limpiar el valor estructurado, o `effectiveMealSlots`
+  // seguiría devolviendo la elección vieja del onboarding y el cambio no
+  // tendría efecto. El onboarding manda los dos campos a la vez, así que su
+  // elección explícita gana y este ajuste no se activa.
+  const next =
+    "meals_to_plan" in patch && !("meal_slots" in patch) ? { ...patch, meal_slots: null } : patch;
   const { error } = await supabase
     .from("profiles")
-    .upsert({ id: auth.user.id, ...patch } as never, { onConflict: "id" });
+    .upsert({ id: auth.user.id, ...next } as never, { onConflict: "id" });
   if (error) throw error;
 }
 

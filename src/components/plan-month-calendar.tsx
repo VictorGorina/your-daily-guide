@@ -11,6 +11,7 @@ import {
   mealsForDate,
   offListNote,
   planForDate,
+  type MealSlot,
   type MonthlyPlan,
   type PlanMonthStatus,
 } from "@/lib/plan-shared";
@@ -39,6 +40,7 @@ export function PlanMonthCalendar({
   monthStatus,
   appStartedOn,
   householdChildren,
+  selectedMealSlots,
   onOpenDay,
 }: {
   plan: MonthlyPlan | null;
@@ -48,6 +50,9 @@ export function PlanMonthCalendar({
   appStartedOn: string | null;
   /** Niños de la casa, para enseñar su plato aparte cuando el compartido no vale (issue 07). */
   householdChildren?: { id: string; name: string }[];
+  /** Comidas que esta persona planifica; cinturón extra sobre el filtro por
+   *  contenido de `mealsForDate` (ver hoy.tsx para el porqué). */
+  selectedMealSlots: readonly MealSlot[];
   onOpenDay: (date: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -71,7 +76,7 @@ export function PlanMonthCalendar({
   ];
 
   const detail = selected ? planForDate(plan, selected) : null;
-  const meals = selected ? mealsForDate(plan, selected).filter((mm) => mm.idea) : [];
+  const meals = selected ? mealsForDate(plan, selected, selectedMealSlots) : [];
   // Platos aparte de los niños ese día (issue 07), por slot, para colgarlos bajo
   // el plato compartido correspondiente.
   const kidMealsBySlot = new Map<string, { name: string; dish: string; off: string[] }[]>();

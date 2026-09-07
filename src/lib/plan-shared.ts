@@ -15,8 +15,75 @@ export const MEAL_SLOT_LABEL: Record<MealSlot, string> = {
   desayuno: "Desayuno",
   comida: "Comida",
   cena: "Cena",
-  snack: "Snack",
+  // La clave interna sigue siendo "snack" (identificadores en inglés, textos
+  // en español) pero en castellano de casa esta comida se llama merienda.
+  snack: "Merienda",
 };
+
+/**
+ * Comidas que se pueden elegir en el onboarding para que el plan las incluya.
+ * Todas por defecto: es el comportamiento de siempre (y el de un perfil sin
+ * `meal_slots` ni `meals_to_plan` interpretable).
+ */
+export const DEFAULT_MEAL_SLOTS: readonly MealSlot[] = MEAL_SLOTS;
+
+/** ¿Es una de las cuatro claves válidas de comida? */
+const isMealSlot = (v: unknown): v is MealSlot =>
+  (MEAL_SLOTS as readonly string[]).includes(v as string);
+
+/**
+ * Valida/depura una lista de slots (columna `meal_slots` del perfil, tal cual
+ * llega de la base de datos): descarta valores desconocidos y duplicados: si
+ * no queda ninguno válido, vuelve a "todas" — nunca un plan vacío por un dato
+ * corrupto o una migración a medias.
+ */
+export function cleanMealSlots(raw: unknown): MealSlot[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_MEAL_SLOTS];
+  const seen = new Set<MealSlot>();
+  for (const v of raw) if (isMealSlot(v)) seen.add(v);
+  return seen.size ? MEAL_SLOTS.filter((s) => seen.has(s)) : [...DEFAULT_MEAL_SLOTS];
+}
+
+/**
+ * Interpreta el texto libre antiguo de `meals_to_plan` ("Comida y cena",
+ * "desayuno, comida, cena", una frase escrita a mano...) buscando el nombre de
+ * cada comida. Es el respaldo para un perfil sin `meal_slots` todavía —
+ * `effectiveMealSlots` la usa en cada lectura, no solo en la migración de
+ * backfill, porque `meals_to_plan` se puede seguir editando por chat
+ * (`actualizar_perfil`) sin que nadie toque `meal_slots` a la vez.
+ *
+ * Devuelve `null` si el texto no menciona ninguna comida reconocible (para
+ * que quien llama caiga a `DEFAULT_MEAL_SLOTS` en vez de un plan vacío).
+ */
+export function parseMealSlotsLegacy(text: string | null | undefined): MealSlot[] | null {
+  const t = String(text ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (!t.trim()) return null;
+  const found: MealSlot[] = [];
+  if (/desayuno/.test(t)) found.push("desayuno");
+  if (/\bcomida\b|almuerzo/.test(t)) found.push("comida");
+  if (/\bcena\b/.test(t)) found.push("cena");
+  if (/merienda|snack/.test(t)) found.push("snack");
+  return found.length ? found : null;
+}
+
+/**
+ * Slots que de verdad hay que planificar para este perfil: `meal_slots`
+ * (estructurado) si lo hay, si no la interpretación del texto libre antiguo,
+ * y si tampoco eso, todas. Único punto de lectura — así el generador del plan
+ * y las pantallas que lo pintan nunca pueden desincronizarse entre sí.
+ */
+export function effectiveMealSlots(profile: {
+  meal_slots?: unknown;
+  meals_to_plan?: string | null;
+}): MealSlot[] {
+  if (Array.isArray(profile.meal_slots) && profile.meal_slots.length) {
+    return cleanMealSlots(profile.meal_slots);
+  }
+  return parseMealSlotsLegacy(profile.meals_to_plan) ?? [...DEFAULT_MEAL_SLOTS];
+}
 
 /** Campo del día donde vive cada comida cuando se cambia a mano. */
 export const MEAL_SLOT_FIELD = {
@@ -1174,29 +1241,43 @@ export type PlanMeal = {
  * Comida y cena salen del día exacto del plan; desayuno y snack usan el plato
  * pedido para ese día si lo hay y, si no, rotan entre las opciones de la semana
  * según el día para dar variedad sin depender de más IA.
+ *
+ * Un slot sin plato (idea vacía) no aparece — antes solo pasaba esto con el
+ * snack; ahora las cuatro comidas se tratan igual, que es lo que hace que
+ * excluir una comida en el onboarding se note de verdad aquí: si
+ * `generateMonthlyPlan` la deja en blanco para ese perfil, deja de salir en
+ * Hoy y en Plan sin que este componente tenga que saber nada de preferencias.
+ *
+ * `selectedSlots`, si se pasa, es un cinturón extra sobre lo anterior: aunque
+ * el día tenga contenido en un slot (p. ej. porque se espejó desde el plato
+ * compartido de otro miembro del hogar — `composeDayForUser` no conoce las
+ * preferencias de cada persona), aquí se descarta igual si esa persona no
+ * quiere ese slot. Se usa en las pantallas (Hoy, Plan, detalle del día); el
+ * resto de usos internos (chat, intercambiar un plato) no lo necesitan.
  */
-export function mealsForDate(plan: MonthlyPlan | null, date: string): PlanMeal[] {
+export function mealsForDate(
+  plan: MonthlyPlan | null,
+  date: string,
+  selectedSlots?: readonly MealSlot[],
+): PlanMeal[] {
   const found = planForDate(plan, date);
   const { dayIndex } = planCursor(date);
   const rotate = (options: string[]) => (options.length ? options[dayIndex % options.length]! : "");
   const day = found?.day ?? null;
   const off = (slot: MealSlot) => day?.extras?.[slot] ?? [];
+  const allowed = selectedSlots ? new Set(selectedSlots) : null;
 
-  const moments: PlanMeal[] = [
-    {
-      moment: MEAL_SLOT_LABEL.desayuno,
-      slot: "desayuno",
-      idea: day?.breakfast || rotate(found?.week.breakfasts ?? []),
-      off: off("desayuno"),
-    },
-    { moment: MEAL_SLOT_LABEL.comida, slot: "comida", idea: day?.lunch ?? "", off: off("comida") },
-    { moment: MEAL_SLOT_LABEL.cena, slot: "cena", idea: day?.dinner ?? "", off: off("cena") },
-  ];
-  const snack = day?.snack || rotate(found?.week.snacks ?? []);
-  if (snack) {
-    moments.push({ moment: MEAL_SLOT_LABEL.snack, slot: "snack", idea: snack, off: off("snack") });
-  }
-  return moments;
+  const meal = (slot: MealSlot, idea: string): PlanMeal | null => {
+    if (!idea || (allowed && !allowed.has(slot))) return null;
+    return { moment: MEAL_SLOT_LABEL[slot], slot, idea, off: off(slot) };
+  };
+
+  return [
+    meal("desayuno", day?.breakfast || rotate(found?.week.breakfasts ?? [])),
+    meal("comida", day?.lunch ?? ""),
+    meal("cena", day?.dinner ?? ""),
+    meal("snack", day?.snack || rotate(found?.week.snacks ?? [])),
+  ].filter((m): m is PlanMeal => m !== null);
 }
 
 /**

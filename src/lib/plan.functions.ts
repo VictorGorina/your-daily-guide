@@ -32,6 +32,7 @@ import {
   completePlan,
   composeMonthlyPlanForMember,
   coverageRatio,
+  effectiveMealSlots,
   daysInMonth,
   formatQty,
   ingredientNames,
@@ -256,6 +257,41 @@ function blankSharedSlots(plan: MonthlyPlan, sharedSlots: SharedSlots): MonthlyP
   };
 }
 
+/**
+ * Vacía en un plan las comidas de un slot que la persona no eligió planificar
+ * (`effectiveMealSlots`, slots elegidos para el plan). Es el cinturón, no el único freno: el
+ * prompt ya le pide a la IA que no rellene esos slots, pero un modelo no
+ * siempre obedece al pie de la letra, así que esto lo garantiza pase lo que
+ * pase. `mealsForDate` (plan-shared.ts) es el otro cinturón, en el lado de
+ * lectura: aunque quedara contenido aquí por lo que sea, ese filtro de
+ * pantalla tampoco lo enseñaría.
+ */
+function blankUnselectedSlots(plan: MonthlyPlan, selected: readonly MealSlot[]): MonthlyPlan {
+  const wants = new Set(selected);
+  const keep = (slot: MealSlot) => wants.has(slot);
+  return {
+    ...plan,
+    weeks: plan.weeks.map((week) => ({
+      ...week,
+      breakfasts: keep("desayuno") ? week.breakfasts : [],
+      snacks: keep("snack") ? week.snacks : [],
+      days: week.days.map((day) => {
+        const next: PlanDay = { ...day };
+        if (!keep("desayuno")) delete next.breakfast;
+        if (!keep("comida")) next.lunch = "";
+        if (!keep("cena")) next.dinner = "";
+        if (!keep("snack")) delete next.snack;
+        // El plato aparte de un niño (issue 07) tampoco tiene sentido en un
+        // slot que la persona ni planifica para sí misma.
+        const kids = (next.kids ?? []).filter((k) => keep(k.slot));
+        if (kids.length) next.kids = kids;
+        else delete next.kids;
+        return next;
+      }),
+    })),
+  };
+}
+
 /** Pide el JSON al modelo en streaming (evita cortes por timeout) y lo intenta varias veces. */
 async function askForJson<T>(
   opts: { key: string; system: string; prompt: string },
@@ -399,6 +435,23 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
 
+    // Qué comidas quiere que se le planifiquen (issue merienda/slots elegidos):
+    // único punto de lectura, compartido con `mealsForDate` en la pantalla, así
+    // que el generador y lo que se pinta nunca pueden desincronizarse.
+    const selectedSlots = effectiveMealSlots(
+      (profile ?? {}) as { meal_slots?: unknown; meals_to_plan?: string | null },
+    );
+    const mealSlotsLine =
+      selectedSlots.length < MEAL_SLOTS.length
+        ? `COMIDAS A PLANIFICAR: solo ${selectedSlots.map((s) => MEAL_SLOT_LABEL[s].toLowerCase()).join(", ")}. No propongas nada para ${MEAL_SLOTS.filter(
+            (s) => !selectedSlots.includes(s),
+          )
+            .map((s) => MEAL_SLOT_LABEL[s].toLowerCase())
+            .join(
+              ", ",
+            )}: deja esos campos vacíos ("" en "lunch"/"dinner", sin platos de desayuno/merienda) y no incluyas sus ingredientes en la compra. `
+        : "";
+
     const today = data.today;
     const coverage = monthCoverage(data.month, today);
     const coveredDays = coverage.toDay - coverage.fromDay + 1;
@@ -523,6 +576,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
           `${cadenceLine} ` +
           "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
           "Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: en las comidas fuera de casa propón una opción de menú o restaurante y no cuentes sus ingredientes en la compra. " +
+          `${mealSlotsLine}` +
           `${servingsLine}` +
           `${kidsLine}` +
           "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
@@ -548,9 +602,13 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
     // una comida compartida, se vacía aquí — la fila de un no planificador
     // nunca guarda el plato de una comida de la casa (lo pone el espejo).
-    const planBody = isNonPlannerInHousehold
+    const sharedBlanked = isNonPlannerInHousehold
       ? blankSharedSlots(rawPlan, home.sharedSlots)
       : rawPlan;
+    // Cinturón para las comidas que esta persona no quiere planificar en
+    // absoluto (independiente de si comparte mesa o no): `mealSlotsLine` ya
+    // se lo pidió a la IA, esto lo garantiza aunque no haya obedecido.
+    const planBody = blankUnselectedSlots(sharedBlanked, selectedSlots);
     const plan: MonthlyPlan = { ...planBody, coverage, cadence: data.cadence };
 
     const { error } = await context.supabase.from("monthly_plans").upsert(
@@ -1154,6 +1212,20 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
       ? `REGLA 5: Hay comidas compartidas en tu casa que lleva ${plannerName}: ${describeSharedSlots(home.sharedSlots)}. NO las toques — devuélvelas exactamente igual que en el plan actual. Ajusta solo tus comidas en solitario.\n`
       : "";
 
+    // Comidas que esta persona quiere planificar (ver generateMonthlyPlan):
+    // una recolocación tampoco debe reintroducir un slot que ya excluyó.
+    const selectedSlots = effectiveMealSlots(
+      p as { meal_slots?: unknown; meals_to_plan?: string | null },
+    );
+    const mealSlotsLine =
+      selectedSlots.length < MEAL_SLOTS.length
+        ? `REGLA 6: solo planifica ${selectedSlots.map((s) => MEAL_SLOT_LABEL[s].toLowerCase()).join(", ")}. No propongas nada para ${MEAL_SLOTS.filter(
+            (s) => !selectedSlots.includes(s),
+          )
+            .map((s) => MEAL_SLOT_LABEL[s].toLowerCase())
+            .join(", ")}: esos campos se quedan vacíos.\n`
+        : "";
+
     const plan = await askForJson(
       {
         key,
@@ -1173,6 +1245,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
           `REGLA 3: ${kcalLine}\n` +
           "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
           `${sharedSlotsLine}` +
+          `${mealSlotsLine}` +
           "Actualiza 'intro' con 1-2 frases explicando en lenguaje sencillo qué has recolocado y por qué. " +
           'Devuelve solo JSON válido con la misma forma: {"intro": string, "focus": [3 strings], "weeks": [{"label", "focus", "breakfasts": [..], "snacks": [..], "days": [{"day","lunch","dinner"}]}]}. Sin markdown.',
       },
@@ -1183,9 +1256,12 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
     // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
     // `current` (congelado) — un no planificador nunca puede acabar
     // escribiendo, ni por accidente, el plato de una comida de la casa.
-    const final = isNonPlannerInHousehold
+    const sharedComposed = isNonPlannerInHousehold
       ? (composeMonthlyPlanForMember(merged, current, home.sharedSlots) ?? merged)
       : merged;
+    // Mismo cinturón que en generateMonthlyPlan: si la IA reintrodujo un slot
+    // que la persona no quiere planificar, se vacía aquí también.
+    const final = blankUnselectedSlots(sharedComposed, selectedSlots);
 
     const { error } = await context.supabase
       .from("monthly_plans")

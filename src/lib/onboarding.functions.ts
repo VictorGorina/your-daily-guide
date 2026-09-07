@@ -119,7 +119,7 @@ export const parseOnboarding = createServerFn({ method: "POST" })
         '"disliked_foods": string (ingredientes que no le gustan o no quiere ver en sus platos, distinto de alergias)|null, ' +
         '"cuisine_preference": string (tipos de cocina o de plato que más le gustan)|null, ' +
         '"portions_per_meal": string (para cuántas raciones cocina cada comida, puede variar entre semana y finde)|null, ' +
-        '"meals_to_plan": string (qué comidas quiere que se le planifiquen y se le incluyan en la compra: desayuno, comida, cena, snacks)|null, ' +
+        '"meals_to_plan": string (qué comidas quiere que se le planifiquen y se le incluyan en la compra: desayuno, comida, cena, merienda)|null, ' +
         '"kitchen_equipment": string (utensilios de cocina con los que cuenta: horno, air fryer, olla lenta...)|null, ' +
         '"cooking_skill": "básico"|"cómodo"|"avanzado"|null, ' +
         '"strength_training_experience": "ninguna"|"menos de 1 año"|"1-3 años"|"más de 3 años"|null, ' +

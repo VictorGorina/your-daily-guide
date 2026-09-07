@@ -1,7 +1,45 @@
 # 04 — Comidas: "merienda" en vez de "snack", y respetar las que se piden
 
-Status: sin empezar
+Status: hecho, sin commitear (verificado en navegador con perfil demo)
 Incidencia del usuario: ⓸
+
+## Cómo quedó
+
+- `MEAL_SLOT_LABEL.snack` → "Merienda" (web + móvil). Chips del onboarding "Snacks" → "Merienda".
+  Copy de pantalla revisado: `plan.tsx` (texto del planificador en solitario), `hogar.tsx`
+  ("la merienda siempre es individual"), fallback de `guide.functions.ts`. Los identificadores
+  internos y la clave JSON `snacks`/`snack` no se tocan.
+- Columna nueva `profiles.meal_slots text[]` + CHECK (`20260907130000_profiles_meal_slots.sql`,
+  ya aplicada a la base de datos). **Sin backfill a propósito**: `effectiveMealSlots` interpreta
+  el `meals_to_plan` antiguo en cada lectura (`parseMealSlotsLegacy`), así que un perfil viejo
+  o editado solo por chat sigue funcionando.
+- Único punto de lectura: `effectiveMealSlots` (`plan-shared.ts`, web + móvil) — `meal_slots`
+  estructurado manda; si no, texto libre interpretado; si tampoco, las cuatro. Tests en
+  `plan-shared.test.ts` (`cleanMealSlots`, `parseMealSlotsLegacy`, `effectiveMealSlots`,
+  `mealsForDate` con `selectedSlots`).
+- El onboarding guarda `meal_slots` directo de la respuesta cruda a los chips
+  (`mealSlotsFromRawAnswer`), sin pasar por `parseOnboarding` (la IA lo volvía frase). Manda
+  los dos campos a la vez.
+- Editar solo el texto libre (pantalla "Mis respuestas" o coach `actualizar_perfil`) limpia
+  `meal_slots` — la regla está centralizada en `saveProfile` (`daily.ts`, web + móvil), no
+  repetida en cada llamador.
+- Se hace cumplir en tres capas: (1) el prompt de `generateMonthlyPlan` y `adjustMonthlyPlan`
+  pide solo los slots elegidos; (2) `blankUnselectedSlots` los vacía por código tras la IA;
+  (3) `mealsForDate(plan, date, selectedSlots)` los filtra al pintar en Hoy, Plan y el detalle
+  del día (web + móvil). La tercera capa además tapa el caso de una comida espejada del hogar
+  que traiga contenido en un slot que esa persona no planifica.
+
+## Verificado (perfil demo, navegador)
+
+- `effectiveMealSlots` con el código real: texto libre "Desayuno, comida y cena" → sin merienda;
+  `meal_slots` estructurado gana al texto; perfil vacío → las cuatro.
+- `mealsForDate` sobre el plan real del demo: pasar `["comida","cena"]` quita el desayuno
+  aunque el día tenga `breakfast`.
+- `saveProfile({ meals_to_plan })` a secas deja `meal_slots` en `null`; con los dos campos,
+  respeta el `meal_slots` explícito.
+- `bun run lint` / `typecheck` / `test` (233) y `tsc` de móvil, verdes.
+- Pendiente de una prueba con regeneración de plan real (llamada de pago); las tres capas de
+  arriba lo cubren igualmente.
 
 ## Objetivo
 

@@ -50,7 +50,7 @@ const fallback: GeneratedGuide = {
     { moment: "Desayuno", idea: "Yogur con fruta y un puñado de frutos secos" },
     { moment: "Comida", idea: "Pollo o legumbre con verduras asadas y arroz" },
     { moment: "Cena", idea: "Tortilla de verduras con ensalada" },
-    { moment: "Snack", idea: "Fruta de temporada o un puñado de almendras" },
+    { moment: "Merienda", idea: "Fruta de temporada o un puñado de almendras" },
   ],
   tips: [
     "Bebe unos 2 litros de agua a lo largo del día",
@@ -111,7 +111,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
           '{"intro": string (1 frase cálida y motivadora, sin presión), "calories": string (rango orientativo, nunca una cifra rígida), "macros": string (orientación de macros en una frase), ' +
           '"macroEstimate": null o {"kcal": number, "protein_g": number, "carbs_g": number, "fat_g": number, "fiber_g": number} (estimación aproximada del total del día — es una guía orientativa, no un conteo nutricional exacto, así que da tu mejor cálculo razonable), ' +
           '"mealMacros": null o un array con un objeto {"moment": string, "kcal": number, "protein_g": number, "carbs_g": number, "fat_g": number, "fiber_g": number} por cada plato real de hoy que te doy abajo (mismo "moment" exacto, uno por plato — la suma de todos debería aproximarse a "macroEstimate"), ' +
-          '"behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Snack", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
+          '"behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Merienda", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
           dishesLine +
           "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
       });

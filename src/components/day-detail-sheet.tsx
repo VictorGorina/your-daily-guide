@@ -20,6 +20,7 @@ import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import {
   capitalizeFirst,
   childMealsForDate,
+  effectiveMealSlots,
   isBeforeAppStart,
   mealsForDate,
   offListNote,
@@ -119,12 +120,15 @@ export function DayDetailBody({
 
   const editable = date < todayISO();
   const beforeStart = isBeforeAppStart(date, profile?.app_started_on);
+  const mySlots = effectiveMealSlots(profile ?? {});
 
   // Si ese día no tiene registro (la persona no abrió la app), se parte de las
   // comidas del plan para poder rellenarlo. Antes salía "No registraste ninguna
   // comida" sin forma de corregirlo. Solo para días editables y posteriores al
-  // alta; `updateLogByDate` crea la fila en el primer cambio.
-  const planHabits: DailyLog["habits"] = mealsForDate(plan, date).map((m) => ({
+  // alta; `updateLogByDate` crea la fila en el primer cambio. Antes esto no
+  // filtraba por `.idea`: un slot sin plato colaba igualmente un hábito vacío
+  // ("Desayuno: false") que se podía marcar como hecho sin haber existido.
+  const planHabits: DailyLog["habits"] = mealsForDate(plan, date, mySlots).map((m) => ({
     label: m.moment,
     done: false,
   }));

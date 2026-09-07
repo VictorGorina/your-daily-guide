@@ -57,9 +57,11 @@ import {
   capitalizeFirst,
   childMealsForDate,
   childPureeGaps,
+  effectiveMealSlots,
   mealsForDate,
   offListNote,
   type MealChange,
+  type MealSlot,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
 import { fillChildMeals, generateMonthlyPlan } from "@/lib/plan.functions";
@@ -227,7 +229,12 @@ function Hoy() {
   }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
   const today0 = todayISO();
-  const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0);
+  // Cinturón extra sobre el filtro por contenido de `mealsForDate`: si el
+  // plato de hoy vino espejado de una comida compartida del hogar (que no
+  // sabe de las preferencias de cada persona), esto lo descarta igual cuando
+  // esta persona no planifica ese slot.
+  const mySlots = effectiveMealSlots(profileQ.data ?? {});
+  const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0, mySlots);
   const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
   /** Who is eating at home for this meal today? Returns null if no household or not a main meal. */
   const mealCompanions = (label: string) => {
@@ -867,7 +874,7 @@ function Hoy() {
             />
           </div>
         ) : openDay ? (
-          <DayMenu date={openDay} plan={planQ.data?.plan ?? null} />
+          <DayMenu date={openDay} plan={planQ.data?.plan ?? null} selectedSlots={mySlots} />
         ) : null}
         <p className="mt-2.5 px-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
           {openDay && openDay < todayISO()
@@ -952,10 +959,18 @@ function Hoy() {
   );
 }
 
-function DayMenu({ date, plan }: { date: string; plan: MonthlyPlan | null }) {
+function DayMenu({
+  date,
+  plan,
+  selectedSlots,
+}: {
+  date: string;
+  plan: MonthlyPlan | null;
+  selectedSlots: readonly MealSlot[];
+}) {
   // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
   // para ese día), no la lista entera de desayunos de la semana.
-  const meals = mealsForDate(plan, date).filter((m) => m.idea);
+  const meals = mealsForDate(plan, date, selectedSlots);
   const label = capitalizeFirst(
     new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
       weekday: "long",

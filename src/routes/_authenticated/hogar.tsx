@@ -827,8 +827,8 @@ function Hogar() {
             {showHelp ? (
               <p className="mt-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
                 Cada persona indica qué días come en casa para cada comida. Si varios coincidís,{" "}
-                {plannerName} planifica el plato compartido. Si comes solo, tu plan va aparte. El
-                snack siempre es individual.
+                {plannerName} planifica el plato compartido. Si comes solo, tu plan va aparte. La
+                merienda siempre es individual.
               </p>
             ) : null}
 

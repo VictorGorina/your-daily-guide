@@ -61,6 +61,7 @@ import {
   childMealsForDate,
   coverageRatio,
   daysInMonth,
+  effectiveMealSlots,
   eur,
   homeTotal,
   isBeforeAppStart,
@@ -79,6 +80,7 @@ import {
   tripsOfCadence,
   tripTiming,
   WEEK_COUNT,
+  type MealSlot,
   type MonthlyPlan,
   type PantryExtra,
   type PlanCoverage,
@@ -570,7 +572,7 @@ export default function Plan() {
             </Text>
             <Text className="mt-1.5 text-center text-sm text-muted-foreground">
               {isSoloPlanner
-                ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, snacks y los días que no compartís).`
+                ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, meriendas y los días que no compartís).`
                 : monthStatus === "next-unlocked"
                   ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
                   : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
@@ -680,6 +682,7 @@ export default function Plan() {
                   monthStatus={monthStatus}
                   appStartedOn={appStartedOn}
                   householdChildren={hh?.children}
+                  selectedMealSlots={effectiveMealSlots(profileQ.data ?? {})}
                   onOpenDay={setOpenDay}
                 />
 
@@ -785,7 +788,7 @@ export default function Plan() {
                     <View className="items-center rounded-3xl bg-surface p-5">
                       <Text className="text-center text-sm text-muted-foreground">
                         Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
-                        snacks y los días que no compartís) y aparecerá aquí.
+                        meriendas y los días que no compartís) y aparecerá aquí.
                       </Text>
                       {actionable ? (
                         <Pressable
@@ -896,6 +899,7 @@ function PlanMonthCalendar({
   monthStatus,
   appStartedOn,
   householdChildren,
+  selectedMealSlots,
   onOpenDay,
 }: {
   plan: MonthlyPlan | null;
@@ -905,6 +909,9 @@ function PlanMonthCalendar({
   appStartedOn: string | null;
   /** Niños de la casa, para el plato aparte cuando el compartido no vale (issue 07). */
   householdChildren?: { id: string; name: string }[];
+  /** Comidas que esta persona planifica; cinturón extra sobre el filtro por
+   *  contenido de `mealsForDate` (ver hoy.tsx para el porqué). */
+  selectedMealSlots: readonly MealSlot[];
   onOpenDay: (date: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -925,7 +932,7 @@ function PlanMonthCalendar({
   ];
 
   const detail = selected ? planForDate(plan, selected) : null;
-  const meals = selected ? mealsForDate(plan, selected).filter((meal) => meal.idea) : [];
+  const meals = selected ? mealsForDate(plan, selected, selectedMealSlots) : [];
   // Platos aparte de los niños ese día (issue 07), por slot.
   const kidMealsBySlot = new Map<string, { name: string; dish: string; off: string[] }[]>();
   if (selected) {
