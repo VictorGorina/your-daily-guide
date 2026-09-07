@@ -23,6 +23,7 @@ import {
   isMonthActionable,
   isNextMonthUnlocked,
   mealsForDate,
+  monthParts,
   mergeFuturePlan,
   type MonthlyPlan,
   monthCoverage,
@@ -900,11 +901,37 @@ describe("normalizeUnit / formatQty / parseQtyLegacy", () => {
     expect(formatQty(3, "ud")).toBe("3 ud");
   });
 
+  it("redondea a un paso comprable en vez de al gramo exacto (issue 03)", () => {
+    // Datos reales del bug (perfil demo, cadencia semanal): nadie compra
+    // "214 g" de zanahoria. Cada tramo escala con la magnitud.
+    expect(formatQty(214, "g")).toBe("200 g"); // 100-1000 → media centena
+    expect(formatQty(143, "g")).toBe("150 g");
+    expect(formatQty(286, "g")).toBe("300 g");
+    expect(formatQty(357, "ml")).toBe("350 ml");
+    expect(formatQty(179, "g")).toBe("200 g");
+    expect(formatQty(71, "g")).toBe("70 g"); // 10-100 → decena
+    // Nunca a cero: por debajo de 10 no se toca, aunque no sea un número redondo.
+    expect(formatQty(7, "g")).toBe("7 g");
+    expect(formatQty(1, "g")).toBe("1 g");
+    // Por encima de 1000 (ya en kg) redondea al medio kilo.
+    expect(formatQty(1430, "g")).toBe("1,5 kg");
+    expect(formatQty(1150, "g")).toBe("1 kg");
+    // Las unidades sueltas no se tocan: siguen al entero más próximo de siempre.
+    expect(formatQty(4.4, "ud")).toBe("4 ud");
+  });
+
   it("interpreta el qty de texto libre de una lista antigua", () => {
     expect(parseQtyLegacy("2 kg")).toEqual({ value: 2000, unit: "g" });
     expect(parseQtyLegacy("1,5 l")).toEqual({ value: 1500, unit: "ml" });
     expect(parseQtyLegacy("3 unidades")).toEqual({ value: 3, unit: "ud" });
     expect(parseQtyLegacy("al gusto")).toBeNull();
+  });
+});
+
+describe("monthParts", () => {
+  it("separa mes y año en vez de partir la cadena ya formateada", () => {
+    expect(monthParts("2026-09")).toEqual({ monthName: "septiembre", year: "2026" });
+    expect(monthParts("2027-01")).toEqual({ monthName: "enero", year: "2027" });
   });
 });
 

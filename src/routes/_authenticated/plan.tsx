@@ -50,6 +50,7 @@ import {
   eur,
   homeTotal,
   isMonthActionable,
+  monthParts,
   monthTitle,
   pendingTotal,
   planMonthStatus,
@@ -502,8 +503,17 @@ function PlanPage() {
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <h1 className="min-w-0 flex-1 truncate text-center font-title text-[28px] font-semibold tracking-[-0.03em]">
-              {capitalizeFirst(monthTitle(month))}
+            {/* Dos líneas (mes arriba, año debajo) en vez de una sola con
+                truncate: "Septiembre de 2026" no cabía entre los dos botones
+                de 32 px y se leía "Septiembre de …". El mes solo, sin el año
+                al lado, cabe de sobra incluso en el más largo (septiembre). */}
+            <h1 className="min-w-0 flex-1 text-center leading-tight">
+              <span className="block font-title text-[26px] font-semibold tracking-[-0.03em]">
+                {capitalizeFirst(monthParts(month).monthName)}
+              </span>
+              <span className="block text-[13px] font-medium text-muted-foreground">
+                {monthParts(month).year}
+              </span>
             </h1>
             <button
               type="button"

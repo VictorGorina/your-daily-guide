@@ -388,14 +388,38 @@ export const normName = (s: string) =>
 export const isCanonicalShopping = (shopping: ShoppingList | null | undefined): boolean =>
   !!shopping && shopping.some((g) => g.items.some((i) => Array.isArray(i.weekQty)));
 
+/**
+ * Redondea un peso/volumen a un paso que escale con la magnitud, "a ojo de
+ * comprador": por debajo de 10 no se toca (nada compra en pasos de 10 la
+ * cúrcuma o el curry — bajar de "7 g" a "0 g" perdería el ingrediente por
+ * completo), de 10 a 100 sube a la decena, de 100 a 1000 a la media centena, y
+ * de ahí para arriba al medio kilo. Antes `formatQty` redondeaba a la unidad
+ * exacta (`Math.round`), y una lista semanal salía con "214 g", "143 g", "7 g":
+ * cantidades que nadie compra tal cual. Solo toca el texto que se enseña — el
+ * dato guardado (`weekQty`/`qtyValue`) no pasa por aquí, así que la invariante
+ * "Σ entre compras = lo que pide el mes" no se mueve un gramo.
+ */
+const roundForBuying = (v: number): number => {
+  if (v < 10) return v;
+  if (v < 100) return Math.round(v / 10) * 10;
+  if (v < 1000) return Math.round(v / 50) * 50;
+  return Math.round(v / 500) * 500;
+};
+
 /** Cantidad legible en español a partir del valor canónico y su unidad. */
 export const formatQty = (value: number, unit: QtyUnit): string => {
-  const v = Math.max(0, Number(value) || 0);
+  const raw = Math.max(0, Number(value) || 0);
   const num = (n: number, digits: number) =>
     n.toLocaleString("es-ES", { maximumFractionDigits: digits });
-  if (unit === "g") return v >= 1000 ? `${num(v / 1000, 2)} kg` : `${num(Math.round(v), 0)} g`;
-  if (unit === "ml") return v >= 1000 ? `${num(v / 1000, 2)} l` : `${num(Math.round(v), 0)} ml`;
-  return `${num(Math.round(v), 0)} ud`;
+  // Las unidades sueltas (huevos, latas, manojos...) ya se compran de una en
+  // una: redondear al alza no ayuda ahí, se queda con el redondeo simple de
+  // siempre.
+  if (unit === "g" || unit === "ml") {
+    const v = roundForBuying(raw);
+    const big = unit === "g" ? "kg" : "l";
+    return v >= 1000 ? `${num(v / 1000, 2)} ${big}` : `${num(v, 0)} ${unit}`;
+  }
+  return `${num(Math.round(raw), 0)} ud`;
 };
 
 /** Gasto real por viaje de compra (índice de `trip` → euros), a mano tras comprar. */
@@ -487,6 +511,22 @@ export const addMonths = (month: string, delta: number): string => {
 /** "2026-08" → "agosto de 2026". */
 export const monthTitle = (month: string): string =>
   new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+
+/**
+ * Mes y año por separado, para pintarlos en dos líneas en la cabecera de Plan
+ * (el mes solo se corta con `numberOfLines={1}` en pantallas estrechas:
+ * "Septiembre de 2026" no cabe en una línea entre los dos botones de
+ * navegación). Cada parte sale de `toLocaleDateString` por su cuenta en vez de
+ * partir la cadena de `monthTitle`: ese formato ("agosto de 2026") depende del
+ * idioma y no es seguro trocearlo por posición.
+ */
+export const monthParts = (month: string): { monthName: string; year: string } => {
+  const date = new Date(`${month}-01T00:00:00`);
+  return {
+    monthName: date.toLocaleDateString("es-ES", { month: "long" }),
+    year: date.toLocaleDateString("es-ES", { year: "numeric" }),
+  };
+};
 
 /**
  * Pone en mayúscula solo la primera letra ("agosto de 2026" → "Agosto de 2026").

@@ -1,6 +1,6 @@
 # 03 — Plan: cabecera del mes en dos líneas y cantidades comprables
 
-Status: sin empezar
+Status: implementado y verificado en producción (2026-09-07)
 Incidencias del usuario: ⓹ (se corta "Septiembre de 2026") + ⓺ (redondear a la decena)
 
 ## Objetivo
@@ -58,3 +58,31 @@ sin escalar su cantidad.
 Zanahoria 214 g · Espinacas frescas 143 g · Calabacín 286 g · Tomate triturado 357 ml
 Salmón congelado 179 g · Pechuga de pollo 357 g · Café 71 g · Cúrcuma 7 g · Curry 7 g
 ```
+
+
+## Hecho — sesión 2026-09-07
+
+Todas las tareas de A y B implementadas en web y móvil. Verificado en real:
+
+- **A (cabecera):** `monthParts(month)` en `plan-shared.ts` deriva mes y año por separado con
+  `toLocaleDateString` (no se trocea la cadena de `monthTitle`, que depende del idioma). La
+  cabecera de Plan pasa a dos líneas — mes en `font-title`, año debajo en `text-muted-foreground`
+  más pequeño — sin `truncate`. Verificado a 390 px con perfil demo: "Septiembre" arriba, "2026"
+  debajo, legible entero, sin descuadre con el candado del mes siguiente (captura tomada).
+- **B (cantidades):** `roundForBuying` en `formatQty` — por debajo de 10 no toca nada, decenas de
+  10 a 100, medias centenas de 100 a 1000, medio kilo por encima. Solo cambia el texto que se
+  pinta; `weekQty`/`qtyValue`/`price_eur` (el dato guardado) no pasan por aquí.
+- **Prueba con un plan real** (perfil demo nuevo, plan generado, cadencia Semanal): "Pechuga de
+  pollo 350 g", "Salmón congelado 200 g", "Aceite de oliva virgen extra 70 ml" — nada de "357 g"
+  ni "179 g". "Jengibre en polvo 7 g" se quedó tal cual (por debajo de 10, nunca a cero) — el caso
+  exacto de la cúrcuma del bug original. Cambiando a cadencia Mensual el total siguió en
+  "115,95 €", idéntico al de antes de tocar la cadencia: la invariante Σ no se movió. Cuenta de
+  prueba borrada al terminar.
+- Tests nuevos en `plan-shared.test.ts` con los valores reales del bug (`formatQty(214,"g")` →
+  "200 g", `formatQty(357,"ml")` → "350 ml", `formatQty(7,"g")` → "7 g", `formatQty(1430,"g")` →
+  "1,5 kg"...) y para `monthParts`. `bun run lint` / `typecheck` / `test` (222 tests) y `tsc` de
+  `mobile/` en verde.
+
+La captura de pantalla del punto A se tomó con `nextIsLocked` en `true` de forma natural (el mes
+que viene estaba fuera de la ventana de `NEXT_MONTH_UNLOCK_DAYS`), así que el candado a la derecha
+de la cabecera de dos líneas quedó verificado sin tener que forzar nada.

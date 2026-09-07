@@ -66,6 +66,7 @@ import {
   isBeforeAppStart,
   isMonthActionable,
   mealsForDate,
+  monthParts,
   monthTitle,
   offListNote,
   pendingTotal,
@@ -506,12 +507,19 @@ export default function Plan() {
               >
                 <ChevronLeft size={20} color="#83796c" />
               </Pressable>
-              <Text
-                className="min-w-0 flex-1 text-center font-heading text-[26px] text-foreground"
-                numberOfLines={1}
-              >
-                {capitalizeFirst(monthTitle(month))}
-              </Text>
+              {/* Dos líneas (mes arriba, año debajo) en vez de una sola con
+                  numberOfLines={1}: "Septiembre de 2026" no cabía entre los
+                  dos botones de 32 px y se leía cortado. El mes solo, sin el
+                  año al lado, cabe de sobra incluso en el más largo
+                  (septiembre). */}
+              <View className="min-w-0 flex-1 items-center">
+                <Text className="text-center font-heading text-[24px] text-foreground">
+                  {capitalizeFirst(monthParts(month).monthName)}
+                </Text>
+                <Text className="text-center text-[13px] font-sans-medium text-muted-foreground">
+                  {monthParts(month).year}
+                </Text>
+              </View>
               <Pressable
                 onPress={() =>
                   nextIsLocked
