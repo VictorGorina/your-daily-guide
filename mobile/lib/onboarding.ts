@@ -15,9 +15,6 @@ export type OnboardingDraft = {
   medications: string | null;
   activity_level: string | null;
   exercise: string | null;
-  work_schedule: string | null;
-  wake_time: string | null;
-  sleep_time: string | null;
   meals_per_day: number | null;
   diet_pattern: string | null;
   non_negotiable_foods: string | null;
@@ -25,7 +22,6 @@ export type OnboardingDraft = {
   goal_type: string | null;
   goal_amount: number | null;
   goal_target_date: string | null;
-  short_term_goal: string | null;
   past_struggles: string | null;
   restrictions: string | null;
   meal_schedule: string | null;
@@ -50,6 +46,4 @@ export type OnboardingDraft = {
   strength_training_experience: string | null;
   supplements: string | null;
   smoking: string | null;
-  tracking_experience: string | null;
-  weigh_in_cadence: string | null;
 };

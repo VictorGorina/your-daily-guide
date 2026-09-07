@@ -188,11 +188,6 @@ const ALCOHOL_Q: Question = {
   chips: ["Nunca", "De vez en cuando", "Con bastante frecuencia"],
 };
 
-const DISLIKED_FOODS_Q: Question = {
-  q: "¿Hay ingredientes que no quieres ver en tus platos?",
-  hint: "Ej.: cilantro, hígado, pescado azul (si no hay ninguno, dime 'ninguno')",
-};
-
 const CUISINE_Q: Question = {
   q: "¿Qué tipo de comida te gusta más?",
   chips: [
@@ -259,11 +254,6 @@ const SMOKING_Q: Question = {
   chips: ["No", "Ocasionalmente", "Sí"],
 };
 
-const WEIGH_IN_CADENCE_Q: Question = {
-  q: "¿Cada cuánto quieres registrar tu peso?",
-  chips: ["Cada semana", "Cada dos semanas", "Te aviso yo cuando quiera"],
-};
-
 /**
  * Solo se pregunta si la respuesta a LIVES_WITH_Q menciona a la pareja: así sabemos
  * si el presupuesto que se pida más adelante (BUDGET_Q) debe ser el de una persona
@@ -317,13 +307,8 @@ const SCREENS: Screen[] = [
       BIRTHDATE_Q,
       BIO_Q,
       {
-        q: "¿Tienes alguna condición médica o estás bajo supervisión médica que deba tener en cuenta?",
-        hint: "Opcional: si no hay nada, pulsa Saltar",
-        optional: true,
-      },
-      {
-        q: "¿Tomas algún medicamento que afecte al apetito, metabolismo o energía? Aprovecho también para preguntarte por suplementos: proteína, creatina, vitaminas...",
-        hint: "Opcional",
+        q: "¿Alguna condición médica, medicación o suplemento que deba tener en cuenta?",
+        hint: "Opcional: condiciones bajo supervisión médica, fármacos que afecten al apetito o la energía, y suplementos (proteína, creatina, vitaminas...). Si no hay nada, pulsa Saltar",
         optional: true,
       },
       SMOKING_Q,
@@ -339,20 +324,12 @@ const SCREENS: Screen[] = [
     subtitle: "Estilo de vida y actividad",
     questions: [
       {
-        q: "¿Cómo describirías tu nivel de actividad física habitual?",
-        chips: ["Sedentario", "Activo ligero", "Activo", "Muy activo"],
-      },
-      {
-        q: "¿Haces ejercicio de forma regular? ¿Qué tipo y con qué frecuencia?",
-        hint: "Ej.: gimnasio 2 días y padel los domingos",
+        q: "¿Cómo describirías tu actividad física habitual y qué ejercicio haces?",
+        hint: "Nivel de base (sedentario, activo, muy activo...) y tipo y frecuencia. Ej.: trabajo de oficina pero voy al gimnasio 3 días y juego al pádel los domingos",
       },
       {
         q: "¿Cómo es tu horario laboral o diario? Turnos fijos, viajes, oficina...",
         hint: "Ej.: oficina de 9 a 18, viajo una semana al mes",
-      },
-      {
-        q: "¿A qué hora sueles despertarte y acostarte?",
-        hint: "Ej.: me levanto a las 7:00 y me acuesto a las 23:30",
       },
       {
         q: "¿Cuántas comidas sueles hacer al día actualmente?",
@@ -385,10 +362,9 @@ const SCREENS: Screen[] = [
         multi: true,
       },
       {
-        q: "¿Hay algún alimento que no estés dispuesto a eliminar bajo ningún concepto?",
-        hint: "Ej.: mi café con leche de la mañana y el chocolate del finde",
+        q: "¿Hay algún alimento intocable que no piensas dejar, y alguno que no quieres ver en tus platos?",
+        hint: "Lo que no negocias (ej.: mi café con leche de la mañana) y lo que rechazas (ej.: cilantro, hígado, pescado azul). Si en alguno no hay nada, dilo.",
       },
-      DISLIKED_FOODS_Q,
       CUISINE_Q,
       ALCOHOL_Q,
       {
@@ -440,14 +416,9 @@ const SCREENS: Screen[] = [
         hint: "Ej.: 5 kg antes de junio (o 'no aplica')",
       },
       {
-        q: "¿Tienes algún objetivo a corto plazo para las próximas 2-4 semanas?",
-        hint: "Ej.: dejar de picar entre horas, beber más agua",
-      },
-      {
         q: "¿Qué es lo que más te ha costado mantener en intentos anteriores? Y de paso: ¿has probado antes a contar calorías o macros, o con otras dietas? ¿Te ayudó o te obsesionó?",
         hint: "Saberlo me ayuda a no repetir lo que no te funciona",
       },
-      WEIGH_IN_CADENCE_Q,
       BUDGET_Q,
     ],
   },
@@ -549,7 +520,10 @@ const buildFlat = (answers: Record<string, string>): FlatNode[] => {
   return out;
 };
 
-const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v1";
+// v2: el recorte de preguntas (issue 06) desplaza las claves posicionales `si-qi`,
+// así que un borrador guardado con el guion anterior restauraría respuestas en la
+// pregunta equivocada. Subir la versión descarta esos borradores a medias.
+const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v2";
 
 type View = "chat" | "index" | "resumen" | "saved";
 
@@ -869,9 +843,6 @@ function Onboarding() {
         medications: d.medications,
         activity_level: d.activity_level ?? "activo ligero",
         exercise: d.exercise,
-        work_schedule: d.work_schedule,
-        wake_time: d.wake_time,
-        sleep_time: d.sleep_time,
         meals_per_day: d.meals_per_day,
         diet_pattern: d.diet_pattern,
         non_negotiable_foods: d.non_negotiable_foods,
@@ -879,7 +850,6 @@ function Onboarding() {
         goal_type: d.goal_type ?? "mantener",
         goal_amount: d.goal_amount,
         goal_target_date: d.goal_target_date,
-        short_term_goal: d.short_term_goal,
         past_struggles: d.past_struggles,
         restrictions: d.restrictions,
         meal_schedule: d.meal_schedule,
@@ -904,8 +874,6 @@ function Onboarding() {
         strength_training_experience: d.strength_training_experience,
         supplements: d.supplements,
         smoking: d.smoking,
-        tracking_experience: d.tracking_experience,
-        weigh_in_cadence: d.weigh_in_cadence,
         onboarding_completed: true,
       });
 
@@ -1020,7 +988,7 @@ function Onboarding() {
             Vamos a conocerte
           </h1>
           <p className="mx-auto max-w-xs text-sm leading-relaxed text-muted-foreground">
-            Son unas {total} preguntas (~10-15 minutos). Puedes saltar cualquiera, volver atrás y
+            Son unas {total} preguntas (~10 minutos). Puedes saltar cualquiera, volver atrás y
             corregir lo que quieras — y si lo dejas a medias, retomas justo donde ibas.
           </p>
           <button

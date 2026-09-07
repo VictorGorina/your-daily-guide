@@ -1,6 +1,8 @@
 # Spec — Pulido: acceso por correo, familia, plan/compra y onboarding
 
-Status: analizado y decidido, sin empezar a implementar (2026-09-07)
+Status: los 6 issues implementados (2026-09-07). 01–05 commiteados en `main`
+(commits `02b04c3`…`59b7804`); 06 (recorte del onboarding) hecho, sin commitear
+todavía.
 Autor: sesión Claude Code, 2026-09-07
 Feature slug: `pulido-acceso-plan-onboarding`
 

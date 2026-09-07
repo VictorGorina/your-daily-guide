@@ -15,9 +15,6 @@ export type OnboardingDraft = {
   medications: string | null;
   activity_level: string | null;
   exercise: string | null;
-  work_schedule: string | null;
-  wake_time: string | null;
-  sleep_time: string | null;
   meals_per_day: number | null;
   diet_pattern: string | null;
   non_negotiable_foods: string | null;
@@ -25,7 +22,6 @@ export type OnboardingDraft = {
   goal_type: string | null;
   goal_amount: number | null;
   goal_target_date: string | null;
-  short_term_goal: string | null;
   past_struggles: string | null;
   restrictions: string | null;
   meal_schedule: string | null;
@@ -55,8 +51,6 @@ export type OnboardingDraft = {
   strength_training_experience: string | null;
   supplements: string | null;
   smoking: string | null;
-  tracking_experience: string | null;
-  weigh_in_cadence: string | null;
 };
 
 const num = (v: unknown) => {
@@ -99,14 +93,14 @@ export const parseOnboarding = createServerFn({ method: "POST" })
         '{"display_name": string|null, "age": number|null, "date_of_birth": "YYYY-MM-DD"|null, "sex": "hombre"|"mujer"|"otro"|null, "height_cm": number|null, "current_weight_kg": number|null, ' +
         '"medical_conditions": string|null, "medications": string|null, ' +
         '"activity_level": "sedentario"|"ligero"|"activo"|"muy activo"|null, "exercise": string (tipo y frecuencia)|null, ' +
-        '"work_schedule": string|null, "wake_time": "HH:MM"|null, "sleep_time": "HH:MM"|null, "meals_per_day": number|null, ' +
+        '"meals_per_day": number|null, ' +
         '"diet_pattern": string (omnívoro, vegetariano, vegano, sin gluten...)|null, "non_negotiable_foods": string|null, ' +
         '"food_relationship": string|null, ' +
         '"goal_type": "perder"|"mantener"|"ganar"|"habitos"|"energia"|null, "goal_amount": number|null, "goal_target_date": "YYYY-MM-DD"|null, ' +
-        '"short_term_goal": string|null, "past_struggles": string|null, ' +
+        '"past_struggles": string (lo que más le ha costado mantener en intentos anteriores Y su experiencia contando calorías o macros o con otras dietas: si le ayudó o le obsesionó)|null, ' +
         '"restrictions": string (alergias e intolerancias)|null, ' +
         '"meal_schedule": string (muy concreto: qué días y comidas cocina en casa, qué come fuera o pide)|null, ' +
-        '"life_context": string (resumen en 3-5 frases de su vida real: trabajo, horarios, deporte, sueño, estrés, tiempo para cocinar)|null, ' +
+        '"life_context": string (resumen en 3-5 frases de su vida real: trabajo y horario laboral, turnos o viajes, deporte, sueño, estrés, tiempo para cocinar)|null, ' +
         '"family_context": string (con quién vive, qué comidas comparte y con quién, niños en casa con edades, alergias y cómo comen)|null, ' +
         '"budget_month_eur": number|null, ' +
         '"coach_scope": "comida"|"comida y hábitos"|null, ' +
@@ -124,9 +118,7 @@ export const parseOnboarding = createServerFn({ method: "POST" })
         '"cooking_skill": "básico"|"cómodo"|"avanzado"|null, ' +
         '"strength_training_experience": "ninguna"|"menos de 1 año"|"1-3 años"|"más de 3 años"|null, ' +
         '"supplements": string (suplementos habituales: proteína, creatina, vitaminas...)|null, ' +
-        '"smoking": "no"|"ocasional"|"sí"|null, ' +
-        '"tracking_experience": string (experiencia previa contando calorías o macros, o con dietas anteriores)|null, ' +
-        '"weigh_in_cadence": "semanal"|"quincenal"|"cuando quiera"|null}. Sin markdown.',
+        '"smoking": "no"|"ocasional"|"sí"|null}. Sin markdown.',
     });
 
     const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
@@ -147,9 +139,6 @@ export const parseOnboarding = createServerFn({ method: "POST" })
       medications: str(p.medications),
       activity_level: str(p.activity_level),
       exercise: str(p.exercise),
-      work_schedule: str(p.work_schedule),
-      wake_time: time(p.wake_time),
-      sleep_time: time(p.sleep_time),
       meals_per_day: num(p.meals_per_day),
       diet_pattern: str(p.diet_pattern),
       non_negotiable_foods: str(p.non_negotiable_foods),
@@ -159,7 +148,6 @@ export const parseOnboarding = createServerFn({ method: "POST" })
       goal_target_date: /^\d{4}-\d{2}-\d{2}$/.test(String(p.goal_target_date))
         ? String(p.goal_target_date)
         : null,
-      short_term_goal: str(p.short_term_goal),
       past_struggles: str(p.past_struggles),
       restrictions: str(p.restrictions),
       meal_schedule: str(p.meal_schedule),
@@ -184,7 +172,5 @@ export const parseOnboarding = createServerFn({ method: "POST" })
       strength_training_experience: str(p.strength_training_experience),
       supplements: str(p.supplements),
       smoking: str(p.smoking),
-      tracking_experience: str(p.tracking_experience),
-      weigh_in_cadence: str(p.weigh_in_cadence),
     };
   });

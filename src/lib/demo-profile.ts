@@ -28,13 +28,6 @@ export function randomDemoProfile(): Partial<Profile> {
       "Correr 4 km tres veces por semana",
       "Paseo diario de 40 minutos y pádel los sábados",
     ]),
-    work_schedule: pick([
-      "Oficina de 9 a 18",
-      "Turnos rotativos",
-      "Teletrabajo con horario flexible",
-    ]),
-    wake_time: pick(["06:45", "07:00", "07:30"]),
-    sleep_time: pick(["23:00", "23:30", "00:00"]),
     meals_per_day: pick([3, 4]),
     diet_pattern: pick(["omnívoro", "omnívoro con poca carne roja", "vegetariano"]),
     non_negotiable_foods: pick([
@@ -46,12 +39,8 @@ export function randomDemoProfile(): Partial<Profile> {
     goal_type: goal,
     goal_amount: goal === "perder" ? between(3, 8) : null,
     goal_target_date: null,
-    short_term_goal: pick([
-      "Cenar en casa cuatro noches por semana",
-      "Beber 2 litros de agua al día",
-      "Comer verdura en dos comidas al día",
-    ]),
-    past_struggles: "Ha empezado dietas muy estrictas y las ha dejado a las dos semanas.",
+    past_struggles:
+      "Ha empezado dietas muy estrictas y las ha dejado a las dos semanas. Probó a contar calorías con una app y acabó obsesionado con las cifras.",
     restrictions: pick([null, "Intolerancia leve a la lactosa"]),
     meal_schedule:
       "Desayuna en casa, come de tupper en el trabajo de lunes a viernes, cena en casa salvo un día que pide fuera y los fines de semana cocina en casa.",
@@ -85,11 +74,6 @@ export function randomDemoProfile(): Partial<Profile> {
     strength_training_experience: goal === "ganar" ? pick(["menos de 1 año", "1-3 años"]) : null,
     supplements: pick([null, "Proteína en polvo"]),
     smoking: pick(["no", "no", "ocasionalmente"]),
-    tracking_experience: pick([
-      "Ha usado MyFitnessPal antes y acabó obsesionado con las cifras",
-      "No ha contado calorías nunca",
-    ]),
-    weigh_in_cadence: pick(["semanal", "quincenal"]),
     onboarding_completed: true,
     // Alta ~40 días atrás para que el navegador de meses de Plan tenga historial
     // que enseñar (y un mes anterior navegable) en las demos.

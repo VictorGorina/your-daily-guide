@@ -87,9 +87,6 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
         kind: "chips",
         options: ["ninguna", "menos de 1 año", "1-3 años", "más de 3 años"],
       },
-      { key: "work_schedule", label: "Horario de trabajo", kind: "long" },
-      { key: "wake_time", label: "Hora de despertar", kind: "time" },
-      { key: "sleep_time", label: "Hora de dormir", kind: "time" },
       { key: "life_context", label: "Cómo es tu vida ahora", kind: "long" },
       {
         key: "alcohol",
@@ -175,15 +172,7 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
         unit: "kg",
       },
       { key: "goal_target_date", label: "Fecha objetivo", kind: "date" },
-      { key: "short_term_goal", label: "Objetivo a corto plazo", kind: "long" },
       { key: "past_struggles", label: "Qué te ha costado antes", kind: "long" },
-      { key: "tracking_experience", label: "Experiencia contando calorías", kind: "long" },
-      {
-        key: "weigh_in_cadence",
-        label: "Cada cuánto pesarte",
-        kind: "chips",
-        options: ["semanal", "quincenal", "cuando quiera"],
-      },
     ],
   },
   {

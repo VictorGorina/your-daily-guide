@@ -50,6 +50,7 @@ type CoachProfile = {
   disliked_foods?: string | null;
   cuisine_preference?: string | null;
   portions_per_meal?: string | null;
+  meals_per_day?: number | null;
   meals_to_plan?: string | null;
   kitchen_equipment?: string | null;
   cooking_skill?: string | null;
@@ -173,7 +174,7 @@ export function coachSystemPrompt(
     p.food_relationship ? `- Relación con la comida hoy: ${p.food_relationship}` : "",
     p.past_struggles ? `- Lo que le ha costado antes: ${p.past_struggles}` : "",
     cookingLine ? `- Cómo cocina: ${cookingLine}` : "",
-    `- Rutina y horarios de comidas: ${p.meal_schedule ?? "sin definir"}`,
+    `- Rutina y horarios de comidas: ${p.meal_schedule ?? "sin definir"}${p.meals_per_day ? ` · Suele hacer ${p.meals_per_day} comidas al día` : ""}`,
     `- Su vida en detalle: ${p.life_context ?? "sin definir"}`,
     `- Presupuesto de comida al mes: ${p.budget_month_eur ? `${p.budget_month_eur} ${currencySymbol(p.currency)}` : "sin definir"}`,
     p.country && p.country !== "ES"

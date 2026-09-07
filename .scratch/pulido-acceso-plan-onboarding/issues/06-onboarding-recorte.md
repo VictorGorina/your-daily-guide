@@ -1,8 +1,90 @@
 # 06 — Onboarding: quitar las preguntas que no se ganan su sitio
 
-Status: sin empezar
+Status: hecho (2026-09-07)
 Incidencia del usuario: ⓼
 Blocked by: 04
+
+## Lo que se hizo
+
+Auditoría campo por campo rastreando cada uno hasta su consumidor real (el
+`coachSystemPrompt` de `ai-provider.server.ts`, que comparten coach y generador de
+plan; `push-dispatch.server.ts`; `profile-fields.ts`). Resultado: **7 campos se
+escribían en el onboarding y no los leía nadie** — `wake_time`, `sleep_time`,
+`meals_per_day`, `work_schedule`, `short_term_goal`, `tracking_experience`,
+`weigh_in_cadence`.
+
+Decisiones del usuario (2026-09-07) sobre la lista presentada:
+
+- **Cortadas** (pregunta + campo fuera del draft, del save y de "Mis respuestas";
+  la columna de BD se deja, no se dropea):
+  - "¿A qué hora sueles despertarte y acostarte?" → `wake_time` + `sleep_time`.
+    La señal de sueño/ritmo ya entra en `life_context`; las horas operativas se
+    piden aparte (resumen mañana/noche).
+  - "¿Cada cuánto quieres registrar tu peso?" → `weigh_in_cadence`. No hay ningún
+    recordatorio de pesaje que lo use.
+  - "¿Tienes algún objetivo a corto plazo para 2-4 semanas?" → `short_term_goal`.
+- **Mantenidas pero se mata la columna huérfana** (la pregunta sigue nutriendo un
+  campo que sí se lee):
+  - "¿Cómo es tu horario laboral o diario?" se queda; `work_schedule` fuera. El
+    texto va a `life_context` (se amplió la instrucción del parser a "trabajo y
+    horario laboral, turnos o viajes").
+  - La pregunta de "qué te ha costado antes / contar calorías" se queda;
+    `tracking_experience` fuera, su contenido se funde en `past_struggles` (se
+    amplió la descripción del campo en el prompt del parser).
+- **`meals_per_day`**: el usuario pidió conservar la pregunta. Para que tenga un
+  consumidor, se cableó a `coachSystemPrompt` (línea de "Rutina y horarios de
+  comidas": "· Suele hacer N comidas al día").
+- **Tabaco y alcohol**: se mantienen los dos (el usuario lo confirmó pese a ser
+  señal débil).
+- **3 fusiones** (2 pasos → 1, sin perder campos; el parser ya troceaba el blob):
+  - "¿Condición médica?" + "¿Medicación/suplementos?" → "¿Alguna condición médica,
+    medicación o suplemento que deba tener en cuenta?"
+  - "¿Nivel de actividad?" (chips) + "¿Haces ejercicio, tipo y frecuencia?" →
+    "¿Cómo describirías tu actividad física habitual y qué ejercicio haces?"
+    (texto libre; el parser mapea `activity_level` + `exercise`).
+  - "¿Algún alimento que no piensas dejar?" + "¿Ingredientes que no quieres ver?"
+    → "¿Hay algún alimento intocable que no piensas dejar, y alguno que no quieres
+    ver en tus platos?"
+
+Resultado: **36 preguntas base → 30**, las 6 pantallas siguen (6/4/9/4/4/3). Cada
+pregunta que queda tiene un consumidor identificable.
+
+`DRAFT_STORAGE_KEY` subido a `-v2` (web + móvil): el recorte desplaza las claves
+posicionales `si-qi`, un borrador a medias del guion viejo restauraría respuestas
+en la pregunta equivocada.
+
+## Ficheros tocados
+
+Web: `src/lib/onboarding.functions.ts` (tipo `OnboardingDraft`, prompt y retorno
+del parser), `src/lib/ai-provider.server.ts` (`meals_per_day` al prompt),
+`src/routes/_authenticated/onboarding.tsx` (SCREENS, `saveAll`, storage key,
+copy del intro), `src/lib/profile-fields.ts`, `src/lib/demo-profile.ts`.
+Móvil (copias a mano, mismo recorte): `mobile/lib/onboarding.ts`,
+`mobile/app/(app)/onboarding.tsx`, `mobile/lib/profile-fields.ts`,
+`mobile/lib/demo-profile.ts`.
+
+## Verificado
+
+- `bun run typecheck` / `lint` / `test` (241 pass) verdes; `tsc` de móvil limpio.
+- Pasada completa del onboarding en navegador con sesión demo: intro dice "30
+  preguntas", el índice confirma 6/4/9/4/4/3, las 3 preguntas fusionadas y la
+  ausencia de wake/sleep, corto plazo y cadencia de pesaje comprobadas en pantalla.
+  `parseOnboarding` ×2 + `generateMonthlyPlan` + `welcomeBriefing` → 200, pantalla
+  final "Tu plan está listo".
+- "Mis respuestas" (`/perfil`): ya no aparecen los 5 campos cortados; `meals_per_day`,
+  `life_context` y `past_struggles` siguen. Un perfil viejo con esas columnas
+  pobladas no rompe (la pantalla itera `PROFILE_SECTIONS`).
+
+## Pendiente / no incluido
+
+- Verificación en el simulador iOS (la copia móvil es port 1:1 y `tsc` pasa; falta
+  la pasada visual).
+- La "palanca complementaria" (animación del onboarding, referencia MyRealFood) es
+  sesión aparte, no entra en este recorte.
+
+---
+
+## Contexto original (antes de implementar)
 
 ## Objetivo
 
