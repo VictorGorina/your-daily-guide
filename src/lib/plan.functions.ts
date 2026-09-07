@@ -22,6 +22,7 @@ import {
 import {
   cadenceOf,
   carryOwnedByName,
+  carryOwnedCanonical,
   childPureeGaps,
   cleanPantryExtras,
   cleanPlan,
@@ -40,6 +41,7 @@ import {
   isNextMonthUnlocked,
   mealsForDate,
   mergeFuturePlan,
+  mergeFutureKids,
   monthCoverage,
   nextMonthISO,
   planForDate,
@@ -69,6 +71,10 @@ import {
 } from "@/lib/plan-shared";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { ValidationError } from "@/lib/validation-error";
+// Solo el tipo: se borra en compilación, así que no arrastra `household.server`
+// (ni su cliente de servicio) al bundle del navegador. El runtime de este
+// contexto se carga siempre con `await import("@/lib/household.server")`.
+import type { HouseholdContext } from "@/lib/household.server";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
 
@@ -397,6 +403,203 @@ const scaleShoppingToBudget = (shopping: ShoppingList, factor: number): Shopping
     }),
   }));
 
+/**
+ * Núcleo de generación de un plan del mes y su lista de la compra: construye el
+ * prompt con el perfil y el hogar, se lo pide a la IA, encaja el presupuesto y
+ * aplica los "cinturones" de comidas compartidas / slots no elegidos. NO lee ni
+ * escribe la base de datos ni consume cuota — de eso se encarga quien lo llama
+ * (`generateMonthlyPlan` al crear el mes, `reflowMonthlyPlan` al regenerar por
+ * un cambio de mesa). `coverage` lo fija el llamante para que un reflow a media
+ * de mes conserve el rango de días original en vez de recortarlo a "de hoy en
+ * adelante".
+ */
+async function generatePlanBody(opts: {
+  key: string;
+  userId: string;
+  month: string;
+  cadence: ShoppingCadence;
+  coverage: PlanCoverage;
+  home: HouseholdContext;
+  profile: unknown;
+}): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> {
+  const { key, userId, month, cadence, coverage, home, profile } = opts;
+
+  // Qué comidas quiere que se le planifiquen (issue merienda/slots elegidos):
+  // único punto de lectura, compartido con `mealsForDate` en la pantalla, así
+  // que el generador y lo que se pinta nunca pueden desincronizarse.
+  const selectedSlots = effectiveMealSlots(
+    (profile ?? {}) as { meal_slots?: unknown; meals_to_plan?: string | null },
+  );
+  const mealSlotsLine =
+    selectedSlots.length < MEAL_SLOTS.length
+      ? `COMIDAS A PLANIFICAR: solo ${selectedSlots.map((s) => MEAL_SLOT_LABEL[s].toLowerCase()).join(", ")}. No propongas nada para ${MEAL_SLOTS.filter(
+          (s) => !selectedSlots.includes(s),
+        )
+          .map((s) => MEAL_SLOT_LABEL[s].toLowerCase())
+          .join(
+            ", ",
+          )}: deja esos campos vacíos ("" en "lunch"/"dinner", sin platos de desayuno/merienda) y no incluyas sus ingredientes en la compra. `
+      : "";
+
+  const coveredDays = coverage.toDay - coverage.fromDay + 1;
+  const ratio = coverageRatio(coverage, month);
+
+  const rawBudget = Number(
+    (profile as { budget_month_eur?: number | null } | null)?.budget_month_eur,
+  );
+  const budget = Number.isFinite(rawBudget) && rawBudget > 0 ? rawBudget : 0;
+  // Presupuesto prorrateado a los días que cubre el plan: un plan que empieza a
+  // media de mes solo puede gastar la parte proporcional del mes que le queda.
+  const proratedBudget = budget > 0 ? Math.round(budget * ratio) : 0;
+  // Moneda/país para las referencias de precio (la salida estructurada del
+  // plan sigue en español canónico; solo cambian el símbolo y el país).
+  const sym = currencySymbol((profile as { currency?: string | null } | null)?.currency);
+  const country = (profile as { country?: string | null } | null)?.country || "ES";
+  const marketRef = country === "ES" ? "supermercado en España" : `supermercado de ${country}`;
+  const budgetLine =
+    proratedBudget > 0
+      ? `El coste total de la lista de la compra NO puede superar ${proratedBudget} ${sym} para el periodo que cubre el plan. Ajusta cantidades y elige alimentos económicos hasta encajar en ese presupuesto.`
+      : `Ajusta la lista a un presupuesto contenido y realista de ${marketRef}.`;
+
+  const coverageLine =
+    coverage.fromDay > 1
+      ? `IMPORTANTE: este plan empieza a media de mes. Cubre SOLO del día ${coverage.fromDay} al ${coverage.toDay} de este mes (${coveredDays} días). La lista de la compra y todas las comidas son únicamente para esos días; no planifiques ni compres para días anteriores al ${coverage.fromDay}.`
+      : `El plan cubre el mes completo (días 1 al ${coverage.toDay}).`;
+
+  const trips = tripsOfCadence(cadence);
+  const tripRanges = Array.from({ length: trips }, (_, t) => {
+    const { from, to } = tripDayRange(coverage, trips, t);
+    return `días ${from}-${to}`;
+  });
+  const cadenceLine =
+    trips === 1
+      ? "COMPRA MENSUAL: la persona hará UNA sola compra para todo el periodo. Apóyate en despensa, congelados, conservas, legumbre seca, huevos, tubérculos y verdura resistente. Puedes incluir algún fresco, pero el que no aguante ~2 semanas se comprará aparte sobre la marcha (se le avisa en pantalla), así que no cargues la compra de pescado, verdura de hoja ni fruta blanda."
+      : `COMPRA REPARTIDA en ${trips} compras (${tripRanges.join(" / ")}). No asignes compras a mano: con el "weekQty" por semana basta, el sistema calcula cuánto lleva cada compra. Reparte los frescos por las semanas en que se usan para que no se acumulen.`;
+
+  const coveredWeeksNote =
+    coverage.fromDay > 1
+      ? `Pon 0 en "weekQty"/"weekPrice" de las semanas del mes anteriores al día ${coverage.fromDay} (este plan no las cubre). `
+      : "";
+
+  // No planificador (issue 05, D1): genera SOLO sus comidas en solitario —
+  // las compartidas ya las cubre el plan del planificador, que se espeja
+  // por lectura (`fetchMonthlyPlan`/`composeMonthlyPlanForMember`) y por
+  // escritura (`syncSharedMeals`). No es el planificador ni un usuario en
+  // solitario si `plannerId` existe y no es quien llama.
+  const isNonPlannerInHousehold = !!home.plannerId && home.plannerId !== userId;
+  const plannerName =
+    home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
+  const myPortion = home.members.find((m) => m.userId === userId)?.portion ?? 1;
+
+  // Raciones exactas del hogar (issue 04): sustituye la frase vaga de "cubre
+  // las raciones extra" por la tabla real que ya calculó `householdContext`,
+  // para que la IA dimensione `weekQty` sin adivinar cuánta gente come.
+  const servingsLine = isNonPlannerInHousehold
+    ? `SOLO TUS COMIDAS EN SOLITARIO: en tu casa, ${describeSharedSlots(home.sharedSlots)} ya las cubre el plan de ${plannerName} — NO las incluyas ni en "plan" ni en "shopping" (deja esos campos de "lunch"/"dinner" vacíos, "" ). Dimensiona lo que sí planifiques para ${myPortion} ración(es). `
+    : home.householdId && HOUSEHOLD_MEAL_KEYS.some((m) => home.sharedSlots[m].length)
+      ? `RACIONES: ${describeServings(home.servings, home.sharedSlots)} (mismo plato para toda la mesa esos días, sin los alérgenos de los niños). Las comidas en solitario (snack, y las que no compartes) piden ${home.servings.plannerSolo} ración(es). Dimensiona cada "weekQty" para esas raciones exactas, ni de más ni de menos. `
+      : "";
+
+  // Plato aparte de un niño (issue 07): solo lo genera el planificador (o un
+  // usuario en solitario con niños en casa, caso raro pero posible).
+  const tableKids = home.children.filter((c) => c.stage === "mesa");
+  const puréeKids = home.children.filter((c) => c.stage === "triturados");
+  const milkKids = home.children.filter((c) => c.stage === "pecho");
+  const kidsLine =
+    !isNonPlannerInHousehold && home.children.length
+      ? [
+          tableKids.length
+            ? `NIÑOS QUE COMEN DEL PLATO: ${JSON.stringify(
+                tableKids.map((c) => ({
+                  childId: c.id,
+                  nombre: c.name,
+                  edad: c.age,
+                  alergias: c.allergies || "ninguna",
+                  racion: c.portion,
+                })),
+              )}. Si un plato compartido no le sirve a un niño (lleva su alérgeno, no encaja con su edad, o no se lo va a comer), añade para ESE niño ESE día un plato alternativo sencillo en "days[].kids" — objeto {"childId" (el de la lista), "slot": "desayuno"|"comida"|"cena", "dish": plato corto} — y suma sus ingredientes al "weekQty" a ración de ese niño. Si el plato compartido le vale, no pongas nada: por defecto el niño come lo mismo que la mesa.`
+            : "",
+          puréeKids.length
+            ? `BEBÉS DE TRITURADOS (comen aparte, NO del plato de la mesa): ${JSON.stringify(
+                puréeKids.map((c) => ({
+                  childId: c.id,
+                  nombre: c.name,
+                  edad: c.age,
+                  alergias: c.allergies || "ninguna",
+                  racion: c.portion,
+                })),
+              )}. Para CADA uno, añade en "days[].kids" su propio plato en comida y cena de cada día: un puré o triturado sencillo, sin sal ni azúcar, adaptado a su edad y sin sus alérgenos. Suma sus ingredientes al "weekQty" a su ración (pequeña). El plato de la mesa NO se dimensiona para ellos.`
+            : "",
+          milkKids.length
+            ? `BEBÉS DE PECHO O BIBERÓN: ${milkKids
+                .map((c) => c.name)
+                .join(
+                  ", ",
+                )}. No comen alimentos sólidos: no les pongas plato en "days[].kids" ni sumes nada a la compra por ellos.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+
+  const { plan: rawPlan, shopping: rawShopping } = await askForJson(
+    {
+      key,
+      system: coachSystemPrompt(profile as never, home.text),
+      prompt:
+        `Crea el plan del mes ${month} y su lista de la compra. Devuelve solo JSON válido:\n` +
+        '{"shopping": [objetos {"category": "Verdura y fruta"|"Proteína"|"Despensa"|"Lácteos"|"Otros", ' +
+        '"items": [{"name": string (ingrediente), "unit": "g"|"ml"|"ud" (g para sólidos, ml para líquidos, ud para piezas/manojos/latas), ' +
+        '"weekQty": [4 números] (cantidad en "unit" que piden los platos de CADA semana del mes para las raciones del hogar; 0 si esa semana no se usa), ' +
+        `"weekPrice": [4 números] (${sym} orientativo de ${marketRef} para la cantidad de cada semana), ` +
+        '"perishable": boolean (true si es fresco y aguanta pocos días)}]}], ' +
+        '"plan": {"intro": string (2 frases motivadoras y comprensivas), "focus": [3 focos del mes, cortos], ' +
+        '"weeks": [4 objetos {"label": "Semana 1".."Semana 4", "focus": string corto, "breakfasts": [2 ideas de desayuno], "snacks": [2 ideas de snack], ' +
+        '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato, "kids": [opcional, solo si un niño necesita otro plato: {"childId", "slot": "desayuno"|"comida"|"cena", "dish"}]}]}]}}\n' +
+        "REGLA CLAVE: todos los platos, desayunos y snacks del plan deben poder prepararse ÚNICAMENTE con los ingredientes de la lista de la compra (más sal, aceite, agua y especias básicas). No menciones ningún alimento que no esté en la lista. " +
+        'CANTIDADES: cada número de "weekQty" es lo que de verdad piden los platos de esa semana, ni de más ni de menos. Si un plato se repite en varias semanas, refleja su parte en el "weekQty" de cada una. ' +
+        `${coverageLine} ${coveredWeeksNote}` +
+        `${budgetLine} ` +
+        `${cadenceLine} ` +
+        "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
+        "Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: en las comidas fuera de casa propón una opción de menú o restaurante y no cuentes sus ingredientes en la compra. " +
+        `${mealSlotsLine}` +
+        `${servingsLine}` +
+        `${kidsLine}` +
+        "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
+    },
+    (parsed) => {
+      const p = (parsed ?? {}) as { plan?: unknown; shopping?: unknown };
+      const plan = completePlan(cleanPlan(p.plan));
+      const shopping = cleanShopping(p.shopping);
+      if (!plan || !shopping.length) return null;
+      return { plan, shopping };
+    },
+  );
+
+  // Deja la lista dentro del presupuesto prorrateado y fija la cadencia/cobertura
+  // del plan como fuente de verdad para las etiquetas de días y compras.
+  const shopping = await enforceBudget(
+    key,
+    coachSystemPrompt(profile as never, home.text),
+    rawShopping,
+    proratedBudget,
+    sym,
+  );
+  // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
+  // una comida compartida, se vacía aquí — la fila de un no planificador
+  // nunca guarda el plato de una comida de la casa (lo pone el espejo).
+  const sharedBlanked = isNonPlannerInHousehold
+    ? blankSharedSlots(rawPlan, home.sharedSlots)
+    : rawPlan;
+  // Cinturón para las comidas que esta persona no quiere planificar en
+  // absoluto (independiente de si comparte mesa o no): `mealSlotsLine` ya
+  // se lo pidió a la IA, esto lo garantiza aunque no haya obedecido.
+  const planBody = blankUnselectedSlots(sharedBlanked, selectedSlots);
+  const plan: MonthlyPlan = { ...planBody, coverage, cadence };
+  return { plan, shopping };
+}
+
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; cadence?: ShoppingCadence; today?: string }) => {
@@ -435,181 +638,15 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
 
-    // Qué comidas quiere que se le planifiquen (issue merienda/slots elegidos):
-    // único punto de lectura, compartido con `mealsForDate` en la pantalla, así
-    // que el generador y lo que se pinta nunca pueden desincronizarse.
-    const selectedSlots = effectiveMealSlots(
-      (profile ?? {}) as { meal_slots?: unknown; meals_to_plan?: string | null },
-    );
-    const mealSlotsLine =
-      selectedSlots.length < MEAL_SLOTS.length
-        ? `COMIDAS A PLANIFICAR: solo ${selectedSlots.map((s) => MEAL_SLOT_LABEL[s].toLowerCase()).join(", ")}. No propongas nada para ${MEAL_SLOTS.filter(
-            (s) => !selectedSlots.includes(s),
-          )
-            .map((s) => MEAL_SLOT_LABEL[s].toLowerCase())
-            .join(
-              ", ",
-            )}: deja esos campos vacíos ("" en "lunch"/"dinner", sin platos de desayuno/merienda) y no incluyas sus ingredientes en la compra. `
-        : "";
-
-    const today = data.today;
-    const coverage = monthCoverage(data.month, today);
-    const coveredDays = coverage.toDay - coverage.fromDay + 1;
-    const ratio = coverageRatio(coverage, data.month);
-
-    const rawBudget = Number(
-      (profile as { budget_month_eur?: number | null } | null)?.budget_month_eur,
-    );
-    const budget = Number.isFinite(rawBudget) && rawBudget > 0 ? rawBudget : 0;
-    // Presupuesto prorrateado a los días que cubre el plan: un plan que empieza a
-    // media de mes solo puede gastar la parte proporcional del mes que le queda.
-    const proratedBudget = budget > 0 ? Math.round(budget * ratio) : 0;
-    // Moneda/país para las referencias de precio (la salida estructurada del
-    // plan sigue en español canónico; solo cambian el símbolo y el país).
-    const sym = currencySymbol((profile as { currency?: string | null } | null)?.currency);
-    const country = (profile as { country?: string | null } | null)?.country || "ES";
-    const marketRef = country === "ES" ? "supermercado en España" : `supermercado de ${country}`;
-    const budgetLine =
-      proratedBudget > 0
-        ? `El coste total de la lista de la compra NO puede superar ${proratedBudget} ${sym} para el periodo que cubre el plan. Ajusta cantidades y elige alimentos económicos hasta encajar en ese presupuesto.`
-        : `Ajusta la lista a un presupuesto contenido y realista de ${marketRef}.`;
-
-    const coverageLine =
-      coverage.fromDay > 1
-        ? `IMPORTANTE: este plan empieza a media de mes. Cubre SOLO del día ${coverage.fromDay} al ${coverage.toDay} de este mes (${coveredDays} días). La lista de la compra y todas las comidas son únicamente para esos días; no planifiques ni compres para días anteriores al ${coverage.fromDay}.`
-        : `El plan cubre el mes completo (días 1 al ${coverage.toDay}).`;
-
-    const trips = tripsOfCadence(data.cadence);
-    const tripRanges = Array.from({ length: trips }, (_, t) => {
-      const { from, to } = tripDayRange(coverage, trips, t);
-      return `días ${from}-${to}`;
-    });
-    const cadenceLine =
-      trips === 1
-        ? "COMPRA MENSUAL: la persona hará UNA sola compra para todo el periodo. Apóyate en despensa, congelados, conservas, legumbre seca, huevos, tubérculos y verdura resistente. Puedes incluir algún fresco, pero el que no aguante ~2 semanas se comprará aparte sobre la marcha (se le avisa en pantalla), así que no cargues la compra de pescado, verdura de hoja ni fruta blanda."
-        : `COMPRA REPARTIDA en ${trips} compras (${tripRanges.join(" / ")}). No asignes compras a mano: con el "weekQty" por semana basta, el sistema calcula cuánto lleva cada compra. Reparte los frescos por las semanas en que se usan para que no se acumulen.`;
-
-    const coveredWeeksNote =
-      coverage.fromDay > 1
-        ? `Pon 0 en "weekQty"/"weekPrice" de las semanas del mes anteriores al día ${coverage.fromDay} (este plan no las cubre). `
-        : "";
-
-    // No planificador (issue 05, D1): genera SOLO sus comidas en solitario —
-    // las compartidas ya las cubre el plan del planificador, que se espeja
-    // por lectura (`fetchMonthlyPlan`/`composeMonthlyPlanForMember`) y por
-    // escritura (`syncSharedMeals`). No es el planificador ni un usuario en
-    // solitario si `plannerId` existe y no es quien llama.
-    const isNonPlannerInHousehold = !!home.plannerId && home.plannerId !== context.userId;
-    const plannerName =
-      home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
-    const myPortion = home.members.find((m) => m.userId === context.userId)?.portion ?? 1;
-
-    // Raciones exactas del hogar (issue 04): sustituye la frase vaga de "cubre
-    // las raciones extra" por la tabla real que ya calculó `householdContext`,
-    // para que la IA dimensione `weekQty` sin adivinar cuánta gente come.
-    const servingsLine = isNonPlannerInHousehold
-      ? `SOLO TUS COMIDAS EN SOLITARIO: en tu casa, ${describeSharedSlots(home.sharedSlots)} ya las cubre el plan de ${plannerName} — NO las incluyas ni en "plan" ni en "shopping" (deja esos campos de "lunch"/"dinner" vacíos, "" ). Dimensiona lo que sí planifiques para ${myPortion} ración(es). `
-      : home.householdId && HOUSEHOLD_MEAL_KEYS.some((m) => home.sharedSlots[m].length)
-        ? `RACIONES: ${describeServings(home.servings, home.sharedSlots)} (mismo plato para toda la mesa esos días, sin los alérgenos de los niños). Las comidas en solitario (snack, y las que no compartes) piden ${home.servings.plannerSolo} ración(es). Dimensiona cada "weekQty" para esas raciones exactas, ni de más ni de menos. `
-        : "";
-
-    // Plato aparte de un niño (issue 07): solo lo genera el planificador (o un
-    // usuario en solitario con niños en casa, caso raro pero posible).
-    const tableKids = home.children.filter((c) => c.stage === "mesa");
-    const puréeKids = home.children.filter((c) => c.stage === "triturados");
-    const milkKids = home.children.filter((c) => c.stage === "pecho");
-    const kidsLine =
-      !isNonPlannerInHousehold && home.children.length
-        ? [
-            tableKids.length
-              ? `NIÑOS QUE COMEN DEL PLATO: ${JSON.stringify(
-                  tableKids.map((c) => ({
-                    childId: c.id,
-                    nombre: c.name,
-                    edad: c.age,
-                    alergias: c.allergies || "ninguna",
-                    racion: c.portion,
-                  })),
-                )}. Si un plato compartido no le sirve a un niño (lleva su alérgeno, no encaja con su edad, o no se lo va a comer), añade para ESE niño ESE día un plato alternativo sencillo en "days[].kids" — objeto {"childId" (el de la lista), "slot": "desayuno"|"comida"|"cena", "dish": plato corto} — y suma sus ingredientes al "weekQty" a ración de ese niño. Si el plato compartido le vale, no pongas nada: por defecto el niño come lo mismo que la mesa.`
-              : "",
-            puréeKids.length
-              ? `BEBÉS DE TRITURADOS (comen aparte, NO del plato de la mesa): ${JSON.stringify(
-                  puréeKids.map((c) => ({
-                    childId: c.id,
-                    nombre: c.name,
-                    edad: c.age,
-                    alergias: c.allergies || "ninguna",
-                    racion: c.portion,
-                  })),
-                )}. Para CADA uno, añade en "days[].kids" su propio plato en comida y cena de cada día: un puré o triturado sencillo, sin sal ni azúcar, adaptado a su edad y sin sus alérgenos. Suma sus ingredientes al "weekQty" a su ración (pequeña). El plato de la mesa NO se dimensiona para ellos.`
-              : "",
-            milkKids.length
-              ? `BEBÉS DE PECHO O BIBERÓN: ${milkKids
-                  .map((c) => c.name)
-                  .join(
-                    ", ",
-                  )}. No comen alimentos sólidos: no les pongas plato en "days[].kids" ni sumes nada a la compra por ellos.`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" ")
-        : "";
-
-    const { plan: rawPlan, shopping: rawShopping } = await askForJson(
-      {
-        key,
-        system: coachSystemPrompt(profile as never, home.text),
-        prompt:
-          `Crea el plan del mes ${data.month} y su lista de la compra. Devuelve solo JSON válido:\n` +
-          '{"shopping": [objetos {"category": "Verdura y fruta"|"Proteína"|"Despensa"|"Lácteos"|"Otros", ' +
-          '"items": [{"name": string (ingrediente), "unit": "g"|"ml"|"ud" (g para sólidos, ml para líquidos, ud para piezas/manojos/latas), ' +
-          '"weekQty": [4 números] (cantidad en "unit" que piden los platos de CADA semana del mes para las raciones del hogar; 0 si esa semana no se usa), ' +
-          `"weekPrice": [4 números] (${sym} orientativo de ${marketRef} para la cantidad de cada semana), ` +
-          '"perishable": boolean (true si es fresco y aguanta pocos días)}]}], ' +
-          '"plan": {"intro": string (2 frases motivadoras y comprensivas), "focus": [3 focos del mes, cortos], ' +
-          '"weeks": [4 objetos {"label": "Semana 1".."Semana 4", "focus": string corto, "breakfasts": [2 ideas de desayuno], "snacks": [2 ideas de snack], ' +
-          '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato, "kids": [opcional, solo si un niño necesita otro plato: {"childId", "slot": "desayuno"|"comida"|"cena", "dish"}]}]}]}}\n' +
-          "REGLA CLAVE: todos los platos, desayunos y snacks del plan deben poder prepararse ÚNICAMENTE con los ingredientes de la lista de la compra (más sal, aceite, agua y especias básicas). No menciones ningún alimento que no esté en la lista. " +
-          'CANTIDADES: cada número de "weekQty" es lo que de verdad piden los platos de esa semana, ni de más ni de menos. Si un plato se repite en varias semanas, refleja su parte en el "weekQty" de cada una. ' +
-          `${coverageLine} ${coveredWeeksNote}` +
-          `${budgetLine} ` +
-          `${cadenceLine} ` +
-          "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
-          "Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: en las comidas fuera de casa propón una opción de menú o restaurante y no cuentes sus ingredientes en la compra. " +
-          `${mealSlotsLine}` +
-          `${servingsLine}` +
-          `${kidsLine}` +
-          "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
-      },
-      (parsed) => {
-        const p = (parsed ?? {}) as { plan?: unknown; shopping?: unknown };
-        const plan = completePlan(cleanPlan(p.plan));
-        const shopping = cleanShopping(p.shopping);
-        if (!plan || !shopping.length) return null;
-        return { plan, shopping };
-      },
-    );
-
-    // Deja la lista dentro del presupuesto prorrateado y fija la cadencia/cobertura
-    // del plan como fuente de verdad para las etiquetas de días y compras.
-    const shopping = await enforceBudget(
+    const { plan, shopping } = await generatePlanBody({
       key,
-      coachSystemPrompt(profile as never, home.text),
-      rawShopping,
-      proratedBudget,
-      sym,
-    );
-    // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
-    // una comida compartida, se vacía aquí — la fila de un no planificador
-    // nunca guarda el plato de una comida de la casa (lo pone el espejo).
-    const sharedBlanked = isNonPlannerInHousehold
-      ? blankSharedSlots(rawPlan, home.sharedSlots)
-      : rawPlan;
-    // Cinturón para las comidas que esta persona no quiere planificar en
-    // absoluto (independiente de si comparte mesa o no): `mealSlotsLine` ya
-    // se lo pidió a la IA, esto lo garantiza aunque no haya obedecido.
-    const planBody = blankUnselectedSlots(sharedBlanked, selectedSlots);
-    const plan: MonthlyPlan = { ...planBody, coverage, cadence: data.cadence };
+      userId: context.userId,
+      month: data.month,
+      cadence: data.cadence,
+      coverage: monthCoverage(data.month, data.today),
+      home,
+      profile,
+    });
 
     const { error } = await context.supabase.from("monthly_plans").upsert(
       {
@@ -630,7 +667,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       supabase: context.supabase as never,
       userId: context.userId,
       month: data.month,
-      today,
+      today: data.today,
     });
 
     return { plan, shopping };
@@ -1141,6 +1178,137 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     return { confirmed_trips: next };
   });
 
+/**
+ * Recoloca los días FUTUROS del plan del mes con la IA, sin tocar hoy, el pasado
+ * ni la lista de la compra. Es el núcleo compartido por `adjustMonthlyPlan` (la
+ * persona cuenta algo — "comí de más", "hice deporte") y por el modo "meals" de
+ * `reflowMonthlyPlan` (cambió la despensa). No consume cuota: el bucket lo
+ * decide quien llama (`plan-adjust` vs `plan-reflow`).
+ */
+async function reflowMeals(opts: {
+  supabase: SupabaseClient<never, never, never>;
+  userId: string;
+  key: string;
+  month: string;
+  today: string;
+  note: string;
+  kcalDelta: number | null;
+}): Promise<{ plan: MonthlyPlan; summary: string; synced: number }> {
+  const { supabase, userId, key, month, today, note, kcalDelta } = opts;
+
+  const { data: row } = await ownPlanRow(supabase, userId, month, "plan, shopping, pantry_extras");
+  const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
+  const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+  const pantryExtras = cleanPantryExtras(
+    (row as { pantry_extras?: unknown } | null)?.pantry_extras,
+  );
+  if (!current) throw new ValidationError("Todavía no hay plan de este mes");
+
+  const [{ data: profile }, { data: logs }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    supabase
+      .from("daily_logs")
+      .select("log_date, weight_kg, habits, mood, notes")
+      .eq("user_id", userId)
+      .lte("log_date", today)
+      .order("log_date", { ascending: false })
+      .limit(7),
+  ]);
+
+  const p = (profile ?? {}) as Record<string, unknown>;
+  const cursor = planCursor(today);
+  const gt = p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
+  const goalLine = gt
+    ? `Objetivo: ${gt} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
+    : "La persona no tiene un objetivo de peso definido: no asumas uno ni recoloques el plan para adelgazar; céntrate en comidas equilibradas y hábitos.";
+  const kcalLine = kcalDelta
+    ? kcalDelta > 0
+      ? `Hoy hay un EXCESO estimado de ${kcalDelta} kcal: compénsalo de forma suave repartida entre los días siguientes (nunca todo en un día, nunca con platos de castigo).`
+      : `Hoy hay un DÉFICIT extra estimado de ${Math.abs(kcalDelta)} kcal (por ejemplo ejercicio): reponlo en los días siguientes con algo más de energía en las comidas, sin pasar hambre.`
+    : "Si de lo que cuenta se deduce un exceso o un déficit de energía, compénsalo de forma suave en los días siguientes.";
+
+  const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
+  const home = await householdContext(supabase as never, userId);
+  // Un no planificador recoloca sus comidas en solitario; las compartidas
+  // las lleva quien planifica en casa (D2). Se lo decimos a la IA en el
+  // prompt Y, por si no lo respeta, se congelan mecánicamente después
+  // (mismo patrón "cinturón y tirantes" que el resto de REGLAs).
+  const isNonPlannerInHousehold = !!home.plannerId && home.plannerId !== userId;
+  const plannerName =
+    home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
+  const sharedSlotsLine = isNonPlannerInHousehold
+    ? `REGLA 5: Hay comidas compartidas en tu casa que lleva ${plannerName}: ${describeSharedSlots(home.sharedSlots)}. NO las toques — devuélvelas exactamente igual que en el plan actual. Ajusta solo tus comidas en solitario.\n`
+    : "";
+
+  // Comidas que esta persona quiere planificar (ver generateMonthlyPlan):
+  // una recolocación tampoco debe reintroducir un slot que ya excluyó.
+  const selectedSlots = effectiveMealSlots(
+    p as { meal_slots?: unknown; meals_to_plan?: string | null },
+  );
+  const mealSlotsLine =
+    selectedSlots.length < MEAL_SLOTS.length
+      ? `REGLA 6: solo planifica ${selectedSlots.map((s) => MEAL_SLOT_LABEL[s].toLowerCase()).join(", ")}. No propongas nada para ${MEAL_SLOTS.filter(
+          (s) => !selectedSlots.includes(s),
+        )
+          .map((s) => MEAL_SLOT_LABEL[s].toLowerCase())
+          .join(", ")}: esos campos se quedan vacíos.\n`
+      : "";
+
+  const plan = await askForJson(
+    {
+      key,
+      system: coachSystemPrompt(profile as never, home.text),
+      prompt:
+        `Plan actual del mes ${month}:\n${JSON.stringify(current)}\n\n` +
+        `Ingredientes ya comprados (no pueden cambiar): ${ingredientNames(shopping)}\n\n` +
+        (pantryExtras.length
+          ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => e.name).join(", ")}\n\n`
+          : "") +
+        `${goalLine}\n` +
+        `Últimos días reales registrados: ${JSON.stringify(logs ?? [])}\n\n` +
+        `Hoy es ${today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
+        `Lo que ha pasado / lo que cuenta la persona: ${note}\n\n` +
+        `REGLA 1: el día de hoy y los días anteriores YA ESTÁN FIJADOS: devuélvelos exactamente igual. Cambia sólo los días POSTERIORES a hoy.\n` +
+        `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
+        `REGLA 3: ${kcalLine}\n` +
+        "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
+        `${sharedSlotsLine}` +
+        `${mealSlotsLine}` +
+        "Actualiza 'intro' con 1-2 frases explicando en lenguaje sencillo qué has recolocado y por qué. " +
+        'Devuelve solo JSON válido con la misma forma: {"intro": string, "focus": [3 strings], "weeks": [{"label", "focus", "breakfasts": [..], "snacks": [..], "days": [{"day","lunch","dinner"}]}]}. Sin markdown.',
+    },
+    (parsed) => completePlan(cleanPlan(parsed)),
+  );
+
+  const merged = mergeFuturePlan(current, plan, cursor);
+  // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
+  // `current` (congelado) — un no planificador nunca puede acabar
+  // escribiendo, ni por accidente, el plato de una comida de la casa.
+  const sharedComposed = isNonPlannerInHousehold
+    ? (composeMonthlyPlanForMember(merged, current, home.sharedSlots) ?? merged)
+    : merged;
+  // Mismo cinturón que en generateMonthlyPlan: si la IA reintrodujo un slot
+  // que la persona no quiere planificar, se vacía aquí también.
+  const final = blankUnselectedSlots(sharedComposed, selectedSlots);
+
+  const { error } = await supabase
+    .from("monthly_plans")
+    .update({ plan: final as never } as never)
+    .eq("month", month)
+    .eq("user_id", userId);
+  if (error) throw error;
+
+  const { synced } = await syncSharedMeals({ supabase: supabase as never, userId, month, today });
+
+  const summary = isNonPlannerInHousehold
+    ? `${final.intro} Las comidas compartidas de tu hogar no las toco — esas las lleva ${plannerName}.`
+    : synced
+      ? `${final.intro} También he ajustado las comidas compartidas de tu hogar.`
+      : final.intro;
+
+  return { plan: final, summary, synced };
+}
+
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
@@ -1163,112 +1331,136 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "plan-adjust");
 
+    const { plan, summary } = await reflowMeals({
+      supabase: context.supabase as never,
+      userId: context.userId,
+      key,
+      month: data.month,
+      today: data.today,
+      note: data.note,
+      kcalDelta: data.kcalDelta,
+    });
+    return { plan, summary };
+  });
+
+export type ReflowResult = {
+  /** Motivo por el que no se hizo nada (no es un error: el cliente no lo enseña). */
+  skipped?: "past" | "not-planner" | "no-plan";
+  scope?: "meals" | "full";
+  plan?: MonthlyPlan;
+  shopping?: ShoppingList;
+  summary?: string;
+};
+
+/**
+ * Recálculo automático y silencioso del plan cuando cambia algo que lo invalida
+ * (issue 05). Lo dispara el cliente con un debounce tras un cambio de despensa o
+ * de mesa — nunca la persona a mano, nunca por tiempo.
+ *
+ *  - `scope: "meals"` (cambió la despensa extra): recoloca los platos de los días
+ *    futuros con `reflowMeals`. La lista de la compra NO se toca (la despensa
+ *    extra nunca entra en la lista).
+ *  - `scope: "full"` (entró o salió alguien de la mesa, cambió una ración,
+ *    alergia o etapa): regenera plan Y cantidades con el hogar nuevo y luego hace
+ *    merge — hoy y el pasado se conservan, y las marcas "en casa"/"comprado"
+ *    viajan por nombre de ingrediente a la lista nueva.
+ *
+ * Solo lo ejecuta quien planifica en casa (o quien va en solitario): un no
+ * planificador que toca la despensa compartida (issue 06) no dispara la
+ * regeneración del plan de otra persona.
+ */
+export const reflowMonthlyPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { month: string; today?: string; scope?: "meals" | "full" }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+    const scope: "meals" | "full" = input?.scope === "full" ? "full" : "meals";
+    return { month: input.month, today, scope };
+  })
+  .handler(async ({ data, context }): Promise<ReflowResult> => {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) throw new Error("Falta la clave de IA");
+
+    // Un mes pasado no se recalcula: no se puede cumplir y gastaría tokens.
+    if (data.month < data.today.slice(0, 7)) return { skipped: "past" };
+
+    const { householdPlannerId, householdContext } = await import("@/lib/household.server");
+    const plannerId = await householdPlannerId(context.supabase as never, context.userId);
+    if (plannerId && plannerId !== context.userId) return { skipped: "not-planner" };
+
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "plan-reflow");
+
     const { data: row } = await ownPlanRow(
       context.supabase as never,
       context.userId,
       data.month,
-      "plan, shopping, pantry_extras",
+      "plan, shopping",
     );
     const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
-    const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
-    const pantryExtras = cleanPantryExtras(
-      (row as { pantry_extras?: unknown } | null)?.pantry_extras,
-    );
-    if (!current) throw new ValidationError("Todavía no hay plan de este mes");
+    if (!current) return { skipped: "no-plan" };
 
-    const [{ data: profile }, { data: logs }] = await Promise.all([
-      context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-      context.supabase
-        .from("daily_logs")
-        .select("log_date, weight_kg, habits, mood, notes")
-        .eq("user_id", context.userId)
-        .lte("log_date", data.today)
-        .order("log_date", { ascending: false })
-        .limit(7),
-    ]);
-
-    const p = (profile ?? {}) as Record<string, unknown>;
-    const cursor = planCursor(data.today);
-    const gt = p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
-    const goalLine = gt
-      ? `Objetivo: ${gt} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
-      : "La persona no tiene un objetivo de peso definido: no asumas uno ni recoloques el plan para adelgazar; céntrate en comidas equilibradas y hábitos.";
-    const kcalLine = data.kcalDelta
-      ? data.kcalDelta > 0
-        ? `Hoy hay un EXCESO estimado de ${data.kcalDelta} kcal: compénsalo de forma suave repartida entre los días siguientes (nunca todo en un día, nunca con platos de castigo).`
-        : `Hoy hay un DÉFICIT extra estimado de ${Math.abs(data.kcalDelta)} kcal (por ejemplo ejercicio): reponlo en los días siguientes con algo más de energía en las comidas, sin pasar hambre.`
-      : "Si de lo que cuenta se deduce un exceso o un déficit de energía, compénsalo de forma suave en los días siguientes.";
-
-    const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
-    const home = await householdContext(context.supabase as never, context.userId);
-    // Un no planificador recoloca sus comidas en solitario; las compartidas
-    // las lleva quien planifica en casa (D2). Se lo decimos a la IA en el
-    // prompt Y, por si no lo respeta, se congelan mecánicamente después
-    // (mismo patrón "cinturón y tirantes" que el resto de REGLAs).
-    const isNonPlannerInHousehold = !!home.plannerId && home.plannerId !== context.userId;
-    const plannerName =
-      home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
-    const sharedSlotsLine = isNonPlannerInHousehold
-      ? `REGLA 5: Hay comidas compartidas en tu casa que lleva ${plannerName}: ${describeSharedSlots(home.sharedSlots)}. NO las toques — devuélvelas exactamente igual que en el plan actual. Ajusta solo tus comidas en solitario.\n`
-      : "";
-
-    // Comidas que esta persona quiere planificar (ver generateMonthlyPlan):
-    // una recolocación tampoco debe reintroducir un slot que ya excluyó.
-    const selectedSlots = effectiveMealSlots(
-      p as { meal_slots?: unknown; meals_to_plan?: string | null },
-    );
-    const mealSlotsLine =
-      selectedSlots.length < MEAL_SLOTS.length
-        ? `REGLA 6: solo planifica ${selectedSlots.map((s) => MEAL_SLOT_LABEL[s].toLowerCase()).join(", ")}. No propongas nada para ${MEAL_SLOTS.filter(
-            (s) => !selectedSlots.includes(s),
-          )
-            .map((s) => MEAL_SLOT_LABEL[s].toLowerCase())
-            .join(", ")}: esos campos se quedan vacíos.\n`
-        : "";
-
-    const plan = await askForJson(
-      {
+    if (data.scope === "meals") {
+      const { plan, summary } = await reflowMeals({
+        supabase: context.supabase as never,
+        userId: context.userId,
         key,
-        system: coachSystemPrompt(profile as never, home.text),
-        prompt:
-          `Plan actual del mes ${data.month}:\n${JSON.stringify(current)}\n\n` +
-          `Ingredientes ya comprados (no pueden cambiar): ${ingredientNames(shopping)}\n\n` +
-          (pantryExtras.length
-            ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => e.name).join(", ")}\n\n`
-            : "") +
-          `${goalLine}\n` +
-          `Últimos días reales registrados: ${JSON.stringify(logs ?? [])}\n\n` +
-          `Hoy es ${data.today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
-          `Lo que ha pasado / lo que cuenta la persona: ${data.note}\n\n` +
-          `REGLA 1: el día de hoy y los días anteriores YA ESTÁN FIJADOS: devuélvelos exactamente igual. Cambia sólo los días POSTERIORES a hoy.\n` +
-          `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
-          `REGLA 3: ${kcalLine}\n` +
-          "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
-          `${sharedSlotsLine}` +
-          `${mealSlotsLine}` +
-          "Actualiza 'intro' con 1-2 frases explicando en lenguaje sencillo qué has recolocado y por qué. " +
-          'Devuelve solo JSON válido con la misma forma: {"intro": string, "focus": [3 strings], "weeks": [{"label", "focus", "breakfasts": [..], "snacks": [..], "days": [{"day","lunch","dinner"}]}]}. Sin markdown.',
-      },
-      (parsed) => completePlan(cleanPlan(parsed)),
-    );
+        month: data.month,
+        today: data.today,
+        note: "Ha cambiado lo que hay en la despensa de casa: alguien ha añadido o quitado un ingrediente que ya se tiene. Recoloca SOLO los días posteriores a hoy para aprovechar mejor lo que hay en casa y lo ya comprado. La lista de la compra no cambia.",
+        kcalDelta: null,
+      });
+      return { scope: "meals", plan, summary };
+    }
 
-    const merged = mergeFuturePlan(current, plan, cursor);
-    // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
-    // `current` (congelado) — un no planificador nunca puede acabar
-    // escribiendo, ni por accidente, el plato de una comida de la casa.
-    const sharedComposed = isNonPlannerInHousehold
-      ? (composeMonthlyPlanForMember(merged, current, home.sharedSlots) ?? merged)
-      : merged;
-    // Mismo cinturón que en generateMonthlyPlan: si la IA reintrodujo un slot
-    // que la persona no quiere planificar, se vacía aquí también.
-    const final = blankUnselectedSlots(sharedComposed, selectedSlots);
+    // scope: "full" — cambió la mesa. Regenera plan y cantidades con el hogar
+    // nuevo y hace merge conservando hoy/pasado y las marcas de compra.
+    const { syncSharedMeals } = await import("@/lib/household.server");
+    const [{ data: profile }, home] = await Promise.all([
+      context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
+      householdContext(context.supabase as never, context.userId),
+    ]);
+    const currentShopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
+    const cadence: ShoppingCadence = current.cadence ?? cadenceOf(currentShopping);
+    const coverage = current.coverage ?? monthCoverage(data.month, data.today);
+
+    const fresh = await generatePlanBody({
+      key,
+      userId: context.userId,
+      month: data.month,
+      cadence,
+      coverage,
+      home,
+      profile,
+    });
+
+    const cursor = planCursor(data.today);
+    const validChildIds = home.children.map((c) => c.id);
+    const mergedPlan = mergeFutureKids(
+      mergeFuturePlan(current, fresh.plan, cursor),
+      fresh.plan,
+      cursor,
+      validChildIds,
+    );
+    const finalPlan: MonthlyPlan = { ...mergedPlan, coverage, cadence };
+    const finalShopping = carryOwnedCanonical(currentShopping, fresh.shopping);
 
     const { error } = await context.supabase
       .from("monthly_plans")
-      .update({ plan: final as never } as never)
+      .update({
+        plan: finalPlan as never,
+        shopping: finalShopping as never,
+        // La compra cambió → el mes deja de estar "cerrado del todo".
+        // `confirmed_trips` se conserva (los tramos ya hechos siguen marcados);
+        // `setTripConfirmed` recalcula el agregado la próxima vez.
+        confirmed_at: null,
+      } as never)
       .eq("month", data.month)
       .eq("user_id", context.userId);
-    if (error) throw error;
+    if (error) {
+      console.error("reflowMonthlyPlan", error);
+      throw new Error("No hemos podido actualizar el plan con los cambios");
+    }
 
     const { synced } = await syncSharedMeals({
       supabase: context.supabase as never,
@@ -1277,13 +1469,14 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
       today: data.today,
     });
 
-    const summary = isNonPlannerInHousehold
-      ? `${final.intro} Las comidas compartidas de tu hogar no las toco — esas las lleva ${plannerName}.`
-      : synced
-        ? `${final.intro} También he ajustado las comidas compartidas de tu hogar.`
-        : final.intro;
-
-    return { plan: final, summary };
+    return {
+      scope: "full",
+      plan: finalPlan,
+      shopping: finalShopping,
+      summary: synced
+        ? `${finalPlan.intro} También he ajustado las comidas compartidas de tu hogar.`
+        : finalPlan.intro,
+    };
   });
 
 /**

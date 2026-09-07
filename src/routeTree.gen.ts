@@ -46,6 +46,7 @@ import { Route as ApiV1PlanPantryExtraRouteImport } from './routes/api/v1/plan/p
 import { Route as ApiV1PlanRecadenceRouteImport } from './routes/api/v1/plan/recadence'
 import { Route as ApiV1PlanReceiptRouteImport } from './routes/api/v1/plan/receipt'
 import { Route as ApiV1PlanRecipeRouteImport } from './routes/api/v1/plan/recipe'
+import { Route as ApiV1PlanReflowRouteImport } from './routes/api/v1/plan/reflow'
 import { Route as ApiV1PlanShoppingOwnedRouteImport } from './routes/api/v1/plan/shopping-owned'
 import { Route as ApiV1PlanTripActualRouteImport } from './routes/api/v1/plan/trip-actual'
 import { Route as ApiV1PlanTripConfirmRouteImport } from './routes/api/v1/plan/trip-confirm'
@@ -238,6 +239,11 @@ const ApiV1PlanRecipeRoute = ApiV1PlanRecipeRouteImport.update({
   path: '/api/v1/plan/recipe',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlanReflowRoute = ApiV1PlanReflowRouteImport.update({
+  id: '/api/v1/plan/reflow',
+  path: '/api/v1/plan/reflow',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1PlanShoppingOwnedRoute = ApiV1PlanShoppingOwnedRouteImport.update({
   id: '/api/v1/plan/shopping-owned',
   path: '/api/v1/plan/shopping-owned',
@@ -296,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/recadence': typeof ApiV1PlanRecadenceRoute
   '/api/v1/plan/receipt': typeof ApiV1PlanReceiptRoute
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
+  '/api/v1/plan/reflow': typeof ApiV1PlanReflowRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
@@ -338,6 +345,7 @@ export interface FileRoutesByTo {
   '/api/v1/plan/recadence': typeof ApiV1PlanRecadenceRoute
   '/api/v1/plan/receipt': typeof ApiV1PlanReceiptRoute
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
+  '/api/v1/plan/reflow': typeof ApiV1PlanReflowRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
@@ -382,6 +390,7 @@ export interface FileRoutesById {
   '/api/v1/plan/recadence': typeof ApiV1PlanRecadenceRoute
   '/api/v1/plan/receipt': typeof ApiV1PlanReceiptRoute
   '/api/v1/plan/recipe': typeof ApiV1PlanRecipeRoute
+  '/api/v1/plan/reflow': typeof ApiV1PlanReflowRoute
   '/api/v1/plan/shopping-owned': typeof ApiV1PlanShoppingOwnedRoute
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
@@ -426,6 +435,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recadence'
     | '/api/v1/plan/receipt'
     | '/api/v1/plan/recipe'
+    | '/api/v1/plan/reflow'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
@@ -468,6 +478,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recadence'
     | '/api/v1/plan/receipt'
     | '/api/v1/plan/recipe'
+    | '/api/v1/plan/reflow'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
@@ -511,6 +522,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/recadence'
     | '/api/v1/plan/receipt'
     | '/api/v1/plan/recipe'
+    | '/api/v1/plan/reflow'
     | '/api/v1/plan/shopping-owned'
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
@@ -547,6 +559,7 @@ export interface RootRouteChildren {
   ApiV1PlanRecadenceRoute: typeof ApiV1PlanRecadenceRoute
   ApiV1PlanReceiptRoute: typeof ApiV1PlanReceiptRoute
   ApiV1PlanRecipeRoute: typeof ApiV1PlanRecipeRoute
+  ApiV1PlanReflowRoute: typeof ApiV1PlanReflowRoute
   ApiV1PlanShoppingOwnedRoute: typeof ApiV1PlanShoppingOwnedRoute
   ApiV1PlanTripActualRoute: typeof ApiV1PlanTripActualRoute
   ApiV1PlanTripConfirmRoute: typeof ApiV1PlanTripConfirmRoute
@@ -814,6 +827,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanRecipeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plan/reflow': {
+      id: '/api/v1/plan/reflow'
+      path: '/api/v1/plan/reflow'
+      fullPath: '/api/v1/plan/reflow'
+      preLoaderRoute: typeof ApiV1PlanReflowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/plan/shopping-owned': {
       id: '/api/v1/plan/shopping-owned'
       path: '/api/v1/plan/shopping-owned'
@@ -900,6 +920,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanRecadenceRoute: ApiV1PlanRecadenceRoute,
   ApiV1PlanReceiptRoute: ApiV1PlanReceiptRoute,
   ApiV1PlanRecipeRoute: ApiV1PlanRecipeRoute,
+  ApiV1PlanReflowRoute: ApiV1PlanReflowRoute,
   ApiV1PlanShoppingOwnedRoute: ApiV1PlanShoppingOwnedRoute,
   ApiV1PlanTripActualRoute: ApiV1PlanTripActualRoute,
   ApiV1PlanTripConfirmRoute: ApiV1PlanTripConfirmRoute,

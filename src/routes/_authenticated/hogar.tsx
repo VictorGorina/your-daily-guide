@@ -60,6 +60,7 @@ import {
 } from "@/lib/household";
 import { saveHomeSchedule, saveSharedSlots, syncHouseholdPlan } from "@/lib/household.functions";
 import { childPureeGaps, eur, shoppingTotal } from "@/lib/plan-shared";
+import { schedulePlanRecalc } from "@/lib/plan-recalc";
 import { fillChildMeals } from "@/lib/plan.functions";
 
 export const Route = createFileRoute("/_authenticated/hogar")({
@@ -196,6 +197,14 @@ function Hogar() {
   // el creador, pero el formulario seguía escondido.
   const canManageRoster = isCreator || isPlanner;
 
+  // Un cambio en la mesa (entra/sale alguien, cambia una ración) invalida los
+  // platos Y las cantidades del plan: se programa un recálculo silencioso con
+  // debounce (issue 05). Solo si quien lo hace es quien planifica — su fila
+  // `monthly_plans` es la del hogar; para otro miembro el servidor lo ignoraría.
+  const recalcRoster = () => {
+    if (isPlanner) schedulePlanRecalc(month, todayISO(), "full");
+  };
+
   const addAdult = useMutation({
     mutationFn: () => {
       const householdId = state.data?.household?.id;
@@ -210,6 +219,7 @@ function Hogar() {
       setNewAdult({ name: "", usesApp: true, appetite: "normal" });
       toast.success("Añadido a la mesa");
       refresh();
+      recalcRoster();
     },
     // Antes se descartaba el error real y siempre salía el mismo texto
     // genérico, así que un fallo (RLS, validación, lo que fuera) no se podía
@@ -224,7 +234,10 @@ function Hogar() {
 
   const dropMember = useMutation({
     mutationFn: (id: string) => removeMember(id),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh();
+      recalcRoster();
+    },
   });
 
   const makePlanner = useMutation({
@@ -243,7 +256,10 @@ function Hogar() {
   const renameMember = (id: string, value: string) =>
     void updateMember(id, { display_name: value.trim() || "Miembro" }).then(refresh);
   const setMemberPortion = (id: string, portion: number) =>
-    void updateMember(id, { portion }).then(refresh);
+    void updateMember(id, { portion }).then(() => {
+      refresh();
+      recalcRoster();
+    });
 
   const leave = useMutation({
     mutationFn: leaveHousehold,
@@ -1131,6 +1147,7 @@ function Hogar() {
             child={childSheet.child}
             householdId={household.id}
             onClose={() => setChildSheet((s) => ({ ...s, open: false }))}
+            onChanged={recalcRoster}
           />
         </Fragment>
       )}

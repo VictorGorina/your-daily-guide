@@ -90,8 +90,10 @@ en `supabase/migrations/`.
 
 Un cambio a mano se guarda en campos propios del día (`breakfast`/`snack` en `PlanDay`) y manda
 sobre la rotación semanal por defecto; una recolocación automática posterior los respeta y no los
-pisa (`mergeFuturePlan`). La lista de la compra nunca cambia — si un plato pide algo no comprado,
-se guarda igual y aparece como aviso en `PlanDay.extras`.
+pisa (`mergeFuturePlan`). Al recolocar platos (`adjustMonthlyPlan`, `setPlanMeal`, recálculo por
+despensa) la lista de la compra nunca cambia — si un plato pide algo no comprado, se guarda igual y
+aparece como aviso en `PlanDay.extras`. La única excepción es un cambio en la mesa del hogar, que
+sí re-dimensiona las cantidades (ver "Recálculo automático del plan" más abajo).
 
 **Cantidades de la compra — modelo canónico por semana.** `generateMonthlyPlan` guarda `shopping`
 en **forma canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`) + `weekQty` (cuánto
@@ -114,10 +116,27 @@ sesga hacia larga vida. La lista de la compra en sí no cambia y no hay compras 
 que la compra no incluye: los añade a mano en Ingredientes (`setPantryExtra`) o salen del escaneo de
 un tiquet (`scanTripReceipt`, se guardan solo los que encajan con sus objetivos). Es un conjunto
 paralelo a `shopping`, nunca se fusiona con la lista; `adjustMonthlyPlan`/`setPlanMeal`/
-`coachPlanContext` lo tratan como disponible al recolocar, sin disparar regeneración. El importe
+`coachPlanContext` lo tratan como disponible al recolocar. El importe
 real del tiquet va a `trip_actuals`; la tarjeta "Gasto en comida" del historial lo muestra
 (`MonthSpendSummary`). Cambiar de cadencia en una lista antigua conserva las marcas
 "en casa"/"comprado" por nombre de ingrediente (`carryOwnedByName`), no por `name`+`trip`.
+
+**Recálculo automático del plan (`reflowMonthlyPlan` + [src/lib/plan-recalc.ts](src/lib/plan-recalc.ts)).**
+Un cambio en la despensa extra o en la mesa del hogar dispara un recálculo **silencioso** del plan
+(issue 05: el usuario revirtió el "sin disparar regeneración" de antes). El disparo es por evento,
+nunca por tiempo. El cliente (`schedulePlanRecalc`) agrupa varios cambios seguidos con un debounce
+de ~6 s → **una** llamada a `POST /api/v1/plan/reflow`; persiste un "pendiente" en
+`localStorage`/`AsyncStorage` y la pantalla Plan lo relanza al abrirse (`flushPlanRecalc`) si la
+app se cerró antes. `reflowMonthlyPlan` tiene dos modos:
+
+- `scope: "meals"` (cambió la despensa) → recoloca platos futuros con `reflowMeals` (núcleo
+  compartido con `adjustMonthlyPlan`). La lista de la compra **no** cambia.
+- `scope: "full"` (entra/sale alguien, cambia ración/alergia/etapa) → regenera plan **y** cantidades
+  con el hogar nuevo (`generatePlanBody`) y hace merge: `mergeFuturePlan` + `mergeFutureKids`
+  conservan hoy/pasado y un plato puesto a mano; `carryOwnedCanonical` traspasa las marcas de compra
+  por nombre; `confirmed_at` se limpia.
+  Solo lo ejecuta quien planifica en casa (o quien va en solitario): el servidor devuelve
+  `skipped: "not-planner"` para un no planificador. Bucket de cuota propio (`plan-reflow`, 12/h).
 
 **Pantalla Plan — navegación de meses y unificación de Historial.** La pantalla tiene dos
 subpestañas (Plan e Ingredientes; ya no hay "Historial") y un selector `‹ mes ›` en la cabecera

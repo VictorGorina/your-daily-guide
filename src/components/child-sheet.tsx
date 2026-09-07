@@ -71,12 +71,15 @@ export function ChildSheet({
   child,
   householdId,
   onClose,
+  onChanged,
 }: {
   open: boolean;
   /** `null` = alta de un peque nuevo; un peque = edición. */
   child: HouseholdChild | null;
   householdId: string;
   onClose: () => void;
+  /** Se llama tras guardar o quitar un peque, para programar el recálculo del plan (issue 05). */
+  onChanged?: () => void;
 }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -115,6 +118,7 @@ export function ChildSheet({
     onSuccess: () => {
       toast.success(child ? "Peque actualizado" : "Peque añadido");
       refresh();
+      onChanged?.();
       onClose();
     },
     onError: () => toast.error("No hemos podido guardar"),
@@ -125,6 +129,7 @@ export function ChildSheet({
     onSuccess: () => {
       toast.success("Peque quitado de la familia");
       refresh();
+      onChanged?.();
       onClose();
     },
     onError: () => toast.error("No hemos podido quitarlo"),

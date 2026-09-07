@@ -93,6 +93,12 @@ import {
   type TripReceipts,
 } from "../../lib/plan-shared";
 import { freshRiskNames, freshRisksForTrip } from "../../lib/perishability";
+import {
+  flushPlanRecalc,
+  onPlanRecalcDone,
+  schedulePlanRecalc,
+  wirePlanRecalcFlush,
+} from "../../lib/plan-recalc";
 
 type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList };
 
@@ -276,6 +282,14 @@ export default function Plan() {
     },
   });
 
+  // Un cambio en la despensa propia invalida los platos de los días futuros: se
+  // programa un recálculo silencioso con debounce (issue 05). No para un no
+  // planificador (su despensa va a la fila del planificador y el servidor no
+  // regenera el plan de otra persona).
+  const recalcFromPantry = () => {
+    if (!isSoloPlanner) schedulePlanRecalc(month, today, "meals");
+  };
+
   const pantry = useMutation({
     mutationFn: (vars: { name: string; qty?: string; remove?: boolean }) =>
       apiPost<{ pantry_extras: PantryExtra[] }>("plan/pantry-extra", { month, ...vars }),
@@ -283,6 +297,7 @@ export default function Plan() {
       qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
         prev ? { ...prev, pantry_extras: res.pantry_extras } : prev,
       );
+      recalcFromPantry();
     },
     onError: () => Alert.alert("No hemos podido guardar el ingrediente"),
   });
@@ -306,6 +321,7 @@ export default function Plan() {
       if (res.discarded.length)
         parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
       Alert.alert("Tiquet leído", parts.join("\n"));
+      if (res.added.length) recalcFromPantry();
     },
     onError: (e) => Alert.alert(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
   });
@@ -403,6 +419,22 @@ export default function Plan() {
     setShopSource("own");
     setOpenDay(null);
   }, [month]);
+
+  // Recálculo automático del plan (issue 05). Red de seguridad: si se cambió la
+  // despensa o la mesa y la app se cerró antes de que saltara el debounce, se
+  // lanza al abrir/volver a Plan. `wirePlanRecalcFlush` engancha además el envío
+  // al pasar la app a segundo plano. Al terminar se refresca el plan (el `intro`
+  // explica qué cambió; no hay más aviso).
+  useEffect(() => {
+    wirePlanRecalcFlush();
+    return onPlanRecalcDone((done) => {
+      qc.invalidateQueries({ queryKey: ["plan", done] });
+      qc.invalidateQueries({ queryKey: ["planner-shopping", done] });
+    });
+  }, [qc]);
+  useEffect(() => {
+    if (!isSoloPlanner) void flushPlanRecalc(month);
+  }, [month, isSoloPlanner]);
 
   const goToMonth = (target: string) => {
     if (target < bounds.earliest || target > bounds.latest) return;
@@ -1157,8 +1189,8 @@ function PantryExtrasCard({
         </Text>
       </View>
       <Text className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-        Si tienes algo que la lista no incluye, dímelo y lo tendré en cuenta al recolocar los
-        próximos días. No se añade a la compra.
+        Si tienes algo que la lista no incluye, dímelo y recoloco los próximos días para
+        aprovecharlo. Tu lista de la compra no cambia.
       </Text>
       <View className="mt-2.5 flex-row gap-1.5">
         <TextInput

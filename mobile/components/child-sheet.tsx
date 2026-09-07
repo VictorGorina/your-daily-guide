@@ -61,11 +61,14 @@ export function ChildSheet({
   child,
   householdId,
   onClose,
+  onChanged,
 }: {
   open: boolean;
   child: HouseholdChild | null;
   householdId: string;
   onClose: () => void;
+  /** Se llama tras guardar o quitar un peque, para programar el recálculo del plan (issue 05). */
+  onChanged?: () => void;
 }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -100,6 +103,7 @@ export function ChildSheet({
     onSuccess: () => {
       Alert.alert(child ? "Peque actualizado" : "Peque añadido");
       refresh();
+      onChanged?.();
       onClose();
     },
     onError: () => Alert.alert("No hemos podido guardar"),
@@ -109,6 +113,7 @@ export function ChildSheet({
     mutationFn: () => removeChild(child!.id),
     onSuccess: () => {
       refresh();
+      onChanged?.();
       onClose();
     },
     onError: () => Alert.alert("No hemos podido quitarlo"),

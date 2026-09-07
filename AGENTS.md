@@ -80,10 +80,31 @@ que la lista de la compra no incluye: los añade a mano en la pestaña Ingredien
 o salen del escaneo de un tiquet (`scanTripReceipt`, solo los que encajan con sus objetivos; el
 resto se descartan con motivo). Es un conjunto **paralelo** a `shopping` — nunca se fusiona con la
 lista de la compra — que `adjustMonthlyPlan`, `setPlanMeal`/`offShoppingList` y `coachPlanContext`
-tratan como también disponible al recolocar. No dispara regeneración: solo cuenta la próxima vez
-que se recoloca. El importe real del tiquet se guarda en `trip_actuals` (misma columna que el gasto
-a mano) y su resumen en `trip_receipts`; de ahí sale la tarjeta "Gasto en comida" del historial
-(`MonthSpendSummary`). La foto del tiquet no se guarda: se manda al modelo de visión y se descarta.
+tratan como también disponible al recolocar. El importe real del tiquet se guarda en `trip_actuals`
+(misma columna que el gasto a mano) y su resumen en `trip_receipts`; de ahí sale la tarjeta "Gasto
+en comida" del historial (`MonthSpendSummary`). La foto del tiquet no se guarda: se manda al modelo
+de visión y se descarta.
+
+**Recálculo automático del plan (issue 05).** Antes un cambio en la despensa extra o en la mesa no
+tocaba el plan ("no dispara regeneración"); el usuario lo revirtió el 2026-09-07. Ahora
+`schedulePlanRecalc` ([src/lib/plan-recalc.ts](src/lib/plan-recalc.ts), copia en
+`mobile/lib/plan-recalc.ts`) programa un recálculo **silencioso** tras un cambio de despensa
+(`onSuccess` de `pantry`/`receipt` en la pantalla Plan) o de mesa (`addAdult` / `dropMember` /
+`setMemberPortion` / `ChildSheet` en Familia). Es por evento, nunca por tiempo. Un debounce de ~6 s
+en el cliente agrupa varios cambios seguidos en **una** llamada a `POST /api/v1/plan/reflow`
+(`reflowMonthlyPlan`), para no vaciar la cuota; se persiste un "pendiente" en storage y la pantalla
+Plan lo relanza al abrirse si la app se cerró antes de que saltara el debounce
+(`flushPlanRecalc`). `reflowMonthlyPlan`:
+
+- `scope: "meals"` (despensa) → `reflowMeals` (núcleo que también usa `adjustMonthlyPlan`): recoloca
+  platos futuros, la lista de la compra **no** cambia.
+- `scope: "full"` (mesa) → `generatePlanBody` regenera plan y cantidades con el hogar nuevo, luego
+  `mergeFuturePlan` + `mergeFutureKids` (conservan hoy/pasado, un plato a mano y adoptan los purés de
+  un bebé nuevo) y `carryOwnedCanonical` (traspasa "en casa"/"comprado" por nombre). `confirmed_at`
+  se limpia. Esta es la única vía por la que un cambio del sistema mueve las cantidades de la compra.
+  Guardas: solo el planificador (o quien va en solitario) ejecuta el recálculo — para un no
+  planificador `reflowMonthlyPlan` devuelve `skipped: "not-planner"` sin gastar cuota. Bucket propio
+  `plan-reflow` (12/h) en `RATE_LIMITS`.
 
 Cambiar de cadencia (`recadenceMonthlyPlan`) en una lista **canónica** no llama a la IA ni toca
 `shopping`: solo guarda la nueva cadencia y la UI re-proyecta. En una lista **antigua** sí rehace

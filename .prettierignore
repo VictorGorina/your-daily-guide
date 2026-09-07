@@ -14,6 +14,11 @@ routeTree.gen.ts
 .agents
 skills-lock.json
 
+# Notas de trabajo del issue tracker (ver docs/agents/issue-tracker.md): markdown
+# a mano, no código; que `prettier --write .` no lo reescriba y ensucie diffs
+# de features que solo tocan un issue.
+.scratch
+
 # Catálogos de assets de Xcode: los escribe Expo al generar los targets
 # nativos ("author": "expo" dentro de cada Contents.json) y los vuelve a
 # escribir a su manera en el siguiente prebuild.

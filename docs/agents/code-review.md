@@ -58,9 +58,18 @@ Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
       `guardSharedSlotWrite`). Se espeja al resto de miembros con la comida compartida
       (`syncSharedMeals` y `composeDayForUser` arrastran `kids` de un slot compartido). La
       lista de la compra no cambia por esto: lo que falte va en `kids[].off`.
-- [ ] **La lista de la compra nunca cambia** por un cambio de plan. Si un plato pide algo no
+- [ ] **La lista de la compra nunca cambia** por un cambio de plan (recolocar platos:
+      `setPlanMeal`, `adjustMonthlyPlan`, recálculo por despensa). Si un plato pide algo no
       comprado, se guarda igual y los ingredientes que faltan quedan en `PlanDay.extras`
-      como aviso.
+      como aviso. **Única excepción:** `reflowMonthlyPlan` con `scope: "full"` (cambió la
+      mesa del hogar) sí regenera las cantidades — ver más abajo.
+- [ ] **Recálculo automático (issue 05).** Un cambio en la despensa extra o en la mesa
+      programa `schedulePlanRecalc` ([plan-recalc.ts](../../src/lib/plan-recalc.ts), copia en
+      `mobile/lib/`) con debounce; NO se llama a `reflowMonthlyPlan` en un bucle ni una vez
+      por cada gesto. El servidor debe devolver `skipped: "not-planner"` para un no
+      planificador (nunca regenera el plan de otra persona) y `scope: "meals"` NO debe tocar
+      `shopping`. Cualquier disparo nuevo (otra mutación de despensa/mesa) va con el mismo
+      helper, en ambas plataformas.
 - [ ] El emparejamiento de un `ShoppingItem` al marcarlo "comprado" (`toggleShoppingOwned`)
       es por `name` + `trip` juntos, nunca solo por `name`. **Excepción deliberada:**
       `carryOwnedByName` (al cambiar de cadencia) empareja **solo por `name`** a propósito —

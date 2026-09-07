@@ -764,6 +764,61 @@ export const carryOwnedByName = (
   }));
 };
 
+/**
+ * Clave para casar el mismo ingrediente entre dos listas cuando la IA ha podido
+ * reescribir el nombre en el camino: `normName` + singular aproximado (quita la
+ * "s" final, "patatas" → "patata", "tomates" → "tomate"). Se queda corta con
+ * plurales en "-es" de consonante ("champiñones"), pero el fallo es benigno —
+ * una marca que no se traspasa, nunca una de más — así que no merece un
+ * stemmer. Solo la usa `carryOwnedCanonical`.
+ */
+const ownedMatchKey = (name: string) => normName(name).replace(/s$/, "");
+
+/**
+ * Como `carryOwnedByName` pero para la forma canónica: además del `owned`
+ * legacy conserva `ownedTrips` (marcas "en casa"/"comprado" por compra). Lo usa
+ * el recálculo automático (issue 05): cuando entra o sale alguien de la mesa la
+ * lista de la compra se regenera con cantidades (y nombres) nuevos, pero lo que
+ * la persona ya había marcado sigue marcado. Casa por `ownedMatchKey`; "fridge"
+ * gana a "store" si un mismo ingrediente traía las dos.
+ */
+export const carryOwnedCanonical = (
+  prev: ShoppingList | null | undefined,
+  next: ShoppingList,
+): ShoppingList => {
+  const legacyByName = new Map<string, "fridge" | "store">();
+  const tripsByName = new Map<string, Record<number, "fridge" | "store">>();
+  for (const group of prev ?? []) {
+    for (const item of group.items) {
+      const key = ownedMatchKey(item.name);
+      if (item.owned && (item.owned === "fridge" || !legacyByName.has(key))) {
+        legacyByName.set(key, item.owned);
+      }
+      for (const [rawTrip, source] of Object.entries(item.ownedTrips ?? {})) {
+        const trip = Number(rawTrip);
+        if (!Number.isFinite(trip) || (source !== "fridge" && source !== "store")) continue;
+        const acc = tripsByName.get(key) ?? {};
+        if (source === "fridge" || !acc[trip]) acc[trip] = source;
+        tripsByName.set(key, acc);
+      }
+    }
+  }
+  if (!legacyByName.size && !tripsByName.size) return next;
+  return next.map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => {
+      const key = ownedMatchKey(item.name);
+      const legacy = legacyByName.get(key);
+      const trips = tripsByName.get(key);
+      if (!legacy && !trips) return item;
+      const out: ShoppingItem = { ...item };
+      if (legacy) out.owned = legacy;
+      if (trips) out.ownedTrips = { ...(item.ownedTrips ?? {}), ...trips };
+      return out;
+    }),
+  }));
+};
+
 /** Array de `len` números ≥ 0 (rellena con 0, recorta lo que sobre). */
 const numArray = (raw: unknown, len: number): number[] =>
   Array.from({ length: len }, (_, i) => {
@@ -1193,6 +1248,54 @@ export const mergeFuturePlan = (
     };
   }),
 });
+
+/**
+ * Segunda pasada tras `mergeFuturePlan`, solo para el recálculo por cambio de
+ * mesa (issue 05, `reflowMonthlyPlan` scope "full"). `mergeFuturePlan` conserva
+ * el `kids` del plan actual en los días futuros (para no pisar un `setChildMeal`
+ * a mano); pero un bebé recién dado de alta necesita su puré y ese `kids` nuevo
+ * viene en `fresh`, no en el actual. Aquí:
+ *  - se descartan los `kids` de un niño que ya no está en la casa (`keepChildIds`);
+ *  - se adopta del plan nuevo cada `(childId, slot)` que el día no tuviera ya
+ *    (una entrada existente = plato puesto a mano, se respeta).
+ * Solo toca días posteriores al cursor; hoy y el pasado no se tocan.
+ */
+export const mergeFutureKids = (
+  merged: MonthlyPlan,
+  fresh: MonthlyPlan,
+  cursor: { weekIndex: number; dayIndex: number },
+  keepChildIds: string[],
+): MonthlyPlan => {
+  const keep = new Set(keepChildIds);
+  return {
+    ...merged,
+    weeks: merged.weeks.map((week, wi) => {
+      if (wi < cursor.weekIndex) return week;
+      const freshWeek = fresh.weeks[wi];
+      if (!freshWeek) return week;
+      const future = wi > cursor.weekIndex;
+      return {
+        ...week,
+        days: week.days.map((day, di) => {
+          if (!future && di <= cursor.dayIndex) return day;
+          const freshDay =
+            freshWeek.days.find((d) => normDay(d.day) === normDay(day.day)) ?? freshWeek.days[di];
+          const existing = (day.kids ?? []).filter((k) => keep.has(k.childId));
+          const taken = new Set(existing.map((k) => `${k.childId}|${k.slot}`));
+          const added = (freshDay?.kids ?? []).filter(
+            (k) => keep.has(k.childId) && !taken.has(`${k.childId}|${k.slot}`),
+          );
+          const kids = [...existing, ...added];
+          if (kids.length === (day.kids?.length ?? 0) && !added.length) return day;
+          const nextDay: PlanDay = { ...day };
+          if (kids.length) nextDay.kids = kids;
+          else delete nextDay.kids;
+          return nextDay;
+        }),
+      };
+    }),
+  };
+};
 
 const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 

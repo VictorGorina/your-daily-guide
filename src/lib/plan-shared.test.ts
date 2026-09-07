@@ -5,6 +5,7 @@ import {
   addMonths,
   cadenceOf,
   carryOwnedByName,
+  carryOwnedCanonical,
   cleanMealSlots,
   cleanPantryExtras,
   cleanPlan,
@@ -28,6 +29,7 @@ import {
   monthParts,
   parseMealSlotsLegacy,
   mergeFuturePlan,
+  mergeFutureKids,
   type MonthlyPlan,
   monthCoverage,
   nextMonthISO,
@@ -344,6 +346,112 @@ describe("carryOwnedByName", () => {
   it("sin marcas previas devuelve la lista nueva tal cual", () => {
     const next = shopping();
     expect(carryOwnedByName([], next)).toBe(next);
+  });
+});
+
+describe("carryOwnedCanonical", () => {
+  // Recálculo por cambio de mesa (issue 05): la lista se regenera con cantidades
+  // nuevas pero lo que ya estaba marcado sigue marcado.
+  const prev: ShoppingList = [
+    {
+      category: "Despensa",
+      items: [
+        {
+          name: "Arroz",
+          qty: "1 kg",
+          price_eur: 2,
+          trip: 0,
+          perishable: false,
+          unit: "g",
+          weekQty: [250, 250, 250, 250],
+          weekPrice: [0.5, 0.5, 0.5, 0.5],
+          ownedTrips: { 0: "store" },
+        },
+        {
+          name: "Aceite de oliva",
+          qty: "1 L",
+          price_eur: 6,
+          trip: 0,
+          perishable: false,
+          unit: "ml",
+          weekQty: [250, 250, 250, 250],
+          weekPrice: [1.5, 1.5, 1.5, 1.5],
+          owned: "fridge",
+        },
+      ],
+    },
+  ];
+
+  const fresh = (): ShoppingList => [
+    {
+      category: "Despensa",
+      items: [
+        {
+          name: "arroz",
+          qty: "1,4 kg",
+          price_eur: 2.8,
+          trip: 0,
+          perishable: false,
+          unit: "g",
+          weekQty: [350, 350, 350, 350],
+          weekPrice: [0.7, 0.7, 0.7, 0.7],
+        },
+        {
+          name: "Aceite de oliva virgen extra",
+          qty: "1 L",
+          price_eur: 6,
+          trip: 0,
+          perishable: false,
+          unit: "ml",
+          weekQty: [250, 250, 250, 250],
+          weekPrice: [1.5, 1.5, 1.5, 1.5],
+        },
+      ],
+    },
+  ];
+
+  it("traspasa ownedTrips por nombre normalizado sin tocar las cantidades nuevas", () => {
+    const out = carryOwnedCanonical(prev, fresh());
+    const arroz = out[0]!.items[0]!;
+    expect(arroz.ownedTrips).toEqual({ 0: "store" });
+    // La cantidad regenerada se conserva: el carry solo toca las marcas.
+    expect(arroz.weekQty).toEqual([350, 350, 350, 350]);
+  });
+
+  it("empareja singular/plural cuando la IA reescribe el nombre al regenerar", () => {
+    const marked: ShoppingList = [
+      {
+        category: "Verdura",
+        items: [
+          {
+            name: "Patatas",
+            qty: "",
+            price_eur: 1,
+            trip: 0,
+            perishable: false,
+            ownedTrips: { 1: "store" },
+          },
+        ],
+      },
+    ];
+    const regen: ShoppingList = [
+      {
+        category: "Verdura",
+        items: [{ name: "Patata", qty: "", price_eur: 1.4, trip: 0, perishable: false }],
+      },
+    ];
+    expect(carryOwnedCanonical(marked, regen)[0]!.items[0]!.ownedTrips).toEqual({ 1: "store" });
+  });
+
+  it("empareja aunque el nombre nuevo no sea idéntico solo si normaliza igual", () => {
+    const out = carryOwnedCanonical(prev, fresh());
+    // "Aceite de oliva" ≠ "Aceite de oliva virgen extra" al normalizar → no se traspasa.
+    expect(out[0]!.items[1]!.owned).toBeUndefined();
+  });
+
+  it("sin marcas previas devuelve la lista nueva tal cual", () => {
+    const next = fresh();
+    expect(carryOwnedCanonical([], next)).toBe(next);
   });
 });
 
@@ -700,6 +808,59 @@ describe("mergeFuturePlan", () => {
     expect(merged.weeks[1]!.days[0]!.kids).toEqual([
       { childId: "leo", slot: "cena", dish: "Puré de patata" },
     ]);
+  });
+});
+
+describe("mergeFutureKids", () => {
+  // Segunda pasada del recálculo por cambio de mesa (issue 05): adopta los purés
+  // que trae el plan nuevo para un bebé recién dado de alta, sin pisar un plato
+  // de niño puesto a mano ni dejar el de un niño que ya no está.
+  const withKids = (
+    base: MonthlyPlan,
+    wi: number,
+    di: number,
+    kids: MonthlyPlan["weeks"][0]["days"][0]["kids"],
+  ) => {
+    const copy: MonthlyPlan = structuredClone(base);
+    copy.weeks[wi]!.days[di] = { ...copy.weeks[wi]!.days[di]!, kids };
+    return copy;
+  };
+  const cursor = { weekIndex: 0, dayIndex: 2 };
+
+  it("adopta el puré del plan nuevo en un día futuro que no tenía plato de niño", () => {
+    const merged = plan();
+    const fresh = withKids(plan(), 1, 0, [
+      { childId: "nora", slot: "comida", dish: "Puré de calabaza" },
+    ]);
+    const out = mergeFutureKids(merged, fresh, cursor, ["nora"]);
+    expect(out.weeks[1]!.days[0]!.kids).toEqual([
+      { childId: "nora", slot: "comida", dish: "Puré de calabaza" },
+    ]);
+  });
+
+  it("respeta un plato de niño ya puesto (mismo childId+slot) y no lo pisa con el del plan nuevo", () => {
+    const merged = withKids(plan(), 1, 0, [{ childId: "leo", slot: "cena", dish: "Arroz a mano" }]);
+    const fresh = withKids(plan(), 1, 0, [{ childId: "leo", slot: "cena", dish: "Otra cosa" }]);
+    const out = mergeFutureKids(merged, fresh, cursor, ["leo"]);
+    expect(out.weeks[1]!.days[0]!.kids).toEqual([
+      { childId: "leo", slot: "cena", dish: "Arroz a mano" },
+    ]);
+  });
+
+  it("descarta el plato de un niño que ya no está en la casa", () => {
+    const merged = withKids(plan(), 1, 0, [
+      { childId: "fuera", slot: "comida", dish: "Puré viejo" },
+    ]);
+    const out = mergeFutureKids(merged, plan(), cursor, ["nora"]);
+    expect(out.weeks[1]!.days[0]!.kids).toBeUndefined();
+  });
+
+  it("no toca hoy ni el pasado", () => {
+    const merged = plan();
+    const fresh = withKids(plan(), 0, 1, [{ childId: "nora", slot: "comida", dish: "Puré" }]);
+    const out = mergeFutureKids(merged, fresh, cursor, ["nora"]);
+    // di=1 <= cursor.dayIndex=2 → intacto
+    expect(out.weeks[0]!.days[1]!.kids).toBeUndefined();
   });
 });
 

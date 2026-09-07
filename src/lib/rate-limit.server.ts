@@ -23,6 +23,11 @@ const RATE_LIMITS = {
   chat: { limit: 60, windowSeconds: HOUR, action: "hablar con el coach" },
   "plan-generate": { limit: 8, windowSeconds: HOUR, action: "generar el plan" },
   "plan-adjust": { limit: 30, windowSeconds: HOUR, action: "reajustar el plan" },
+  // Recálculo automático al cambiar la despensa o la mesa (issue 05). Bucket
+  // propio y con holgura: agrupado por el debounce del cliente, no lo dispara
+  // la persona a mano, y así un bucle accidental no vacía la cuota real de
+  // `plan-generate` ni `plan-adjust`.
+  "plan-reflow": { limit: 12, windowSeconds: HOUR, action: "actualizar el plan con los cambios" },
   "child-meals": { limit: 20, windowSeconds: HOUR, action: "actualizar el menú de los peques" },
   guide: { limit: 30, windowSeconds: HOUR, action: "pedir la guía de hoy" },
   "onboarding-parse": { limit: 30, windowSeconds: HOUR, action: "guardar tus respuestas" },
