@@ -29,6 +29,7 @@ import { Route as ApiPushSubscribeRouteImport } from './routes/api/push/subscrib
 import { Route as ApiPushUnsubscribeRouteImport } from './routes/api/push/unsubscribe'
 import { Route as ApiV1GuideRouteImport } from './routes/api/v1/guide'
 import { Route as ApiV1AccountDeleteRouteImport } from './routes/api/v1/account/delete'
+import { Route as ApiV1AuthConfirmRouteImport } from './routes/api/v1/auth/confirm'
 import { Route as ApiV1AuthResetRouteImport } from './routes/api/v1/auth/reset'
 import { Route as ApiV1HouseholdHomeScheduleRouteImport } from './routes/api/v1/household/home-schedule'
 import { Route as ApiV1HouseholdPropagateLogRouteImport } from './routes/api/v1/household/propagate-log'
@@ -147,6 +148,11 @@ const ApiV1GuideRoute = ApiV1GuideRouteImport.update({
 const ApiV1AccountDeleteRoute = ApiV1AccountDeleteRouteImport.update({
   id: '/api/v1/account/delete',
   path: '/api/v1/account/delete',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1AuthConfirmRoute = ApiV1AuthConfirmRouteImport.update({
+  id: '/api/v1/auth/confirm',
+  path: '/api/v1/auth/confirm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1AuthResetRoute = ApiV1AuthResetRouteImport.update({
@@ -273,6 +279,7 @@ export interface FileRoutesByFullPath {
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
+  '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
@@ -314,6 +321,7 @@ export interface FileRoutesByTo {
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
+  '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
@@ -357,6 +365,7 @@ export interface FileRoutesById {
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
   '/api/v1/guide': typeof ApiV1GuideRoute
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
+  '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
@@ -400,6 +409,7 @@ export interface FileRouteTypes {
     | '/api/push/unsubscribe'
     | '/api/v1/guide'
     | '/api/v1/account/delete'
+    | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
@@ -441,6 +451,7 @@ export interface FileRouteTypes {
     | '/api/push/unsubscribe'
     | '/api/v1/guide'
     | '/api/v1/account/delete'
+    | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
@@ -483,6 +494,7 @@ export interface FileRouteTypes {
     | '/api/push/unsubscribe'
     | '/api/v1/guide'
     | '/api/v1/account/delete'
+    | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
@@ -518,6 +530,7 @@ export interface RootRouteChildren {
   ApiPushUnsubscribeRoute: typeof ApiPushUnsubscribeRoute
   ApiV1GuideRoute: typeof ApiV1GuideRoute
   ApiV1AccountDeleteRoute: typeof ApiV1AccountDeleteRoute
+  ApiV1AuthConfirmRoute: typeof ApiV1AuthConfirmRoute
   ApiV1AuthResetRoute: typeof ApiV1AuthResetRoute
   ApiV1HouseholdHomeScheduleRoute: typeof ApiV1HouseholdHomeScheduleRoute
   ApiV1HouseholdPropagateLogRoute: typeof ApiV1HouseholdPropagateLogRoute
@@ -680,6 +693,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/account/delete'
       fullPath: '/api/v1/account/delete'
       preLoaderRoute: typeof ApiV1AccountDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/auth/confirm': {
+      id: '/api/v1/auth/confirm'
+      path: '/api/v1/auth/confirm'
+      fullPath: '/api/v1/auth/confirm'
+      preLoaderRoute: typeof ApiV1AuthConfirmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/auth/reset': {
@@ -863,6 +883,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPushUnsubscribeRoute: ApiPushUnsubscribeRoute,
   ApiV1GuideRoute: ApiV1GuideRoute,
   ApiV1AccountDeleteRoute: ApiV1AccountDeleteRoute,
+  ApiV1AuthConfirmRoute: ApiV1AuthConfirmRoute,
   ApiV1AuthResetRoute: ApiV1AuthResetRoute,
   ApiV1HouseholdHomeScheduleRoute: ApiV1HouseholdHomeScheduleRoute,
   ApiV1HouseholdPropagateLogRoute: ApiV1HouseholdPropagateLogRoute,

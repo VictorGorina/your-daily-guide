@@ -29,9 +29,10 @@ const RATE_LIMITS = {
   receipt: { limit: 20, windowSeconds: HOUR, action: "escanear un tiquet" },
   recipe: { limit: 40, windowSeconds: HOUR, action: "pedir una receta" },
   "coach-aux": { limit: 40, windowSeconds: HOUR, action: "pedirle esto al coach" },
-  // Sin sesión y por correo, no por cuenta. Se suma al freno de 60 s que ya hay
-  // en memoria en `requestPasswordReset`.
+  // Sin sesión y por correo, no por cuenta. Se suman al freno de 60 s que ya hay
+  // en memoria en `auth.functions.ts`.
   "password-reset": { limit: 5, windowSeconds: HOUR, action: "pedir el enlace" },
+  "signup-confirm": { limit: 5, windowSeconds: HOUR, action: "pedir el correo de confirmación" },
 } as const;
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

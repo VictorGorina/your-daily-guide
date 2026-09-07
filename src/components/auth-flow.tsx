@@ -5,7 +5,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
-import { requestPasswordReset } from "@/lib/auth.functions";
+import { authErrorText, isEmailNotConfirmed } from "@/lib/auth-errors";
+import { requestPasswordReset, requestSignupConfirmation } from "@/lib/auth.functions";
 import { saveProfile } from "@/lib/daily";
 import { randomDemoProfile } from "@/lib/demo-profile";
 import { SUPPORTED_LOCALES } from "@/lib/i18n";
@@ -92,6 +93,10 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  // La cuenta existe pero nadie abrió el correo de confirmación. Es el único
+  // error de acceso con salida dentro de la app, así que se guarda aparte para
+  // poder ofrecer el reenvío en vez de dejar a la persona en un callejón.
+  const [needsConfirm, setNeedsConfirm] = useState(false);
 
   const goNext = () => {
     if (next) {
@@ -121,10 +126,12 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
   const openAccess = (m: "in" | "up") => {
     setMode(m);
     setSent(false);
+    setNeedsConfirm(false);
     setStage("access");
   };
   const backToIntro = () => {
     setSent(false);
+    setNeedsConfirm(false);
     setMode("in");
     setStage("intro");
   };
@@ -143,7 +150,30 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
       await requestPasswordReset({ data: { email: email.trim(), platform: "web" } });
       setSent(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("auth.errSendLink"));
+      toast.error(authErrorText(error, t, "auth.errSendLink"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Manda (o reenvía) el correo de confirmación. Es la misma operación en los
+   * dos casos: al crear la cuenta y al descubrir que quedó sin confirmar. El
+   * enlace lo genera y lo envía nuestro backend con la plantilla de la casa —
+   * ver requestSignupConfirmation en src/lib/auth.functions.ts.
+   */
+  const sendConfirmation = () =>
+    requestSignupConfirmation({
+      data: { email: email.trim(), password, platform: "web", next },
+    });
+
+  const resendConfirmation = async () => {
+    setLoading(true);
+    try {
+      await sendConfirmation();
+      toast.success(t("auth.resendSent"));
+    } catch (error) {
+      toast.error(authErrorText(error, t, "auth.errSendLink"));
     } finally {
       setLoading(false);
     }
@@ -155,36 +185,29 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
       return;
     }
     setLoading(true);
+    setNeedsConfirm(false);
     try {
       if (mode === "up") {
-        // El enlace del correo debe apuntar a una URL pública y estable, no a
-        // localhost ni al esquema de la app nativa (un correo se abre en otro
-        // sitio). En producción el origin ya es peppersfam.es; en local cae a
-        // localhost. Esa URL + /confirmado tiene que estar en la allowlist de
-        // Redirect URLs del panel de Supabase.
-        const base = window.location.origin;
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${base}/confirmado${next ? `?next=${encodeURIComponent(next)}` : ""}`,
-          },
-        });
-        if (error) throw error;
-        if (!data.session) {
-          setSent(true);
-          return;
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        if (error) throw error;
+        await sendConfirmation();
+        // Siempre se enseña "mira tu buzón", exista ya la cuenta o no: el
+        // servidor responde igual en los dos casos a propósito, para no
+        // convertir el alta en un buscador de quién está registrado.
+        setSent(true);
+        return;
       }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw error;
       if (!goNext()) navigate({ to: "/hoy", replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("auth.errSignIn"));
+      // Nada de `error.message` crudo: Supabase lo manda en inglés y a veces sin
+      // relación con lo que la persona acaba de hacer ("Email not confirmed"
+      // tras escribir la contraseña). Ver src/lib/auth-errors.ts.
+      if (isEmailNotConfirmed(error)) setNeedsConfirm(true);
+      toast.error(authErrorText(error, t, "auth.errSignIn"));
     } finally {
       setLoading(false);
     }
@@ -338,7 +361,10 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setNeedsConfirm(false);
+                }}
                 placeholder={t("auth.emailPlaceholder")}
               />
               {mode !== "forgot" && (
@@ -351,6 +377,23 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
                   placeholder={t("auth.passwordPlaceholder")}
                 />
               )}
+              {/* Salida del callejón sin salida: la cuenta existe pero nadie
+                  abrió el correo. Antes solo salía "Email not confirmed" en un
+                  toast y no había forma de pedir otro desde la app. */}
+              {mode === "in" && needsConfirm && (
+                <div className="rounded-3xl bg-primary-soft px-4 py-3.5">
+                  <p className="text-[13px] leading-[1.5]">{t("auth.errEmailNotConfirmed")}</p>
+                  <button
+                    type="button"
+                    onClick={resendConfirmation}
+                    disabled={loading}
+                    className="mt-2.5 w-full rounded-full bg-surface py-2.5 text-xs font-medium text-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {loading ? t("auth.sending") : t("auth.resendConfirm")}
+                  </button>
+                </div>
+              )}
+
               {mode === "in" && (
                 <button
                   type="button"

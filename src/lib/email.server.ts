@@ -56,34 +56,80 @@ export async function sendEmail({ to, subject, html }: EmailMessage): Promise<vo
 }
 
 /**
- * Cuerpo del correo de recuperación, con la paleta de la app (ver
+ * Envoltorio común de los correos, con la paleta de la app (ver
  * docs/design-guidelines.md). Los estilos van en línea porque los clientes de
  * correo ignoran las hojas de estilo, y el enlace se repite como texto plano
  * abajo para quien no pueda pulsar el botón.
+ *
+ * Está compartido a propósito: el de recuperación y el de confirmación se
+ * mandan por caminos distintos, y si cada uno llevara su propio HTML acabarían
+ * pareciendo correos de dos productos.
  */
-export function passwordResetEmail(actionLink: string): { subject: string; html: string } {
-  return {
-    subject: "Recupera tu acceso a Peppers",
-    html: `<!doctype html>
+function emailShell({
+  title,
+  body,
+  cta,
+  actionLink,
+  footer,
+}: {
+  title: string;
+  body: string;
+  cta: string;
+  actionLink: string;
+  footer: string;
+}): string {
+  return `<!doctype html>
 <html lang="es">
   <body style="margin:0;padding:32px 16px;background:#f3f1ed;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#3e3d39;">
     <div style="max-width:480px;margin:0 auto;background:#fbfaf7;border-radius:24px;padding:32px;">
-      <h1 style="margin:0 0 12px;font-size:24px;font-weight:600;color:#3e3d39;">Recupera tu acceso</h1>
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:600;color:#3e3d39;">${title}</h1>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#83796c;">
-        Has pedido crear una contraseña nueva. Pulsa el botón y elige una: el enlace caduca en una hora
-        y solo se puede usar una vez.
+        ${body}
       </p>
       <a href="${actionLink}" style="display:block;padding:16px 24px;background:#ff8a3d;color:#fbfaf7;text-decoration:none;border-radius:999px;font-size:15px;font-weight:600;text-align:center;">
-        Crear contraseña nueva
+        ${cta}
       </a>
       <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#83796c;">
-        Si no has sido tú, puedes ignorar este correo: tu contraseña seguirá igual.
+        ${footer}
       </p>
       <p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#83796c;word-break:break-all;">
         ¿No funciona el botón? Copia esta dirección en tu navegador:<br />${actionLink}
       </p>
     </div>
   </body>
-</html>`,
+</html>`;
+}
+
+/** Cuerpo del correo de recuperación de contraseña. */
+export function passwordResetEmail(actionLink: string): { subject: string; html: string } {
+  return {
+    subject: "Recupera tu acceso a Peppers",
+    html: emailShell({
+      title: "Recupera tu acceso",
+      body: "Has pedido crear una contraseña nueva. Pulsa el botón y elige una: el enlace caduca en una hora y solo se puede usar una vez.",
+      cta: "Crear contraseña nueva",
+      actionLink,
+      footer: "Si no has sido tú, puedes ignorar este correo: tu contraseña seguirá igual.",
+    }),
+  };
+}
+
+/**
+ * Cuerpo del correo de confirmación de alta.
+ *
+ * Lo mandamos nosotros en vez de dejárselo al SMTP de Supabase por el mismo
+ * motivo que el de recuperación, más uno propio: la plantilla genérica de
+ * Supabase, enviada desde un dominio que no es el nuestro, acababa en spam.
+ */
+export function signupConfirmationEmail(actionLink: string): { subject: string; html: string } {
+  return {
+    subject: "Confirma tu cuenta de Peppers",
+    html: emailShell({
+      title: "Ya casi estás",
+      body: "Pulsa el botón para confirmar tu correo y entrar en Peppers. El enlace caduca en una hora y solo se puede usar una vez.",
+      cta: "Confirmar mi cuenta",
+      actionLink,
+      footer: "Si no has creado ninguna cuenta, puedes ignorar este correo.",
+    }),
   };
 }

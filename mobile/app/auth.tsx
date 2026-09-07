@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { apiPostPublic } from "../lib/api";
+import { authErrorText, isEmailNotConfirmed } from "../lib/auth-errors";
 import { useAuth } from "../lib/auth-context";
 import { saveProfile } from "../lib/daily";
 import { randomDemoProfile } from "../lib/demo-profile";
@@ -97,14 +98,20 @@ export default function Auth() {
   const [demoLoading, setDemoLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  // La cuenta existe pero nadie abrió el correo de confirmación. Es el único
+  // error de acceso con salida dentro de la app, así que se guarda aparte para
+  // poder ofrecer el reenvío en vez de dejar a la persona en un callejón.
+  const [needsConfirm, setNeedsConfirm] = useState(false);
 
   const openAccess = (m: "in" | "up") => {
     setMode(m);
     setSent(false);
+    setNeedsConfirm(false);
     setStage("access");
   };
   const backToIntro = () => {
     setSent(false);
+    setNeedsConfirm(false);
     setMode("in");
     setStage("intro");
   };
@@ -185,32 +192,60 @@ export default function Auth() {
     }
   };
 
+  /**
+   * Manda (o reenvía) el correo de confirmación. Es la misma operación en los
+   * dos casos, y la hace nuestro backend con la plantilla de la casa en vez del
+   * SMTP de Supabase — que es por lo que el correo del alta acababa en spam.
+   * Ver requestSignupConfirmation en src/lib/auth.functions.ts de la web.
+   */
+  const sendConfirmation = () =>
+    apiPostPublic("auth/confirm", {
+      email: email.trim(),
+      password,
+      platform: "mobile",
+    });
+
+  const resendConfirmation = async () => {
+    setLoading(true);
+    try {
+      await sendConfirmation();
+      Alert.alert(t("auth.resendSent"));
+    } catch (error) {
+      Alert.alert(t("auth.errSendLink"), authErrorText(error, t, "common.retry"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async () => {
-    if (!email.trim() || !password) {
+    if (!email.trim() || password.length < 6) {
       Alert.alert(t("auth.errNeedCreds"));
       return;
     }
 
     setLoading(true);
+    setNeedsConfirm(false);
     try {
       if (mode === "up") {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-        });
-        if (error) throw error;
-        // Con confirmación por correo activada, signUp no abre sesión: hay que
-        // avisar de que toca ir al buzón.
-        if (!data.session) setSent(true);
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        if (error) throw error;
+        await sendConfirmation();
+        // Siempre "mira tu buzón", exista ya la cuenta o no: el servidor
+        // responde igual en los dos casos a propósito, para no convertir el
+        // alta en un buscador de quién está registrado.
+        setSent(true);
+        return;
       }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw error;
     } catch (error) {
-      Alert.alert(t("auth.errSignIn"), error instanceof Error ? error.message : t("common.retry"));
+      // Nada de `error.message` crudo: Supabase lo manda en inglés y a veces sin
+      // relación con lo que la persona acaba de hacer ("Email not confirmed"
+      // tras escribir la contraseña). Ver lib/auth-errors.ts.
+      if (isEmailNotConfirmed(error)) setNeedsConfirm(true);
+      Alert.alert(t("auth.errSignIn"), authErrorText(error, t, "common.retry"));
     } finally {
       setLoading(false);
     }
@@ -364,7 +399,10 @@ export default function Auth() {
                     autoCapitalize="none"
                     autoComplete="email"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(v) => {
+                      setEmail(v);
+                      setNeedsConfirm(false);
+                    }}
                     placeholder={t("auth.emailPlaceholder")}
                     placeholderTextColor="#a8a093"
                   />
@@ -379,6 +417,26 @@ export default function Auth() {
                       placeholder={t("auth.passwordPlaceholder")}
                       placeholderTextColor="#a8a093"
                     />
+                  )}
+
+                  {/* Salida del callejón sin salida: la cuenta existe pero nadie
+                      abrió el correo. Antes solo salía "Email not confirmed" y
+                      no había forma de pedir otro desde la app. */}
+                  {mode === "in" && needsConfirm && (
+                    <View className="rounded-3xl bg-primary-soft px-4 py-3.5">
+                      <Text className="text-[13px] font-body leading-[1.5] text-foreground">
+                        {t("auth.errEmailNotConfirmed")}
+                      </Text>
+                      <Pressable
+                        onPress={resendConfirmation}
+                        disabled={loading}
+                        className="mt-2.5 w-full items-center rounded-full bg-surface py-2.5 active:opacity-90 disabled:opacity-60"
+                      >
+                        <Text className="text-xs font-body-medium text-foreground">
+                          {loading ? t("auth.sending") : t("auth.resendConfirm")}
+                        </Text>
+                      </Pressable>
+                    </View>
                   )}
 
                   {mode === "in" && (

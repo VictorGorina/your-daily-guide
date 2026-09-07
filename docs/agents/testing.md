@@ -32,6 +32,7 @@ Qué hay cubierto hoy:
 | `macros.test.ts`           | `sumDoneMacros` (suma por status, matching moment↔label, platos fantasma, deshacer), `macroTargets` (fallback genérico, clamp), `ZERO_MACROS`                                                                                    |
 | `food-categories.test.ts`  | `classifyDish` (precedencia multi-palabra, límites de palabra), paleta de acentos                                                                                                                                                |
 | `rate-limit-error.test.ts` | `retryAfterText` (límites minuto/hora, singular/plural, sin encadenar dos redondeos) y el mensaje de `RateLimitError`                                                                                                            |
+| `auth-errors.test.ts`      | `authErrorKey`/`authErrorText` (traducción por código de Supabase, respaldo por texto, mensajes propios tal cual) y que un error ajeno nunca se enseña en crudo                                                                  |
 
 ## Regla al tocar esta lógica
 
