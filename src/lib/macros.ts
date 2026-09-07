@@ -45,6 +45,35 @@ export function sumDoneMacros(
 }
 
 /**
+ * Desvío en kcal de un lote de cambios de plato frente a lo que preveía el
+ * plan: para cada comida cambiada, lo que estima la guía nueva menos lo que
+ * estimaba la guía que había antes de tocarla.
+ *
+ * Es lo que convierte "he comido pizza y cerveza" en una cifra que la IA puede
+ * usar para recolocar los días siguientes (`kcalDelta` en `adjustMonthlyPlan`).
+ * Antes no se le pasaba nada desde Hoy y el coach solía responder que el plan
+ * ya estaba equilibrado.
+ *
+ * Devuelve `null` si no hay ninguna comida con las dos cifras — sin dato es
+ * mejor no inventarse un cero, que la IA leería como "no ha pasado nada".
+ */
+export function kcalDeltaOf(
+  changes: readonly { label: string; prevKcal: number | null }[],
+  mealMacros: MealMacroEstimate[] | null | undefined,
+): number | null {
+  let total = 0;
+  let counted = 0;
+  for (const change of changes) {
+    if (change.prevKcal == null) continue;
+    const now = mealMacros?.find((m) => m.moment === change.label)?.kcal;
+    if (typeof now !== "number") continue;
+    total += now - change.prevKcal;
+    counted += 1;
+  }
+  return counted ? Math.round(total) : null;
+}
+
+/**
  * Referencia genérica (no personalizada por profesional alguno) de respaldo,
  * solo para cuando todavía no hay `macroEstimate` del día (guía sin generar o
  * sin plan). La proteína se ajusta al peso (~1,2 g/kg, cifra habitual para

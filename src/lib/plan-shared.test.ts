@@ -9,7 +9,9 @@ import {
   cleanMealSlots,
   cleanPantryExtras,
   cleanPlan,
+  cleanReflowChanges,
   cleanShopping,
+  applyPlanChanges,
   childMealsForDate,
   childPureeGaps,
   cleanTripActuals,
@@ -27,6 +29,8 @@ import {
   isNextMonthUnlocked,
   mealsForDate,
   monthParts,
+  reconcileHabits,
+  suggestedDish,
   parseMealSlotsLegacy,
   mergeFuturePlan,
   mergeFutureKids,
@@ -42,7 +46,9 @@ import {
   homeTotal,
   ownedTotal,
   pendingTotal,
+  dateOfPlanCell,
   planForDate,
+  planSlotIndex,
   projectTrips,
   repartitionTrips,
   shoppingTotal,
@@ -751,45 +757,91 @@ describe("effectiveMealSlots", () => {
 
 // --- fusión de un plan recolocado ----------------------------------
 
-describe("mergeFuturePlan", () => {
-  it("conserva un plato pedido a mano en un día futuro tras una recolocación", () => {
-    const current = plan();
-    current.weeks[0]!.days[4] = day("Viernes", "A", "B", { breakfast: "Tostadas caseras" });
-    current.weeks[1]!.days[0] = day("Lunes", "C", "D", { snack: "Nueces" });
+describe("dateOfPlanCell", () => {
+  // Septiembre de 2026 empieza en martes: la semana 0 va del día 1 (martes) al
+  // día 7 (lunes), así que el lunes es la ÚLTIMA fecha de esa semana aunque
+  // ocupe la primera posición de la fila.
+  it("devuelve la fecha real de cada celda, no el orden de la fila", () => {
+    expect(dateOfPlanCell("2026-09", 0, 1)).toBe("2026-09-01"); // martes
+    expect(dateOfPlanCell("2026-09", 0, 0)).toBe("2026-09-07"); // lunes
+    expect(dateOfPlanCell("2026-09", 1, 1)).toBe("2026-09-08");
+  });
 
-    // El plan nuevo de la IA solo trae lunch/dinner, nunca breakfast/snack
-    const next = plan({
+  it("es la inversa de planSlotIndex", () => {
+    for (const date of ["2026-09-01", "2026-09-07", "2026-09-08", "2026-09-20"]) {
+      const at = planSlotIndex(plan(), date)!;
+      expect(dateOfPlanCell("2026-09", at.weekIndex, at.dayIndex)).toBe(date);
+    }
+  });
+
+  it("null si la celda no cae en el mes", () => {
+    // Febrero de 2026 tiene 28 días: la semana 3 va del 22 (domingo) al 28
+    // (sábado), así que no hay ningún día del mes más allá de esa fila.
+    expect(dateOfPlanCell("2026-02", 3, 5)).toBe("2026-02-28");
+    expect(dateOfPlanCell("2026-02", 4, 0)).toBeNull();
+  });
+});
+
+describe("mergeFuturePlan", () => {
+  const renamed = () =>
+    plan({
       weeks: plan().weeks.map((w) => ({
         ...w,
         days: w.days.map((d) => day(d.day, `NUEVO ${d.lunch}`, `NUEVO ${d.dinner}`)),
       })),
     });
 
-    const merged = mergeFuturePlan(current, next, { weekIndex: 0, dayIndex: 2 });
+  it("conserva un plato pedido a mano en un día futuro tras una recolocación", () => {
+    const current = plan();
+    // Viernes de la semana 0 = 4 de septiembre, futuro respecto al día 3.
+    current.weeks[0]!.days[4] = day("Viernes", "A", "B", { breakfast: "Tostadas caseras" });
+    current.weeks[1]!.days[0] = day("Lunes", "C", "D", { snack: "Nueces" });
 
-    // día futuro de la semana en curso: adopta lunch/dinner nuevos, mantiene el desayuno a mano
+    const next = renamed();
+    const merged = mergeFuturePlan(current, next, "2026-09-03");
+
     expect(merged.weeks[0]!.days[4]!.breakfast).toBe("Tostadas caseras");
     expect(merged.weeks[0]!.days[4]!.lunch).toBe(next.weeks[0]!.days[4]!.lunch);
-    expect(merged.weeks[0]!.days[4]!.lunch).not.toBe("A"); // ya no es el del plan viejo
+    expect(merged.weeks[0]!.days[4]!.lunch).not.toBe("A");
 
-    // semana futura: igual, el snack a mano sobrevive
+    // Semana futura: igual, el snack a mano sobrevive.
     expect(merged.weeks[1]!.days[0]!.snack).toBe("Nueces");
     expect(merged.weeks[1]!.days[0]!.lunch).toBe(next.weeks[1]!.days[0]!.lunch);
   });
 
   it("no toca los días de hoy o antes", () => {
-    const current = plan();
-    const next = plan({
-      weeks: plan().weeks.map((w) => ({
-        ...w,
-        days: w.days.map((d) => day(d.day, `NUEVO ${d.lunch}`, `NUEVO ${d.dinner}`)),
-      })),
-    });
-
-    const merged = mergeFuturePlan(current, next, { weekIndex: 0, dayIndex: 2 });
-
-    // día 1 de la semana 0 (di=1 <= cursor.dayIndex=2) queda intacto
+    // Hoy es jueves 3; el martes 1 está en la posición 1 de la misma fila.
+    const merged = mergeFuturePlan(plan(), renamed(), "2026-09-03");
     expect(merged.weeks[0]!.days[1]!.lunch).toBe("Comida S0D1");
+    expect(merged.weeks[0]!.days[3]!.lunch).toBe("Comida S0D3"); // hoy
+  });
+
+  it("sí toca un día futuro que va ANTES en la fila (lunes 7 vs jueves 3)", () => {
+    // La posición 0 de la fila es el lunes 7: viene después del jueves 3 en el
+    // calendario aunque vaya antes en la rejilla. Decidir por posición lo dejaba
+    // fuera del ajuste.
+    const merged = mergeFuturePlan(plan(), renamed(), "2026-09-03");
+    expect(merged.weeks[0]!.days[0]!.lunch).toBe("NUEVO Comida S0D0");
+  });
+
+  it("un lunes 7 no reescribe el resto de su fila, que ya es pasado", () => {
+    // Este es el fallo que hacía parecer que el coach no ajustaba nada: con
+    // hoy = lunes 7 (posición 0), las posiciones 1-6 son los días 1 al 6, ya
+    // pasados, y se llevaban TODO el ajuste; los días siguientes, ninguno.
+    const merged = mergeFuturePlan(plan(), renamed(), "2026-09-07");
+    for (let di = 1; di <= 6; di++) {
+      expect(merged.weeks[0]!.days[di]!.dinner).toBe(`Cena S0D${di}`);
+    }
+    expect(merged.weeks[1]!.days[1]!.dinner).toBe("NUEVO Cena S1D1");
+  });
+
+  it("los desayunos de la semana en curso no se tocan, los de una futura sí", () => {
+    const next = plan({
+      weeks: plan().weeks.map((w) => ({ ...w, breakfasts: ["Otro desayuno"] })),
+    });
+    const merged = mergeFuturePlan(plan(), next, "2026-09-03");
+    expect(merged.weeks[0]!.breakfasts).toEqual(["Avena", "Tostadas", "Yogur"]);
+    expect(merged.weeks[1]!.breakfasts).toEqual(["Otro desayuno"]);
   });
 
   it("conserva el plato aparte de un niño puesto a mano en un día futuro (issue 07)", () => {
@@ -797,14 +849,7 @@ describe("mergeFuturePlan", () => {
     current.weeks[1]!.days[0] = day("Lunes", "C", "D", {
       kids: [{ childId: "leo", slot: "cena", dish: "Puré de patata" }],
     });
-    const next = plan({
-      weeks: plan().weeks.map((w) => ({
-        ...w,
-        days: w.days.map((d) => day(d.day, `NUEVO ${d.lunch}`, `NUEVO ${d.dinner}`)),
-      })),
-    });
-
-    const merged = mergeFuturePlan(current, next, { weekIndex: 0, dayIndex: 2 });
+    const merged = mergeFuturePlan(current, renamed(), "2026-09-03");
     expect(merged.weeks[1]!.days[0]!.kids).toEqual([
       { childId: "leo", slot: "cena", dish: "Puré de patata" },
     ]);
@@ -825,14 +870,14 @@ describe("mergeFutureKids", () => {
     copy.weeks[wi]!.days[di] = { ...copy.weeks[wi]!.days[di]!, kids };
     return copy;
   };
-  const cursor = { weekIndex: 0, dayIndex: 2 };
+  const today = "2026-09-03";
 
   it("adopta el puré del plan nuevo en un día futuro que no tenía plato de niño", () => {
     const merged = plan();
     const fresh = withKids(plan(), 1, 0, [
       { childId: "nora", slot: "comida", dish: "Puré de calabaza" },
     ]);
-    const out = mergeFutureKids(merged, fresh, cursor, ["nora"]);
+    const out = mergeFutureKids(merged, fresh, today, ["nora"]);
     expect(out.weeks[1]!.days[0]!.kids).toEqual([
       { childId: "nora", slot: "comida", dish: "Puré de calabaza" },
     ]);
@@ -841,7 +886,7 @@ describe("mergeFutureKids", () => {
   it("respeta un plato de niño ya puesto (mismo childId+slot) y no lo pisa con el del plan nuevo", () => {
     const merged = withKids(plan(), 1, 0, [{ childId: "leo", slot: "cena", dish: "Arroz a mano" }]);
     const fresh = withKids(plan(), 1, 0, [{ childId: "leo", slot: "cena", dish: "Otra cosa" }]);
-    const out = mergeFutureKids(merged, fresh, cursor, ["leo"]);
+    const out = mergeFutureKids(merged, fresh, today, ["leo"]);
     expect(out.weeks[1]!.days[0]!.kids).toEqual([
       { childId: "leo", slot: "cena", dish: "Arroz a mano" },
     ]);
@@ -851,15 +896,15 @@ describe("mergeFutureKids", () => {
     const merged = withKids(plan(), 1, 0, [
       { childId: "fuera", slot: "comida", dish: "Puré viejo" },
     ]);
-    const out = mergeFutureKids(merged, plan(), cursor, ["nora"]);
+    const out = mergeFutureKids(merged, plan(), today, ["nora"]);
     expect(out.weeks[1]!.days[0]!.kids).toBeUndefined();
   });
 
   it("no toca hoy ni el pasado", () => {
     const merged = plan();
+    // Posición 1 de la semana 0 = martes 1 de septiembre, ya pasado.
     const fresh = withKids(plan(), 0, 1, [{ childId: "nora", slot: "comida", dish: "Puré" }]);
-    const out = mergeFutureKids(merged, fresh, cursor, ["nora"]);
-    // di=1 <= cursor.dayIndex=2 → intacto
+    const out = mergeFutureKids(merged, fresh, today, ["nora"]);
     expect(out.weeks[0]!.days[1]!.kids).toBeUndefined();
   });
 });
@@ -1359,5 +1404,168 @@ describe("cleanShopping · forma canónica", () => {
     const item = out[0]!.items[0]!;
     expect(item.weekPrice).toEqual([3, 1, 0, 0]);
     expect(item.price_eur).toBe(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reconcileHabits / suggestedDish — el registro del día contra el plan real
+// ---------------------------------------------------------------------------
+
+describe("reconcileHabits", () => {
+  const meals = (...pairs: [string, string][]) => pairs.map(([moment, idea]) => ({ moment, idea }));
+
+  it("descarta la comida que ya no se planifica y conserva el resto", () => {
+    const { habits, changed } = reconcileHabits(
+      [
+        { label: "Comida", done: true, status: "plan" },
+        { label: "Merienda", done: false },
+        { label: "Cena", done: false },
+      ],
+      meals(["Comida", "Lentejas"], ["Cena", "Crema"]),
+    );
+    expect(habits.map((h) => h.label)).toEqual(["Comida", "Cena"]);
+    // Lo que es del registro (marcado, estado) no se pierde por el camino.
+    expect(habits[0]!.done).toBe(true);
+    expect(habits[0]!.status).toBe("plan");
+    expect(changed).toBe(true);
+  });
+
+  it("añade la comida que falta cuando el día se creó vacío", () => {
+    // Abrir el chat antes que Hoy creaba el registro con habits: [].
+    const { habits, changed } = reconcileHabits([], meals(["Comida", "Arroz"]));
+    expect(habits).toEqual([{ label: "Comida", done: false, plannedIdea: "Arroz" }]);
+    expect(changed).toBe(true);
+  });
+
+  it("no marca cambio cuando ya está todo en su sitio", () => {
+    const stored = [{ label: "Cena", done: false, plannedIdea: "Crema" }];
+    const { habits, changed } = reconcileHabits(stored, meals(["Cena", "Crema"]));
+    expect(changed).toBe(false);
+    expect(habits[0]).toBe(stored[0]!);
+  });
+
+  it("congela plannedIdea y no la reescribe cuando el plato del plan cambia", () => {
+    // Tras un cambio a mano, `setPlanMeal` deja el plato NUEVO en el plan: la
+    // sugerencia original solo sobrevive si no se vuelve a tocar.
+    const first = reconcileHabits([{ label: "Cena", done: false }], meals(["Cena", "Crema"]));
+    expect(first.habits[0]!.plannedIdea).toBe("Crema");
+    const second = reconcileHabits(first.habits, meals(["Cena", "Pizza"]));
+    expect(second.habits[0]!.plannedIdea).toBe("Crema");
+    expect(second.changed).toBe(false);
+  });
+
+  it("hereda wasIdea de un registro anterior a plannedIdea", () => {
+    const { habits } = reconcileHabits(
+      [{ label: "Cena", done: true, status: "distinto", wasIdea: "Crema" }],
+      meals(["Cena", "Pizza"]),
+    );
+    expect(habits[0]!.plannedIdea).toBe("Crema");
+  });
+
+  it("un slot sin plato no congela nada (el plan aún no lo tiene)", () => {
+    const { habits } = reconcileHabits([{ label: "Cena", done: false }], meals(["Cena", ""]));
+    expect(habits[0]!.plannedIdea).toBeUndefined();
+  });
+});
+
+describe("suggestedDish", () => {
+  it("devuelve la sugerencia original mientras no sea lo que se ve", () => {
+    expect(suggestedDish({ label: "Cena", done: true, plannedIdea: "Crema" }, "Pizza")).toBe(
+      "Crema",
+    );
+  });
+
+  it("no tacha nada si se ha vuelto al plato del plan", () => {
+    expect(suggestedDish({ label: "Cena", done: true, plannedIdea: "Crema" }, "Crema")).toBeNull();
+  });
+
+  it("cae a wasIdea para registros antiguos", () => {
+    expect(suggestedDish({ label: "Cena", done: true, wasIdea: "Crema" }, "Pizza")).toBe("Crema");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cleanReflowChanges / applyPlanChanges — la recolocación como lista de cambios
+// ---------------------------------------------------------------------------
+
+describe("cleanReflowChanges", () => {
+  const allowed = ["2026-09-09", "2026-09-10"];
+
+  it("acepta los cambios de una fecha editable", () => {
+    const out = cleanReflowChanges(
+      {
+        intro: "He aligerado dos cenas.",
+        cambios: [
+          { fecha: "2026-09-09", cena: "Merluza con ensalada" },
+          { fecha: "2026-09-10", comida: "Lentejas", cena: "Crema de verduras" },
+        ],
+      },
+      allowed,
+    );
+    expect(out?.intro).toBe("He aligerado dos cenas.");
+    expect(out?.changes).toEqual([
+      { date: "2026-09-09", dinner: "Merluza con ensalada" },
+      { date: "2026-09-10", lunch: "Lentejas", dinner: "Crema de verduras" },
+    ]);
+  });
+
+  it("descarta una fecha que no está entre las editables", () => {
+    // El día cerrado no se cuela ni aunque el modelo lo pida.
+    const out = cleanReflowChanges(
+      { cambios: [{ fecha: "2026-09-01", cena: "Otra cosa" }] },
+      allowed,
+    );
+    expect(out?.changes).toEqual([]);
+  });
+
+  it("descarta una entrada sin ningún plato", () => {
+    const out = cleanReflowChanges({ cambios: [{ fecha: "2026-09-09", cena: "  " }] }, allowed);
+    expect(out?.changes).toEqual([]);
+  });
+
+  it("lista vacía es respuesta válida; una respuesta sin 'cambios' no lo es", () => {
+    // La diferencia importa: null hace que `askForJson` reintente, y "no hace
+    // falta cambiar nada" no es un fallo que haya que reintentar.
+    expect(cleanReflowChanges({ intro: "todo bien", cambios: [] }, allowed)?.changes).toEqual([]);
+    expect(cleanReflowChanges({ intro: "todo bien" }, allowed)).toBeNull();
+    expect(cleanReflowChanges(null, allowed)).toBeNull();
+  });
+});
+
+describe("applyPlanChanges", () => {
+  it("escribe el plato en la celda que le toca por fecha", () => {
+    // 9 de septiembre de 2026 = miércoles de la semana 1 → celda (1, 2).
+    const out = applyPlanChanges(
+      plan(),
+      [{ date: "2026-09-09", dinner: "Merluza con ensalada" }],
+      "2026-09-07",
+    );
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Merluza con ensalada");
+    expect(out.weeks[1]!.days[2]!.lunch).toBe("Comida S1D2"); // lo no tocado, igual
+  });
+
+  it("ignora un cambio con fecha de hoy o anterior", () => {
+    const base = plan();
+    const out = applyPlanChanges(
+      base,
+      [
+        { date: "2026-09-07", dinner: "Hoy no" },
+        { date: "2026-09-01", dinner: "Ayer tampoco" },
+      ],
+      "2026-09-07",
+    );
+    expect(out).toBe(base); // ni siquiera se copia el plan
+  });
+
+  it("conserva el desayuno y el plato de un niño puestos a mano", () => {
+    const current = plan();
+    current.weeks[1]!.days[2] = day("Miércoles", "A", "B", {
+      breakfast: "Tostadas caseras",
+      kids: [{ childId: "leo", slot: "cena", dish: "Puré" }],
+    });
+    const out = applyPlanChanges(current, [{ date: "2026-09-09", dinner: "Nueva" }], "2026-09-07");
+    expect(out.weeks[1]!.days[2]!.breakfast).toBe("Tostadas caseras");
+    expect(out.weeks[1]!.days[2]!.kids).toEqual([{ childId: "leo", slot: "cena", dish: "Puré" }]);
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Nueva");
   });
 });

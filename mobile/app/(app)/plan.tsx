@@ -39,6 +39,7 @@ import { DayDetailSheet } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
 import { GoalWeightSummary } from "../../components/goal-weight-summary";
 import { MonthSpendSummary } from "../../components/month-spend-summary";
+import { PlanUpdatedBanner } from "../../components/plan-updated-banner";
 import { Dialog } from "../../components/ui/dialog";
 import { apiPost } from "../../lib/api";
 import {
@@ -95,6 +96,8 @@ import {
 import { freshRiskNames, freshRisksForTrip } from "../../lib/perishability";
 import {
   flushPlanRecalc,
+  clearPlanUpdatedNotice,
+  hasPlanUpdatedNotice,
   onPlanRecalcDone,
   schedulePlanRecalc,
   wirePlanRecalcFlush,
@@ -1304,6 +1307,33 @@ function IngredientsTab({
   onEnterShopMode?: () => void;
 }) {
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
+
+  // Aviso de "hemos actualizado tus cantidades" tras un cambio en la mesa. Se
+  // suscribe aquí y no en la pantalla de arriba porque `onPlanRecalcDone` es una
+  // suscripción de módulo: evita bajar dos props por los tres sitios donde se
+  // usa esta pestaña. Igual que en la web.
+  const [planUpdated, setPlanUpdated] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      void hasPlanUpdatedNotice(month).then((v) => {
+        if (alive) setPlanUpdated(v);
+      });
+    };
+    refresh();
+    const off = onPlanRecalcDone((done) => {
+      if (done === month) refresh();
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [month]);
+  const dismissPlanUpdated = () => {
+    clearPlanUpdatedNotice(month);
+    setPlanUpdated(false);
+  };
+
   // Mes que viene desbloqueado: la compra se hace entera ahora. Mes pasado: solo
   // lectura. Mes en curso: cualquier compra que no haya pasado ya (puedes
   // auditar la nevera para la semana que viene por adelantado); las compras ya
@@ -1360,6 +1390,10 @@ function IngredientsTab({
 
   return (
     <View className="mt-5 gap-2.5">
+      {/* "Tus ingredientes se han actualizado": la mesa cambió y el recálculo
+          automático ya rehizo las cantidades. Va aquí y no en Familia porque es
+          aquí donde se ven los números distintos. */}
+      {planUpdated ? <PlanUpdatedBanner onDismiss={dismissPlanUpdated} /> : null}
       {readOnly ? (
         <View className="rounded-[20px] bg-secondary/60 px-4 py-3">
           <Text className="text-xs leading-relaxed text-muted-foreground">

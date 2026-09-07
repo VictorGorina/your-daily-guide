@@ -60,6 +60,8 @@ import {
   effectiveMealSlots,
   mealsForDate,
   offListNote,
+  reconcileHabits,
+  suggestedDish,
   type MealChange,
   type MealSlot,
   type MonthlyPlan,
@@ -454,7 +456,20 @@ function Hoy() {
 
   const impulso = impulsoFrom(logsQ.data ?? []);
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
-  const habits = today?.habits ?? [];
+  // El registro del día se casa con las comidas que esta persona planifica de
+  // verdad: `daily_logs.habits` se escribe UNA vez, al crear el día, y lo crea
+  // quien lo toque primero (abrir el chat antes que Hoy lo dejaba vacío), así
+  // que sin esto una comida descartada en el onboarding seguía saliendo aquí.
+  // Se pinta siempre lo reconciliado, aunque el guardado de abajo falle.
+  const reconciled = reconcileHabits(today?.habits, todayMeals);
+  const habits = reconciled.habits;
+  useEffect(() => {
+    // Solo se guarda si de verdad cambia algo (si no, se escribiría en bucle),
+    // y solo el día de hoy: un día pasado es un hecho, no una preferencia.
+    if (!today || !reconciled.changed) return;
+    save.mutate({ habits: reconciled.habits });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today?.id, reconciled.changed]);
   const doneCount = habits.filter((h) => h.done).length;
   // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
   // "comí distinto"), no el menú completo del día: así deshacer una comida
@@ -484,8 +499,7 @@ function Hoy() {
   const swapMeal =
     swapIndex != null ? todayMeals.find((m) => m.moment === habits[swapIndex]?.label) : undefined;
   const infoHabit = infoIndex != null ? habits[infoIndex] : undefined;
-  const infoChanges: MealChange[] =
-    ((infoHabit as Record<string, unknown> | undefined)?.adjustmentChanges as MealChange[]) ?? [];
+  const infoChanges: MealChange[] = infoHabit?.adjustmentChanges ?? [];
 
   // La "siguiente comida" es la primera, en orden cronológico, que aún no
   // tiene un estado explícito. Importante: se filtra por `status`, no por
@@ -618,12 +632,13 @@ function Hoy() {
               const note = offListNote(planned?.off);
               const shared = sharedWith(h.label);
               const kidMeals = childMealsFor(h.label);
-              // El coach cambió el plato de este momento hoy (desde el chat o
-              // desde "comí otra cosa"): se muestra el plato real en naranja,
-              // con el que había antes tachado debajo — ver `wasIdea` en
-              // daily.ts. Si el cambio acaba coincidiendo otra vez con lo que
-              // había (p.ej. se revierte), deja de contar como editado.
-              const wasIdea = h.wasIdea && h.wasIdea !== idea ? h.wasIdea : null;
+              // El plato de este momento se ha cambiado hoy (desde el chat o
+              // desde "comí otra cosa"): se muestra el real en naranja y debajo,
+              // tachada, la sugerencia ORIGINAL del plan — congelada, así que
+              // sigue siendo la misma tras veinte cambios (ver `plannedIdea` en
+              // plan-shared.ts). Si se vuelve al plato sugerido, deja de contar
+              // como editado.
+              const wasIdea = suggestedDish(h, idea);
 
               return (
                 <div
@@ -686,18 +701,19 @@ function Hoy() {
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {/* Badge "i" / spinner de ajuste: aparece cuando el plato se
-                          ha cambiado y adjustMonthlyPlan ha terminado (o está en
-                          curso). El badge abre el AdjustmentInfoSheet con los
-                          cambios en el plan futuro. */}
-                      {mealSwap.adjustingIndex === i ? (
+                      {/* Badge "i" / spinner de ajuste: el spinner sale mientras
+                          esta comida espera al lote (los cambios seguidos se
+                          agrupan en un solo reajuste), y el badge cuando ya hay
+                          resultado. Es por comida, no global: cambiar una no
+                          bloquea las demás. */}
+                      {mealSwap.isAdjusting(h.label) ? (
                         <span
                           className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10"
                           title="Ajustando el plan…"
                         >
                           <Loader2 className="h-[14px] w-[14px] animate-spin text-primary" />
                         </span>
-                      ) : (h as Record<string, unknown>).adjustmentChanges ? (
+                      ) : h.adjustmentChanges ? (
                         <button
                           type="button"
                           title="Ver ajuste del plan"
@@ -902,10 +918,13 @@ function Hoy() {
         }}
         mealLabel={swapMeal?.moment ?? ""}
         plannedDish={swapMeal?.idea ?? ""}
-        disabled={mealSwap.isSwapping}
+        // Solo bloquea mientras se guarda ESTA comida (un ida y vuelta), no
+        // mientras se reajusta el plan: antes el flag era de la mutación entera
+        // y había que esperar a la IA para poder tocar la comida siguiente.
+        disabled={mealSwap.isSaving(swapMeal?.moment ?? "")}
         onSwap={(dish) => {
-          if (swapIndex == null || !swapMeal) return;
-          mealSwap.swap(swapIndex, swapMeal.slot, dish, swapMeal.moment);
+          if (!swapMeal) return;
+          void mealSwap.swap(swapMeal.moment, swapMeal.slot, dish);
           setSwapIndex(null);
         }}
         onSkip={() => {
@@ -921,6 +940,7 @@ function Hoy() {
           if (!v) setInfoIndex(null);
         }}
         changes={infoChanges}
+        kcalDelta={infoHabit?.adjustmentKcal ?? null}
         dish={
           infoIndex != null
             ? (todayMeals.find((m) => m.moment === habits[infoIndex]?.label)?.idea ??

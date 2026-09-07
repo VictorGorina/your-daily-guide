@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { MacroEstimate, MealMacroEstimate } from "./guide.functions";
-import { ZERO_MACROS, macroTargets, sumDoneMacros } from "./macros";
+import { ZERO_MACROS, kcalDeltaOf, macroTargets, sumDoneMacros } from "./macros";
 
 // ---------------------------------------------------------------------------
 // sumDoneMacros — suma las macros de las comidas ya marcadas como comidas
@@ -260,5 +260,56 @@ describe("ZERO_MACROS", () => {
       { ...ZERO_MACROS },
     );
     expect(total).toEqual({ kcal: 300, protein_g: 30, carbs_g: 50, fat_g: 15, fiber_g: 7 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// kcalDeltaOf — el desvío que se le pasa a la IA para que compense de verdad
+// ---------------------------------------------------------------------------
+
+describe("kcalDeltaOf", () => {
+  const macro = (moment: string, kcal: number): MealMacroEstimate => ({
+    moment,
+    kcal,
+    protein_g: 0,
+    carbs_g: 0,
+    fat_g: 0,
+    fiber_g: 0,
+  });
+
+  it("suma el exceso de varias comidas del mismo lote", () => {
+    const delta = kcalDeltaOf(
+      [
+        { label: "Comida", prevKcal: 600 },
+        { label: "Cena", prevKcal: 500 },
+      ],
+      [macro("Comida", 1100), macro("Cena", 900), macro("Desayuno", 300)],
+    );
+    // +500 de la comida y +400 de la cena; el desayuno no se tocó y no cuenta.
+    expect(delta).toBe(900);
+  });
+
+  it("da negativo cuando se ha comido menos de lo previsto", () => {
+    expect(kcalDeltaOf([{ label: "Cena", prevKcal: 800 }], [macro("Cena", 450)])).toBe(-350);
+  });
+
+  it("ignora las comidas sin cifra de antes o de después", () => {
+    expect(
+      kcalDeltaOf(
+        [
+          { label: "Cena", prevKcal: null },
+          { label: "Comida", prevKcal: 400 },
+        ],
+        [macro("Comida", 700)],
+      ),
+    ).toBe(300);
+  });
+
+  it("devuelve null sin nada que comparar, en vez de un cero engañoso", () => {
+    // Un 0 le diría a la IA "no ha pasado nada"; null la deja sin dato, que es
+    // la verdad, y el prompt cae a la regla suave de siempre.
+    expect(kcalDeltaOf([{ label: "Cena", prevKcal: null }], [macro("Cena", 900)])).toBeNull();
+    expect(kcalDeltaOf([{ label: "Cena", prevKcal: 500 }], null)).toBeNull();
+    expect(kcalDeltaOf([], [macro("Cena", 900)])).toBeNull();
   });
 });

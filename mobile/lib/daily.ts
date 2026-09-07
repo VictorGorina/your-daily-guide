@@ -1,7 +1,9 @@
 import { cleanSharedSlots, type SharedSlots } from "./household-shared";
-import { composeMonthlyPlanForMember, mealsForDate } from "./plan-shared";
+import { composeMonthlyPlanForMember, effectiveMealSlots, mealsForDate } from "./plan-shared";
 import { supabase } from "./supabase";
 import type {
+  MealHabit,
+  MealStatus,
   MealSlot,
   MonthlyPlan,
   PantryExtra,
@@ -117,7 +119,7 @@ export type DailyGuide = {
   tips?: string[];
 };
 
-export type MealStatus = "plan" | "distinto" | "salteo";
+export type { MealHabit, MealStatus } from "./plan-shared";
 
 export const MEAL_STATUS_LABEL: Record<MealStatus, string> = {
   plan: "Comí lo del plan",
@@ -130,20 +132,8 @@ export type DailyLog = {
   user_id: string;
   log_date: string;
   weight_kg: number | null;
-  habits: {
-    label: string;
-    done: boolean;
-    status?: MealStatus;
-    /** Plato que había en el plan antes de que el coach lo cambiara por lo que
-     * de verdad se comió ese momento (ver `cambiar_plato` en
-     * use-coach-actions.ts). Solo se guarda la primera vez que se cambia ese
-     * momento en el día. Mismo criterio que la web (src/lib/daily.ts). */
-    wasIdea?: string;
-    /** Qué comió realmente cuando status === "distinto". Se escribe desde el
-     * DayDetailSheet al corregir un día pasado — el plan no cambia, pero el
-     * historial queda correcto. Mismo criterio que la web. */
-    actual?: string;
-  }[];
+  /** Las comidas del día. Ver `MealHabit` y `reconcileHabits` en plan-shared.ts. */
+  habits: MealHabit[];
   guide: DailyGuide | null;
   mood: string | null;
   notes: string | null;
@@ -245,6 +235,38 @@ export async function updateTodayLog(patch: Partial<DailyLog>) {
     .update(patch as never)
     .eq("log_date", todayISO());
   if (error) throw error;
+}
+
+/** El registro de hoy si existe, sin crearlo (a diferencia de `ensureTodayLog`). */
+export async function fetchTodayLog(): Promise<DailyLog | null> {
+  const { data } = await supabase
+    .from("daily_logs")
+    .select("*")
+    .eq("log_date", todayISO())
+    .maybeSingle();
+  return (data as unknown as DailyLog) ?? null;
+}
+
+/**
+ * Cambia las comidas del registro de hoy releyéndolas de la base de datos justo
+ * antes de escribir, en vez de mandar un array que el cliente tenía en memoria.
+ * `habits` es una única columna JSON, así que cada guardado reescribe la lista
+ * entera y dos operaciones lentas solapadas se pisaban entre sí. Misma función
+ * que en la web (src/lib/daily.ts).
+ */
+export async function patchTodayHabits(
+  update: (habits: MealHabit[]) => MealHabit[],
+): Promise<MealHabit[] | null> {
+  const { data, error } = await supabase
+    .from("daily_logs")
+    .select("habits")
+    .eq("log_date", todayISO())
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const next = update(((data as { habits?: MealHabit[] }).habits ?? []) as MealHabit[]);
+  await updateTodayLog({ habits: next });
+  return next;
 }
 
 export type ChatMessage = {
@@ -451,10 +473,15 @@ export async function logTodayWeight(kg: number) {
     .select("id");
   if (error) throw error;
   if (!data || data.length === 0) {
-    const planRow = await fetchMonthlyPlan(monthISO());
-    const moments = mealsForDate((planRow?.plan as MonthlyPlan | null) ?? null, todayISO()).map(
-      (m) => m.moment,
-    );
+    // Filtrando por las comidas que esta persona quiere planificar: sin esto,
+    // el registro nacía con las cuatro y Hoy acababa enseñando la merienda que
+    // se descartó en el onboarding.
+    const [planRow, profile] = await Promise.all([fetchMonthlyPlan(monthISO()), fetchProfile()]);
+    const moments = mealsForDate(
+      (planRow?.plan as MonthlyPlan | null) ?? null,
+      todayISO(),
+      effectiveMealSlots(profile ?? {}),
+    ).map((m) => m.moment);
     await ensureTodayLog(moments);
     await updateTodayLog({ weight_kg: kg });
   }

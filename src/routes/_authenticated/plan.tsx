@@ -30,6 +30,7 @@ import { DayDetailSheet } from "@/components/day-detail-sheet";
 import { GoalWeightSummary } from "@/components/goal-weight-summary";
 import { MonthSpendSummary } from "@/components/month-spend-summary";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
+import { PlanUpdatedBanner } from "@/components/plan-updated-banner";
 import {
   fetchLogs,
   fetchLogsForMonth,
@@ -74,7 +75,9 @@ import {
 } from "@/lib/plan-shared";
 import { freshRiskNames, freshRisksForTrip } from "@/lib/perishability";
 import {
+  clearPlanUpdatedNotice,
   flushPlanRecalc,
+  hasPlanUpdatedNotice,
   onPlanRecalcDone,
   schedulePlanRecalc,
   wirePlanRecalcFlush,
@@ -1103,6 +1106,22 @@ function IngredientsTab({
 }) {
   const currentTrip = trips[selectedTrip] ?? trips[0];
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
+
+  // Aviso de "hemos actualizado tus cantidades" tras un cambio en la mesa. Se
+  // suscribe aquí y no en el componente de arriba porque `onPlanRecalcDone` es
+  // una suscripción de módulo: evita bajar dos props por los tres sitios donde
+  // se usa esta pestaña.
+  const [planUpdated, setPlanUpdated] = useState(() => hasPlanUpdatedNotice(month));
+  useEffect(() => {
+    setPlanUpdated(hasPlanUpdatedNotice(month));
+    return onPlanRecalcDone((done) => {
+      if (done === month) setPlanUpdated(hasPlanUpdatedNotice(month));
+    });
+  }, [month]);
+  const dismissPlanUpdated = () => {
+    clearPlanUpdatedNotice(month);
+    setPlanUpdated(false);
+  };
   // Mes que viene desbloqueado: la compra se hace entera ahora, así que todas
   // las compras son accionables a la vez. Mes pasado: solo lectura. Mes en
   // curso: cualquier compra que no haya pasado ya (puedes auditar la nevera para
@@ -1157,6 +1176,10 @@ function IngredientsTab({
 
   return (
     <section className="mt-5 space-y-3 pb-40">
+      {/* "Tus ingredientes se han actualizado": la mesa cambió y el recálculo
+          automático ya rehizo las cantidades. Va aquí y no en Familia porque
+          es aquí donde se ven los números distintos. */}
+      {planUpdated ? <PlanUpdatedBanner onDismiss={dismissPlanUpdated} /> : null}
       {readOnly ? (
         <div className="rounded-[20px] bg-secondary/60 px-4 py-3">
           <p className="text-xs leading-relaxed text-muted-foreground">

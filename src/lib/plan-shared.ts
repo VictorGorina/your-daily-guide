@@ -1209,45 +1209,162 @@ export const planCursor = (date: string) => {
 };
 
 /**
- * Conserva el pasado y el día de hoy del plan actual y sólo adopta del plan nuevo
- * los días posteriores al cursor: el día en curso ya está fijado.
+ * Fecha que ocupa una celda `(semana, día)` del plan, o `null` si esa celda no
+ * cae en el mes. Es la inversa de `planSlotIndex`.
+ *
+ * Hace falta porque la rejilla del plan NO va en orden de calendario: la semana
+ * la marca el día del mes (`floor((día-1)/7)`) y la posición dentro de ella, el
+ * día de la semana. En un mes que empieza en martes, la semana 0 va
+ * martes(1)…domingo(6) y luego lunes(7): el lunes es el ÚLTIMO día de esa
+ * semana pero el PRIMERO de la fila. Decidir "esto es futuro" comparando
+ * posiciones da el resultado contrario al del calendario.
+ *
+ * Los días 29 en adelante comparten celda con los de la semana 3 (el plan solo
+ * tiene 4 filas y `planSlotIndex` los recorta ahí), así que esta función
+ * devuelve la PRIMERA fecha de la fila: al usarla para decidir qué se puede
+ * reescribir, el empate se resuelve a favor de no tocar nada. Es la limitación
+ * del modelo de 4 semanas, no de esta función.
+ */
+export function dateOfPlanCell(month: string, weekIndex: number, dayIndex: number): string | null {
+  const total = daysInMonth(month);
+  const from = weekIndex * 7 + 1;
+  for (let dom = from; dom <= Math.min(from + 6, total); dom++) {
+    const date = `${month}-${String(dom).padStart(2, "0")}`;
+    if ((new Date(`${date}T00:00:00`).getDay() + 6) % 7 === dayIndex) return date;
+  }
+  return null;
+}
+
+/**
+ * Conserva el pasado y el día de hoy del plan actual y sólo adopta del plan
+ * nuevo los días POSTERIORES a `today`, mirando la fecha real de cada celda.
+ *
+ * Antes se decidía por posición en la rejilla (`día > el de hoy dentro de su
+ * semana`), y eso no coincide con el calendario: un lunes 7, que es la última
+ * fecha de la semana 0 pero la posición 0 de la fila, dejaba las posiciones 1-6
+ * —que son los días 1 al 6, ya pasados— del lado "futuro". Resultado: la
+ * recolocación reescribía días pasados y no tocaba ninguno de los siguientes,
+ * así que el ajuste no se veía por ningún lado y parecía que el coach no había
+ * hecho nada.
  */
 export const mergeFuturePlan = (
   current: MonthlyPlan,
   next: MonthlyPlan,
-  cursor: { weekIndex: number; dayIndex: number },
-): MonthlyPlan => ({
-  ...(current.coverage ? { coverage: current.coverage } : {}),
-  ...(current.cadence ? { cadence: current.cadence } : {}),
-  intro: next.intro || current.intro,
-  focus: next.focus.length ? next.focus : current.focus,
-  weeks: current.weeks.map((week, wi) => {
-    const fresh = next.weeks[wi];
-    if (!fresh || wi < cursor.weekIndex) return week;
-    const future = wi > cursor.weekIndex;
-    return {
-      label: week.label,
-      focus: future ? fresh.focus || week.focus : week.focus,
-      breakfasts: future && fresh.breakfasts.length ? fresh.breakfasts : week.breakfasts,
-      snacks: future && fresh.snacks.length ? fresh.snacks : week.snacks,
+  today: string,
+): MonthlyPlan => {
+  const month = today.slice(0, 7);
+  return {
+    ...(current.coverage ? { coverage: current.coverage } : {}),
+    ...(current.cadence ? { cadence: current.cadence } : {}),
+    intro: next.intro || current.intro,
+    focus: next.focus.length ? next.focus : current.focus,
+    weeks: current.weeks.map((week, wi) => {
+      const fresh = next.weeks[wi];
+      if (!fresh) return week;
+      // Los campos de semana (desayunos y meriendas rotan por semana) solo se
+      // adoptan si la semana entera está por venir; si no, cambiarían también
+      // lo que ya se comió.
+      const weekAhead = week.days.every((_, di) => {
+        const date = dateOfPlanCell(month, wi, di);
+        return date == null || date > today;
+      });
+      return {
+        label: week.label,
+        focus: weekAhead ? fresh.focus || week.focus : week.focus,
+        breakfasts: weekAhead && fresh.breakfasts.length ? fresh.breakfasts : week.breakfasts,
+        snacks: weekAhead && fresh.snacks.length ? fresh.snacks : week.snacks,
+        days: week.days.map((day, di) => {
+          const date = dateOfPlanCell(month, wi, di);
+          if (date == null || date <= today) return day;
+          const freshDay =
+            fresh.days.find((d) => normDay(d.day) === normDay(day.day)) ?? fresh.days[di];
+          if (!freshDay?.lunch && !freshDay?.dinner) return day;
+          // El spread conserva breakfast/snack/extras/kids: un plato pedido a
+          // mano (incluido el plato aparte de un niño) manda sobre la recolocación
+          // automática hasta que se cambie a mano otra vez (la IA sólo devuelve
+          // lunch/dinner por día).
+          return {
+            ...day,
+            lunch: freshDay.lunch || day.lunch,
+            dinner: freshDay.dinner || day.dinner,
+          };
+        }),
+      };
+    }),
+  };
+};
+
+/** Un día que la recolocación cambia. Solo lo que cambia: lo demás se queda. */
+export type PlanChange = { date: string; lunch?: string; dinner?: string };
+
+/**
+ * Lee la respuesta de la IA al recolocar el plan, que es una LISTA DE CAMBIOS
+ * ({"intro", "cambios": [{"fecha","comida","cena"}]}), no el plan entero.
+ *
+ * Pedir las cuatro semanas de vuelta para mover dos cenas salía caro y salía
+ * mal: el modelo copiaba el plan tal cual la mayoría de las veces. Una lista
+ * corta es barata de generar y, sobre todo, se puede validar — aquí se
+ * descarta cualquier fecha que no esté entre las editables, así que un despiste
+ * del modelo no puede reescribir un día ya cerrado.
+ *
+ * Devuelve `null` solo si la respuesta no tiene forma de lista de cambios (para
+ * que quien llama reintente). Una lista vacía es una respuesta válida: significa
+ * "no hace falta cambiar nada".
+ */
+export function cleanReflowChanges(
+  raw: unknown,
+  allowedDates: readonly string[],
+): { intro: string; changes: PlanChange[] } | null {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(o.cambios)) return null;
+  const allowed = new Set(allowedDates);
+  const changes: PlanChange[] = [];
+  for (const item of o.cambios) {
+    const c = (item ?? {}) as Record<string, unknown>;
+    const date = String(c.fecha ?? "");
+    if (!allowed.has(date)) continue;
+    const lunch = String(c.comida ?? "")
+      .trim()
+      .slice(0, 200);
+    const dinner = String(c.cena ?? "")
+      .trim()
+      .slice(0, 200);
+    if (!lunch && !dinner) continue;
+    changes.push({ date, ...(lunch ? { lunch } : {}), ...(dinner ? { dinner } : {}) });
+  }
+  return { intro: String(o.intro ?? ""), changes };
+}
+
+/**
+ * Aplica una lista de cambios sobre el plan, cada uno en la celda que le toca
+ * por fecha (`planSlotIndex`, la misma que usa la pantalla). Un cambio con
+ * fecha de hoy o anterior se ignora: el pasado no se reescribe nunca.
+ */
+export function applyPlanChanges(
+  current: MonthlyPlan,
+  changes: readonly PlanChange[],
+  today: string,
+): MonthlyPlan {
+  const byCell = new Map<string, PlanChange>();
+  for (const c of changes) {
+    if (!c.date || c.date <= today) continue;
+    const at = planSlotIndex(current, c.date);
+    if (at) byCell.set(`${at.weekIndex}:${at.dayIndex}`, c);
+  }
+  if (!byCell.size) return current;
+  return {
+    ...current,
+    weeks: current.weeks.map((week, wi) => ({
+      ...week,
       days: week.days.map((day, di) => {
-        if (!future && di <= cursor.dayIndex) return day;
-        const freshDay =
-          fresh.days.find((d) => normDay(d.day) === normDay(day.day)) ?? fresh.days[di];
-        if (!freshDay?.lunch && !freshDay?.dinner) return day;
-        // El spread conserva breakfast/snack/extras/kids: un plato pedido a
-        // mano (incluido el plato aparte de un niño) manda sobre la recolocación
-        // automática hasta que se cambie a mano otra vez (la IA sólo devuelve
-        // lunch/dinner por día).
-        return {
-          ...day,
-          lunch: freshDay.lunch || day.lunch,
-          dinner: freshDay.dinner || day.dinner,
-        };
+        const c = byCell.get(`${wi}:${di}`);
+        // El spread conserva breakfast/snack/extras/kids: la recolocación solo
+        // toca comida y cena, igual que antes.
+        return c ? { ...day, lunch: c.lunch || day.lunch, dinner: c.dinner || day.dinner } : day;
       }),
-    };
-  }),
-});
+    })),
+  };
+}
 
 /**
  * Segunda pasada tras `mergeFuturePlan`, solo para el recálculo por cambio de
@@ -1258,26 +1375,27 @@ export const mergeFuturePlan = (
  *  - se descartan los `kids` de un niño que ya no está en la casa (`keepChildIds`);
  *  - se adopta del plan nuevo cada `(childId, slot)` que el día no tuviera ya
  *    (una entrada existente = plato puesto a mano, se respeta).
- * Solo toca días posteriores al cursor; hoy y el pasado no se tocan.
+ * Solo toca días posteriores a `today`, por fecha real de la celda (mismo
+ * criterio que `mergeFuturePlan`); hoy y el pasado no se tocan.
  */
 export const mergeFutureKids = (
   merged: MonthlyPlan,
   fresh: MonthlyPlan,
-  cursor: { weekIndex: number; dayIndex: number },
+  today: string,
   keepChildIds: string[],
 ): MonthlyPlan => {
   const keep = new Set(keepChildIds);
+  const month = today.slice(0, 7);
   return {
     ...merged,
     weeks: merged.weeks.map((week, wi) => {
-      if (wi < cursor.weekIndex) return week;
       const freshWeek = fresh.weeks[wi];
       if (!freshWeek) return week;
-      const future = wi > cursor.weekIndex;
       return {
         ...week,
         days: week.days.map((day, di) => {
-          if (!future && di <= cursor.dayIndex) return day;
+          const date = dateOfPlanCell(month, wi, di);
+          if (date == null || date <= today) return day;
           const freshDay =
             freshWeek.days.find((d) => normDay(d.day) === normDay(day.day)) ?? freshWeek.days[di];
           const existing = (day.kids ?? []).filter((k) => keep.has(k.childId));
@@ -1381,6 +1499,99 @@ export function mealsForDate(
     meal("cena", day?.dinner ?? ""),
     meal("snack", day?.snack || rotate(found?.week.snacks ?? [])),
   ].filter((m): m is PlanMeal => m !== null);
+}
+
+export type MealStatus = "plan" | "distinto" | "salteo";
+
+/**
+ * Una comida dentro del registro del día (`daily_logs.habits`). Vive aquí y no
+ * en `daily.ts` porque `reconcileHabits` la necesita y `daily.ts` ya importa
+ * este módulo (al revés sería un ciclo).
+ */
+export type MealHabit = {
+  label: string;
+  done: boolean;
+  status?: MealStatus;
+  /**
+   * Plato que el PLAN proponía para ese momento, congelado la primera vez que
+   * se ve el día y nunca reescrito. Es lo que Hoy tacha bajo el plato real:
+   * cambies una vez o veinte, el tachado sigue siendo la sugerencia original.
+   * Sustituye a `wasIdea`, que guardaba "lo que había justo antes del último
+   * cambio" y por tanto se iba desplazando con cada cambio encadenado.
+   */
+  plannedIdea?: string;
+  /** Antecesor de `plannedIdea`. Solo se lee, para registros ya guardados. */
+  wasIdea?: string;
+  /**
+   * kcal que la guía estimaba para el plato del plan de ese momento, congeladas
+   * igual que `plannedIdea`. El desvío que se le pasa a la IA se mide siempre
+   * contra el PLAN, no contra el último cambio: si no, cambiar dos veces una
+   * cena daba un desvío medido contra el cambio intermedio (y podía salir
+   * negativo tras comerse una pizza).
+   */
+  plannedKcal?: number;
+  /** Qué comió realmente cuando status === "distinto". Se escribe desde el
+   * DayDetailSheet al corregir un día pasado — el plan no cambia, pero el
+   * historial queda correcto. */
+  actual?: string;
+  /** Días futuros que se recolocaron para compensar este cambio. Lo escribe el
+   * lote de `use-meal-swap`, en todas las comidas del mismo lote. */
+  adjustmentChanges?: MealChange[];
+  /** Explicación en una frase del mismo ajuste. */
+  adjustmentSummary?: string;
+  /** Desvío estimado en kcal del lote frente a lo que preveía el plan. */
+  adjustmentKcal?: number;
+};
+
+/**
+ * El plato que hay que tachar bajo el plato real de una comida: la sugerencia
+ * original del plan, o `null` si lo que se ve ya es esa sugerencia. Cae a
+ * `wasIdea` para registros anteriores a `plannedIdea`.
+ */
+export function suggestedDish(habit: MealHabit, currentIdea: string): string | null {
+  const suggested = habit.plannedIdea || habit.wasIdea;
+  return suggested && suggested !== currentIdea ? suggested : null;
+}
+
+/**
+ * Casa el registro del día con las comidas que el plan tiene HOY para esta
+ * persona (ya filtradas por `effectiveMealSlots`).
+ *
+ * Hace falta porque `daily_logs.habits` se escribe UNA vez, al crear el día, y
+ * lo crea quien toque el día primero con la lista que tenga a mano: abrir el
+ * chat antes que Hoy lo crea vacío, y `logTodayWeight` lo creaba con todas las
+ * comidas. A partir de ahí nadie lo reconciliaba, así que una comida
+ * descartada en el onboarding seguía apareciendo en Hoy para siempre.
+ *
+ * Conserva por `label` todo lo que es del registro y no del plan (qué marcaste,
+ * qué comiste, el ajuste), descarta las comidas que ya no se planifican, añade
+ * las que falten y congela `plannedIdea` la primera vez que ve cada comida.
+ *
+ * `changed` es `false` cuando no hay nada que guardar — quien llama lo usa para
+ * no escribir en bucle en cada render.
+ */
+export function reconcileHabits(
+  habits: readonly MealHabit[] | null | undefined,
+  meals: readonly { moment: string; idea: string }[],
+): { habits: MealHabit[]; changed: boolean } {
+  const previous = habits ?? [];
+  const byLabel = new Map(previous.map((h) => [h.label, h]));
+  const next = meals.map((m) => {
+    const existing = byLabel.get(m.moment);
+    if (!existing) return { label: m.moment, done: false, plannedIdea: m.idea || undefined };
+    // `plannedIdea` solo se rellena si falta: una vez congelado no se toca ni
+    // aunque el plato del plan haya cambiado (que es justo lo que pasa tras un
+    // cambio a mano — `setPlanMeal` escribe el plato nuevo en el plan).
+    return existing.plannedIdea || !m.idea
+      ? existing
+      : { ...existing, plannedIdea: existing.wasIdea || m.idea };
+  });
+  // Comparación por identidad: las comidas que no cambian se devuelven tal
+  // cual, así que basta con mirar si alguna posición trae otro objeto. También
+  // detecta un reordenado, que se aprovecha para dejar el registro en el mismo
+  // orden que el plan (y por tanto no vuelve a dispararse a la siguiente).
+  const changed = next.length !== previous.length || next.some((h, i) => h !== previous[i]);
+  return { habits: next, changed };
 }
 
 /**

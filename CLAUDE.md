@@ -86,14 +86,41 @@ en `supabase/migrations/`.
 - `setPlanMeal` cambia un plato de un día concreto tal cual lo pide la persona, sin IA de por
   medio — así es verificable que se aplicó lo pedido.
 - `adjustMonthlyPlan` recoloca varios días futuros para compensar (comió de más, hizo ejercicio);
-  el día de hoy nunca se toca.
+  el día de hoy nunca se toca. La IA **no** devuelve el plan entero, sino una lista de cambios
+  (`{"cambios": [{"fecha","comida","cena"}]}`, ver `cleanReflowChanges` + `applyPlanChanges`):
+  pidiéndole las cuatro semanas de vuelta copiaba el plan tal cual casi siempre. Las fechas que
+  puede tocar van explícitas en el prompt y se validan al aplicarlas. Si el desvío en kcal supera
+  `FORCE_ADJUST_KCAL` y no cambia nada, se le insiste una vez.
 
 Un cambio a mano se guarda en campos propios del día (`breakfast`/`snack` en `PlanDay`) y manda
 sobre la rotación semanal por defecto; una recolocación automática posterior los respeta y no los
-pisa (`mergeFuturePlan`). Al recolocar platos (`adjustMonthlyPlan`, `setPlanMeal`, recálculo por
+pisa (`mergeFuturePlan`). **Ojo con la rejilla del plan:** las semanas van por día del mes
+(`floor((día-1)/7)`) y la posición dentro de la fila es el día de la semana, así que el orden de la
+fila no es el del calendario — un lunes 7 es la última fecha de la semana 0 pero la posición 0.
+Qué fecha ocupa cada celda lo dice `dateOfPlanCell`, y es lo que decide qué se puede reescribir;
+compararlo por posición hacía que la recolocación pisara días pasados y no tocara ninguno futuro. Al recolocar platos (`adjustMonthlyPlan`, `setPlanMeal`, recálculo por
 despensa) la lista de la compra nunca cambia — si un plato pide algo no comprado, se guarda igual y
 aparece como aviso en `PlanDay.extras`. La única excepción es un cambio en la mesa del hogar, que
 sí re-dimensiona las cantidades (ver "Recálculo automático del plan" más abajo).
+
+**Pestaña Hoy — el registro del día se reconcilia al leerlo.** La tira de comidas se pinta desde
+`daily_logs.habits`, que se escribe UNA vez al crear el día y lo crea quien toque el día primero
+(abrir el chat lo crea vacío). `reconcileHabits` ([src/lib/plan-shared.ts](src/lib/plan-shared.ts))
+lo casa en cada carga con `mealsForDate(plan, hoy, effectiveMealSlots(perfil))`: descarta la comida
+que ya no se planifica (una merienda descartada en el onboarding dejaba de irse), añade la que
+falte y congela `plannedIdea` — el plato que el plan proponía, que es lo que Hoy tacha bajo el
+plato real por muchas veces que se cambie (`suggestedDish`). Solo reescribe el día de hoy; un día
+pasado es un hecho, no una preferencia.
+
+**Cambiar un plato en Hoy — aplicar ya, ajustar en lote** ([src/lib/use-meal-swap.ts](src/lib/use-meal-swap.ts)).
+`setPlanMeal` escribe el plato al instante y sin IA; el reajuste de los días futuros y la
+regeneración de macros se agrupan tras 10 s de calma en **una** llamada de cada, con el debounce
+persistido y el flush al ocultar la app (misma forma que `plan-recalc.ts`). El estado es por
+comida, no global: cambiar una no bloquea las demás. El desvío en kcal que se le pasa a la IA sale
+de `kcalDeltaOf` comparando las macros nuevas contra `plannedKcal` (congelada como `plannedIdea`,
+para medir siempre contra el plan y no contra el cambio anterior). Cada escritura de `habits` pasa
+por `patchTodayHabits`, que relee la fila justo antes: es una sola columna JSON y dos operaciones
+lentas solapadas se pisaban entera la lista.
 
 **Cantidades de la compra — modelo canónico por semana.** `generateMonthlyPlan` guarda `shopping`
 en **forma canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`) + `weekQty` (cuánto

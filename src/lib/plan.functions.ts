@@ -34,6 +34,9 @@ import {
   composeMonthlyPlanForMember,
   coverageRatio,
   effectiveMealSlots,
+  applyPlanChanges,
+  cleanReflowChanges,
+  dateOfPlanCell,
   daysInMonth,
   formatQty,
   ingredientNames,
@@ -1185,6 +1188,14 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
  * `reflowMonthlyPlan` (cambió la despensa). No consume cuota: el bucket lo
  * decide quien llama (`plan-adjust` vs `plan-reflow`).
  */
+/**
+ * A partir de este desvío (en kcal, en valor absoluto) recolocar deja de ser
+ * opcional para la IA. Por debajo se compensa "de forma suave", que puede
+ * significar no tocar nada — cambiar una fruta por otra no debe reescribir la
+ * semana.
+ */
+const FORCE_ADJUST_KCAL = 200;
+
 async function reflowMeals(opts: {
   supabase: SupabaseClient<never, never, never>;
   userId: string;
@@ -1221,10 +1232,21 @@ async function reflowMeals(opts: {
   const goalLine = gt
     ? `Objetivo: ${gt} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
     : "La persona no tiene un objetivo de peso definido: no asumas uno ni recoloques el plan para adelgazar; céntrate en comidas equilibradas y hábitos.";
+  // Por debajo de este desvío, compensar es opcional (cambiar un plátano por
+  // una manzana no debe recolocar la semana). Por encima, el prompt lo exige:
+  // sin esto el modelo respondía "el plan ya está equilibrado" incluso ante una
+  // pizza con cerveza, que es justo lo que la persona nota como incoherente.
+  const strongDelta = kcalDelta != null && Math.abs(kcalDelta) >= FORCE_ADJUST_KCAL;
   const kcalLine = kcalDelta
     ? kcalDelta > 0
-      ? `Hoy hay un EXCESO estimado de ${kcalDelta} kcal: compénsalo de forma suave repartida entre los días siguientes (nunca todo en un día, nunca con platos de castigo).`
-      : `Hoy hay un DÉFICIT extra estimado de ${Math.abs(kcalDelta)} kcal (por ejemplo ejercicio): reponlo en los días siguientes con algo más de energía en las comidas, sin pasar hambre.`
+      ? `Hoy hay un EXCESO estimado de ${kcalDelta} kcal sobre lo que preveía el plan.` +
+        (strongDelta
+          ? " Es un desvío grande: NO devuelvas el plan igual. Tienes que recolocar al menos DOS días posteriores a hoy para absorberlo (cenas más ligeras, más verdura y proteína, raciones algo menores), repartido y nunca todo en un día ni con platos de castigo."
+          : " Compénsalo de forma suave repartida entre los días siguientes (nunca todo en un día, nunca con platos de castigo).")
+      : `Hoy hay un DÉFICIT extra estimado de ${Math.abs(kcalDelta)} kcal (por ejemplo ejercicio) sobre lo que preveía el plan.` +
+        (strongDelta
+          ? " Es un desvío grande: NO devuelvas el plan igual. Tienes que reponerlo en al menos DOS días posteriores a hoy con comidas algo más completas, sin pasar hambre."
+          : " Reponlo en los días siguientes con algo más de energía en las comidas, sin pasar hambre.")
     : "Si de lo que cuenta se deduce un exceso o un déficit de energía, compénsalo de forma suave en los días siguientes.";
 
   const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
@@ -1254,33 +1276,81 @@ async function reflowMeals(opts: {
           .join(", ")}: esos campos se quedan vacíos.\n`
       : "";
 
-  const plan = await askForJson(
-    {
-      key,
-      system: coachSystemPrompt(profile as never, home.text),
-      prompt:
-        `Plan actual del mes ${month}:\n${JSON.stringify(current)}\n\n` +
-        `Ingredientes ya comprados (no pueden cambiar): ${ingredientNames(shopping)}\n\n` +
-        (pantryExtras.length
-          ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => e.name).join(", ")}\n\n`
-          : "") +
-        `${goalLine}\n` +
-        `Últimos días reales registrados: ${JSON.stringify(logs ?? [])}\n\n` +
-        `Hoy es ${today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
-        `Lo que ha pasado / lo que cuenta la persona: ${note}\n\n` +
-        `REGLA 1: el día de hoy y los días anteriores YA ESTÁN FIJADOS: devuélvelos exactamente igual. Cambia sólo los días POSTERIORES a hoy.\n` +
-        `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
-        `REGLA 3: ${kcalLine}\n` +
-        "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
-        `${sharedSlotsLine}` +
-        `${mealSlotsLine}` +
-        "Actualiza 'intro' con 1-2 frases explicando en lenguaje sencillo qué has recolocado y por qué. " +
-        'Devuelve solo JSON válido con la misma forma: {"intro": string, "focus": [3 strings], "weeks": [{"label", "focus", "breakfasts": [..], "snacks": [..], "days": [{"day","lunch","dinner"}]}]}. Sin markdown.',
-    },
-    (parsed) => completePlan(cleanPlan(parsed)),
-  );
+  // El plan guardado no tiene fechas: es una rejilla de 4 semanas × Lunes…
+  // Domingo, y qué fecha es cada celda lo decide `dateOfPlanCell` (la semana la
+  // marca el día del mes, no el orden natural). Sin esa anotación el modelo
+  // entendía "posterior a hoy" como "más abajo en la fila", y en un lunes eso
+  // son los días 1 al 6 — ya pasados. Recolocaba de verdad, pero siempre en
+  // días que no se podían tocar, y el ajuste no aparecía por ningún lado.
+  const dated = {
+    ...current,
+    weeks: current.weeks.map((week, wi) => ({
+      ...week,
+      days: week.days.map((d, di) => ({ fecha: dateOfPlanCell(month, wi, di), ...d })),
+    })),
+  };
+  // Fechas que sí se pueden recolocar, dichas de forma explícita: es más difícil
+  // de ignorar que una regla en prosa.
+  const editableDates = current.weeks
+    .flatMap((week, wi) => week.days.map((_, di) => dateOfPlanCell(month, wi, di)))
+    .filter((d): d is string => !!d && d > today);
 
-  const merged = mergeFuturePlan(current, plan, cursor);
+  /**
+   * Una pasada de recolocación. `insist` solo lleva texto en el reintento: ver
+   * abajo por qué hace falta pedirlo dos veces.
+   *
+   * Se le pide SOLO la lista de días a cambiar, no el plan entero de vuelta.
+   * Pidiendo las cuatro semanas completas para mover dos cenas, el modelo
+   * devolvía casi siempre el plan copiado tal cual (y cuando cambiaba algo lo
+   * ponía en la fila equivocada): mucho texto de salida por un cambio mínimo.
+   * Una lista corta con fechas explícitas es barata de generar, fácil de
+   * validar y se aplica de forma determinista aquí, no a base de confiar.
+   */
+  const askReflow = (insist: string) =>
+    askForJson(
+      {
+        key,
+        system: coachSystemPrompt(profile as never, home.text),
+        prompt:
+          insist +
+          `Plan actual del mes ${month} (cada día lleva su "fecha" real):\n${JSON.stringify(dated)}\n\n` +
+          `Ingredientes ya comprados (no pueden cambiar): ${ingredientNames(shopping)}\n\n` +
+          (pantryExtras.length
+            ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => e.name).join(", ")}\n\n`
+            : "") +
+          `${goalLine}\n` +
+          `Últimos días reales registrados: ${JSON.stringify(logs ?? [])}\n\n` +
+          `Hoy es ${today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
+          `Lo que ha pasado / lo que cuenta la persona: ${note}\n\n` +
+          `REGLA 1: las ÚNICAS fechas que puedes cambiar son ${editableDates.join(", ") || "ninguna"}. Hoy y los días anteriores están cerrados. Guíate por la "fecha" de cada día, no por su posición en la semana.\n` +
+          `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
+          `REGLA 3: ${kcalLine}\n` +
+          "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
+          `${sharedSlotsLine}` +
+          `${mealSlotsLine}` +
+          "En 'intro', 1-2 frases en lenguaje sencillo explicando qué has recolocado y por qué. " +
+          'Devuelve SOLO los días que cambias, no el plan entero, como JSON válido: {"intro": string, "cambios": [{"fecha": "AAAA-MM-DD", "comida": string, "cena": string}]}. Incluye "comida" o "cena" solo si cambian ese plato. Sin markdown.',
+      },
+      (parsed) => cleanReflowChanges(parsed, editableDates),
+    );
+
+  let reflow = await askReflow("");
+  // Un desvío grande sin ni un cambio es, casi siempre, el modelo escurriendo
+  // el bulto. Se le insiste UNA vez: cuesta una llamada extra y solo pasa en el
+  // caso que la persona nota como incoherente ("me he comido una pizza y dice
+  // que no cambia nada").
+  if (strongDelta && !reflow.changes.length) {
+    console.warn(`reflowMeals: ${kcalDelta} kcal de desvío y ningún cambio; insistiendo`);
+    const second = await askReflow(
+      "AVISO: en tu respuesta anterior no cambiaste ningún día, y para este desvío eso no vale. Devuelve al menos DOS días con platos distintos.\n\n",
+    );
+    if (second.changes.length) reflow = second;
+    else console.warn("reflowMeals: sigue sin cambiar nada tras insistir");
+  }
+  const merged: MonthlyPlan = {
+    ...applyPlanChanges(current, reflow.changes, today),
+    intro: reflow.intro || current.intro,
+  };
   // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
   // `current` (congelado) — un no planificador nunca puede acabar
   // escribiendo, ni por accidente, el plato de una comida de la casa.
@@ -1434,12 +1504,11 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
       profile,
     });
 
-    const cursor = planCursor(data.today);
     const validChildIds = home.children.map((c) => c.id);
     const mergedPlan = mergeFutureKids(
-      mergeFuturePlan(current, fresh.plan, cursor),
+      mergeFuturePlan(current, fresh.plan, data.today),
       fresh.plan,
-      cursor,
+      data.today,
       validChildIds,
     );
     const finalPlan: MonthlyPlan = { ...mergedPlan, coverage, cadence };

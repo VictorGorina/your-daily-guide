@@ -240,6 +240,148 @@ export function mealsForDate(
   ].filter((m): m is PlanMeal => m !== null);
 }
 
+export type MealStatus = "plan" | "distinto" | "salteo";
+
+/**
+ * Una comida dentro del registro del día (`daily_logs.habits`). Vive aquí y no
+ * en `daily.ts` porque `reconcileHabits` la necesita y `daily.ts` ya importa
+ * este módulo (al revés sería un ciclo).
+ */
+export type MealHabit = {
+  label: string;
+  done: boolean;
+  status?: MealStatus;
+  /**
+   * Plato que el PLAN proponía para ese momento, congelado la primera vez que
+   * se ve el día y nunca reescrito. Es lo que Hoy tacha bajo el plato real:
+   * cambies una vez o veinte, el tachado sigue siendo la sugerencia original.
+   * Sustituye a `wasIdea`, que guardaba "lo que había justo antes del último
+   * cambio" y por tanto se iba desplazando con cada cambio encadenado.
+   */
+  plannedIdea?: string;
+  /** Antecesor de `plannedIdea`. Solo se lee, para registros ya guardados. */
+  wasIdea?: string;
+  /**
+   * kcal que la guía estimaba para el plato del plan de ese momento, congeladas
+   * igual que `plannedIdea`. El desvío que se le pasa a la IA se mide siempre
+   * contra el PLAN, no contra el último cambio: si no, cambiar dos veces una
+   * cena daba un desvío medido contra el cambio intermedio (y podía salir
+   * negativo tras comerse una pizza).
+   */
+  plannedKcal?: number;
+  /** Qué comió realmente cuando status === "distinto". Se escribe desde el
+   * DayDetailSheet al corregir un día pasado — el plan no cambia, pero el
+   * historial queda correcto. */
+  actual?: string;
+  /** Días futuros que se recolocaron para compensar este cambio. Lo escribe el
+   * lote de `use-meal-swap`, en todas las comidas del mismo lote. */
+  adjustmentChanges?: MealChange[];
+  /** Explicación en una frase del mismo ajuste. */
+  adjustmentSummary?: string;
+  /** Desvío estimado en kcal del lote frente a lo que preveía el plan. */
+  adjustmentKcal?: number;
+};
+
+/**
+ * El plato que hay que tachar bajo el plato real de una comida: la sugerencia
+ * original del plan, o `null` si lo que se ve ya es esa sugerencia. Cae a
+ * `wasIdea` para registros anteriores a `plannedIdea`.
+ */
+export function suggestedDish(habit: MealHabit, currentIdea: string): string | null {
+  const suggested = habit.plannedIdea || habit.wasIdea;
+  return suggested && suggested !== currentIdea ? suggested : null;
+}
+
+/**
+ * Casa el registro del día con las comidas que el plan tiene HOY para esta
+ * persona (ya filtradas por `effectiveMealSlots`).
+ *
+ * Hace falta porque `daily_logs.habits` se escribe UNA vez, al crear el día, y
+ * lo crea quien toque el día primero con la lista que tenga a mano: abrir el
+ * chat antes que Hoy lo crea vacío, y `logTodayWeight` lo creaba con todas las
+ * comidas. A partir de ahí nadie lo reconciliaba, así que una comida
+ * descartada en el onboarding seguía apareciendo en Hoy para siempre.
+ *
+ * Conserva por `label` todo lo que es del registro y no del plan (qué marcaste,
+ * qué comiste, el ajuste), descarta las comidas que ya no se planifican, añade
+ * las que falten y congela `plannedIdea` la primera vez que ve cada comida.
+ *
+ * `changed` es `false` cuando no hay nada que guardar — quien llama lo usa para
+ * no escribir en bucle en cada render.
+ */
+export function reconcileHabits(
+  habits: readonly MealHabit[] | null | undefined,
+  meals: readonly { moment: string; idea: string }[],
+): { habits: MealHabit[]; changed: boolean } {
+  const previous = habits ?? [];
+  const byLabel = new Map(previous.map((h) => [h.label, h]));
+  const next = meals.map((m) => {
+    const existing = byLabel.get(m.moment);
+    if (!existing) return { label: m.moment, done: false, plannedIdea: m.idea || undefined };
+    // `plannedIdea` solo se rellena si falta: una vez congelado no se toca ni
+    // aunque el plato del plan haya cambiado (que es justo lo que pasa tras un
+    // cambio a mano — `setPlanMeal` escribe el plato nuevo en el plan).
+    return existing.plannedIdea || !m.idea
+      ? existing
+      : { ...existing, plannedIdea: existing.wasIdea || m.idea };
+  });
+  // Comparación por identidad: las comidas que no cambian se devuelven tal
+  // cual, así que basta con mirar si alguna posición trae otro objeto. También
+  // detecta un reordenado, que se aprovecha para dejar el registro en el mismo
+  // orden que el plan (y por tanto no vuelve a dispararse a la siguiente).
+  const changed = next.length !== previous.length || next.some((h, i) => h !== previous[i]);
+  return { habits: next, changed };
+}
+
+export type MealChange = {
+  date: string;
+  slot: MealSlot;
+  slotLabel: string;
+  before: string;
+  after: string;
+};
+
+/**
+ * Compara los platos de los días FUTUROS (posteriores a `today`) entre dos
+ * versiones del plan y devuelve los que cambiaron. Ignora el día de hoy y
+ * anteriores (están fijados). Compara solo lunch y dinner — desayunos y snacks
+ * no los recoloca `adjustMonthlyPlan` (giran por semana, no por día).
+ */
+export function diffFutureMeals(
+  before: MonthlyPlan | null,
+  after: MonthlyPlan | null,
+  today: string,
+): MealChange[] {
+  if (!before || !after) return [];
+  const month = today.slice(0, 7);
+  const changes: MealChange[] = [];
+  const totalDays = daysInMonth(month);
+
+  for (let d = 1; d <= totalDays; d++) {
+    const date = `${month}-${String(d).padStart(2, "0")}`;
+    if (date <= today) continue; // solo días futuros
+
+    const mealsBefore = mealsForDate(before, date);
+    const mealsAfter = mealsForDate(after, date);
+
+    for (const mb of mealsBefore) {
+      // Solo comparar comida y cena — lo que adjustMonthlyPlan recoloca
+      if (mb.slot !== "comida" && mb.slot !== "cena") continue;
+      const ma = mealsAfter.find((m) => m.slot === mb.slot);
+      if (ma && ma.idea && mb.idea && ma.idea !== mb.idea) {
+        changes.push({
+          date,
+          slot: mb.slot,
+          slotLabel: MEAL_SLOT_LABEL[mb.slot],
+          before: mb.idea,
+          after: ma.idea,
+        });
+      }
+    }
+  }
+  return changes;
+}
+
 /**
  * Platos aparte de un niño para una fecha (issue 07): solo los slots con
  * override propio para ese niño; en el resto come el plato compartido del día.

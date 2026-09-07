@@ -60,7 +60,16 @@ async function run(): Promise<void> {
   running = true;
   pending = null;
   try {
-    await apiPost("plan/reflow", { month: job.month, today: job.today, scope: job.scope });
+    const result = await apiPost<{ skipped?: string; scope?: string }>("plan/reflow", {
+      month: job.month,
+      today: job.today,
+      scope: job.scope,
+    });
+    // Un recálculo "full" (entró o salió alguien de la mesa, cambió una ración)
+    // rehace también las CANTIDADES de la compra. Eso hay que decirlo: se deja
+    // una marca que sobrevive a navegar de Familia a Plan, que es justo el
+    // camino que hace la persona. Un `skipped` no cuenta.
+    if (result && !result.skipped && result.scope === "full") await markPlanUpdated(job.month);
   } catch (err) {
     console.warn("plan-recalc: no se pudo actualizar el plan", err);
   } finally {
@@ -105,4 +114,25 @@ export function wirePlanRecalcFlush(): void {
   AppState.addEventListener("change", (state) => {
     if (state === "background" || state === "inactive") void flushPlanRecalc();
   });
+}
+
+const NOTICE_PREFIX = "plan-updated-notice:";
+
+/** Deja constancia de que las cantidades del mes se han rehecho. */
+async function markPlanUpdated(month: string) {
+  await AsyncStorage.setItem(`${NOTICE_PREFIX}${month}`, "1").catch(() => {});
+}
+
+/** ¿Hay un aviso de "tus ingredientes se han actualizado" sin leer para este mes? */
+export async function hasPlanUpdatedNotice(month: string): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(`${NOTICE_PREFIX}${month}`)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Descarta el aviso (la persona lo ha leído). */
+export function clearPlanUpdatedNotice(month: string): void {
+  void AsyncStorage.removeItem(`${NOTICE_PREFIX}${month}`).catch(() => {});
 }

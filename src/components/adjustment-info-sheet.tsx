@@ -22,13 +22,23 @@ export function AdjustmentInfoSheet({
   onOpenChange,
   changes,
   dish,
+  kcalDelta,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   changes: MealChange[];
   /** El plato que comió la persona (para el título). */
   dish: string;
+  /** Desvío estimado frente a lo que preveía el plan, si se pudo calcular. */
+  kcalDelta?: number | null;
 }) {
+  // Redondeo a la baja en decenas: es una estimación de la IA, y darla al kcal
+  // exacto sugeriría una precisión que no tiene.
+  const rounded =
+    typeof kcalDelta === "number" && Math.abs(kcalDelta) >= 50
+      ? `${kcalDelta > 0 ? "+" : "−"}${Math.round(Math.abs(kcalDelta) / 10) * 10} kcal`
+      : null;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
@@ -37,15 +47,29 @@ export function AdjustmentInfoSheet({
             Ajuste del plan
           </SheetTitle>
           <SheetDescription>
-            Tras comer <span className="font-medium text-foreground">{dish}</span>, se han
-            recolocado estos platos futuros para compensar:
+            Tras comer <span className="font-medium text-foreground">{dish}</span>
+            {/* La cifra es del día entero, no de este plato: los cambios
+                seguidos se ajustan en un solo lote y el desvío se suma. */}
+            {rounded ? (
+              <>
+                , hoy llevas <span className="font-medium text-foreground">{rounded}</span> frente a
+                lo que preveía el plan
+              </>
+            ) : null}
+            {changes.length ? ". Se han recolocado estos platos futuros:" : "."}
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-3 px-4 pb-8">
           {changes.length === 0 ? (
+            // Sin cifra no se puede afirmar que el plan siga equilibrado: solo
+            // sabemos que el coach no ha movido nada. Con cifra, se dice.
             <p className="text-sm text-muted-foreground">
-              No se han cambiado platos futuros — el plan ya estaba equilibrado.
+              {rounded
+                ? `El coach no ha movido ningún plato futuro: considera que ${
+                    (kcalDelta ?? 0) > 0 ? "el exceso" : "la diferencia"
+                  } se absorbe con lo que ya tienes planificado.`
+                : "El coach no ha movido ningún plato futuro."}
             </p>
           ) : (
             changes.map((c) => (

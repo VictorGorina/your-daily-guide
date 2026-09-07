@@ -74,6 +74,44 @@ async function postReflow(p: Pending): Promise<void> {
     body: JSON.stringify({ month: p.month, today: p.today, scope: p.scope }),
   });
   if (!res.ok) throw new Error(`plan/reflow ${res.status}`);
+  // Un recálculo "full" (entró o salió alguien de la mesa, cambió una ración)
+  // rehace también las CANTIDADES de la compra. Eso hay que decirlo: se deja
+  // una marca que sobrevive a navegar de Hogar a Plan, que es justo el camino
+  // que hace la persona. Un `skipped` (no planificador, mes pasado) no cuenta.
+  const result = (await res.json().catch(() => null)) as {
+    skipped?: string;
+    scope?: string;
+  } | null;
+  if (result && !result.skipped && result.scope === "full") markPlanUpdated(p.month);
+}
+
+const NOTICE_PREFIX = "plan-updated-notice:";
+
+/** Deja constancia de que las cantidades del mes se han rehecho. */
+function markPlanUpdated(month: string) {
+  try {
+    localStorage.setItem(`${NOTICE_PREFIX}${month}`, "1");
+  } catch {
+    /* sin storage no hay aviso; el plan se ha actualizado igual */
+  }
+}
+
+/** ¿Hay un aviso de "tus ingredientes se han actualizado" sin leer para este mes? */
+export function hasPlanUpdatedNotice(month: string): boolean {
+  try {
+    return localStorage.getItem(`${NOTICE_PREFIX}${month}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Descarta el aviso (la persona lo ha leído). */
+export function clearPlanUpdatedNotice(month: string): void {
+  try {
+    localStorage.removeItem(`${NOTICE_PREFIX}${month}`);
+  } catch {
+    /* no-op */
+  }
 }
 
 async function run(): Promise<void> {

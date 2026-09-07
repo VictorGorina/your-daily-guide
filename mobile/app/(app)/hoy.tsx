@@ -7,14 +7,16 @@ import {
   Check,
   ChevronDown,
   Home,
+  Info,
   MessageCircle,
   PencilLine,
   X,
 } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AdjustmentInfoSheet } from "../../components/adjustment-info-sheet";
 import { BottomNav } from "../../components/bottom-nav";
 import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { DayDetailBody } from "../../components/day-detail-sheet";
@@ -22,6 +24,7 @@ import { DishRecipe } from "../../components/dish-recipe";
 import { DishCategoryIcon } from "../../components/food-category-bg";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { MacroBars } from "../../components/macro-bars";
+import { MealSwapSheet } from "../../components/meal-swap-sheet";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
 import { WeekStrip } from "../../components/week-strip";
 import { classifyDish, FOOD_CATEGORIES } from "../../lib/food-categories";
@@ -58,11 +61,14 @@ import {
   effectiveMealSlots,
   mealsForDate,
   offListNote,
+  reconcileHabits,
+  suggestedDish,
   type MealSlot,
   type MonthlyPlan,
   type ShoppingList,
 } from "../../lib/plan-shared";
 import { quoteOfTheDay } from "../../lib/quotes";
+import { useMealSwap } from "../../lib/use-meal-swap";
 import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
 // Orden cronológico aproximado de cada momento, para saber cuál toca ahora.
@@ -152,7 +158,8 @@ export default function Hoy() {
   const qc = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
-  const [guidedIndex, setGuidedIndex] = useState<number | null>(null);
+  const [swapIndex, setSwapIndex] = useState<number | null>(null);
+  const [infoIndex, setInfoIndex] = useState<number | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
@@ -423,7 +430,18 @@ export default function Hoy() {
 
   const impulso = impulsoFrom(logsQ.data ?? []);
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
-  const habits = today?.habits ?? [];
+  // El registro del día se casa con las comidas que esta persona planifica de
+  // verdad: `daily_logs.habits` se escribe UNA vez, al crear el día, y lo crea
+  // quien lo toque primero (abrir el chat antes que Hoy lo dejaba vacío), así
+  // que sin esto una comida descartada en el onboarding seguía saliendo aquí.
+  // Mismo criterio que la web (src/routes/_authenticated/hoy.tsx).
+  const reconciled = reconcileHabits(today?.habits, todayMeals);
+  const habits = reconciled.habits;
+  useEffect(() => {
+    if (!today || !reconciled.changed) return;
+    save.mutate({ habits: reconciled.habits });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today?.id, reconciled.changed]);
   const doneCount = habits.filter((h) => h.done).length;
   // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
   // "comí distinto"), no el menú completo del día: así deshacer una comida
@@ -440,12 +458,15 @@ export default function Hoy() {
     save.mutate({ habits: next });
   };
 
-  const handleMealStatus = (index: number, status: MealStatus) => {
-    setMealStatus(index, status);
-    if (status === "distinto") setGuidedIndex(index);
-  };
+  const mealSwap = useMealSwap(
+    () => todayQ.data,
+    () => planQ.data?.plan ?? null,
+  );
 
-  const guidedMeal = guidedIndex != null ? habits[guidedIndex] : undefined;
+  // Datos para el sheet de cambio y el de información del ajuste.
+  const swapMeal =
+    swapIndex != null ? todayMeals.find((m) => m.moment === habits[swapIndex]?.label) : undefined;
+  const infoHabit = infoIndex != null ? habits[infoIndex] : undefined;
 
   const pending = habits
     .map((h, i) => ({ h, i }))
@@ -571,10 +592,11 @@ export default function Hoy() {
                 const cat = classifyDish(dish);
                 const catInfo = FOOD_CATEGORIES[cat];
                 const accent = catInfo.accent;
-                // El coach cambió el plato de este momento hoy (chat o "comí
-                // otra cosa"): plato real en naranja, con el que había antes
-                // tachado debajo — ver `wasIdea` en lib/daily.ts.
-                const wasIdea = h.wasIdea && h.wasIdea !== dish ? h.wasIdea : null;
+                // El plato de este momento se ha cambiado hoy: el real en
+                // naranja y debajo, tachada, la sugerencia ORIGINAL del plan
+                // — congelada, así que sigue igual tras veinte cambios (ver
+                // `plannedIdea` en lib/plan-shared.ts).
+                const wasIdea = suggestedDish(h, dish);
                 const note = offListNote(planned?.off);
                 const shared = sharedWith(h.label);
 
@@ -644,10 +666,26 @@ export default function Hoy() {
 
                       {/* Acciones */}
                       <View className="flex-row items-center gap-1.5">
+                        {/* Spinner mientras esta comida espera al lote (los
+                            cambios seguidos se agrupan en un solo reajuste) y
+                            badge "i" cuando ya hay resultado. Es por comida, no
+                            global: cambiar una no bloquea las demás. */}
+                        {mealSwap.isAdjusting(h.label) ? (
+                          <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary/10">
+                            <ActivityIndicator size="small" color="#ff8a3d" />
+                          </View>
+                        ) : h.adjustmentChanges ? (
+                          <Pressable
+                            onPress={() => setInfoIndex(i)}
+                            className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary/10 active:opacity-80"
+                          >
+                            <Info size={14} color="#ff8a3d" />
+                          </Pressable>
+                        ) : null}
                         {isPending ? (
                           <>
                             <Pressable
-                              onPress={() => handleMealStatus(i, "distinto")}
+                              onPress={() => setSwapIndex(i)}
                               className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
                             >
                               <PencilLine size={14} color="#83796c" />
@@ -855,25 +893,42 @@ export default function Hoy() {
         <ChatBubbleIcon />
       </Pressable>
 
-      <GuidedLogSheet
-        mode="meal"
-        open={guidedIndex != null}
+      {/* Cambio de plato directo, igual que en la web: el plato cambia al
+          instante (plan/meal, sin IA) y el reajuste de los días futuros va en un
+          lote en segundo plano. Antes esto mandaba al chat del coach. */}
+      <MealSwapSheet
+        open={swapIndex != null}
         onOpenChange={(v) => {
-          if (!v) setGuidedIndex(null);
+          if (!v) setSwapIndex(null);
         }}
-        contextNote={guidedMeal ? `Qué has comido en vez de: ${guidedMeal.label}` : undefined}
-        mealLabel={guidedMeal?.label}
+        mealLabel={swapMeal?.moment ?? ""}
+        plannedDish={swapMeal?.idea ?? ""}
+        disabled={mealSwap.isSaving(swapMeal?.moment ?? "")}
+        onSwap={(dish) => {
+          if (!swapMeal) return;
+          void mealSwap.swap(swapMeal.moment, swapMeal.slot, dish);
+          setSwapIndex(null);
+        }}
         onSkip={() => {
-          if (guidedIndex != null) {
-            setMealStatus(guidedIndex, "salteo");
-            setGuidedIndex(null);
-          }
+          if (swapIndex != null) setMealStatus(swapIndex, "salteo");
+          setSwapIndex(null);
         }}
-        onSend={(text) => {
-          setPendingChatMessage(text);
-          setGuidedIndex(null);
-          router.navigate("/chat");
+      />
+
+      {/* Info del ajuste del plan tras un cambio: lista antes → después. */}
+      <AdjustmentInfoSheet
+        open={infoIndex != null}
+        onOpenChange={(v) => {
+          if (!v) setInfoIndex(null);
         }}
+        changes={infoHabit?.adjustmentChanges ?? []}
+        kcalDelta={infoHabit?.adjustmentKcal ?? null}
+        dish={
+          infoIndex != null
+            ? (todayMeals.find((m) => m.moment === habits[infoIndex]?.label)?.idea ??
+              "lo que comiste")
+            : "lo que comiste"
+        }
       />
 
       <GuidedLogSheet

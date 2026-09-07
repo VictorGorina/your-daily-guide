@@ -24,6 +24,7 @@ import {
   isBeforeAppStart,
   mealsForDate,
   offListNote,
+  suggestedDish,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
 
@@ -274,10 +275,9 @@ export function DayDetailBody({
         </div>
         {habits.map((h, i) => {
           const planned = plannedByLabel.get(h.label) ?? "";
-          // `wasIdea` = plato que había en el plan antes de que el coach lo
-          // cambiara por lo que de verdad se comió (ver daily.ts). Si sigue
-          // coincidiendo con lo planificado, no cuenta como cambio.
-          const wasIdea = h.wasIdea && h.wasIdea !== planned ? h.wasIdea : null;
+          // La sugerencia original del plan para ese momento, si lo que se ve
+          // ya no es ella (ver `plannedIdea` en plan-shared.ts).
+          const wasIdea = suggestedDish(h, planned);
           const skipped = h.status === "salteo";
           const unlogged = h.status == null;
           const changed = h.status === "distinto";

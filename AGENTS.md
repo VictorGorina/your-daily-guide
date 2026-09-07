@@ -34,6 +34,16 @@ Dos caminos distintos, deliberadamente separados:
 - `adjustMonthlyPlan` recoloca **varios** días futuros para compensar (comió de más, salió a
   correr). Ahí el día de hoy sigue fijado.
 
+  La IA devuelve una **lista de cambios** (`{"intro", "cambios": [{"fecha","comida","cena"}]}`),
+  no el plan entero: `cleanReflowChanges` la valida contra las fechas editables y
+  `applyPlanChanges` la escribe en la celda que toca. Antes se le pedían las cuatro semanas de
+  vuelta y devolvía el plan copiado tal cual casi siempre — mucho texto de salida para mover dos
+  cenas. El prompt lleva el plan **anotado con la fecha de cada día** y la lista explícita de
+  fechas que puede tocar. Si el desvío en kcal (`kcalDelta`, que le llega desde el cambio de plato
+  en Hoy) supera `FORCE_ADJUST_KCAL` y aun así no cambia nada, se le insiste una vez; si sigue sin
+  mover nada queda en el log y la pantalla lo dice con la cifra, en vez de afirmar que el plan
+  estaba equilibrado.
+
 `generateMonthlyPlan` solo planifica de hoy en adelante: su `.validator` rechaza los meses
 pasados (no se pueden cumplir y gastan tokens) y el mes que viene hasta su última semana
 (`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7` en `plan-shared.ts`, compartido con el
@@ -46,6 +56,17 @@ El plan base deja desayunos y snacks a nivel de semana (una lista que rota por d
 cambio para un día concreto se guarda en campos propios del día — `breakfast`/`snack` en `PlanDay`
 ([plan-shared.ts](src/lib/plan-shared.ts)) — y manda sobre la rotación. `mergeFuturePlan` los
 conserva: una recolocación automática posterior no pisa lo que se pidió a mano.
+
+**La rejilla del plan no va en orden de calendario.** La semana la marca el día del mes
+(`floor((día-1)/7)`) y la posición dentro de la fila, el día de la semana. En un mes que empieza en
+martes, la semana 0 va martes(día 1)…domingo(día 6) y luego lunes(día 7): el lunes es la ÚLTIMA
+fecha de esa semana pero ocupa la posición 0. Qué fecha ocupa cada celda lo dice `dateOfPlanCell`
+(la inversa de `planSlotIndex`), y es lo único con lo que se puede decidir si una celda se puede
+reescribir. `mergeFuturePlan`/`mergeFutureKids` lo comparaban por posición y en un lunes eso
+reescribía los días 1 al 6 —ya pasados— sin tocar ninguno futuro: el ajuste se aplicaba donde no se
+veía, y parecía que el coach no hacía nada. Los días 29 en adelante comparten celda con la semana
+3; `dateOfPlanCell` devuelve la primera fecha de la fila, de forma que el empate se resuelve a
+favor de no tocar nada.
 
 La lista de la compra **nunca** cambia. Si el plato pide algo que no se compró, se guarda igual y
 los ingredientes que faltan quedan en `PlanDay.extras[comida]`, que se pintan como aviso ("Fuera de
