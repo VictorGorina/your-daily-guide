@@ -6,10 +6,13 @@ import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provi
 import { parseJsonLoose } from "@/lib/plan-shared";
 
 /**
- * Estimación aproximada del total del día, calculada por el modelo a partir
- * de los platos reales del plan de hoy (no de una base de datos nutricional).
- * Es orientativa por diseño — ver el aviso que se muestra junto a la barra de
- * macros en Hoy y el de la portada (index.tsx).
+ * Estimación aproximada del total del día. Desde la Fase 2 de
+ * `nutricion-determinista` se calcula sumando los ingredientes de los platos
+ * reales contra la tabla de composición (`src/lib/nutrition/`), no pidiéndosela
+ * al modelo — así el mismo plato da el mismo número cada día. Sigue siendo
+ * orientativa por diseño: ver el aviso junto a la barra de macros en Hoy y en
+ * la portada (index.tsx). El respaldo, si un plato no se puede descomponer, es
+ * una estimación gruesa por tipo de comida (`roughMealMacros`), no el modelo.
  */
 export type MacroEstimate = {
   kcal: number;
@@ -59,11 +62,65 @@ const fallback: GeneratedGuide = {
   ],
 };
 
-/** Un número finito y positivo, o 0 si el modelo devuelve cualquier otra cosa. */
-const num = (v: unknown): number => {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+/**
+ * Respaldo cuando un plato no se puede descomponer en ingredientes: una
+ * estimación gruesa por tipo de comida, para que la barra de macros de Hoy no
+ * se quede a cero. Deliberadamente conservadora y redonda — es un suelo, no un
+ * cálculo.
+ */
+const roughMealMacros = (moment: string): MacroEstimate => {
+  const key = moment.toLowerCase();
+  if (key.startsWith("desayuno"))
+    return { kcal: 350, protein_g: 15, carbs_g: 45, fat_g: 12, fiber_g: 5 };
+  if (key.startsWith("comida") || key.startsWith("almuerzo"))
+    return { kcal: 600, protein_g: 35, carbs_g: 65, fat_g: 20, fiber_g: 9 };
+  if (key.startsWith("cena"))
+    return { kcal: 500, protein_g: 30, carbs_g: 50, fat_g: 18, fiber_g: 8 };
+  if (key.startsWith("merienda") || key.startsWith("snack"))
+    return { kcal: 200, protein_g: 8, carbs_g: 25, fat_g: 7, fiber_g: 3 };
+  return { kcal: 450, protein_g: 22, carbs_g: 50, fat_g: 15, fiber_g: 6 };
 };
+
+const addMacros = (a: MacroEstimate, b: MacroEstimate): MacroEstimate => ({
+  kcal: a.kcal + b.kcal,
+  protein_g: a.protein_g + b.protein_g,
+  carbs_g: a.carbs_g + b.carbs_g,
+  fat_g: a.fat_g + b.fat_g,
+  fiber_g: a.fiber_g + b.fiber_g,
+});
+
+/**
+ * Macros del día por lookup de ingredientes (Fase 2). Para cada plato real de
+ * hoy: descomponer en ingredientes con el modelo (una sola llamada para todos)
+ * y sumar contra la tabla de composición. Si un plato no se resuelve con
+ * garantías, ese momento cae a `roughMealMacros`. Nunca lanza.
+ */
+async function macrosFromLookup(
+  todayMeals: { moment: string; idea: string }[],
+  apiKey: string,
+): Promise<{ macroEstimate: MacroEstimate; mealMacros: MealMacroEstimate[] }> {
+  const { decomposeDishes } = await import("@/lib/nutrition/resolve-dish.server");
+  const breakdowns = await decomposeDishes(
+    todayMeals.map((m) => m.idea),
+    { servings: 1, apiKey },
+  );
+
+  const mealMacros = todayMeals.map((meal): MealMacroEstimate => {
+    const b = breakdowns.get(meal.idea.trim());
+    const usable = b && b.source === "model" && b.perServing.kcal > 0 && b.quality >= 0.4;
+    const macros = usable ? b.perServing : roughMealMacros(meal.moment);
+    return { moment: meal.moment, ...macros };
+  });
+
+  const macroEstimate = mealMacros.reduce<MacroEstimate>(addMacros, {
+    kcal: 0,
+    protein_g: 0,
+    carbs_g: 0,
+    fat_g: 0,
+    fiber_g: 0,
+  });
+  return { macroEstimate, mealMacros };
+}
 
 export const generateDailyGuide = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -94,67 +151,43 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
 
     const todayMeals = data.todayMeals;
     const dishesLine = todayMeals.length
-      ? `Los platos reales de HOY (de su plan mensual, no te los inventes) son: ${todayMeals
+      ? `Los platos reales de HOY (de su plan mensual) son: ${todayMeals
           .map((m) => `${m.moment}: ${m.idea}`)
-          .join("; ")}. Calcula "macroEstimate" a partir de estos platos concretos, y además ` +
-        `"mealMacros" con una estimación por cada uno de esos platos (mismo "moment" exacto que te ` +
-        `he dado arriba, uno por plato, sin inventar comidas nuevas). `
-      : 'No hay plan con platos para hoy todavía: deja "macroEstimate" y "mealMacros" en null. ';
+          .join("; ")}. Tenlos en cuenta al redactar, pero no los repitas en "meals". `
+      : "Todavía no hay plan con platos para hoy. ";
+
+    // Las macros salen del lookup de ingredientes, no de esta llamada (Fase 2).
+    // Se hace en paralelo con el texto de la guía.
+    const macrosPromise = todayMeals.length
+      ? macrosFromLookup(todayMeals, key).catch((error) => {
+          console.error("macrosFromLookup", error);
+          return null;
+        })
+      : Promise.resolve(null);
 
     const ai = createAiProvider(key);
     try {
-      const { text } = await generateText({
-        model: ai(COACH_MODEL),
-        system: coachSystemPrompt(profile as never),
-        prompt:
-          "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +
-          '{"intro": string (1 frase cálida y motivadora, sin presión), "calories": string (rango orientativo, nunca una cifra rígida), "macros": string (orientación de macros en una frase), ' +
-          '"macroEstimate": null o {"kcal": number, "protein_g": number, "carbs_g": number, "fat_g": number, "fiber_g": number} (estimación aproximada del total del día — es una guía orientativa, no un conteo nutricional exacto, así que da tu mejor cálculo razonable), ' +
-          '"mealMacros": null o un array con un objeto {"moment": string, "kcal": number, "protein_g": number, "carbs_g": number, "fat_g": number, "fiber_g": number} por cada plato real de hoy que te doy abajo (mismo "moment" exacto, uno por plato — la suma de todos debería aproximarse a "macroEstimate"), ' +
-          '"behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Merienda", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
-          dishesLine +
-          "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
-      });
+      const [{ text }, lookup] = await Promise.all([
+        generateText({
+          model: ai(COACH_MODEL),
+          system: coachSystemPrompt(profile as never),
+          prompt:
+            "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +
+            '{"intro": string (1 frase cálida y motivadora, sin presión), "calories": string (rango orientativo, nunca una cifra rígida), "macros": string (orientación de macros en una frase), ' +
+            '"behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Merienda", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
+            dishesLine +
+            "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
+        }),
+        macrosPromise,
+      ]);
       const parsed = parseJsonLoose(text) as GeneratedGuide;
       if (!parsed.behaviors?.length) return fallback;
-      const rawMacro = parsed.macroEstimate as unknown;
-      const macroEstimate: MacroEstimate | null =
-        todayMeals.length && rawMacro && typeof rawMacro === "object"
-          ? {
-              kcal: num((rawMacro as Record<string, unknown>).kcal),
-              protein_g: num((rawMacro as Record<string, unknown>).protein_g),
-              carbs_g: num((rawMacro as Record<string, unknown>).carbs_g),
-              fat_g: num((rawMacro as Record<string, unknown>).fat_g),
-              fiber_g: num((rawMacro as Record<string, unknown>).fiber_g),
-            }
-          : null;
-      // Solo se aceptan entradas cuyo "moment" coincide con un plato real de
-      // hoy (los que le pasamos en el prompt) — así una alucinación del modelo
-      // no añade una comida fantasma a la suma que hace Hoy.
-      const todayMoments = new Set(todayMeals.map((m) => m.moment));
-      const rawMealMacros = parsed.mealMacros as unknown;
-      const mealMacros: MealMacroEstimate[] | null =
-        todayMeals.length && Array.isArray(rawMealMacros)
-          ? rawMealMacros
-              .filter(
-                (m): m is Record<string, unknown> =>
-                  !!m && typeof m === "object" && todayMoments.has(String((m as never)["moment"])),
-              )
-              .map((m) => ({
-                moment: String(m.moment),
-                kcal: num(m.kcal),
-                protein_g: num(m.protein_g),
-                carbs_g: num(m.carbs_g),
-                fat_g: num(m.fat_g),
-                fiber_g: num(m.fiber_g),
-              }))
-          : null;
       return {
         intro: String(parsed.intro ?? fallback.intro),
         calories: String(parsed.calories ?? fallback.calories),
         macros: String(parsed.macros ?? fallback.macros),
-        macroEstimate: macroEstimate?.kcal ? macroEstimate : null,
-        mealMacros: mealMacros?.length ? mealMacros : null,
+        macroEstimate: lookup?.macroEstimate.kcal ? lookup.macroEstimate : null,
+        mealMacros: lookup?.mealMacros.length ? lookup.mealMacros : null,
         behaviors: parsed.behaviors.slice(0, 3).map(String),
         meals: Array.isArray(parsed.meals)
           ? parsed.meals

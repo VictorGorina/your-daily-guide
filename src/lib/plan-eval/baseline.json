@@ -1,0 +1,9 @@
+{
+  "ranAt": "2026-09-10T14:12:52.645Z",
+  "dishes": 50,
+  "resolved": 50,
+  "resolvedPct": 100,
+  "meanQualityPct": 100,
+  "kcalOutOfRange": 0,
+  "unidentifiedIngredients": {}
+}

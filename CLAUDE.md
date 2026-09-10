@@ -103,6 +103,22 @@ despensa) la lista de la compra nunca cambia — si un plato pide algo no compra
 aparece como aviso en `PlanDay.extras`. La única excepción es un cambio en la mesa del hogar, que
 sí re-dimensiona las cantidades (ver "Recálculo automático del plan" más abajo).
 
+**Macros y kcal — deterministas, no del modelo** (feature `nutricion-determinista`, Fase 2,
+`src/lib/nutrition/`). El modelo ya no estima las macros de un plato. `generateDailyGuide`
+descompone cada plato real de hoy en `{ingrediente, gramos}` con **una** llamada al modelo
+(`decomposeDishes` en `resolve-dish.server.ts`) y suma cada ingrediente contra una tabla de
+composición estática de ~200 alimentos (`foods.data.ts`, valores por 100 g + precio ES
+aproximado) con `matchFood`/`macrosOf` (`nutrition.ts`, puro y testeado). Así el mismo plato da
+el mismo número cada día. Si un plato no se descompone con garantías, ese momento cae a
+`roughMealMacros` (estimación gruesa por tipo de comida), nunca al modelo. `matchFood` casa por
+alias exacto, contención de label o solape de tokens (un solo token solo cuenta si es la
+cabecera del alimento); lo que no casa cae en `GENERIC_FOOD`. La forma de `MacroEstimate` /
+`mealMacros` no cambió, así que Hoy (web y móvil) y `kcalDeltaOf` siguen igual. Banco de pruebas
+de cobertura: `bun run eval:dishes` (gasta llamadas al modelo, no va en CI).
+`src/lib/nutrition/index.ts` reexporta solo lo puro; `foods.data.ts` no debe entrar en el bundle
+de navegador. Fases 3-5 (lista de la compra y `reflowMeals` sobre el mismo lookup) están
+pendientes en `.scratch/nutricion-determinista/`.
+
 **Pestaña Hoy — el registro del día se reconcilia al leerlo.** La tira de comidas se pinta desde
 `daily_logs.habits`, que se escribe UNA vez al crear el día y lo crea quien toque el día primero
 (abrir el chat lo crea vacío). `reconcileHabits` ([src/lib/plan-shared.ts](src/lib/plan-shared.ts))

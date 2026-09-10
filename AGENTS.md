@@ -5,6 +5,12 @@ La IA (chat del coach, guía diaria, plan mensual) usa OpenRouter (modelo `googl
 por defecto) a través de `@openrouter/ai-sdk-provider`
 (ver [src/lib/ai-provider.server.ts](src/lib/ai-provider.server.ts)); requiere `OPENROUTER_API_KEY` en `.env`.
 
+El modelo se queda deliberadamente en la gama barata: cuando la calidad de una salida flojea, la
+respuesta es **sacar el trabajo verificable del modelo hacia código**, no subir de modelo. Primer
+ejemplo: las **kcal y macros** ya no las estima el modelo — `src/lib/nutrition/` descompone cada
+plato en ingredientes (una llamada) y los suma contra una tabla de composición estática. Ver
+"Macros y kcal — deterministas" en CLAUDE.md y `.scratch/nutricion-determinista/`.
+
 ## API HTTP (`/api/v1/*`)
 
 Cada server function está expuesta además como ruta HTTP bajo
