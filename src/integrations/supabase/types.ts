@@ -284,6 +284,7 @@ export type Database = {
           short_term_goal: string | null;
           sleep_time: string | null;
           start_weight_kg: number | null;
+          target_weight_kg: number | null;
           theme: string;
           timezone: string;
           tone: string;
@@ -331,6 +332,7 @@ export type Database = {
           short_term_goal?: string | null;
           sleep_time?: string | null;
           start_weight_kg?: number | null;
+          target_weight_kg?: number | null;
           theme?: string;
           timezone?: string;
           tone?: string;
@@ -378,6 +380,7 @@ export type Database = {
           short_term_goal?: string | null;
           sleep_time?: string | null;
           start_weight_kg?: number | null;
+          target_weight_kg?: number | null;
           theme?: string;
           timezone?: string;
           tone?: string;

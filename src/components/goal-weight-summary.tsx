@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { ProgressBar } from "@/components/progress-bar";
+import { WeightGauge } from "@/components/weight-gauge";
 import {
   goalProgress,
   logTodayWeight,
@@ -23,10 +24,9 @@ const formatMetaDate = (isoDate: string) => {
  * Vivía en la subpestaña Historial; ahora encabeza la subpestaña Plan y se
  * muestra sea cual sea el mes seleccionado (el objetivo no es "del mes").
  *
- * Solo enseña barra de progreso cuando hay una métrica real: objetivo de peso
- * con cantidad, o "mantener" (estabilidad). Para objetivos que no son de peso
- * ("hábitos", "energía") no hay porcentaje que enseñar — solo el peso y el
- * botón para anotarlo.
+ * Con `target_weight_kg`: indicador de posición (WeightGauge) centrado en el
+ * objetivo, con zona de mantenimiento, punto de peso actual y tendencia.
+ * Sin target (legacy): barra de progreso lineal como antes.
  */
 export function GoalWeightSummary({
   logs,
@@ -38,6 +38,34 @@ export function GoalWeightSummary({
   const progress = goalProgress(profile ?? null);
   const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
 
+  // ── Camino nuevo: peso objetivo con WeightGauge ──
+  if (progress.targetKg != null && profile) {
+    const points = weighPoints(logs);
+    const trend = trendDirection(points, progress.targetKg);
+
+    return (
+      <div className="surface-card animate-rise p-5">
+        <WeightGauge
+          targetKg={progress.targetKg}
+          currentKg={Number(
+            profile.current_weight_kg ?? profile.start_weight_kg ?? progress.targetKg,
+          )}
+          startKg={Number(
+            profile.start_weight_kg ?? profile.current_weight_kg ?? progress.targetKg,
+          )}
+          regressing={progress.regressing}
+          trendDirection={trend}
+        />
+        <WeightPanel
+          logs={logs}
+          lastKnown={profile.current_weight_kg ?? null}
+          regressing={progress.regressing}
+        />
+      </div>
+    );
+  }
+
+  // ── Fallback legacy: barra de progreso lineal ──
   const metaCaption = profile?.goal_target_date
     ? `meta: ${formatMetaDate(profile.goal_target_date)}`
     : undefined;
@@ -46,17 +74,13 @@ export function GoalWeightSummary({
     if (goal === "mantener") return "Estabilidad";
     if (progress.regressing) {
       const kg = Math.abs(progress.done).toFixed(1);
-      // "Retroceso" = te alejas de la dirección del objetivo.
       return goal === "perder" ? `+${kg} kg (retroceso)` : `−${kg} kg (retroceso)`;
     }
     if (progress.hasTarget) return `${progress.done.toFixed(1)} de ${progress.total} kg`;
-    // Objetivo de peso sin meta numérica: solo la tendencia hasta ahora.
     const kg = progress.done.toFixed(1);
     return goal === "ganar" ? `${kg} kg más` : `${kg} kg menos`;
   };
 
-  // Con meta numérica (o "mantener") se enseña la barra de porcentaje; sin meta,
-  // solo un dato de tendencia — un 0 % con la barra vacía induciría a error.
   const showBar = progress.measurable && (progress.hasTarget || goal === "mantener");
 
   return (
@@ -91,6 +115,22 @@ export function GoalWeightSummary({
       />
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers internos
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Dirección de tendencia de los últimos pesajes respecto al target. */
+function trendDirection(weights: number[], targetKg: number): "toward" | "away" | "stable" {
+  if (weights.length < 2) return "stable";
+  const last = weights[weights.length - 1];
+  const prev = weights[weights.length - 2];
+  const delta = last - prev;
+  if (Math.abs(delta) < 0.2) return "stable";
+  const distNow = Math.abs(last - targetKg);
+  const distPrev = Math.abs(prev - targetKg);
+  return distNow < distPrev ? "toward" : "away";
 }
 
 // Tendencia de los últimos pesajes + botón para anotar el peso de hoy. El

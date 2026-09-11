@@ -125,7 +125,7 @@ function Ajustes() {
     });
 
   const commitNumber = (
-    key: "current_weight_kg" | "height_cm" | "goal_amount",
+    key: "current_weight_kg" | "height_cm" | "target_weight_kg",
     raw: string,
     min: number,
     max: number,
@@ -288,24 +288,24 @@ function Ajustes() {
         </div>
         <div>
           <FieldInput
-            label="Objetivo"
+            label="Peso objetivo"
             inputMode="decimal"
-            defaultValue={profile?.goal_amount ?? ""}
+            defaultValue={profile?.target_weight_kg ?? ""}
             placeholder="kg"
             onBlur={(e) =>
               commitNumber(
-                "goal_amount",
+                "target_weight_kg",
                 e.target.value,
-                0.5,
-                100,
-                "El objetivo debe estar entre 0,5 y 100 kg",
+                30,
+                300,
+                "El peso objetivo debe estar entre 30 y 300 kg",
                 false,
               )
             }
           />
           <FieldNote
-            error={errors["goal_amount"]}
-            help="Opcional: kg que quieres perder o ganar."
+            error={errors["target_weight_kg"]}
+            help="El peso al que quieres llegar y mantenerte."
           />
         </div>
       </section>

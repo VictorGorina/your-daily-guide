@@ -34,7 +34,14 @@ import { DictateButton } from "../../components/dictate-button";
 import { RegionStep } from "../../components/region-step";
 import { apiPost } from "../../lib/api";
 import { ageFromDOB } from "../../lib/age";
-import { addMessage, fetchProfile, monthISO, saveProfile, todayISO } from "../../lib/daily";
+import {
+  addMessage,
+  deriveGoalType,
+  fetchProfile,
+  monthISO,
+  saveProfile,
+  todayISO,
+} from "../../lib/daily";
 import type { OnboardingDraft } from "../../lib/onboarding";
 import type { MealSlot } from "../../lib/plan-shared";
 import { resolveDeviceTimeZone } from "../../lib/zoned-date";
@@ -856,8 +863,12 @@ export default function Onboarding() {
         diet_pattern: d.diet_pattern,
         non_negotiable_foods: d.non_negotiable_foods,
         food_relationship: d.food_relationship,
-        goal_type: d.goal_type ?? "mantener",
-        goal_amount: d.goal_amount,
+        target_weight_kg: d.target_weight_kg,
+        goal_type: deriveGoalType(d.current_weight_kg, d.target_weight_kg) ?? "mantener",
+        goal_amount:
+          d.target_weight_kg != null && d.current_weight_kg != null
+            ? Math.abs(d.current_weight_kg - d.target_weight_kg)
+            : null,
         goal_target_date: d.goal_target_date,
         past_struggles: d.past_struggles,
         restrictions: d.restrictions,

@@ -48,7 +48,7 @@ export default function Ajustes() {
     });
 
   const commitNumber = (
-    key: "current_weight_kg" | "height_cm" | "goal_amount",
+    key: "current_weight_kg" | "height_cm" | "target_weight_kg",
     raw: string,
     min: number,
     max: number,
@@ -245,26 +245,26 @@ export default function Ajustes() {
           </View>
           <View>
             <TextInput
-              key={`goal-${seed}`}
-              defaultValue={profile?.goal_amount?.toString() ?? ""}
-              placeholder="Objetivo (kg)"
+              key={`target-${seed}`}
+              defaultValue={profile?.target_weight_kg?.toString() ?? ""}
+              placeholder="Peso objetivo (kg)"
               placeholderTextColor="#a69d8f"
               keyboardType="decimal-pad"
               onEndEditing={(e) =>
                 commitNumber(
-                  "goal_amount",
+                  "target_weight_kg",
                   e.nativeEvent.text,
-                  0.5,
-                  100,
-                  "El objetivo debe estar entre 0,5 y 100 kg",
+                  30,
+                  300,
+                  "El peso objetivo debe estar entre 30 y 300 kg",
                   false,
                 )
               }
               className={inputClass}
             />
             <FieldNote
-              error={errors["goal_amount"]}
-              help="Opcional: kg que quieres perder o ganar."
+              error={errors["target_weight_kg"]}
+              help="El peso al que quieres llegar. La dirección se calcula sola."
             />
           </View>
         </View>

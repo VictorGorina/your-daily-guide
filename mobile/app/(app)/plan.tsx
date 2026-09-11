@@ -529,8 +529,8 @@ export default function Plan() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-52 pt-6">
-        <View className="flex-row items-start justify-between gap-3">
-          <View className="min-w-0 flex-1">
+        <View className="relative flex-row justify-center">
+          <View className="items-center">
             <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
               Plan mensual
             </Text>
@@ -549,7 +549,7 @@ export default function Plan() {
                   dos botones de 32 px y se leía cortado. El mes solo, sin el
                   año al lado, cabe de sobra incluso en el más largo
                   (septiembre). */}
-              <View className="min-w-0 flex-1 items-center">
+              <View className="items-center">
                 <Text className="text-center font-heading text-[24px] text-foreground">
                   {capitalizeFirst(monthParts(month).monthName)}
                 </Text>
@@ -581,9 +581,24 @@ export default function Plan() {
           </View>
           {plan && actionable ? (
             <Pressable
-              onPress={() => generate.mutate(undefined)}
+              onPress={() =>
+                Alert.alert(
+                  `¿Rehacer el plan de ${monthTitle(month)}?`,
+                  isSoloPlanner
+                    ? "Se genera de cero tu plan en solitario: pierdes los platos que hayas cambiado a mano este mes."
+                    : "Se genera de cero: pierdes los platos que hayas cambiado a mano, lo que ya tengas marcado en la compra y los platos aparte de los peques.",
+                  [
+                    { text: "Cancelar", style: "cancel" },
+                    {
+                      text: "Sí, rehacer",
+                      style: "destructive",
+                      onPress: () => generate.mutate(undefined),
+                    },
+                  ],
+                )
+              }
               disabled={generate.isPending}
-              className="mt-1 h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-70"
+              className="absolute right-0 top-0 h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-70"
               style={generate.isPending ? { opacity: 0.6 } : undefined}
             >
               {generate.isPending ? (

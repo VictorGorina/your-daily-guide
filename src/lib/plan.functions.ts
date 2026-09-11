@@ -9,7 +9,7 @@ import {
   createAiProvider,
   currencySymbol,
 } from "@/lib/ai-provider.server";
-import { normalizeGoalType } from "@/lib/daily";
+import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import {
   describeServings,
   describeSharedSlots,
@@ -1228,10 +1228,24 @@ async function reflowMeals(opts: {
 
   const p = (profile ?? {}) as Record<string, unknown>;
   const cursor = planCursor(today);
-  const gt = p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
-  const goalLine = gt
-    ? `Objetivo: ${gt} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
-    : "La persona no tiene un objetivo de peso definido: no asumas uno ni recoloques el plan para adelgazar; céntrate en comidas equilibradas y hábitos.";
+  const goalLine = (() => {
+    if (p.target_weight_kg != null) {
+      const target = Number(p.target_weight_kg);
+      const current = Number(p.current_weight_kg ?? p.start_weight_kg ?? target);
+      const diff = Math.abs(current - target);
+      const dir = deriveGoalType(current, target);
+      const datePart = p.goal_target_date ? `, fecha orientativa ${p.goal_target_date}` : "";
+      if (dir === "mantener" || diff < 1)
+        return `Peso objetivo: ${target} kg (actual: ${current} kg — en mantenimiento${datePart}). Equilibra, no restrinjas.`;
+      const verb = dir === "perder" ? "perder" : "ganar";
+      return `Peso objetivo: ${target} kg (actual: ${current} kg, falta: ${diff.toFixed(1)} kg por ${verb}${datePart}). Ritmo saludable: máx ~1 kg/semana de pérdida, ~0.5 kg/semana de ganancia; nunca déficit mayor de 500 kcal/día.`;
+    }
+    // Fallback legacy
+    const gt = p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
+    return gt
+      ? `Objetivo: ${gt} ${p.goal_amount ?? ""} kg, fecha objetivo ${String(p.goal_target_date ?? "sin fecha")}, peso actual ${String(p.current_weight_kg ?? "?")} kg, peso inicial ${String(p.start_weight_kg ?? "?")} kg.`
+      : "La persona no tiene un objetivo de peso definido: no asumas uno ni recoloques el plan para adelgazar; céntrate en comidas equilibradas y hábitos.";
+  })();
   // Por debajo de este desvío, compensar es opcional (cambiar un plátano por
   // una manzana no debe recolocar la semana). Por encima, el prompt lo exige:
   // sin esto el modelo respondía "el plan ya está equilibrado" incluso ante una

@@ -31,6 +31,7 @@ export type Profile = {
   height_cm: number | null;
   start_weight_kg: number | null;
   current_weight_kg: number | null;
+  target_weight_kg: number | null;
   activity_level: string | null;
   goal_type: string | null;
   goal_amount: number | null;
@@ -576,6 +577,23 @@ export function normalizeGoalType(raw: string): string {
 }
 
 /**
+ * Deriva la dirección del objetivo a partir del peso actual y el peso objetivo.
+ * Se usa tanto para los prompts de la IA como para el onboarding, donde
+ * reemplaza la selección manual de `goal_type`.
+ */
+export function deriveGoalType(
+  currentKg: number | null | undefined,
+  targetKg: number | null | undefined,
+  thresholdKg = 1,
+): "perder" | "ganar" | "mantener" | null {
+  if (currentKg == null || targetKg == null) return null;
+  const diff = currentKg - targetKg;
+  if (diff > thresholdKg) return "perder";
+  if (diff < -thresholdKg) return "ganar";
+  return "mantener";
+}
+
+/**
  * Progreso hacia el objetivo de peso, en 0-1 y en kg. "Mantener" mide la
  * estabilidad (cuánto te has alejado del peso inicial, hasta 3 kg de margen).
  */
@@ -590,29 +608,84 @@ export type GoalProgress = {
   regressing: boolean;
   /** Hay datos para enseñar progreso (objetivo de peso + peso de partida). */
   measurable: boolean;
-  /** Hay una meta numérica (`goal_amount`) contra la que medir un porcentaje. */
+  /** Hay una meta numérica contra la que medir un porcentaje. */
   hasTarget: boolean;
+  /** Peso objetivo, si existe. */
+  targetKg: number | null;
+  /** Distancia actual al objetivo en kg (siempre >= 0). */
+  distanceKg: number;
 };
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
+const ZERO: GoalProgress = {
+  pct: 0,
+  done: 0,
+  total: 0,
+  unit: "kg",
+  regressing: false,
+  measurable: false,
+  hasTarget: false,
+  targetKg: null,
+  distanceKg: 0,
+};
+
 export function goalProgress(profile: Profile | null): GoalProgress {
-  const zero: GoalProgress = {
-    pct: 0,
-    done: 0,
-    total: 0,
-    unit: "kg",
-    regressing: false,
-    measurable: false,
-    hasTarget: false,
-  };
-  if (!profile || !profile.goal_type) return zero;
+  if (!profile) return ZERO;
+
+  // -- Camino nuevo: target_weight_kg es la fuente canonica --
+  if (profile.target_weight_kg != null) {
+    const target = Number(profile.target_weight_kg);
+    const current = Number(profile.current_weight_kg ?? profile.start_weight_kg ?? target);
+    const start = Number(profile.start_weight_kg ?? current);
+    const distanceKg = Math.abs(current - target);
+
+    // La direccion del PROGRESO se mide contra el camino original (start->target),
+    // no contra la posicion actual. Asi, si alguien empezo en 100 queriendo 80 y
+    // ahora esta en 78 (sobrepaso), sigue viendo 100% de progreso en vez de un
+    // cambio repentino a "ganar". `deriveGoalType` (current vs target) es para
+    // los prompts de la IA — decide que hacer AHORA, no el historico.
+    const totalPath = Math.abs(start - target);
+    const originalDir: "perder" | "ganar" | "mantener" =
+      start > target + 1 ? "perder" : start < target - 1 ? "ganar" : "mantener";
+
+    if (originalDir === "mantener" || totalPath < 1) {
+      // Start ~ target: la persona quiere mantenerse donde ya esta.
+      return {
+        pct: clamp01(1 - distanceKg / 3),
+        done: distanceKg,
+        total: 0,
+        unit: "kg",
+        regressing: distanceKg > 1,
+        measurable: true,
+        hasTarget: true,
+        targetKg: target,
+        distanceKg,
+      };
+    }
+
+    // "perder" o "ganar": progreso = fraccion del camino start->target recorrida.
+    const done = originalDir === "perder" ? start - current : current - start;
+    return {
+      pct: totalPath > 0 ? clamp01(done / totalPath) : done >= 0 ? 1 : 0,
+      done,
+      total: totalPath,
+      unit: "kg",
+      regressing: done < 0,
+      measurable: true,
+      hasTarget: true,
+      targetKg: target,
+      distanceKg,
+    };
+  }
+
+  // -- Fallback legacy: goal_type + goal_amount (usuarios pre-migracion) --
+  if (!profile.goal_type) return ZERO;
   const goal = normalizeGoalType(profile.goal_type);
   const start = Number(profile.start_weight_kg ?? 0);
   const current = Number(profile.current_weight_kg ?? start);
   const total = Number(profile.goal_amount ?? 0);
-  // Sin start_weight_kg fiable no podemos medir progreso real.
-  if (!profile.start_weight_kg) return zero;
+  if (!profile.start_weight_kg) return ZERO;
 
   if (goal === "mantener") {
     const drift = Math.abs(current - start);
@@ -624,15 +697,15 @@ export function goalProgress(profile: Profile | null): GoalProgress {
       regressing: drift > 1,
       measurable: true,
       hasTarget: false,
+      targetKg: null,
+      distanceKg: drift,
     };
   }
 
   if (goal === "perder" || goal === "ganar") {
-    // Progreso con signo: perder → bajar suma; ganar → subir suma.
     const done = goal === "perder" ? start - current : current - start;
     const hasTarget = total > 0;
     return {
-      // Sin meta numérica no hay porcentaje; se enseña "X kg menos/más".
       pct: hasTarget ? clamp01(done / total) : 0,
       done,
       total: hasTarget ? total : 0,
@@ -640,11 +713,13 @@ export function goalProgress(profile: Profile | null): GoalProgress {
       regressing: done < 0,
       measurable: true,
       hasTarget,
+      targetKg: null,
+      distanceKg: Math.abs(done),
     };
   }
 
-  // "habitos" / "energia": no hay métrica de peso que enseñar.
-  return zero;
+  // "habitos" / "energia": no hay metrica de peso que ensenar.
+  return ZERO;
 }
 
 /**

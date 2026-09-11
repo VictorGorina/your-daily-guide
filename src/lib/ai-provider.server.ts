@@ -1,7 +1,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 import { ageFromDOB } from "@/lib/age";
-import { normalizeGoalType } from "@/lib/daily";
+import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 
 /** Modelo usado por el coach vía OpenRouter: Gemini 2.5 Flash da un buen
  * equilibrio coste/calidad para chat conversacional en español y generación
@@ -20,6 +20,7 @@ type CoachProfile = {
   height_cm?: number | null;
   current_weight_kg?: number | null;
   start_weight_kg?: number | null;
+  target_weight_kg?: number | null;
   activity_level?: string | null;
   goal_type?: string | null;
   goal_amount?: number | null;
@@ -98,16 +99,33 @@ export function coachSystemPrompt(
   // para que el acompañamiento se ajuste solo según van cumpliendo años, en vez de
   // quedarse con la edad fija que dieron el día del onboarding.
   const age = ageFromDOB(p.date_of_birth) ?? p.age ?? null;
-  // El objetivo se describe según lo que hay: sin objetivo NO se asume uno de
-  // peso (antes el prompt imprimía "Objetivo: ?" y el coach se lo inventaba);
-  // los objetivos no ponderales (hábitos, energía) evitan hablar de kilos.
-  const gt = p.goal_type ? normalizeGoalType(p.goal_type) : null;
-  const weightGoal = gt === "perder" || gt === "ganar" || gt === "mantener";
-  const goalLine = !gt
-    ? "- Objetivo: no tiene ninguno definido. No des por hecho que quiere perder peso ni te inventes un objetivo; céntrate en hábitos, bienestar y alimentación equilibrada, y solo si viene a cuento pregúntale con delicadeza si quiere fijar alguno."
-    : weightGoal
-      ? `- Objetivo: ${gt}${p.goal_amount ? ` ${p.goal_amount} kg` : ""} ${p.goal_target_date ? `para ${p.goal_target_date}` : "(sin fecha)"}`
-      : `- Objetivo: ${gt}${p.goal_target_date ? ` para ${p.goal_target_date}` : ""} (no es un objetivo de peso: no hables de kilos salvo que la persona lo pida).`;
+  // El objetivo se describe según lo que hay: target_weight_kg es la fuente
+  // canónica; si no existe, se cae al campo legacy goal_type.
+  const goalLine = (() => {
+    if (p.target_weight_kg != null) {
+      const target = Number(p.target_weight_kg);
+      const current = Number(p.current_weight_kg ?? p.start_weight_kg ?? target);
+      const diff = Math.abs(current - target);
+      const dir = deriveGoalType(current, target);
+      const datePart = p.goal_target_date ? `, fecha orientativa: ${p.goal_target_date}` : "";
+      if (dir === "mantener" || diff < 1) {
+        return `- Peso objetivo: ${target} kg (actual: ${current} kg — en mantenimiento${datePart}). Céntrate en equilibrio y hábitos, no en perder ni ganar.`;
+      }
+      const verb = dir === "perder" ? "perder" : "ganar";
+      return (
+        `- Peso objetivo: ${target} kg (actual: ${current} kg, falta: ${diff.toFixed(1)} kg por ${verb}${datePart}). ` +
+        `Ritmo saludable: máx ~0.5-1 kg/semana de pérdida o ~0.25-0.5 kg/semana de ganancia; nunca déficit mayor de 500 kcal/día ni dietas restrictivas. Si la fecha pide un ritmo mayor, recomienda ajustar la fecha, NUNCA pasar hambre.`
+      );
+    }
+    // Fallback legacy
+    const gt = p.goal_type ? normalizeGoalType(p.goal_type) : null;
+    const weightGoal = gt === "perder" || gt === "ganar" || gt === "mantener";
+    if (!gt)
+      return "- Objetivo: no tiene ninguno definido. No des por hecho que quiere perder peso ni te inventes un objetivo; céntrate en hábitos, bienestar y alimentación equilibrada, y solo si viene a cuento pregúntale con delicadeza si quiere fijar alguno.";
+    if (weightGoal)
+      return `- Objetivo: ${gt}${p.goal_amount ? ` ${p.goal_amount} kg` : ""} ${p.goal_target_date ? `para ${p.goal_target_date}` : "(sin fecha)"}`;
+    return `- Objetivo: ${gt}${p.goal_target_date ? ` para ${p.goal_target_date}` : ""} (no es un objetivo de peso: no hables de kilos salvo que la persona lo pida).`;
+  })();
 
   // Seguridad: nunca un déficit ni alimentos de riesgo durante embarazo/lactancia.
   const pregnancyLine =

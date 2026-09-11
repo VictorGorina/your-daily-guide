@@ -19,8 +19,7 @@ export type OnboardingDraft = {
   diet_pattern: string | null;
   non_negotiable_foods: string | null;
   food_relationship: string | null;
-  goal_type: string | null;
-  goal_amount: number | null;
+  target_weight_kg: number | null;
   goal_target_date: string | null;
   past_struggles: string | null;
   restrictions: string | null;
@@ -96,7 +95,7 @@ export const parseOnboarding = createServerFn({ method: "POST" })
         '"meals_per_day": number|null, ' +
         '"diet_pattern": string (omnívoro, vegetariano, vegano, sin gluten...)|null, "non_negotiable_foods": string|null, ' +
         '"food_relationship": string|null, ' +
-        '"goal_type": "perder"|"mantener"|"ganar"|"habitos"|"energia"|null, "goal_amount": number|null, "goal_target_date": "YYYY-MM-DD"|null, ' +
+        '"target_weight_kg": number|null (peso al que quiere llegar y mantenerse), "goal_target_date": "YYYY-MM-DD"|null (para cuándo quiere alcanzarlo), ' +
         '"past_struggles": string (lo que más le ha costado mantener en intentos anteriores Y su experiencia contando calorías o macros o con otras dietas: si le ayudó o le obsesionó)|null, ' +
         '"restrictions": string (alergias e intolerancias)|null, ' +
         '"meal_schedule": string (muy concreto: qué días y comidas cocina en casa, qué come fuera o pide)|null, ' +
@@ -143,8 +142,7 @@ export const parseOnboarding = createServerFn({ method: "POST" })
       diet_pattern: str(p.diet_pattern),
       non_negotiable_foods: str(p.non_negotiable_foods),
       food_relationship: str(p.food_relationship),
-      goal_type: str(p.goal_type),
-      goal_amount: num(p.goal_amount),
+      target_weight_kg: num(p.target_weight_kg),
       goal_target_date: /^\d{4}-\d{2}-\d{2}$/.test(String(p.goal_target_date))
         ? String(p.goal_target_date)
         : null,

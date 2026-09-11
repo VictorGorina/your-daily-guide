@@ -19,8 +19,7 @@ export type OnboardingDraft = {
   diet_pattern: string | null;
   non_negotiable_foods: string | null;
   food_relationship: string | null;
-  goal_type: string | null;
-  goal_amount: number | null;
+  target_weight_kg: number | null;
   goal_target_date: string | null;
   past_struggles: string | null;
   restrictions: string | null;

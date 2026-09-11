@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Scale } from "lucide-react-native";
 import { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
-import Svg, { Polyline } from "react-native-svg";
+import Svg, { Circle, G, Line, Polyline, Rect } from "react-native-svg";
 
 import {
   goalProgress,
@@ -19,15 +19,128 @@ const formatMetaDate = (isoDate: string) => {
   return d && m && y ? `${d}/${m}/${y}` : isoDate;
 };
 
+/** Direccion de tendencia de los ultimos pesajes respecto al target. */
+function trendDirection(weights: number[], targetKg: number): "toward" | "away" | "stable" {
+  if (weights.length < 2) return "stable";
+  const last = weights[weights.length - 1]!;
+  const prev = weights[weights.length - 2]!;
+  const delta = last - prev;
+  if (Math.abs(delta) < 0.2) return "stable";
+  const distNow = Math.abs(last - targetKg);
+  const distPrev = Math.abs(prev - targetKg);
+  return distNow < distPrev ? "toward" : "away";
+}
+
+/** Constantes del gauge */
+const PADDING_KG = 3;
+const MAINTAIN_ZONE = 1;
+
+/**
+ * Indicador visual de peso actual vs peso objetivo (react-native-svg).
+ * Reemplaza la barra de progreso lineal: muestra una escala horizontal con
+ * el peso objetivo como referencia central, un punto coloreado para el peso
+ * actual y una franja ±1 kg alrededor del objetivo ("zona de mantenimiento").
+ */
+function WeightGauge({
+  targetKg,
+  currentKg,
+  startKg,
+  regressing,
+  trend,
+}: {
+  targetKg: number;
+  currentKg: number;
+  startKg: number;
+  regressing: boolean;
+  trend: "toward" | "away" | "stable";
+}) {
+  const rangeMin = Math.min(targetKg, currentKg, startKg) - PADDING_KG;
+  const rangeMax = Math.max(targetKg, currentKg, startKg) + PADDING_KG;
+  const rangeSpan = rangeMax - rangeMin;
+
+  const pct = (kg: number) => ((kg - rangeMin) / rangeSpan) * 100;
+
+  const targetPct = pct(targetKg);
+  const currentPct = pct(currentKg);
+  const zoneLPct = pct(targetKg - MAINTAIN_ZONE);
+  const zoneRPct = pct(targetKg + MAINTAIN_ZONE);
+
+  const distanceKg = Math.abs(currentKg - targetKg);
+  const inZone = distanceKg <= MAINTAIN_ZONE;
+
+  const dotColor = inZone
+    ? "#6DBE7B" // Verde fresco — en zona de mantenimiento
+    : regressing
+      ? "#E57373" // Rojo suave — alejandose
+      : "#FF8A3D"; // Naranja Peppers — acercandose
+
+  const distanceLabel =
+    distanceKg < 0.5
+      ? "En tu peso"
+      : `${distanceKg.toFixed(1)} kg ${currentKg > targetKg ? "por encima" : "por debajo"}`;
+
+  const trendArrow = trend === "toward" ? "→" : trend === "away" ? "←" : null;
+
+  return (
+    <View>
+      {/* Cabecera: peso objetivo + distancia */}
+      <View className="mb-3 flex-row items-baseline justify-between gap-2">
+        <Text className="text-sm font-sans-semibold text-foreground">
+          Objetivo: <Text className="font-mono-medium tabular-nums">{targetKg}</Text> kg
+        </Text>
+        <Text className="font-mono-medium text-xs tabular-nums" style={{ color: dotColor }}>
+          {distanceLabel}
+        </Text>
+      </View>
+
+      {/* Escala SVG */}
+      <Svg
+        width="100%"
+        height={40}
+        viewBox="0 0 300 40"
+        preserveAspectRatio="xMidYMid meet"
+        accessibilityLabel={`Peso actual ${currentKg} kg, objetivo ${targetKg} kg`}
+      >
+        {/* Rail de fondo */}
+        <Rect x={10} y={14} width={280} height={6} rx={3} fill="#EAE6DD" />
+
+        {/* Zona de mantenimiento (+-1 kg alrededor del target) */}
+        <Rect
+          x={10 + (zoneLPct / 100) * 280}
+          y={10}
+          width={((zoneRPct - zoneLPct) / 100) * 280}
+          height={14}
+          rx={3}
+          fill="#6DBE7B"
+          opacity={0.18}
+        />
+
+        {/* Linea del target */}
+        <Line
+          x1={10 + (targetPct / 100) * 280}
+          y1={8}
+          x2={10 + (targetPct / 100) * 280}
+          y2={26}
+          stroke="#6DBE7B"
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+
+        {/* Punto del peso actual */}
+        <Circle cx={10 + (currentPct / 100) * 280} cy={17} r={6} fill={dotColor} />
+      </Svg>
+    </View>
+  );
+}
+
 /**
  * Foto transversal del objetivo de peso y la tendencia de los últimos pesajes.
  * Vivía en la subpestaña Historial; ahora encabeza la subpestaña Plan y se
  * muestra sea cual sea el mes seleccionado (el objetivo no es "del mes").
  *
- * Solo enseña barra de progreso cuando hay una métrica real: objetivo de peso
- * con cantidad, o "mantener" (estabilidad). Para objetivos que no son de peso
- * ("hábitos", "energía") no hay porcentaje que enseñar — solo el peso y el
- * botón para anotarlo.
+ * Con `target_weight_kg`: indicador de posicion (WeightGauge) centrado en el
+ * objetivo, con zona de mantenimiento, punto de peso actual y tendencia.
+ * Sin target (legacy): barra de progreso lineal como antes.
  */
 export function GoalWeightSummary({
   logs,
@@ -38,6 +151,35 @@ export function GoalWeightSummary({
 }) {
   const progress = goalProgress(profile ?? null);
   const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
+
+  // -- Camino nuevo: peso objetivo con WeightGauge --
+  if (progress.targetKg != null && profile) {
+    const points = weighPoints(logs);
+    const trend = trendDirection(points, progress.targetKg);
+
+    return (
+      <View className="rounded-3xl bg-surface p-5">
+        <WeightGauge
+          targetKg={progress.targetKg}
+          currentKg={Number(
+            profile.current_weight_kg ?? profile.start_weight_kg ?? progress.targetKg,
+          )}
+          startKg={Number(
+            profile.start_weight_kg ?? profile.current_weight_kg ?? progress.targetKg,
+          )}
+          regressing={progress.regressing}
+          trend={trend}
+        />
+        <WeightPanel
+          logs={logs}
+          lastKnown={profile.current_weight_kg ?? null}
+          regressing={progress.regressing}
+        />
+      </View>
+    );
+  }
+
+  // -- Fallback legacy: barra de progreso lineal --
   const pct = Math.round(progress.pct * 100);
 
   const metaCaption = profile?.goal_target_date

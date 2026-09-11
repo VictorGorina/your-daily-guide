@@ -32,6 +32,17 @@ import { MonthSpendSummary } from "@/components/month-spend-summary";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
 import { PlanUpdatedBanner } from "@/components/plan-updated-banner";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   fetchLogs,
   fetchLogsForMonth,
   fetchMonthlyPlan,
@@ -524,8 +535,8 @@ function PlanPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
-      <header className="animate-rise flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <header className="animate-rise relative flex justify-center">
+        <div className="min-w-0 text-center">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Plan mensual
           </p>
@@ -569,16 +580,35 @@ function PlanPage() {
           </div>
         </div>
         {plan && actionable ? (
-          <button
-            onClick={() => generate.mutate(undefined)}
-            disabled={generate.isPending}
-            aria-label={
-              isSoloPlanner ? "Volver a planificar mis comidas en solitario" : "Regenerar plan"
-            }
-            className="mt-1 rounded-full bg-surface p-2.5 text-muted-foreground disabled:opacity-60"
-          >
-            <RefreshCw className={`h-4 w-4 ${generate.isPending ? "animate-spin" : ""}`} />
-          </button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                disabled={generate.isPending}
+                aria-label={
+                  isSoloPlanner ? "Volver a planificar mis comidas en solitario" : "Regenerar plan"
+                }
+                className="absolute right-0 top-1 rounded-full bg-surface p-2.5 text-muted-foreground disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${generate.isPending ? "animate-spin" : ""}`} />
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="rounded-3xl">
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Rehacer el plan de {monthTitle(month)}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {isSoloPlanner
+                    ? "Se genera de cero tu plan en solitario: pierdes los platos que hayas cambiado a mano este mes."
+                    : "Se genera de cero: pierdes los platos que hayas cambiado a mano, lo que ya tengas marcado en la compra y los platos aparte de los peques."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => generate.mutate(undefined)}>
+                  Sí, rehacer
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         ) : null}
       </header>
 
