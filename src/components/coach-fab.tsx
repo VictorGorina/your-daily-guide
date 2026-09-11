@@ -250,9 +250,21 @@ export function CoachFab() {
 
   return (
     <>
-      {!open && lastAction ? (
-        <div className="animate-toast-in fixed bottom-[calc(11.25rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 max-w-[16rem]">
-          <ActionRow action={lastAction} />
+      {lastAction ? (
+        // El aviso vive SIEMPRE en el DOM (solo cambia su visibilidad con
+        // `open`) para que cerrar/abrir el coach a medio recalcular no
+        // desmonte y remonte esta chapa: si lo hiciera, la propia
+        // `animate-toast-in` de ActionRow se reproduciría otra vez por encima
+        // de la misma acción que ya se había visto animarse dentro del chat,
+        // dando el efecto de animación superpuesta/duplicada. La key por id
+        // sigue forzando el remount (y por tanto la animación de entrada)
+        // cuando SÍ llega una acción nueva.
+        <div
+          className={`fixed bottom-[calc(11.25rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 max-w-[16rem] ${
+            open ? "invisible" : "visible"
+          }`}
+        >
+          <ActionRow key={lastAction.id} action={lastAction} />
         </div>
       ) : null}
 
