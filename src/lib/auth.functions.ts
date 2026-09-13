@@ -164,7 +164,8 @@ export const requestSignupConfirmation = createServerFn({ method: "POST" })
 
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { sendEmail, signupConfirmationEmail } = await import("@/lib/email.server");
+      const { sendEmail, signupConfirmationEmail, alreadyRegisteredEmail } =
+        await import("@/lib/email.server");
 
       const { data: link, error } = await supabaseAdmin.auth.admin.generateLink({
         type: "signup",
@@ -172,8 +173,22 @@ export const requestSignupConfirmation = createServerFn({ method: "POST" })
         password,
         options: { redirectTo },
       });
-      // Cuenta ya confirmada entre otros casos: se calla y se responde igual.
-      if (error || !link?.properties?.action_link) return ok;
+      if (error || !link?.properties?.action_link) {
+        // Cuenta ya confirmada entre otros casos posibles: generateLink no
+        // tiene enlace de alta que dar. La respuesta a quien lo pidió sigue
+        // siendo "ok" (política antienumeración de siempre — nunca se le dice
+        // "ya tienes cuenta"), pero dejarlo esperando un correo que no va a
+        // llegar es un callejón sin salida. Si el motivo es justo ese, se
+        // avisa en su lugar a quien SÍ tiene la cuenta.
+        const code = (error as { code?: unknown } | null)?.code;
+        if (code === "email_exists" || code === "user_already_exists") {
+          const { subject, html } = alreadyRegisteredEmail(`${publicUrl}/auth`);
+          await sendEmail({ to: email, subject, html }).catch((notifyError) => {
+            console.error("requestSignupConfirmation:already-registered", notifyError);
+          });
+        }
+        return ok;
+      }
 
       const { subject, html } = signupConfirmationEmail(link.properties.action_link);
       await sendEmail({ to: email, subject, html });

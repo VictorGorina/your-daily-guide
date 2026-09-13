@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { LoaderCircle, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { authErrorText } from "@/lib/auth-errors";
 import { supabase } from "@/integrations/supabase/client";
 import { safeInternalPath } from "@/lib/safe-next";
 
@@ -19,6 +21,12 @@ import { safeInternalPath } from "@/lib/safe-next";
 // puede disparase antes de que este efecto llegue a suscribirse — se
 // perdería sin más señal. Por eso también comprobamos getSession() como
 // respaldo: si el token ya se procesó, la sesión de recuperación ya está ahí.
+// Pero SOLO cuando el enlace es de verdad de recuperación (`type=recovery`
+// en el hash, que es lo que pone Supabase en el redirect): sin esa
+// comprobación, el respaldo aceptaba CUALQUIER sesión abierta en el
+// navegador —login normal, OAuth, incluso el perfil demo anónimo— y
+// enseñaba el formulario para cambiarle la contraseña a esa cuenta con solo
+// visitar /restablecer (auditoría de auth, 2026-09-13).
 export const Route = createFileRoute("/restablecer")({
   ssr: false,
   validateSearch: (
@@ -36,6 +44,7 @@ export const Route = createFileRoute("/restablecer")({
 
 function RestablecerPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { next, error_description } = Route.useSearch();
   const [status, setStatus] = useState<"waiting" | "ready" | "done" | "error">(
     error_description ? "error" : "waiting",
@@ -61,17 +70,26 @@ function RestablecerPage() {
       return;
     }
 
+    // Único momento en el que confiamos en getSession() como respaldo del
+    // evento (ver comentario de arriba de la ruta): el propio hash dice que
+    // este enlace es de recuperación. Si no lo dice, puede ser cualquier otra
+    // sesión abierta en el navegador y no debe enseñar el formulario.
+    const isRecoveryLink = hashParams.get("type") === "recovery";
+
     let cancelled = false;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!cancelled && data.session)
-        setStatus((current) => (current === "waiting" ? "ready" : current));
-    });
+    if (isRecoveryLink) {
+      supabase.auth.getSession().then(({ data }) => {
+        if (!cancelled && data.session)
+          setStatus((current) => (current === "waiting" ? "ready" : current));
+      });
+    }
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY" && !cancelled) setStatus("ready");
     });
 
     // Si tras unos segundos no ha llegado el evento de recuperación, el
-    // enlace no era válido: no dejamos a la persona esperando para siempre.
+    // enlace no era válido (o no era un enlace de recuperación de verdad): no
+    // dejamos a la persona esperando para siempre.
     const timeout = setTimeout(() => {
       if (!cancelled) setStatus((current) => (current === "waiting" ? "error" : current));
     }, 8000);
@@ -85,11 +103,11 @@ function RestablecerPage() {
 
   const submit = async () => {
     if (password.length < 6) {
-      toast.error("La contraseña debe tener al menos 6 caracteres");
+      toast.error(t("auth.errWeakPassword"));
       return;
     }
     if (password !== confirm) {
-      toast.error("Las dos contraseñas no coinciden");
+      toast.error(t("auth.reset.errMismatch"));
       return;
     }
     setSaving(true);
@@ -101,7 +119,9 @@ function RestablecerPage() {
         window.location.replace(next || "/hoy");
       }, 1200);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No hemos podido guardar la contraseña");
+      // Nada de error.message crudo: Supabase lo manda en inglés (ver
+      // auth-errors.ts, el mismo camino que usa auth-flow.tsx para entrar).
+      toast.error(authErrorText(error, t, "auth.reset.errSave"));
     } finally {
       setSaving(false);
     }
@@ -117,28 +137,32 @@ function RestablecerPage() {
           <>
             <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
             <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
-              Comprobando el enlace…
+              {t("auth.reset.checkingLink")}
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">Un momento, ya casi está.</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.oneMoment")}</p>
           </>
         )}
 
         {status === "ready" && (
           <>
             <h1 className="font-title text-3xl font-semibold tracking-[-0.03em]">
-              Crea tu contraseña nueva
+              {t("auth.reset.title")}
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Elige una contraseña de al menos 6 caracteres.
-            </p>
-            <div className="mt-8 space-y-3 text-left">
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.reset.subtitle")}</p>
+            <form
+              className="mt-8 space-y-3 text-left"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submit();
+              }}
+            >
               <input
                 className={field}
                 type="password"
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Contraseña nueva"
+                placeholder={t("auth.reset.newPasswordPlaceholder")}
               />
               <input
                 className={field}
@@ -146,25 +170,25 @@ function RestablecerPage() {
                 autoComplete="new-password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Repite la contraseña"
+                placeholder={t("auth.reset.repeatPasswordPlaceholder")}
               />
               <button
-                onClick={submit}
+                type="submit"
                 disabled={saving}
                 className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
               >
-                {saving ? "Guardando..." : "Guardar contraseña"}
+                {saving ? t("auth.reset.saving") : t("auth.reset.save")}
               </button>
-            </div>
+            </form>
           </>
         )}
 
         {status === "done" && (
           <>
             <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
-              ¡Contraseña actualizada!
+              {t("auth.reset.done")}
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">Entrando en Peppers…</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.enteringApp")}</p>
           </>
         )}
 
@@ -172,16 +196,14 @@ function RestablecerPage() {
           <>
             <TriangleAlert className="mx-auto h-10 w-10 text-destructive" />
             <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
-              Este enlace ya no funciona
+              {t("auth.linkErrorTitle")}
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar.
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.linkErrorBody")}</p>
             <button
               onClick={() => navigate({ to: "/auth" })}
               className="mt-6 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
             >
-              Volver a entrar
+              {t("auth.backToSignIn")}
             </button>
           </>
         )}

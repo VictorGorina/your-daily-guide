@@ -32,6 +32,7 @@ const BY_CODE: Record<string, string> = {
   over_email_send_rate_limit: "auth.errEmailRateLimit",
   over_request_rate_limit: "auth.errRateLimit",
   signup_disabled: "auth.errSignupDisabled",
+  same_password: "auth.errSamePassword",
 };
 
 /**
@@ -44,6 +45,7 @@ const BY_MESSAGE: [RegExp, string][] = [
   [/already registered|already exists/i, "auth.errUserExists"],
   [/password should be at least/i, "auth.errWeakPassword"],
   [/rate limit|too many requests/i, "auth.errRateLimit"],
+  [/different from the old password/i, "auth.errSamePassword"],
 ];
 
 /**

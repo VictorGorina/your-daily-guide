@@ -135,6 +135,15 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
     setMode("in");
     setStage("intro");
   };
+  // A diferencia de backToIntro: se queda en la pantalla de acceso, no salta
+  // a la portada. Es lo que usa "Volver a entrar" tras enviar un correo —
+  // antes reutilizaba backToIntro y obligaba a un clic de más ("Ya tengo
+  // cuenta") para llegar al formulario de login.
+  const backToSignInForm = () => {
+    setSent(false);
+    setNeedsConfirm(false);
+    setMode("in");
+  };
 
   const forgotPassword = async () => {
     if (!email.trim().includes("@")) {
@@ -271,203 +280,230 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[26rem] flex-col px-5 pb-8 pt-6 font-ui">
-      {/* Cabecera: en acceso, marca pequeña a la izquierda + botón atrás; en la
+      {/* Todo el contenido va dentro de un <form>: así Enter envía el paso
+          actual (submit → onPrimary) igual que pulsar el botón. Antes eran
+          <div>s sueltos y Enter no hacía nada — el gesto más natural del
+          mundo en un formulario no funcionaba (auditoría de auth,
+          2026-09-13). Los botones que no deben enviar (Atrás, Google, demo,
+          conmutador de idioma, cambiar de modo…) ya llevan type="button". */}
+      <form
+        className="flex flex-1 flex-col"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onPrimary();
+        }}
+      >
+        {/* Cabecera: en acceso, marca pequeña a la izquierda + botón atrás; en la
           portada solo el conmutador de idioma (la marca va centrada, debajo). */}
-      <div className="flex min-h-9 items-start justify-between gap-2">
-        {stage === "access" ? (
-          <div className="flex flex-row items-center gap-2.5">
-            <img src="/logo-icon.svg" alt="" className="h-10 w-10" />
-            <span className="font-title text-base font-semibold tracking-[-0.02em]">Peppers</span>
-          </div>
-        ) : (
-          <span aria-hidden />
-        )}
-        <div className="flex shrink-0 items-center gap-2">
-          {stage === "access" && (
-            <button
-              type="button"
-              onClick={backToIntro}
-              className="rounded-full bg-surface px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary-soft hover:text-primary"
-            >
-              {t("auth.back")}
-            </button>
+        <div className="flex min-h-9 items-start justify-between gap-2">
+          {stage === "access" ? (
+            <div className="flex flex-row items-center gap-2.5">
+              <img src="/logo-icon.svg" alt="" className="h-10 w-10" />
+              <span className="font-title text-base font-semibold tracking-[-0.02em]">Peppers</span>
+            </div>
+          ) : (
+            <span aria-hidden />
           )}
-          {stage === "intro" && <LocaleSwitch />}
-        </div>
-      </div>
-
-      {stage === "intro" && (
-        <div className="mt-2 flex w-fit flex-col items-center">
-          {/* El SVG lleva bastante aire por debajo de los pimientos; se recorta
-              con un contenedor de altura fija para pegar la palabra al dibujo.
-              El bloque va a la izquierda, con la palabra centrada bajo el logo. */}
-          <span className="block h-20 w-24 overflow-hidden">
-            <img src="/logo-icon.svg" alt="" className="h-24 w-24" />
-          </span>
-          <span className="font-title text-xl font-semibold tracking-[-0.02em]">Peppers</span>
-        </div>
-      )}
-
-      {/* Cuerpo */}
-      {stage === "intro" ? (
-        <div className="animate-rise">
-          <h1 className="mt-6 font-title text-4xl font-semibold leading-[1.02] tracking-[-0.03em] text-pretty">
-            {t("auth.intro.title")
-              .split("\n")
-              .map((line, i) => (
-                <span key={i} className="block">
-                  {line}
-                </span>
-              ))}
-          </h1>
-          <p className="mt-3.5 max-w-[19rem] text-[13.5px] leading-[1.55] text-muted-foreground text-pretty">
-            {t("auth.intro.body")}
-          </p>
-        </div>
-      ) : (
-        <div className="animate-rise">
-          <h1 className="mt-6 font-title text-[26px] font-semibold leading-[1.05] tracking-[-0.03em]">
-            {mode === "in"
-              ? t("auth.titleIn")
-              : mode === "up"
-                ? t("auth.titleUp")
-                : t("auth.titleForgot")}
-          </h1>
-          <p className="mt-2 max-w-[19rem] text-[13px] leading-[1.5] text-muted-foreground">
-            {mode === "in"
-              ? t("auth.subtitleIn")
-              : mode === "up"
-                ? t("auth.subtitleUp")
-                : t("auth.subtitleForgot")}
-          </p>
-
-          {sent ? (
-            <div className="mt-5 space-y-2.5">
-              <div className="rounded-3xl bg-primary-soft px-4 py-4 text-sm">
-                {mode === "forgot" ? t("auth.sentReset") : t("auth.sentConfirm")}
-              </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {stage === "access" && (
               <button
                 type="button"
                 onClick={backToIntro}
-                className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
+                className="rounded-full bg-surface px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary-soft hover:text-primary"
               >
-                {t("auth.backToSignIn")}
+                {t("auth.back")}
               </button>
-            </div>
-          ) : (
-            <div className="mt-5 space-y-2.5">
-              <input
-                className={field}
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setNeedsConfirm(false);
-                }}
-                placeholder={t("auth.emailPlaceholder")}
-              />
-              {mode !== "forgot" && (
-                <input
-                  className={field}
-                  type="password"
-                  autoComplete={mode === "in" ? "current-password" : "new-password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={t("auth.passwordPlaceholder")}
-                />
-              )}
-              {/* Salida del callejón sin salida: la cuenta existe pero nadie
-                  abrió el correo. Antes solo salía "Email not confirmed" en un
-                  toast y no había forma de pedir otro desde la app. */}
-              {mode === "in" && needsConfirm && (
-                <div className="rounded-3xl bg-primary-soft px-4 py-3.5">
-                  <p className="text-[13px] leading-[1.5]">{t("auth.errEmailNotConfirmed")}</p>
-                  <button
-                    type="button"
-                    onClick={resendConfirmation}
-                    disabled={loading}
-                    className="mt-2.5 w-full rounded-full bg-surface py-2.5 text-xs font-medium text-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
-                  >
-                    {loading ? t("auth.sending") : t("auth.resendConfirm")}
-                  </button>
-                </div>
-              )}
+            )}
+            {stage === "intro" && <LocaleSwitch />}
+          </div>
+        </div>
 
-              {mode === "in" && (
+        {stage === "intro" && (
+          <div className="mt-2 flex w-fit flex-col items-center">
+            {/* El SVG lleva bastante aire por debajo de los pimientos; se recorta
+              con un contenedor de altura fija para pegar la palabra al dibujo.
+              El bloque va a la izquierda, con la palabra centrada bajo el logo. */}
+            <span className="block h-20 w-24 overflow-hidden">
+              <img src="/logo-icon.svg" alt="" className="h-24 w-24" />
+            </span>
+            <span className="font-title text-xl font-semibold tracking-[-0.02em]">Peppers</span>
+          </div>
+        )}
+
+        {/* Cuerpo */}
+        {stage === "intro" ? (
+          <div className="animate-rise">
+            <h1 className="mt-6 font-title text-4xl font-semibold leading-[1.02] tracking-[-0.03em] text-pretty">
+              {t("auth.intro.title")
+                .split("\n")
+                .map((line, i) => (
+                  <span key={i} className="block">
+                    {line}
+                  </span>
+                ))}
+            </h1>
+            <p className="mt-3.5 max-w-[19rem] text-[13.5px] leading-[1.55] text-muted-foreground text-pretty">
+              {t("auth.intro.body")}
+            </p>
+          </div>
+        ) : (
+          <div className="animate-rise">
+            <h1 className="mt-6 font-title text-[26px] font-semibold leading-[1.05] tracking-[-0.03em]">
+              {mode === "in"
+                ? t("auth.titleIn")
+                : mode === "up"
+                  ? t("auth.titleUp")
+                  : t("auth.titleForgot")}
+            </h1>
+            <p className="mt-2 max-w-[19rem] text-[13px] leading-[1.5] text-muted-foreground">
+              {mode === "in"
+                ? t("auth.subtitleIn")
+                : mode === "up"
+                  ? t("auth.subtitleUp")
+                  : t("auth.subtitleForgot")}
+            </p>
+
+            {sent ? (
+              <div className="mt-5 space-y-2.5">
+                <div className="rounded-3xl bg-primary-soft px-4 py-4 text-sm">
+                  {mode === "forgot" ? t("auth.sentReset") : t("auth.sentConfirm")}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setMode("forgot")}
-                  className="w-full text-right text-xs text-muted-foreground underline-offset-4 hover:underline"
+                  onClick={backToSignInForm}
+                  className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
                 >
-                  {t("auth.forgotLink")}
+                  {t("auth.backToSignIn")}
                 </button>
-              )}
-
-              {mode !== "forgot" && (
-                <>
-                  <div className="my-1 flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="h-px flex-1 bg-border" /> {t("auth.or")}{" "}
-                    <span className="h-px flex-1 bg-border" />
+              </div>
+            ) : (
+              <div className="mt-5 space-y-2.5">
+                <input
+                  className={field}
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setNeedsConfirm(false);
+                  }}
+                  placeholder={t("auth.emailPlaceholder")}
+                />
+                {mode !== "forgot" && (
+                  <input
+                    className={field}
+                    type="password"
+                    autoComplete={mode === "in" ? "current-password" : "new-password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={t("auth.passwordPlaceholder")}
+                  />
+                )}
+                {/* Salida del callejón sin salida: la cuenta existe pero nadie
+                  abrió el correo. Antes solo salía "Email not confirmed" en un
+                  toast y no había forma de pedir otro desde la app. */}
+                {mode === "in" && needsConfirm && (
+                  <div className="rounded-3xl bg-primary-soft px-4 py-3.5">
+                    <p className="text-[13px] leading-[1.5]">{t("auth.errEmailNotConfirmed")}</p>
+                    <button
+                      type="button"
+                      onClick={resendConfirmation}
+                      disabled={loading}
+                      className="mt-2.5 w-full rounded-full bg-surface py-2.5 text-xs font-medium text-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+                    >
+                      {loading ? t("auth.sending") : t("auth.resendConfirm")}
+                    </button>
                   </div>
+                )}
+
+                {mode === "in" && (
                   <button
                     type="button"
-                    onClick={google}
-                    className="w-full rounded-full bg-surface py-3.5 text-sm font-medium text-foreground transition-transform active:scale-[0.98]"
+                    onClick={() => setMode("forgot")}
+                    className="w-full text-right text-xs text-muted-foreground underline-offset-4 hover:underline"
                   >
-                    {t("auth.google")}
+                    {t("auth.forgotLink")}
                   </button>
-                  <button
-                    type="button"
-                    onClick={demo}
-                    disabled={demoLoading}
-                    className="w-full py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
-                  >
-                    {demoLoading ? t("auth.demoCreating") : t("auth.tryNoAccount")}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                )}
 
-      <div className="flex-1" />
+                {mode !== "forgot" && (
+                  <>
+                    <div className="my-1 flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="h-px flex-1 bg-border" /> {t("auth.or")}{" "}
+                      <span className="h-px flex-1 bg-border" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={google}
+                      className="w-full rounded-full bg-surface py-3.5 text-sm font-medium text-foreground transition-transform active:scale-[0.98]"
+                    >
+                      {t("auth.google")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={demo}
+                      disabled={demoLoading}
+                      className="w-full py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                    >
+                      {demoLoading ? t("auth.demoCreating") : t("auth.tryNoAccount")}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-      <PepperRow />
+        <div className="flex-1" />
 
-      <button
-        type="button"
-        onClick={onPrimary}
-        disabled={loading}
-        className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-      >
-        {primaryLabel}
-      </button>
+        <PepperRow />
 
-      {stage === "intro" && (
-        <button
-          type="button"
-          onClick={() => openAccess("in")}
-          className="mt-2.5 w-full py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          {t("auth.intro.haveAccount")}
-        </button>
-      )}
+        {/* Tras enviar un correo (confirmación o recuperación) se oculta: antes
+          se quedaba activo con el mismo texto y volvía a mandar otro correo
+          al pulsarlo — el freno de 60s del servidor solo lo retrasaba, no lo
+          evitaba (auditoría de auth, 2026-09-13). El bloque de "sent" de
+          arriba ya da la única acción que hace falta ("Volver a entrar"). */}
+        {!(stage === "access" && sent) && (
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+          >
+            {primaryLabel}
+          </button>
+        )}
 
-      {stage === "access" && !sent && (
-        <button
-          type="button"
-          onClick={() => setMode(mode === "in" ? "up" : "in")}
-          className="mt-2.5 w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
-        >
-          {mode === "in" ? t("auth.toSignUp") : t("auth.toSignIn")}
-        </button>
-      )}
+        {stage === "intro" && (
+          <button
+            type="button"
+            onClick={() => openAccess("in")}
+            className="mt-2.5 w-full py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {t("auth.intro.haveAccount")}
+          </button>
+        )}
 
-      <p className="mt-3 text-center text-[11px] leading-[1.45] text-muted-foreground/80">
-        {stage === "intro" ? t("auth.intro.disclaimer") : t("auth.landing.disclaimer")}
-      </p>
+        {stage === "access" && !sent && (
+          <button
+            type="button"
+            onClick={() => {
+              // Al cambiar de modo se limpia la contraseña (no el correo, que sí
+              // conviene conservar): si alguien empezaba a crear una cuenta y
+              // cambiaba a "Entrar", se quedaba con la contraseña nueva escrita
+              // en el campo de login y el intento fallaba sin motivo aparente.
+              setPassword("");
+              setMode(mode === "in" ? "up" : "in");
+            }}
+            className="mt-2.5 w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
+          >
+            {mode === "in" ? t("auth.toSignUp") : t("auth.toSignIn")}
+          </button>
+        )}
+
+        <p className="mt-3 text-center text-[11px] leading-[1.45] text-muted-foreground/80">
+          {stage === "intro" ? t("auth.intro.disclaimer") : t("auth.landing.disclaimer")}
+        </p>
+      </form>
     </main>
   );
 }

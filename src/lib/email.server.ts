@@ -133,3 +133,26 @@ export function signupConfirmationEmail(actionLink: string): { subject: string; 
     }),
   };
 }
+
+/**
+ * Aviso a quien YA tiene una cuenta confirmada, cuando alguien intenta darse
+ * de alta otra vez con su correo. `requestSignupConfirmation` responde igual
+ * (`{ok: true}`, "mira tu correo") tanto si la cuenta existe como si no —es
+ * la política antienumeración— así que sin este correo la persona que
+ * intentaba entrar se quedaba esperando un enlace que nunca llegaba, sin
+ * ninguna pista de que ya tenía cuenta. Este correo no lleva token: solo
+ * enlaza a la pantalla de entrar, así que no delata nada que este mismo
+ * intento de alta no delatara ya al dueño real de la cuenta.
+ */
+export function alreadyRegisteredEmail(signInLink: string): { subject: string; html: string } {
+  return {
+    subject: "Alguien ha intentado crear una cuenta con tu correo",
+    html: emailShell({
+      title: "Ya tienes cuenta en Peppers",
+      body: "Alguien ha intentado crear una cuenta nueva con este correo, pero ya tienes una. Si has sido tú, entra con tu contraseña de siempre.",
+      cta: "Entrar en Peppers",
+      actionLink: signInLink,
+      footer: "Si no has sido tú, puedes ignorar este correo: tu cuenta sigue igual de segura.",
+    }),
+  };
+}

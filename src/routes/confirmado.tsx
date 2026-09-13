@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { supabase } from "@/integrations/supabase/client";
 import { safeInternalPath } from "@/lib/safe-next";
@@ -27,12 +28,10 @@ export const Route = createFileRoute("/confirmado")({
 
 function ConfirmadoPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { next, error_description } = Route.useSearch();
   const [status, setStatus] = useState<"waiting" | "confirmed" | "error">(
     error_description ? "error" : "waiting",
-  );
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(
-    error_description ? decodeURIComponent(error_description.replace(/\+/g, " ")) : undefined,
   );
 
   useEffect(() => {
@@ -42,12 +41,20 @@ function ConfirmadoPage() {
     // el mismo sitio donde van los tokens del flujo implícito). El router
     // sólo nos da la query string, así que miramos también el hash antes de
     // quedarnos esperando una sesión que ya no va a llegar.
+    //
+    // El motivo NUNCA se enseña en pantalla: es texto que viene tal cual de la
+    // URL, así que cualquiera puede fabricar un enlace con lo que quiera en
+    // error_description (era un vector de phishing — auditoría de auth,
+    // 2026-09-13). Como mucho se registra en consola para depurar; el estado
+    // de error ya explica en español qué hacer, igual que restablecer.tsx.
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const hashError = hashParams.get("error_description") || hashParams.get("error");
-    const initialError =
-      (error_description && decodeURIComponent(error_description.replace(/\+/g, " "))) || hashError;
-    if (initialError) {
-      setErrorMessage(initialError);
+    const hasUrlError =
+      Boolean(error_description) || hashParams.has("error_description") || hashParams.has("error");
+    if (hasUrlError) {
+      console.warn(
+        "confirmado: enlace con error",
+        error_description || hashParams.get("error_description") || hashParams.get("error"),
+      );
       setStatus("error");
       return;
     }
@@ -87,32 +94,35 @@ function ConfirmadoPage() {
         {status === "waiting" && (
           <>
             <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
-            <h1 className="mt-6 font-display text-3xl">Confirmando tu cuenta…</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Un momento, ya casi está.</p>
+            <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
+              {t("auth.confirm.confirming")}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.oneMoment")}</p>
           </>
         )}
 
         {status === "confirmed" && (
           <>
             <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
-            <h1 className="mt-6 font-display text-3xl">¡Cuenta confirmada!</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Entrando en Peppers…</p>
+            <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
+              {t("auth.confirm.confirmed")}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.enteringApp")}</p>
           </>
         )}
 
         {status === "error" && (
           <>
             <TriangleAlert className="mx-auto h-10 w-10 text-destructive" />
-            <h1 className="mt-6 font-display text-3xl">Este enlace ya no funciona</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {errorMessage ||
-                "Puede haber caducado o usarse ya. Entra de nuevo para pedir uno nuevo."}
-            </p>
+            <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
+              {t("auth.linkErrorTitle")}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">{t("auth.linkErrorBody")}</p>
             <button
               onClick={() => navigate({ to: "/auth" })}
               className="mt-6 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
             >
-              Volver a entrar
+              {t("auth.backToSignIn")}
             </button>
           </>
         )}
