@@ -28,6 +28,8 @@ import {
   isMonthActionable,
   isNextMonthUnlocked,
   isPinned,
+  isPlanCellAhead,
+  isPlanWeekAhead,
   mealsForDate,
   mirrorPinned,
   monthParts,
@@ -782,6 +784,60 @@ describe("dateOfPlanCell", () => {
     // (sábado), así que no hay ningún día del mes más allá de esa fila.
     expect(dateOfPlanCell("2026-02", 3, 5)).toBe("2026-02-28");
     expect(dateOfPlanCell("2026-02", 4, 0)).toBeNull();
+  });
+});
+
+describe("isPlanCellAhead / isPlanWeekAhead", () => {
+  // Qué celdas puede reescribir `syncSharedMeals` al espejar las comidas
+  // compartidas del planificador. Septiembre de 2026 empieza en martes: la fila
+  // de la semana 0 es [lunes 7, martes 1, miércoles 2, …, domingo 6].
+  const row = (month: string, weekIndex: number, today: string) =>
+    Array.from({ length: 7 }, (_, di) => isPlanCellAhead(month, weekIndex, di, today));
+
+  it("hoy = lunes 7: no toca las posiciones 1-6 de su fila, que son los días 1 al 6", () => {
+    // Con el cursor por posición (dayIndex 0) estas seis celdas se pisaban.
+    expect(row("2026-09", 0, "2026-09-07")).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(row("2026-09", 1, "2026-09-07")).toEqual([true, true, true, true, true, true, true]);
+    expect(isPlanWeekAhead("2026-09", 0, "2026-09-07")).toBe(false);
+    expect(isPlanWeekAhead("2026-09", 1, "2026-09-07")).toBe(true);
+  });
+
+  it("hoy = miércoles 2: sí toca el lunes 7 aunque vaya antes en la fila", () => {
+    // Posición 0 = lunes 7 (futuro); 1 = martes 1 (pasado); 2 = hoy; 3-6 = días 3-6.
+    expect(row("2026-09", 0, "2026-09-02")).toEqual([true, false, false, true, true, true, true]);
+    // La semana 0 ya ha empezado: sus desayunos no se reescriben.
+    expect(isPlanWeekAhead("2026-09", 0, "2026-09-02")).toBe(false);
+    expect(isPlanWeekAhead("2026-09", 1, "2026-09-02")).toBe(true);
+  });
+
+  it("un mes íntegramente futuro se copia completo, también las celdas sin fecha", () => {
+    for (let wi = 0; wi <= 4; wi++) {
+      expect(row("2026-10", wi, "2026-09-15")).toEqual([true, true, true, true, true, true, true]);
+      expect(isPlanWeekAhead("2026-10", wi, "2026-09-15")).toBe(true);
+    }
+  });
+
+  it("un mes pasado no se toca", () => {
+    for (let wi = 0; wi <= 3; wi++) {
+      expect(row("2026-08", wi, "2026-09-15")).toEqual([
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+      ]);
+      expect(isPlanWeekAhead("2026-08", wi, "2026-09-15")).toBe(false);
+    }
   });
 });
 

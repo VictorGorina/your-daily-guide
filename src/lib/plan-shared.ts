@@ -1251,6 +1251,41 @@ export function dateOfPlanCell(month: string, weekIndex: number, dayIndex: numbe
 }
 
 /**
+ * ¿Es la celda `(semana, día)` del plan de `month` posterior a `today`, y por
+ * tanto se puede reescribir? Decide por la fecha real de la celda
+ * (`dateOfPlanCell`), nunca por su posición en la fila: un lunes 7 va en la
+ * posición 0 pero es la última fecha de la semana 0 de un mes que empieza en
+ * martes. Hoy y el pasado no se tocan; una celda que no cae en el mes, tampoco.
+ *
+ * Un mes íntegramente futuro (p. ej. al preparar el que viene por adelantado)
+ * no tiene nada fijado: todas sus celdas cuentan como futuras, también las que
+ * no tienen fecha, para que se copie completo.
+ */
+export function isPlanCellAhead(
+  month: string,
+  weekIndex: number,
+  dayIndex: number,
+  today: string,
+): boolean {
+  if (month > today.slice(0, 7)) return true;
+  const date = dateOfPlanCell(month, weekIndex, dayIndex);
+  return date != null && date > today;
+}
+
+/**
+ * ¿Está por venir la semana `weekIndex` entera? Los campos de semana
+ * (desayunos y meriendas rotan por semana) solo se reescriben entonces; si no,
+ * cambiarían también lo que ya se comió. Mismo criterio que `mergeFuturePlan`:
+ * toda celda con fecha tiene que ser posterior a `today`.
+ */
+export function isPlanWeekAhead(month: string, weekIndex: number, today: string): boolean {
+  if (month > today.slice(0, 7)) return true;
+  return Array.from({ length: 7 }, (_, di) => dateOfPlanCell(month, weekIndex, di)).every(
+    (date) => date == null || date > today,
+  );
+}
+
+/**
  * Conserva el pasado y el día de hoy del plan actual y sólo adopta del plan
  * nuevo los días POSTERIORES a `today`, mirando la fecha real de cada celda.
  *

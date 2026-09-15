@@ -20,7 +20,13 @@ import {
   type ServingsTable,
   type SharedSlots,
 } from "@/lib/household-shared";
-import { cleanPlan, mirrorPinned, planCursor, type MonthlyPlan } from "@/lib/plan-shared";
+import {
+  cleanPlan,
+  isPlanCellAhead,
+  isPlanWeekAhead,
+  mirrorPinned,
+  type MonthlyPlan,
+} from "@/lib/plan-shared";
 
 type AnyClient = SupabaseClient<never, never, never>;
 
@@ -373,15 +379,11 @@ export async function syncSharedMeals(opts: {
   const source = cleanPlan((plannerRow as { plan?: unknown } | null)?.plan);
   if (!source) return { synced: 0 };
 
-  // Al preparar el mes que viene por adelantado, `opts.today` cae en el mes
-  // anterior: `planCursor` lo tomaría como semana 3-4 y dejaría medio mes sin
-  // sincronizar. Un mes íntegramente futuro no tiene nada fijado, así que el
-  // cursor arranca "antes de todo" para que se copie completo.
-  const cursor =
-    opts.month > opts.today.slice(0, 7)
-      ? { weekIndex: -1, dayIndex: -1, dayName: "" }
-      : planCursor(opts.today);
-
+  // Qué celdas se reescriben lo decide la fecha real de cada una
+  // (`isPlanCellAhead` / `isPlanWeekAhead`), no su posición en la fila: la
+  // rejilla no va en orden de calendario y, con un cursor por posición, un lunes
+  // 7 pisaba los días 1-6 (ya pasados) y un miércoles 2 se saltaba el lunes 7.
+  // Un mes íntegramente futuro se copia completo.
   let synced = 0;
   for (const target of targets) {
     const { data: row } = await supabaseAdmin
@@ -398,18 +400,17 @@ export async function syncSharedMeals(opts: {
     const nextPlan: MonthlyPlan = {
       ...targetPlan,
       weeks: targetPlan.weeks.map((week, wi) => {
-        if (wi < cursor.weekIndex) return week;
-        const futureWeek = wi > cursor.weekIndex;
         const sourceWeek = source.weeks[wi];
         if (!sourceWeek) return week;
+        const weekAhead = isPlanWeekAhead(opts.month, wi, opts.today);
         return {
           ...week,
           breakfasts:
-            futureWeek && ctx.sharedSlots.desayuno.length && sourceWeek.breakfasts.length
+            weekAhead && ctx.sharedSlots.desayuno.length && sourceWeek.breakfasts.length
               ? sourceWeek.breakfasts
               : week.breakfasts,
           days: week.days.map((day, di) => {
-            if (!futureWeek && di <= cursor.dayIndex) return day;
+            if (!isPlanCellAhead(opts.month, wi, di, opts.today)) return day;
             const sourceDay = sourceWeek.days[di];
             if (!sourceDay) return day;
             // Solo se pisan las comidas que ese día son compartidas del hogar Y
