@@ -8,6 +8,30 @@ export type Database = {
   };
   public: {
     Tables: {
+      ai_spend: {
+        Row: {
+          calls: number;
+          cost_usd: number;
+          day: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          calls?: number;
+          cost_usd?: number;
+          day: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          calls?: number;
+          cost_usd?: number;
+          day?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       chat_messages: {
         Row: {
           content: string;
@@ -457,6 +481,10 @@ export type Database = {
         Returns: boolean;
       };
       join_household: { Args: { _invite_code: string }; Returns: string };
+      record_ai_spend: {
+        Args: { _user_id: string; _cost_usd: number };
+        Returns: undefined;
+      };
       set_household_planner: {
         Args: { _household_id: string; _member_id: string };
         Returns: undefined;

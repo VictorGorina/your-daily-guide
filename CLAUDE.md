@@ -260,6 +260,18 @@ datos no debe dejar la app sin coach), así que un error de `consume_rate_limit`
 significa que ahora mismo no hay tope de gasto. Desde un `*.functions.ts` se carga con
 `await import(...)`: importa `client.server`, que no puede acabar en el bundle del navegador.
 
+**Tope de gasto en IA (`ai_spend` + `record_ai_spend`):** complementa las cuotas por hora con un
+tope en dólares por persona, diario y mensual (`AI_SPEND_CAPS`, junto a `RATE_LIMITS`; días y
+meses en UTC). `createAiProvider(key, userId)` exige `userId` y envuelve cada modelo en un
+middleware que mira el tope **antes de cada llamada** y suma después el `usage.cost` real de
+OpenRouter (pedido con `usage: { include: true }`; si no llega, se estima por tokens). Así no se
+escapa ninguna llamada: reintentos y helpers sin bucket (`offShoppingList`) incluidos.
+`enforceUserRateLimit` lo mira también en la entrada, para cortar con 429 antes de hacer trabajo.
+Mismo `RateLimitError` (su `scope` `day`/`month` cambia el mensaje) y mismo "dejar pasar" con log si
+falla la base de datos. Ojo con `streamText`: un error del middleware no llega a `result.text`
+(rechaza con un genérico), solo a `onError` — por eso `askForJson` lo captura ahí y no reintenta.
+Lógica pura y testeada en [src/lib/ai-spend.ts](src/lib/ai-spend.ts).
+
 ## Convenciones de código
 
 - Alias de imports: `@/*` apunta a `src/*` (ver `tsconfig.json` y `components.json`).

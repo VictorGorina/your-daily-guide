@@ -98,11 +98,12 @@ const addMacros = (a: MacroEstimate, b: MacroEstimate): MacroEstimate => ({
 async function macrosFromLookup(
   todayMeals: { moment: string; idea: string }[],
   apiKey: string,
+  userId: string,
 ): Promise<{ macroEstimate: MacroEstimate; mealMacros: MealMacroEstimate[] }> {
   const { decomposeDishes } = await import("@/lib/nutrition/resolve-dish.server");
   const breakdowns = await decomposeDishes(
     todayMeals.map((m) => m.idea),
-    { servings: 1, apiKey },
+    { servings: 1, apiKey, userId },
   );
 
   const mealMacros = todayMeals.map((meal): MealMacroEstimate => {
@@ -159,13 +160,13 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     // Las macros salen del lookup de ingredientes, no de esta llamada (Fase 2).
     // Se hace en paralelo con el texto de la guía.
     const macrosPromise = todayMeals.length
-      ? macrosFromLookup(todayMeals, key).catch((error) => {
+      ? macrosFromLookup(todayMeals, key, context.userId).catch((error) => {
           console.error("macrosFromLookup", error);
           return null;
         })
       : Promise.resolve(null);
 
-    const ai = createAiProvider(key);
+    const ai = createAiProvider(key, context.userId);
     try {
       const [{ text }, lookup] = await Promise.all([
         generateText({

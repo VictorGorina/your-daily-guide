@@ -175,7 +175,7 @@ export const Route = createFileRoute("/api/chat")({
           throw error;
         }
 
-        const ai = createAiProvider(key);
+        const ai = createAiProvider(key, userId);
         // La fecha se dice explícita (y con el día de la semana) porque el
         // modelo no la sabe: sin esto, "el desayuno de mañana" no se puede
         // convertir en la fecha que necesita cambiar_plato.

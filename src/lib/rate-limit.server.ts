@@ -1,4 +1,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  decideSpendCap,
+  utcMonthStartISO,
+  type AiSpendCaps,
+  type SpendCapDecision,
+} from "@/lib/ai-spend";
 import { RateLimitError } from "@/lib/rate-limit-error";
 
 /**
@@ -9,8 +15,10 @@ import { RateLimitError } from "@/lib/rate-limit-error";
  * tope.
  *
  * Los límites están puestos con holgura: no buscan racionarle el uso a nadie,
- * solo poner un techo a lo que una sola cuenta puede gastar en una hora. Si a
- * alguien le queda corto, se sube aquí sin tocar la base de datos.
+ * solo poner un techo a lo que una sola cuenta puede gastar en una hora
+ * (`RATE_LIMITS`) y, sumando todas las operaciones, en un día o un mes
+ * (`AI_SPEND_CAPS`). Si a alguien le queda corto, se sube aquí sin tocar la base
+ * de datos.
  *
  * Este módulo importa `client.server` arriba del todo (permitido en un
  * `.server.ts`), así que desde un `*.functions.ts` hay que cargarlo con
@@ -39,6 +47,18 @@ const RATE_LIMITS = {
   "password-reset": { limit: 5, windowSeconds: HOUR, action: "pedir el enlace" },
   "signup-confirm": { limit: 5, windowSeconds: HOUR, action: "pedir el correo de confirmación" },
 } as const;
+
+/**
+ * Tope de gasto en IA por persona, en dólares de OpenRouter. Complementa a
+ * `RATE_LIMITS`, no lo sustituye: esas cuotas son por hora, y una cuenta
+ * automatizada que las respete todas puede gastar ~50-70 $/mes POR operación.
+ * Una persona que usa mucho la app gasta ~0,85 $/mes (medido el 2026-09-15:
+ * un mensaje al coach ≈ 0,0014 $, la guía ≈ 0,0013 $, el plan del mes ≈ 0,01 $),
+ * así que estos topes no los roza nadie que use la app de verdad.
+ *
+ * El día y el mes van en UTC (ver `ai-spend.ts`). `Infinity` desactiva un tope.
+ */
+const AI_SPEND_CAPS: AiSpendCaps = { dailyUsd: 0.25, monthlyUsd: 3 };
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;
 
@@ -72,16 +92,94 @@ async function consume(subject: string, bucket: RateLimitBucket): Promise<Consum
 }
 
 /**
+ * Cuánto lleva gastado la persona y si puede hacer otra llamada, contra la
+ * tabla `ai_spend` (migración `ai_spend`). Igual que `consume`, si la lectura
+ * falla se deja pasar y queda en el log: mientras falle no hay tope de gasto,
+ * pero la app sigue teniendo coach.
+ */
+async function spendCapDecision(userId: string): Promise<SpendCapDecision | null> {
+  const now = new Date();
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("ai_spend")
+      .select("day, cost_usd")
+      .eq("user_id", userId)
+      .gte("day", utcMonthStartISO(now));
+    if (error) throw error;
+    const decision = decideSpendCap(data ?? [], AI_SPEND_CAPS, now);
+    if (!decision.allowed) {
+      // Llegar aquí usando la app con normalidad es casi imposible (ver
+      // AI_SPEND_CAPS): si se repite para una cuenta, merece un vistazo.
+      console.warn("ai_spend cap", {
+        userId,
+        scope: decision.scope,
+        daySpentUsd: decision.daySpentUsd,
+        monthSpentUsd: decision.monthSpentUsd,
+      });
+    }
+    return decision;
+  } catch (error) {
+    console.error("ai_spend read", error);
+    return null;
+  }
+}
+
+/**
+ * Tope de gasto en IA antes de UNA llamada al modelo. Lo usa el middleware de
+ * `createAiProvider` en cada llamada, para que ninguna se escape del tope
+ * aunque su server function no pase por `enforceUserRateLimit` (p. ej.
+ * `offShoppingList` al cambiar un plato). `action` va genérica porque ahí no se
+ * sabe qué operación la pidió.
+ */
+export async function enforceAiSpendCap(userId: string, action = "usar el coach"): Promise<void> {
+  const decision = await spendCapDecision(userId);
+  if (decision && !decision.allowed) {
+    throw new RateLimitError(decision.retryAfterSeconds, action, decision.scope);
+  }
+}
+
+/**
+ * Suma el coste real de una llamada al día UTC de la persona. Nunca lanza: si
+ * la escritura falla, la respuesta de la IA ya está pagada y hecha, y romperla
+ * no arreglaría nada; queda en el log (y esa llamada fuera del tope).
+ */
+export async function recordAiSpend(userId: string, costUsd: number): Promise<void> {
+  if (!(costUsd > 0)) return;
+  try {
+    const { error } = await supabaseAdmin.rpc("record_ai_spend", {
+      _user_id: userId,
+      _cost_usd: costUsd,
+    });
+    if (error) throw error;
+  } catch (error) {
+    console.error("record_ai_spend", error);
+  }
+}
+
+/**
  * Cuota de una cuenta con sesión. Lanza `RateLimitError` (HTTP 429) cuando se
  * ha pasado, con el mensaje ya escrito para enseñarlo en pantalla.
+ *
+ * Todas las cuotas por cuenta protegen llamadas a la IA, así que aquí se mira
+ * también el tope de gasto (`AI_SPEND_CAPS`): así se corta en la entrada, antes
+ * de leer el perfil o montar el prompt, y con la acción concreta en el mensaje.
+ * Se consulta a la vez que la cuota horaria para no sumar otra espera. El
+ * middleware de `createAiProvider` lo vuelve a mirar antes de cada llamada.
  *
  * `userId` sale siempre del `sub` del JWT ya verificado por
  * `requireSupabaseAuth`, nunca del cuerpo de la petición: si lo eligiera quien
  * llama, podría gastarle la cuota a otra persona.
  */
 export async function enforceUserRateLimit(userId: string, bucket: RateLimitBucket): Promise<void> {
-  const { allowed, retryAfterSeconds } = await consume(`user:${userId}`, bucket);
-  if (!allowed) throw new RateLimitError(retryAfterSeconds, RATE_LIMITS[bucket].action);
+  const { action } = RATE_LIMITS[bucket];
+  const [spend, { allowed, retryAfterSeconds }] = await Promise.all([
+    spendCapDecision(userId),
+    consume(`user:${userId}`, bucket),
+  ]);
+  // El de gasto primero: su espera es la más larga, y la que de verdad manda.
+  if (spend && !spend.allowed)
+    throw new RateLimitError(spend.retryAfterSeconds, action, spend.scope);
+  if (!allowed) throw new RateLimitError(retryAfterSeconds, action);
 }
 
 /** SHA-256 en hexadecimal con Web Crypto, que es lo único que hay garantizado

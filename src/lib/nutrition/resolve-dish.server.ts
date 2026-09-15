@@ -78,11 +78,15 @@ const RATION_ANCHORS =
 /**
  * Descompone varios platos en una sola llamada al modelo. Devuelve un mapa
  * indexado por el string de plato tal como se pasó. Nunca lanza: un fallo del
- * modelo devuelve el plato como `unresolved` y el caller decide el respaldo.
+ * modelo (también el tope de gasto) devuelve el plato como `unresolved` y el
+ * caller decide el respaldo.
+ *
+ * `userId` es a quién se apunta el gasto (ver `createAiProvider`); `null` solo
+ * en el eval, que no corre en nombre de nadie.
  */
 export async function decomposeDishes(
   dishes: string[],
-  opts: { servings?: number; apiKey?: string } = {},
+  opts: { servings?: number; apiKey?: string; userId: string | null },
 ): Promise<Map<string, DishBreakdown>> {
   const servings = Math.max(1, Math.round(opts.servings ?? 1));
   const unique = Array.from(new Set(dishes.map((d) => d.trim()).filter(Boolean)));
@@ -103,7 +107,7 @@ export async function decomposeDishes(
   }
 
   try {
-    const ai = createAiProvider(apiKey);
+    const ai = createAiProvider(apiKey, opts.userId);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
       temperature: 0,
@@ -173,7 +177,7 @@ export async function decomposeDishes(
 /** Un solo plato. Azúcar sobre `decomposeDishes`. */
 export async function dishToIngredients(
   dish: string,
-  opts: { servings?: number; apiKey?: string } = {},
+  opts: { servings?: number; apiKey?: string; userId: string | null },
 ): Promise<DishBreakdown> {
   const servings = Math.max(1, Math.round(opts.servings ?? 1));
   const map = await decomposeDishes([dish], opts);

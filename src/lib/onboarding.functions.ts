@@ -81,7 +81,7 @@ export const parseOnboarding = createServerFn({ method: "POST" })
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "onboarding-parse");
 
-    const ai = createAiProvider(key);
+    const ai = createAiProvider(key, context.userId);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
       system:

@@ -42,7 +42,8 @@ async function main() {
   const breakdowns = new Map<string, DishBreakdown>();
   for (let i = 0; i < dishes.length; i += 8) {
     const batch = dishes.slice(i, i + 8);
-    const map = await decomposeDishes(batch, { servings: PER_SLOT_SERVINGS });
+    // Sin persona detrás: el gasto del eval no cuenta contra ningún tope.
+    const map = await decomposeDishes(batch, { servings: PER_SLOT_SERVINGS, userId: null });
     for (const [k, v] of map) breakdowns.set(k, v);
     process.stdout.write(`  ${Math.min(i + 8, dishes.length)}/${dishes.length}\r`);
   }

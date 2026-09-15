@@ -1,16 +1,85 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { wrapLanguageModel, type LanguageModelMiddleware } from "ai";
 
 import { ageFromDOB } from "@/lib/age";
+import { callCostUsd } from "@/lib/ai-spend";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 
 /** Modelo usado por el coach vía OpenRouter: Gemini 2.5 Flash da un buen
  * equilibrio coste/calidad para chat conversacional en español y generación
  * de JSON estructurado (guías, planes), con salidas consistentes y baratas
- * (~$0.30 / $2.50 por millón de tokens de entrada/salida en OpenRouter). */
+ * (~$0.30 / $2.50 por millón de tokens de entrada/salida en OpenRouter; si
+ * cambia, cambia también `COACH_MODEL_USD_PER_MTOK` en `ai-spend.ts`). */
 export const COACH_MODEL = "google/gemini-2.5-flash";
 
-export function createAiProvider(apiKey: string) {
-  return createOpenRouter({ apiKey }).chat;
+/**
+ * Modelos de OpenRouter que cuentan su gasto contra el tope de la persona.
+ *
+ * `userId` es obligatorio a propósito: toda llamada a la IA tiene que decir a
+ * quién se le apunta, y así una llamada nueva no puede quedarse fuera del tope
+ * por olvido. Solo va `null` fuera de una petición de alguien (el eval).
+ */
+export function createAiProvider(apiKey: string, userId: string | null) {
+  const openrouter = createOpenRouter({ apiKey });
+  return (modelId: string) => {
+    // Sin `usage.include`, OpenRouter no manda `usage.cost` y solo quedaría
+    // estimarlo con los tokens.
+    const model = openrouter.chat(modelId, { usage: { include: true } });
+    return userId ? wrapLanguageModel({ model, middleware: aiSpendMiddleware(userId) }) : model;
+  };
+}
+
+/**
+ * Antes de cada llamada, el tope de gasto; al terminar, su coste a `ai_spend`.
+ * Va en el modelo y no en cada `generateText`/`streamText` porque así cubre
+ * todas las llamadas —reintentos incluidos— sin que ningún sitio lo repita.
+ *
+ * `rate-limit.server` se carga dentro: arrastra el cliente de servicio, y este
+ * módulo lo importan arriba del todo archivos que también van al navegador.
+ */
+function aiSpendMiddleware(userId: string): LanguageModelMiddleware {
+  const spend = () => import("@/lib/rate-limit.server");
+  return {
+    specificationVersion: "v4",
+    wrapGenerate: async ({ doGenerate }) => {
+      const { enforceAiSpendCap, recordAiSpend } = await spend();
+      await enforceAiSpendCap(userId);
+      const result = await doGenerate();
+      await recordAiSpend(userId, callCostUsd(result));
+      return result;
+    },
+    wrapStream: async ({ doStream }) => {
+      const { enforceAiSpendCap, recordAiSpend } = await spend();
+      await enforceAiSpendCap(userId);
+      const { stream, ...rest } = await doStream();
+      return {
+        ...rest,
+        stream: onFinishPart(stream, (part) => recordAiSpend(userId, callCostUsd(part))),
+      };
+    },
+  };
+}
+
+/**
+ * Deja pasar el stream tal cual y, al llegar la parte `finish` (la última, la
+ * que trae el uso y el coste), lanza `onFinish`. El stream no se cierra hasta
+ * que termina: en serverless, lo que queda pendiente tras la respuesta puede no
+ * llegar a ejecutarse.
+ */
+function onFinishPart<P extends { type: string }>(
+  stream: ReadableStream<P>,
+  onFinish: (part: Extract<P, { type: "finish" }>) => Promise<void>,
+): ReadableStream<P> {
+  let pending: Promise<void> | undefined;
+  return stream.pipeThrough(
+    new TransformStream<P, P>({
+      transform(part, controller) {
+        if (part.type === "finish") pending = onFinish(part as Extract<P, { type: "finish" }>);
+        controller.enqueue(part);
+      },
+      flush: () => pending,
+    }),
+  );
 }
 
 type CoachProfile = {

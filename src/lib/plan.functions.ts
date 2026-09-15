@@ -73,6 +73,7 @@ import {
   type TripReceipts,
   withPlanMeal,
 } from "@/lib/plan-shared";
+import { RateLimitError } from "@/lib/rate-limit-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { ValidationError } from "@/lib/validation-error";
 // Solo el tipo: se borra en compilación, así que no arrastra `household.server`
@@ -304,14 +305,17 @@ function blankUnselectedSlots(plan: MonthlyPlan, selected: readonly MealSlot[]):
 
 /** Pide el JSON al modelo en streaming (evita cortes por timeout) y lo intenta varias veces. */
 async function askForJson<T>(
-  opts: { key: string; system: string; prompt: string },
+  opts: { key: string; userId: string; system: string; prompt: string },
   extract: (parsed: unknown) => T | null,
   attempts = 3,
 ): Promise<T> {
-  const ai = createAiProvider(opts.key);
+  const ai = createAiProvider(opts.key, opts.userId);
   let lastError: unknown = null;
 
   for (let i = 0; i < attempts; i++) {
+    // Un error del modelo en streaming no llega tal cual a `result.text` (que
+    // rechaza con un genérico "No output generated"), solo a `onError`.
+    let streamError: unknown = null;
     try {
       const result = streamText({
         model: ai(COACH_MODEL),
@@ -321,13 +325,22 @@ async function askForJson<T>(
             ? opts.prompt
             : `${opts.prompt}\n\nIMPORTANTE: el intento anterior no fue válido. Devuelve EXCLUSIVAMENTE el JSON completo y cerrado, sin markdown, sin comentarios y sin texto antes o después.`,
         temperature: i === 0 ? 0.7 : 0.3,
+        onError: ({ error }) => {
+          streamError = error;
+          // Sustituye al log por defecto del SDK; el tope ya se registra al saltar.
+          if (!(error instanceof RateLimitError)) console.error("askForJson stream", error);
+        },
       });
       const text = await result.text;
       const value = extract(parseJsonLoose(text));
       if (value) return value;
       lastError = new Error("JSON incompleto");
     } catch (e) {
-      lastError = e;
+      // Tope de gasto: reintentar no lo cambia y el mensaje ya viene escrito
+      // para la persona, así que sube tal cual (429 en `apiPost`).
+      if (streamError instanceof RateLimitError) throw streamError;
+      if (e instanceof RateLimitError) throw e;
+      lastError = streamError ?? e;
     }
   }
 
@@ -344,6 +357,7 @@ async function askForJson<T>(
  */
 async function enforceBudget(
   key: string,
+  userId: string,
   system: string,
   shopping: ShoppingList,
   target: number,
@@ -353,7 +367,7 @@ async function enforceBudget(
 
   let result = shopping;
   try {
-    const ai = createAiProvider(key);
+    const ai = createAiProvider(key, userId);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
       system,
@@ -549,6 +563,7 @@ async function generatePlanBody(opts: {
   const { plan: rawPlan, shopping: rawShopping } = await askForJson(
     {
       key,
+      userId,
       system: coachSystemPrompt(profile as never, home.text),
       prompt:
         `Crea el plan del mes ${month} y su lista de la compra. Devuelve solo JSON válido:\n` +
@@ -585,6 +600,7 @@ async function generatePlanBody(opts: {
   // del plan como fuente de verdad para las etiquetas de días y compras.
   const shopping = await enforceBudget(
     key,
+    userId,
     coachSystemPrompt(profile as never, home.text),
     rawShopping,
     proratedBudget,
@@ -963,7 +979,7 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
     const tripActuals = cleanTripActuals(typed?.trip_actuals);
     const tripReceipts = cleanTripReceipts(typed?.trip_receipts);
 
-    const ai = createAiProvider(key);
+    const ai = createAiProvider(key, context.userId);
     const dataUrl = `data:${data.mime};base64,${data.imageBase64}`;
 
     // 1) Leer el tiquet (visión).
@@ -1024,6 +1040,8 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
             };
           }
         } catch (e) {
+          // Tope de gasto: otro intento no lo cambia, y "foto más nítida" confundiría.
+          if (e instanceof RateLimitError) throw e;
           console.error("scanTripReceipt vision", e);
         }
       }
@@ -1331,6 +1349,7 @@ async function reflowMeals(opts: {
     askForJson(
       {
         key,
+        userId,
         system: coachSystemPrompt(profile as never, home.text),
         prompt:
           insist +
@@ -1575,8 +1594,13 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
  * ojo ("pechuga de pollo" está cubierto por "pollo", "tomates cherry" por
  * "tomate"). Si la comprobación falla no se marca nada: preferimos no avisar
  * antes que avisar en falso de algo que la persona sí tiene en casa.
+ *
+ * No tiene cuota horaria propia (el cambio de plato no debe fallar por ella),
+ * pero sí cuenta contra el tope de gasto: al llegar a él, el middleware del
+ * modelo lanza, cae en el `catch` y el plato se guarda igual sin el aviso.
  */
 async function offShoppingList(
+  userId: string,
   dish: string,
   shopping: ShoppingList,
   pantryExtras: PantryExtra[] = [],
@@ -1588,7 +1612,7 @@ async function offShoppingList(
   if (!names || !key) return [];
 
   try {
-    const ai = createAiProvider(key);
+    const ai = createAiProvider(key, userId);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
       temperature: 0,
@@ -1684,7 +1708,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       const pantryExtras = cleanPantryExtras(
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
       );
-      const off = await offShoppingList(data.dish, shopping, pantryExtras);
+      const off = await offShoppingList(context.userId, data.dish, shopping, pantryExtras);
       const previousPinned = isPinned(current.weeks[at.weekIndex]?.days[at.dayIndex], data.slot);
 
       const next = withPlanMeal(current, data.date, data.slot, data.dish, { off, pin: data.pin });
@@ -1795,7 +1819,9 @@ export const setChildMeal = createServerFn({ method: "POST" })
       const pantryExtras = cleanPantryExtras(
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
       );
-      const off = data.dish ? await offShoppingList(data.dish, shopping, pantryExtras) : [];
+      const off = data.dish
+        ? await offShoppingList(context.userId, data.dish, shopping, pantryExtras)
+        : [];
 
       const next: MonthlyPlan = {
         ...current,
@@ -1954,6 +1980,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
       const proposals = await askForJson(
         {
           key,
+          userId: context.userId,
           system: coachSystemPrompt(profile as never, home.text),
           prompt:
             "A un plan del mes ya hecho le faltan platos de bebés de triturados (se dieron de alta después de generar el plan). NO cambies ni menciones el plato de la mesa: solo propón, para CADA hueco de esta lista, el puré o triturado de ese bebé:\n" +
@@ -2100,6 +2127,7 @@ export const goalImpact = createServerFn({ method: "POST" })
       const result = await askForJson(
         {
           key,
+          userId: context.userId,
           system: coachSystemPrompt(profile as never),
           prompt:
             `Perfil: ${JSON.stringify(profile ?? {})}\n` +
@@ -2154,7 +2182,7 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
       home.members.find((m) => m.userId === home.plannerId)?.displayName ??
       "otra persona de tu casa";
 
-    const ai = createAiProvider(key);
+    const ai = createAiProvider(key, context.userId);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
       system: coachSystemPrompt(profile as never, home.householdId ? home.text : null),
@@ -2214,6 +2242,7 @@ export const dishRecipe = createServerFn({ method: "POST" })
     return askForJson(
       {
         key,
+        userId: context.userId,
         system:
           "Eres un cocinero que explica recetas caseras muy simples, en español, con frases cortas y claras, siempre dentro de la dieta mediterránea (verdura, fruta, legumbre, cereal integral, pescado y aceite de oliva virgen extra por delante; carne roja/procesada y ultraprocesados solo de forma ocasional).",
         prompt:
