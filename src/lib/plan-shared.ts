@@ -111,6 +111,13 @@ export type ChildMeal = { childId: string; slot: MealSlot; dish: string; off?: s
  * lista de la compra, para poder avisar en pantalla. `kids` guarda los platos
  * aparte de un niño para ESE día (issue 07); el resto de comidas el niño come
  * el plato compartido.
+ *
+ * `pinned` son las comidas de ese día que la persona eligió a mano
+ * (`setPlanMeal`). Ninguna recolocación automática las pisa (`applyPlanChanges`,
+ * `mergeFuturePlan`): sin esta marca, una comida o cena cambiada a mano se
+ * perdía en el siguiente reajuste, porque se guarda en el mismo campo que
+ * escribe la IA. Los días 29-31 comparten celda con los de la semana 3 (el plan
+ * tiene 4 filas), así que la marca vale para las dos fechas de esa celda.
  */
 export type PlanDay = {
   day: string;
@@ -120,7 +127,12 @@ export type PlanDay = {
   snack?: string;
   extras?: Partial<Record<MealSlot, string[]>>;
   kids?: ChildMeal[];
+  pinned?: MealSlot[];
 };
+
+/** ¿Esta comida del día la eligió la persona a mano? */
+export const isPinned = (day: PlanDay | null | undefined, slot: MealSlot): boolean =>
+  !!day?.pinned?.includes(slot);
 
 /**
  * Días del mes que cubre el plan. Un plan creado a media de mes solo cubre de
@@ -959,10 +971,13 @@ const cleanDay = (raw: unknown): PlanDay => {
   const snack = String(d.snack ?? "").trim();
   const extras = cleanExtras(d.extras);
   const kids = cleanKids(d.kids);
+  const rawPinned: unknown[] = Array.isArray(d.pinned) ? d.pinned : [];
+  const pinned = MEAL_SLOTS.filter((s) => rawPinned.includes(s));
   if (breakfast) day.breakfast = breakfast;
   if (snack) day.snack = snack;
   if (extras) day.extras = extras;
   if (kids) day.kids = kids;
+  if (pinned.length) day.pinned = pinned;
   return day;
 };
 
@@ -1279,14 +1294,15 @@ export const mergeFuturePlan = (
           const freshDay =
             fresh.days.find((d) => normDay(d.day) === normDay(day.day)) ?? fresh.days[di];
           if (!freshDay?.lunch && !freshDay?.dinner) return day;
-          // El spread conserva breakfast/snack/extras/kids: un plato pedido a
-          // mano (incluido el plato aparte de un niño) manda sobre la recolocación
-          // automática hasta que se cambie a mano otra vez (la IA sólo devuelve
-          // lunch/dinner por día).
+          // El spread conserva breakfast/snack/extras/kids/pinned: un plato pedido
+          // a mano (incluido el plato aparte de un niño) manda sobre la
+          // recolocación automática hasta que se cambie a mano otra vez (la IA
+          // sólo devuelve lunch/dinner por día). Una comida o cena elegida a mano
+          // vive en el mismo campo que escribe la IA, así que la protege `pinned`.
           return {
             ...day,
-            lunch: freshDay.lunch || day.lunch,
-            dinner: freshDay.dinner || day.dinner,
+            lunch: isPinned(day, "comida") ? day.lunch : freshDay.lunch || day.lunch,
+            dinner: isPinned(day, "cena") ? day.dinner : freshDay.dinner || day.dinner,
           };
         }),
       };
@@ -1338,7 +1354,8 @@ export function cleanReflowChanges(
 /**
  * Aplica una lista de cambios sobre el plan, cada uno en la celda que le toca
  * por fecha (`planSlotIndex`, la misma que usa la pantalla). Un cambio con
- * fecha de hoy o anterior se ignora: el pasado no se reescribe nunca.
+ * fecha de hoy o anterior se ignora: el pasado no se reescribe nunca. Tampoco
+ * se pisa una comida o cena elegida a mano (`pinned`), aunque la IA la devuelva.
  */
 export function applyPlanChanges(
   current: MonthlyPlan,
@@ -1358,9 +1375,14 @@ export function applyPlanChanges(
       ...week,
       days: week.days.map((day, di) => {
         const c = byCell.get(`${wi}:${di}`);
-        // El spread conserva breakfast/snack/extras/kids: la recolocación solo
-        // toca comida y cena, igual que antes.
-        return c ? { ...day, lunch: c.lunch || day.lunch, dinner: c.dinner || day.dinner } : day;
+        // El spread conserva breakfast/snack/extras/kids/pinned: la recolocación
+        // solo toca comida y cena, y nunca la que se eligió a mano.
+        if (!c) return day;
+        return {
+          ...day,
+          lunch: c.lunch && !isPinned(day, "comida") ? c.lunch : day.lunch,
+          dinner: c.dinner && !isPinned(day, "cena") ? c.dinner : day.dinner,
+        };
       }),
     })),
   };
@@ -1439,6 +1461,61 @@ export function planSlotIndex(
   const byName = week.days.findIndex((d) => normDay(d.day).includes(target));
   const dayIndex = byName >= 0 ? byName : (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
   return week.days[dayIndex] ? { weekIndex, dayIndex } : null;
+}
+
+/**
+ * Escribe un plato suelto en la celda de `date`, tal cual lo pidió la persona.
+ * Es la única forma de hacerlo: la usa `setPlanMeal` en el servidor y la
+ * actualización optimista de la pantalla, así que lo que se ve al instante es
+ * exactamente lo que se guarda.
+ *
+ * - `off`: ingredientes del plato que no están en la compra (aviso en pantalla).
+ * - `pin` (por defecto `true`): marca la comida como elegida a mano, para que
+ *   ningún reajuste la pise. `false` quita la marca (lo usa "Deshacer" para
+ *   dejar el día como estaba).
+ *
+ * Devuelve `null` si la fecha no tiene celda en el plan.
+ */
+export function withPlanMeal(
+  plan: MonthlyPlan,
+  date: string,
+  slot: MealSlot,
+  dish: string,
+  opts: { off?: readonly string[]; pin?: boolean } = {},
+): MonthlyPlan | null {
+  const at = planSlotIndex(plan, date);
+  if (!at) return null;
+  const off = opts.off ?? [];
+  const pin = opts.pin ?? true;
+  return {
+    ...plan,
+    weeks: plan.weeks.map((week, wi) =>
+      wi !== at.weekIndex
+        ? week
+        : {
+            ...week,
+            days: week.days.map((day, di) => {
+              if (di !== at.dayIndex) return day;
+              const updated: PlanDay = { ...day, [MEAL_SLOT_FIELD[slot]]: dish };
+
+              const extras = { ...(day.extras ?? {}) };
+              if (off.length) extras[slot] = [...off];
+              else delete extras[slot];
+              if (Object.keys(extras).length) updated.extras = extras;
+              else delete updated.extras;
+
+              const pinned = new Set(day.pinned ?? []);
+              if (pin) pinned.add(slot);
+              else pinned.delete(slot);
+              const pins = MEAL_SLOTS.filter((s) => pinned.has(s));
+              if (pins.length) updated.pinned = pins;
+              else delete updated.pinned;
+
+              return updated;
+            }),
+          },
+    ),
+  };
 }
 
 /** Platos del plan mensual para una fecha concreta (YYYY-MM-DD). */
@@ -1646,6 +1723,27 @@ export function childPureeGaps(
 }
 
 /**
+ * Marcas de "elegido a mano" de un día de un miembro del hogar tras espejar las
+ * comidas compartidas: igual que el plato de un niño, la marca viaja con su
+ * comida. En un slot compartido manda la del planificador (el plato es suyo) y
+ * en el resto se conserva la propia. Si no, un miembro que tenía fijada su cena
+ * en solitario seguiría protegiendo el plato del planificador cuando esa cena
+ * pasa a ser compartida.
+ */
+export function mirrorPinned(
+  own: PlanDay,
+  source: PlanDay,
+  sharedSlots: ReadonlySet<string>,
+): MealSlot[] | undefined {
+  const pins = new Set([
+    ...(own.pinned ?? []).filter((s) => !sharedSlots.has(s)),
+    ...(source.pinned ?? []).filter((s) => sharedSlots.has(s)),
+  ]);
+  const ordered = MEAL_SLOTS.filter((s) => pins.has(s));
+  return ordered.length ? ordered : undefined;
+}
+
+/**
  * El día que ve un miembro del hogar (issue 05, D1): las comidas compartidas
  * ese día de la semana muestran el plato del planificador; las demás, el
  * suyo propio. `weekday` es el índice de día dentro de la semana del plan
@@ -1691,6 +1789,10 @@ export function composeDayForUser(
   ];
   if (kids.length) next.kids = kids;
   else delete next.kids;
+
+  const pinned = mirrorPinned(mineDay, plannerDay, sharedSet);
+  if (pinned) next.pinned = pinned;
+  else delete next.pinned;
   return next;
 }
 

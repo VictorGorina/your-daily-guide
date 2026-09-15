@@ -92,9 +92,13 @@ en `supabase/migrations/`.
   puede tocar van explícitas en el prompt y se validan al aplicarlas. Si el desvío en kcal supera
   `FORCE_ADJUST_KCAL` y no cambia nada, se le insiste una vez.
 
-Un cambio a mano se guarda en campos propios del día (`breakfast`/`snack` en `PlanDay`) y manda
-sobre la rotación semanal por defecto; una recolocación automática posterior los respeta y no los
-pisa (`mergeFuturePlan`). **Ojo con la rejilla del plan:** las semanas van por día del mes
+Un cambio a mano (`setPlanMeal`, que escribe con `withPlanMeal`) queda **fijado** en
+`PlanDay.pinned`: ninguna recolocación automática lo pisa (`applyPlanChanges`, `mergeFuturePlan`, y
+el prompt de `reflowMeals` lo marca como `"fijo"`). Hace falta porque comida y cena viven en los
+mismos campos (`lunch`/`dinner`) que escribe la IA; antes solo sobrevivían desayuno y merienda
+(`breakfast`/`snack`, que además mandan sobre la rotación semanal). "Deshacer" manda `pin: false`
+con el `previousPinned` que devuelve `setPlanMeal`. En el hogar, la marca de una comida compartida
+viaja con el plato del planificador (`mirrorPinned`). **Ojo con la rejilla del plan:** las semanas van por día del mes
 (`floor((día-1)/7)`) y la posición dentro de la fila es el día de la semana, así que el orden de la
 fila no es el del calendario — un lunes 7 es la última fecha de la semana 0 pero la posición 0.
 Qué fecha ocupa cada celda lo dice `dateOfPlanCell`, y es lo que decide qué se puede reescribir;

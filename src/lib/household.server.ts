@@ -20,7 +20,7 @@ import {
   type ServingsTable,
   type SharedSlots,
 } from "@/lib/household-shared";
-import { cleanPlan, planCursor, type MonthlyPlan } from "@/lib/plan-shared";
+import { cleanPlan, mirrorPinned, planCursor, type MonthlyPlan } from "@/lib/plan-shared";
 
 type AnyClient = SupabaseClient<never, never, never>;
 
@@ -446,6 +446,10 @@ export async function syncSharedMeals(opts: {
             ];
             if (kids.length) next.kids = kids;
             else delete next.kids;
+            // La marca de "elegido a mano" viaja igual que el plato de un niño.
+            const pinned = mirrorPinned(day, sourceDay, copiedSet);
+            if (pinned) next.pinned = pinned;
+            else delete next.pinned;
             return next;
           }),
         };

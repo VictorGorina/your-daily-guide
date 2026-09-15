@@ -107,7 +107,9 @@ export type ChildMeal = { childId: string; slot: MealSlot; dish: string; off?: s
  * día), así que `breakfast`/`snack` sólo aparecen cuando se ha pedido un plato
  * concreto para ESE día. `extras` guarda, por comida, los ingredientes de ese
  * plato que no salen de la lista de la compra, para poder avisar en pantalla.
- * `kids` guarda los platos aparte de un niño para ESE día.
+ * `kids` guarda los platos aparte de un niño para ESE día. `pinned` son las
+ * comidas de ese día elegidas a mano, que ningún reajuste automático pisa (ver
+ * `PlanDay` en `src/lib/plan-shared.ts`).
  */
 export type PlanDay = {
   day: string;
@@ -117,7 +119,20 @@ export type PlanDay = {
   snack?: string;
   extras?: Partial<Record<MealSlot, string[]>>;
   kids?: ChildMeal[];
+  pinned?: MealSlot[];
 };
+
+/** Campo del día donde vive cada comida cuando se cambia a mano. */
+export const MEAL_SLOT_FIELD = {
+  desayuno: "breakfast",
+  comida: "lunch",
+  cena: "dinner",
+  snack: "snack",
+} as const satisfies Record<MealSlot, keyof PlanDay>;
+
+/** ¿Esta comida del día la eligió la persona a mano? */
+export const isPinned = (day: PlanDay | null | undefined, slot: MealSlot): boolean =>
+  !!day?.pinned?.includes(slot);
 
 /**
  * Días del mes que cubre el plan. Un plan creado a media de mes solo cubre de
@@ -178,6 +193,55 @@ export function planSlotIndex(
   const byName = week.days.findIndex((d) => normDay(d.day).includes(target));
   const dayIndex = byName >= 0 ? byName : (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
   return week.days[dayIndex] ? { weekIndex, dayIndex } : null;
+}
+
+/**
+ * Escribe un plato suelto en la celda de `date`, tal cual lo pidió la persona:
+ * la misma escritura que hace `setPlanMeal` en el servidor, para la
+ * actualización optimista. `pin` (por defecto `true`) marca la comida como
+ * elegida a mano; `false` quita la marca. `null` si la fecha no tiene celda.
+ * Copia de `src/lib/plan-shared.ts`.
+ */
+export function withPlanMeal(
+  plan: MonthlyPlan,
+  date: string,
+  slot: MealSlot,
+  dish: string,
+  opts: { off?: readonly string[]; pin?: boolean } = {},
+): MonthlyPlan | null {
+  const at = planSlotIndex(plan, date);
+  if (!at) return null;
+  const off = opts.off ?? [];
+  const pin = opts.pin ?? true;
+  return {
+    ...plan,
+    weeks: plan.weeks.map((week, wi) =>
+      wi !== at.weekIndex
+        ? week
+        : {
+            ...week,
+            days: week.days.map((day, di) => {
+              if (di !== at.dayIndex) return day;
+              const updated: PlanDay = { ...day, [MEAL_SLOT_FIELD[slot]]: dish };
+
+              const extras = { ...(day.extras ?? {}) };
+              if (off.length) extras[slot] = [...off];
+              else delete extras[slot];
+              if (Object.keys(extras).length) updated.extras = extras;
+              else delete updated.extras;
+
+              const pinned = new Set(day.pinned ?? []);
+              if (pin) pinned.add(slot);
+              else pinned.delete(slot);
+              const pins = MEAL_SLOTS.filter((s) => pinned.has(s));
+              if (pins.length) updated.pinned = pins;
+              else delete updated.pinned;
+
+              return updated;
+            }),
+          },
+    ),
+  };
 }
 
 /** Platos del plan mensual para una fecha concreta (YYYY-MM-DD). */
@@ -474,6 +538,16 @@ export function composeDayForUser(
   ];
   if (kids.length) next.kids = kids;
   else delete next.kids;
+
+  // La marca de "elegido a mano" viaja igual: en un slot compartido, la del
+  // planificador; en el resto, la propia.
+  const pins = new Set([
+    ...(mineDay.pinned ?? []).filter((s) => !sharedSet.has(s)),
+    ...(plannerDay.pinned ?? []).filter((s) => sharedSet.has(s)),
+  ]);
+  const pinned = MEAL_SLOTS.filter((s) => pins.has(s));
+  if (pinned.length) next.pinned = pinned;
+  else delete next.pinned;
   return next;
 }
 

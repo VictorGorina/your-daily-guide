@@ -42,6 +42,7 @@ import {
   ingredientNames,
   isCanonicalShopping,
   isNextMonthUnlocked,
+  isPinned,
   mealsForDate,
   mergeFuturePlan,
   mergeFutureKids,
@@ -54,7 +55,6 @@ import {
   type PlanCoverage,
   type ShoppingCadence,
   MEAL_SLOTS,
-  MEAL_SLOT_FIELD,
   MEAL_SLOT_LABEL,
   parseJsonLoose,
   planCursor,
@@ -71,6 +71,7 @@ import {
   type TripActuals,
   type TripConfirmations,
   type TripReceipts,
+  withPlanMeal,
 } from "@/lib/plan-shared";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { ValidationError } from "@/lib/validation-error";
@@ -1296,11 +1297,17 @@ async function reflowMeals(opts: {
   // entendía "posterior a hoy" como "más abajo en la fila", y en un lunes eso
   // son los días 1 al 6 — ya pasados. Recolocaba de verdad, pero siempre en
   // días que no se podían tocar, y el ajuste no aparecía por ningún lado.
+  // Las comidas elegidas a mano van como "fijo": el modelo no debe proponer
+  // cambiarlas (y si lo hace, `applyPlanChanges` las ignora igualmente).
   const dated = {
     ...current,
     weeks: current.weeks.map((week, wi) => ({
       ...week,
-      days: week.days.map((d, di) => ({ fecha: dateOfPlanCell(month, wi, di), ...d })),
+      days: week.days.map(({ pinned, ...d }, di) => ({
+        fecha: dateOfPlanCell(month, wi, di),
+        ...d,
+        ...(pinned?.length ? { fijo: pinned } : {}),
+      })),
     })),
   };
   // Fechas que sí se pueden recolocar, dichas de forma explícita: es más difícil
@@ -1336,7 +1343,7 @@ async function reflowMeals(opts: {
           `Últimos días reales registrados: ${JSON.stringify(logs ?? [])}\n\n` +
           `Hoy es ${today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
           `Lo que ha pasado / lo que cuenta la persona: ${note}\n\n` +
-          `REGLA 1: las ÚNICAS fechas que puedes cambiar son ${editableDates.join(", ") || "ninguna"}. Hoy y los días anteriores están cerrados. Guíate por la "fecha" de cada día, no por su posición en la semana.\n` +
+          `REGLA 1: las ÚNICAS fechas que puedes cambiar son ${editableDates.join(", ") || "ninguna"}. Hoy y los días anteriores están cerrados. Guíate por la "fecha" de cada día, no por su posición en la semana. Si un día lleva "fijo", esas comidas las eligió la persona a mano: no las cambies (puedes cambiar la otra comida de ese día).\n` +
           `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
           `REGLA 3: ${kcalLine}\n` +
           "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
@@ -1616,23 +1623,28 @@ async function offShoppingList(
  */
 export const setPlanMeal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { date: string; slot: string; dish: string; today?: string }) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? ""))
-      throw new ValidationError("Fecha no válida");
-    if (!MEAL_SLOTS.includes(input?.slot as MealSlot))
-      throw new ValidationError("Comida no válida");
-    const dish = String(input?.dish ?? "")
-      .trim()
-      .slice(0, 200);
-    if (!dish) throw new ValidationError("Falta el plato nuevo");
-    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
-    if (input.date < today) {
-      throw new ValidationError(
-        "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
-      );
-    }
-    return { date: input.date, slot: input.slot as MealSlot, dish, today };
-  })
+  .validator(
+    (input: { date: string; slot: string; dish: string; today?: string; pin?: boolean }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? ""))
+        throw new ValidationError("Fecha no válida");
+      if (!MEAL_SLOTS.includes(input?.slot as MealSlot))
+        throw new ValidationError("Comida no válida");
+      const dish = String(input?.dish ?? "")
+        .trim()
+        .slice(0, 200);
+      if (!dish) throw new ValidationError("Falta el plato nuevo");
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+      if (input.date < today) {
+        throw new ValidationError(
+          "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
+        );
+      }
+      // Un plato pedido a mano queda fijado por defecto; `pin: false` solo lo
+      // manda "Deshacer", para devolver el día al estado exacto de antes.
+      const pin = input?.pin !== false;
+      return { date: input.date, slot: input.slot as MealSlot, dish, today, pin };
+    },
+  )
   .handler(
     async ({
       data,
@@ -1643,6 +1655,8 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       dish: string;
       off: string[];
       previousIdea: string;
+      /** ¿Esa comida ya estaba elegida a mano antes del cambio? Para "Deshacer". */
+      previousPinned: boolean;
     }> => {
       await guardSharedSlotWrite(context.supabase, context.userId, data.date, data.slot);
 
@@ -1671,28 +1685,10 @@ export const setPlanMeal = createServerFn({ method: "POST" })
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
       );
       const off = await offShoppingList(data.dish, shopping, pantryExtras);
-      const field = MEAL_SLOT_FIELD[data.slot];
+      const previousPinned = isPinned(current.weeks[at.weekIndex]?.days[at.dayIndex], data.slot);
 
-      const next: MonthlyPlan = {
-        ...current,
-        weeks: current.weeks.map((week, wi) =>
-          wi !== at.weekIndex
-            ? week
-            : {
-                ...week,
-                days: week.days.map((day, di) => {
-                  if (di !== at.dayIndex) return day;
-                  const extras = { ...(day.extras ?? {}) };
-                  if (off.length) extras[data.slot] = off;
-                  else delete extras[data.slot];
-                  const updated: PlanDay = { ...day, [field]: data.dish };
-                  if (Object.keys(extras).length) updated.extras = extras;
-                  else delete updated.extras;
-                  return updated;
-                }),
-              },
-        ),
-      };
+      const next = withPlanMeal(current, data.date, data.slot, data.dish, { off, pin: data.pin });
+      if (!next) throw new ValidationError("Ese día todavía no tiene menú en el plan");
 
       const { error } = await context.supabase
         .from("monthly_plans")
@@ -1718,6 +1714,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
         dish: data.dish,
         off,
         previousIdea,
+        previousPinned,
       };
     },
   );

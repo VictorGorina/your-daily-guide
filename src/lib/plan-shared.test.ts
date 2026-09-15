@@ -27,7 +27,9 @@ import {
   isCanonicalShopping,
   isMonthActionable,
   isNextMonthUnlocked,
+  isPinned,
   mealsForDate,
+  mirrorPinned,
   monthParts,
   reconcileHabits,
   suggestedDish,
@@ -57,6 +59,7 @@ import {
   tripCount,
   tripDayRange,
   weekDayCounts,
+  withPlanMeal,
 } from "./plan-shared";
 
 // --- helpers ---------------------------------------------------------------
@@ -1567,5 +1570,132 @@ describe("applyPlanChanges", () => {
     expect(out.weeks[1]!.days[2]!.breakfast).toBe("Tostadas caseras");
     expect(out.weeks[1]!.days[2]!.kids).toEqual([{ childId: "leo", slot: "cena", dish: "Puré" }]);
     expect(out.weeks[1]!.days[2]!.dinner).toBe("Nueva");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// withPlanMeal / pinned — un plato elegido a mano no lo pisa ningún reajuste
+// ---------------------------------------------------------------------------
+
+describe("withPlanMeal", () => {
+  // 17 de septiembre de 2026 = jueves de la semana 2 → celda (2, 3).
+  const DATE = "2026-09-17";
+
+  it("escribe cada comida en su campo y solo en la celda de esa fecha", () => {
+    const base = plan();
+    const out = withPlanMeal(base, DATE, "cena", "Hamburguesa")!;
+    expect(out.weeks[2]!.days[3]!.dinner).toBe("Hamburguesa");
+    expect(out.weeks[2]!.days[3]!.lunch).toBe("Comida S2D3");
+    expect(out.weeks[2]!.days[2]!.dinner).toBe("Cena S2D2");
+    expect(base.weeks[2]!.days[3]!.dinner).toBe("Cena S2D3"); // no muta la entrada
+
+    expect(withPlanMeal(base, DATE, "comida", "Lentejas")!.weeks[2]!.days[3]!.lunch).toBe(
+      "Lentejas",
+    );
+    expect(withPlanMeal(base, DATE, "desayuno", "Tostada")!.weeks[2]!.days[3]!.breakfast).toBe(
+      "Tostada",
+    );
+    expect(withPlanMeal(base, DATE, "snack", "Nueces")!.weeks[2]!.days[3]!.snack).toBe("Nueces");
+  });
+
+  it("guarda el aviso de fuera de la compra y lo quita si el plato nuevo no lo necesita", () => {
+    const withOff = withPlanMeal(plan(), DATE, "cena", "Sushi", { off: ["salmón"] })!;
+    expect(withOff.weeks[2]!.days[3]!.extras).toEqual({ cena: ["salmón"] });
+    const cleared = withPlanMeal(withOff, DATE, "cena", "Tortilla")!;
+    expect(cleared.weeks[2]!.days[3]!).not.toHaveProperty("extras");
+  });
+
+  it("fija la comida por defecto, en orden y sin duplicados", () => {
+    const once = withPlanMeal(plan(), DATE, "cena", "A")!;
+    const twice = withPlanMeal(withPlanMeal(once, DATE, "desayuno", "B")!, DATE, "cena", "C")!;
+    expect(twice.weeks[2]!.days[3]!.pinned).toEqual(["desayuno", "cena"]);
+  });
+
+  it("pin: false quita la marca y no deja la clave vacía", () => {
+    const pinned = withPlanMeal(plan(), DATE, "cena", "A")!;
+    const undone = withPlanMeal(pinned, DATE, "cena", "Cena S2D3", { pin: false })!;
+    expect(undone.weeks[2]!.days[3]!).not.toHaveProperty("pinned");
+    expect(isPinned(undone.weeks[2]!.days[3], "cena")).toBe(false);
+  });
+
+  it("devuelve null si la fecha no tiene celda", () => {
+    expect(withPlanMeal(plan({ weeks: [] }), DATE, "cena", "A")).toBeNull();
+  });
+});
+
+describe("pinned en cleanPlan", () => {
+  it("conserva las comidas válidas en orden y descarta basura", () => {
+    const out = cleanPlan({
+      weeks: [
+        {
+          label: "S1",
+          days: [
+            { day: "Lunes", lunch: "x", dinner: "y", pinned: ["cena", "merienda", 3, "comida"] },
+            { day: "Martes", lunch: "x", dinner: "y", pinned: "cena" },
+            { day: "Miércoles", lunch: "x", dinner: "y", pinned: [] },
+          ],
+        },
+      ],
+    });
+    expect(out!.weeks[0]!.days[0]!.pinned).toEqual(["comida", "cena"]);
+    expect(out!.weeks[0]!.days[1]!).not.toHaveProperty("pinned");
+    expect(out!.weeks[0]!.days[2]!).not.toHaveProperty("pinned");
+  });
+});
+
+describe("pinned en applyPlanChanges", () => {
+  it("no pisa una cena elegida a mano, pero sí la comida no fijada del mismo día", () => {
+    // 9 de septiembre de 2026 = miércoles de la semana 1 → celda (1, 2).
+    const current = withPlanMeal(plan(), "2026-09-09", "cena", "Hamburguesa")!;
+    const out = applyPlanChanges(
+      current,
+      [{ date: "2026-09-09", lunch: "Ensalada", dinner: "Merluza" }],
+      "2026-09-07",
+    );
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Hamburguesa");
+    expect(out.weeks[1]!.days[2]!.lunch).toBe("Ensalada");
+    expect(out.weeks[1]!.days[2]!.pinned).toEqual(["cena"]);
+  });
+});
+
+describe("pinned en mergeFuturePlan", () => {
+  it("una comida fijada sobrevive a una regeneración; la no fijada se renueva", () => {
+    // Miércoles 9 de septiembre, futuro respecto al jueves 3.
+    const current = withPlanMeal(plan(), "2026-09-09", "comida", "Paella")!;
+    const next = plan({
+      weeks: plan().weeks.map((w) => ({
+        ...w,
+        days: w.days.map((d) => day(d.day, `NUEVO ${d.lunch}`, `NUEVO ${d.dinner}`)),
+      })),
+    });
+    const merged = mergeFuturePlan(current, next, "2026-09-03");
+    expect(merged.weeks[1]!.days[2]!.lunch).toBe("Paella");
+    expect(merged.weeks[1]!.days[2]!.dinner).toBe("NUEVO Cena S1D2");
+    expect(merged.weeks[1]!.days[2]!.pinned).toEqual(["comida"]);
+  });
+});
+
+describe("pinned en el hogar (mirrorPinned / composeDayForUser)", () => {
+  // Jueves=3 comparte cena.
+  const slots: SharedSlots = { desayuno: [], comida: [], cena: [3] };
+
+  it("en un slot compartido manda la marca del planificador; en el resto, la propia", () => {
+    const mine = day("Jueves", "Mi comida", "Mi cena", { pinned: ["comida", "cena"] });
+    const planner = day("Jueves", "Su comida", "Su cena");
+    const composed = composeDayForUser(mine, planner, slots, 3);
+    expect(composed.dinner).toBe("Su cena");
+    expect(composed.pinned).toEqual(["comida"]);
+
+    const plannerPinned = day("Jueves", "Su comida", "Su cena", { pinned: ["cena"] });
+    expect(composeDayForUser(day("Jueves", "a", "b"), plannerPinned, slots, 3).pinned).toEqual([
+      "cena",
+    ]);
+  });
+
+  it("mirrorPinned no inventa marcas ni deja una lista vacía", () => {
+    const own = day("Lunes", "a", "b");
+    const source = day("Lunes", "c", "d", { pinned: ["comida"] });
+    expect(mirrorPinned(own, source, new Set(["cena"]))).toBeUndefined();
+    expect(mirrorPinned(own, source, new Set(["comida"]))).toEqual(["comida"]);
   });
 });
