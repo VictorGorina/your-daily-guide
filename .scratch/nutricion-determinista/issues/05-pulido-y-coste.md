@@ -1,6 +1,6 @@
 # 05 — Pulido y coste (DIFERIDA)
 
-Status: deferred
+Status: superseded — anclas de ración y eval absorbidos en `.scratch/precision-nutricional/` (tickets 02 y 05); el prompt-cache deja de hacer falta al quitar `FOOD_KEYS` del prompt
 
 ## Qué
 

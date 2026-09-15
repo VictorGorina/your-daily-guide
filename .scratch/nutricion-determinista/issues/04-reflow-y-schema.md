@@ -1,6 +1,6 @@
 # 04 — Salida por schema + reflow sobre números reales (DIFERIDA)
 
-Status: deferred — decidir tras Fase 3
+Status: superseded — ver `.scratch/precision-nutricional/issues/10-plan-consciente-del-objetivo.md` y `12-reajuste-en-codigo.md`
 
 ## Qué
 

@@ -1,6 +1,6 @@
 # 03 — Lista de la compra y precio derivados (DIFERIDA)
 
-Status: deferred — decidir tras medir Fases 0-2
+Status: superseded — ver `.scratch/precision-nutricional/issues/11-compra-derivada.md`
 
 ## Qué
 

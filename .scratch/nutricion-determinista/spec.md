@@ -91,3 +91,9 @@ Módulo nuevo `src/lib/nutrition/`:
 4. Primera entrega: **Fases 0-2**. Las 3-5 se deciden viendo la mejora medida.
 
 ## Comments
+
+- 2026-09-14 — Las Fases 3-5 quedan **absorbidas** por `.scratch/precision-nutricional/`
+  (tickets 10, 11 y 12). Ese spec parte del estado de las Fases 0-2 y corrige varios supuestos de
+  aquí: la tabla mezcla valores crudos y cocinados, el eval mide confianza de casado y no
+  exactitud, y el memo por proceso no garantiza "mismo plato, mismo número". No implementar las
+  Fases 3-5 desde este spec.
