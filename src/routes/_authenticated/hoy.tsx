@@ -58,8 +58,10 @@ import {
   childMealsForDate,
   childPureeGaps,
   effectiveMealSlots,
+  isPinned,
   mealsForDate,
   offListNote,
+  planForDate,
   reconcileHabits,
   suggestedDish,
   type MealChange,
@@ -836,7 +838,10 @@ function Hoy() {
                       {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
                     </p>
                   ))}
-                  {idea ? <DishRecipe dish={idea} month={month} /> : null}
+                  {/* Sin receta si el plato ya se cambió a mano: ya se sabe qué
+                      se va a comer, así que enseñarla solo gastaría una
+                      llamada a la IA sin aportar nada. */}
+                  {idea && !wasIdea ? <DishRecipe dish={idea} month={month} /> : null}
                 </div>
               );
             })}
@@ -991,6 +996,10 @@ function DayMenu({
   // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
   // para ese día), no la lista entera de desayunos de la semana.
   const meals = mealsForDate(plan, date, selectedSlots);
+  // Día crudo del plan, para saber qué slots están fijados a mano (`pinned`) y
+  // no ofrecerles receta: ya se sabe qué se va a comer, así que enseñarla solo
+  // gastaría una llamada a la IA sin aportar nada.
+  const day = planForDate(plan, date)?.day ?? null;
   const label = capitalizeFirst(
     new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
       weekday: "long",
@@ -1014,6 +1023,7 @@ function DayMenu({
               value={m.idea}
               note={offListNote(m.off)}
               recipeMonth={date.slice(0, 7)}
+              pinned={isPinned(day, m.slot)}
             />
           ))}
         </div>
@@ -1031,12 +1041,16 @@ function Field({
   value,
   note,
   recipeMonth,
+  pinned,
 }: {
   label: string;
   value: string;
   note?: string | null;
-  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes. */
+  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes
+   *  (salvo que `pinned` sea true). */
   recipeMonth?: string;
+  /** Este plato se eligió a mano (`setPlanMeal`): no se ofrece receta. */
+  pinned?: boolean;
 }) {
   const bgStyle = recipeMonth ? foodBgStyle(value) : {};
   return (
@@ -1056,7 +1070,7 @@ function Field({
               {note}
             </span>
           ) : null}
-          {recipeMonth ? <DishRecipe dish={value} month={recipeMonth} /> : null}
+          {recipeMonth && !pinned ? <DishRecipe dish={value} month={recipeMonth} /> : null}
         </div>
       </div>
     </div>

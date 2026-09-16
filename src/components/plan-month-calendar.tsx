@@ -8,6 +8,7 @@ import {
   capitalizeFirst,
   childMealsForDate,
   isBeforeAppStart,
+  isPinned,
   mealsForDate,
   offListNote,
   planForDate,
@@ -205,7 +206,12 @@ export function PlanMonthCalendar({
                         {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
                       </p>
                     ))}
-                    <DishRecipe dish={meal.idea} month={month} />
+                    {/* Sin receta si el plato se eligió a mano: ya se sabe qué
+                        se va a comer, así que enseñarla solo gastaría una
+                        llamada a la IA sin aportar nada. */}
+                    {!isPinned(detail.day, meal.slot) ? (
+                      <DishRecipe dish={meal.idea} month={month} />
+                    ) : null}
                   </div>
                 ))}
               </div>
