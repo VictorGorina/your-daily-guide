@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import {
   Activity,
@@ -12,26 +12,28 @@ import {
   PencilLine,
   X,
 } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AdjustmentInfoSheet } from "../../components/adjustment-info-sheet";
 import { BottomNav } from "../../components/bottom-nav";
 import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
-import { DayDetailBody } from "../../components/day-detail-sheet";
+import { DayDetailBody, type DayDetailHousehold } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
 import { DishCategoryIcon } from "../../components/food-category-bg";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { MacroBars } from "../../components/macro-bars";
 import { MealSwapSheet } from "../../components/meal-swap-sheet";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
-import { WeekStrip } from "../../components/week-strip";
+import { WeekPager } from "../../components/week-pager";
 import { classifyDish, FOOD_CATEGORIES } from "../../lib/food-categories";
 import { apiPost } from "../../lib/api";
 import {
   ensureTodayLog,
   fetchLogs,
+  fetchLogsForMonth,
   fetchMonthlyPlan,
   fetchProfile,
   impulsoFrom,
@@ -43,6 +45,7 @@ import {
   type DailyGuide,
   type DailyLog,
   type MealStatus,
+  type Profile,
 } from "../../lib/daily";
 import { sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
 import { fetchHousehold } from "../../lib/household";
@@ -69,7 +72,12 @@ import {
 } from "../../lib/plan-shared";
 import { quoteOfTheDay } from "../../lib/quotes";
 import { useMealSwap } from "../../lib/use-meal-swap";
+import { addDaysISO, monthsOfWeek, weekDates, weekStartOf } from "../../lib/week-nav";
 import { resolveDeviceTimeZone } from "../../lib/zoned-date";
+
+// Misma curva que el resto de la app (docs/design-guidelines.md §7) y que
+// `week-pager.tsx`, para que el panel del día y la tira se muevan igual.
+const EASING = Easing.bezier(0.22, 1, 0.36, 1);
 
 // Orden cronológico aproximado de cada momento, para saber cuál toca ahora.
 const MOMENT_RANK: Record<string, number> = {
@@ -220,6 +228,52 @@ export default function Hoy() {
   }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
   const today0 = todayISO();
+  const [visibleWeek, setVisibleWeek] = useState(() => weekStartOf(today0));
+  const appStartedOn = profileQ.data?.app_started_on ?? null;
+
+  // Meses que puede llegar a pisar la tira: la semana visible y sus dos
+  // vecinas (lo que `WeekPager` puede llegar a pintar con `windowSize={3}`),
+  // para que deslizar hasta el borde de un mes no se quede sin datos. Solo
+  // cambia cuando cambia de semana, no en cada frame de scroll.
+  const pagerMonths = useMemo(() => {
+    const months = new Set([
+      ...monthsOfWeek(visibleWeek),
+      ...monthsOfWeek(addDaysISO(visibleWeek, -7)),
+      ...monthsOfWeek(addDaysISO(visibleWeek, 7)),
+    ]);
+    return [...months].sort();
+  }, [visibleWeek]);
+
+  const pagerLogsQ = useQueries({
+    queries: pagerMonths.map((m) => ({
+      queryKey: ["logs", m],
+      queryFn: () => fetchLogsForMonth(m),
+    })),
+  });
+  const pagerPlanQ = useQueries({
+    queries: pagerMonths.map((m) => ({
+      queryKey: ["plan", m],
+      queryFn: () => fetchMonthlyPlan(m),
+    })),
+  });
+  const logByDate = useMemo(() => {
+    const map = new Map<string, DailyLog>();
+    for (const q of pagerLogsQ) for (const l of q.data ?? []) map.set(l.log_date, l);
+    return map;
+  }, [pagerLogsQ]);
+  const planByMonth = useMemo(() => {
+    const map = new Map<string, MonthlyPlan | null>();
+    pagerMonths.forEach((m, i) => map.set(m, (pagerPlanQ[i]?.data?.plan as MonthlyPlan) ?? null));
+    return map;
+  }, [pagerMonths, pagerPlanQ]);
+  const openDayPlan = openDay ? (planByMonth.get(openDay.slice(0, 7)) ?? null) : null;
+  // Plegar el panel del día si deja de pertenecer a la semana visible (p. ej.
+  // tras deslizar a otra semana con el día abierto).
+  useEffect(() => {
+    if (openDay && !weekDates(visibleWeek).includes(openDay)) setOpenDay(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleWeek]);
+
   // Cinturón extra sobre el filtro por contenido de `mealsForDate`: si el
   // plato de hoy vino espejado de una comida compartida del hogar (que no
   // sabe de las preferencias de cada persona), esto lo descarta igual cuando
@@ -476,7 +530,10 @@ export default function Hoy() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-52 pt-4">
+      <ScrollView
+        contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-52 pt-4"
+        directionalLockEnabled
+      >
         {/* ── Header: fecha + "Hoy" + impulso ── */}
         <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
@@ -808,54 +865,40 @@ export default function Hoy() {
 
         {/* ── Tira de la semana ── */}
         <View className="mt-6">
-          <WeekStrip
+          <WeekPager
+            today={today0}
+            appStartedOn={appStartedOn}
             selected={openDay}
             onSelect={(d) => setOpenDay((prev) => (prev === d ? null : d))}
-            logs={logsQ.data ?? []}
+            visibleWeek={visibleWeek}
+            onVisibleWeekChange={setVisibleWeek}
+            logsFor={(d) => logByDate.get(d)}
             todayHabits={
               habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)
             }
           />
-          {openDay && openDay < todayISO() ? (
-            <View className="mt-3 rounded-3xl bg-surface p-4">
-              <View className="flex-row items-center gap-2">
-                <ChevronDown size={16} color="#6dbe7b" />
-                <Text className="font-body-semibold text-sm text-foreground">
-                  {capitalizeFirst(
-                    new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "long",
-                    }),
-                  )}
-                </Text>
-              </View>
-              <View className="mt-3">
-                <DayDetailBody
-                  date={openDay}
-                  plan={(planQ.data?.plan as MonthlyPlan | null) ?? null}
-                  log={logsQ.data?.find((l) => l.log_date === openDay)}
-                  profile={profileQ.data ?? null}
-                  householdChildren={householdQ.data?.children}
-                  household={
-                    householdQ.data?.household?.shared_slots
-                      ? {
-                          sharedSlots: householdQ.data.household.shared_slots,
-                          memberCount: (householdQ.data.members ?? []).filter((m) => m.user_id)
-                            .length,
-                        }
-                      : undefined
-                  }
-                />
-              </View>
-            </View>
-          ) : openDay ? (
-            <DayMenu
-              date={openDay}
-              plan={(planQ.data?.plan as MonthlyPlan | null) ?? null}
-              selectedSlots={mySlots}
-            />
-          ) : null}
+          <Animated.View layout={LinearTransition.duration(350).easing(EASING)}>
+            {openDay ? (
+              <DayPanel
+                key={openDay}
+                date={openDay}
+                plan={openDayPlan}
+                log={logByDate.get(openDay)}
+                profile={profileQ.data ?? null}
+                householdChildren={householdQ.data?.children}
+                household={
+                  householdQ.data?.household?.shared_slots
+                    ? {
+                        sharedSlots: householdQ.data.household.shared_slots,
+                        memberCount: (householdQ.data.members ?? []).filter((m) => m.user_id)
+                          .length,
+                      }
+                    : undefined
+                }
+                mySlots={mySlots}
+              />
+            ) : null}
+          </Animated.View>
           <Text className="font-body mt-2 px-1 text-[10.5px] text-muted-foreground">
             {openDay && openDay < todayISO()
               ? "Toca una comida para corregir lo que comiste."
@@ -955,6 +998,67 @@ export default function Hoy() {
 
       <BottomNav />
     </SafeAreaView>
+  );
+}
+
+// ── Contenido del día abierto en la tira: pasado (corrección) o futuro/hoy
+// (menú), con un fundido simple al cambiar de día (ticket 03 de
+// hoy-semanas-editables). `key={date}` en el llamador fuerza el
+// entering/exiting. `FadeIn`/`FadeOut` (solo opacidad, presets de Reanimated)
+// en vez de una animación custom con `transform`: una combinada con
+// `transform` colgó el hilo de UI tras varias navegaciones seguidas en el
+// simulador — ver memoria `reanimated-custom-entering-hang` antes de intentar
+// una de nuevo.
+function DayPanel({
+  date,
+  plan,
+  log,
+  profile,
+  householdChildren,
+  household,
+  mySlots,
+}: {
+  date: string;
+  plan: MonthlyPlan | null;
+  log: DailyLog | undefined;
+  profile: Profile | null;
+  householdChildren?: { id: string; name: string }[];
+  household?: DayDetailHousehold;
+  mySlots: readonly MealSlot[];
+}) {
+  const isPast = date < todayISO();
+
+  return (
+    <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+      {isPast ? (
+        <View className="mt-3 rounded-3xl bg-surface p-4">
+          <View className="flex-row items-center gap-2">
+            <ChevronDown size={16} color="#6dbe7b" />
+            <Text className="font-body-semibold text-sm text-foreground">
+              {capitalizeFirst(
+                new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                }),
+              )}
+            </Text>
+          </View>
+          <View className="mt-3">
+            <DayDetailBody
+              date={date}
+              plan={plan}
+              log={log}
+              profile={profile ?? null}
+              householdChildren={householdChildren}
+              household={household}
+            />
+          </View>
+        </View>
+      ) : (
+        <DayMenu date={date} plan={plan} selectedSlots={mySlots} />
+      )}
+    </Animated.View>
   );
 }
 

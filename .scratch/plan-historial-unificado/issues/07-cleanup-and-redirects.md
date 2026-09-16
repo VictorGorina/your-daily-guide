@@ -1,6 +1,6 @@
 # 07 — Limpieza: borrar Historial, repuntar redirects, docs
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: 06
 
 ## Tareas

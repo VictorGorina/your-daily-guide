@@ -1,6 +1,6 @@
 # 08 — QA end-to-end + verificación en simulador iOS
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: 07
 
 Usar el login demo para todo lo que mute datos (memoria `verify-with-demo-profile`), nunca la

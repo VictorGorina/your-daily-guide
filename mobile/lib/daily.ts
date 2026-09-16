@@ -494,7 +494,7 @@ export async function logTodayWeight(kg: number) {
 export type RatioSignal = "success" | "warning" | "muted" | "none";
 
 /**
- * Semáforo de cumplimiento diario, compartido por WeekStrip y MonthCalendar.
+ * Semáforo de cumplimiento diario, compartido por WeekPager y MonthCalendar.
  * Deliberadamente sin rojo: un día flojo se marca "muted" (gris neutro), nunca
  * como fallo. "none" es solo para días sin ningún registro.
  */

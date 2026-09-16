@@ -1,6 +1,6 @@
 # 04 — Comidas: "merienda" en vez de "snack", y respetar las que se piden
 
-Status: hecho, sin commitear (verificado en navegador con perfil demo)
+Status: hecho, commiteado en `main` (`3cdc033`), verificado en navegador con perfil demo
 Incidencia del usuario: ⓸
 
 ## Cómo quedó

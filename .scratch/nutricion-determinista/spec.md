@@ -1,6 +1,7 @@
 # Spec — Nutrición determinista
 
-Status: Fases 0-2 implementadas y verificadas (2026-09-10), sin commitear. Fases 3-5 diferidas.
+Status: Fases 0-2 implementadas, verificadas y commiteadas en `main` (`6027bbd`, 2026-09-10).
+Fases 3-5 diferidas — ver `.scratch/precision-nutricional/` (las sustituye).
 
 ## Estado tras la primera tanda (2026-09-10)
 

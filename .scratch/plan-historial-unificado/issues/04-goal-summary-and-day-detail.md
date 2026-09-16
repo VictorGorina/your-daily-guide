@@ -1,6 +1,6 @@
 # 04 — `<GoalWeightSummary>` + `<DayDetailSheet>`
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: 03
 
 Hacer **mobile primero**, verificar en simulador, luego web.

@@ -1,6 +1,6 @@
 # 01 — Helpers de navegación de mes + consolidación de constantes
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: —
 
 ## Objetivo

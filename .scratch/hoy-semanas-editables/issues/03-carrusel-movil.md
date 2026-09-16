@@ -1,6 +1,7 @@
 # 03 — Carrusel de semanas en móvil
 
-Status: ready
+Status: hecho, verificado en simulador iOS (2026-09-16), sin commitear. Pendiente: límite de
+alta, salto lejano con fundido, reducir movimiento, capturas formales.
 Blocked by: 01
 Tamaño: M
 
@@ -71,15 +72,58 @@ Móvil va primero por la regla de paridad (memoria `native-ios-app`).
 
 ## Criterios de aceptación
 
-- [ ] Simulador: al abrir Hoy se ve la semana actual sin salto; deslizar a la anterior y la
+- [x] Simulador: al abrir Hoy se ve la semana actual sin salto; deslizar a la anterior y la
       siguiente encaja sin tirones; el scroll vertical de Hoy sigue funcionando al arrastrar en
       diagonal.
-- [ ] Simulador: no pasa de la semana del alta ni de la última semana permitida; los chevrons se
-      apagan en los límites.
-- [ ] Simulador: "Hoy" desde 5 semanas atrás hace fundido + salto, no un barrido largo.
-- [ ] Simulador: el anillo se desliza entre días de la misma semana; el panel cambia de altura
-      animado y se pliega al irse a otra semana.
-- [ ] Reducir movimiento activado en el simulador: solo fundidos.
-- [ ] Capturas de pantalla de cada punto.
+- [x] Simulador: no pasa de la última semana permitida (el mes que viene bloqueado); los chevrons
+      se apagan en el límite. **No verificado**: el límite de la semana del alta (`appStartedOn`)
+      — el perfil demo usado no tenía fecha de alta útil para probarlo.
+- [ ] Simulador: "Hoy" desde 5 semanas atrás hace fundido + salto, no un barrido largo. Probado
+      solo el salto cercano (scrollToIndex animado, distancia 1); el camino de fundido
+      (`Math.abs(delta) > 2`) no se ha visto en vivo.
+- [x] Simulador: el anillo se desliza entre días de la misma semana; el panel cambia de altura
+      animado y se pliega al irse a otra semana (confirmado con el swipe nativo: seleccionar un
+      día de la semana pasada y deslizar a "Esta semana" pliega el panel solo).
+- [ ] Reducir movimiento activado en el simulador: solo fundidos. No probado (requiere activar el
+      ajuste de accesibilidad del simulador).
+- [ ] Capturas de pantalla de cada punto. Se tomaron capturas de verificación durante la sesión,
+      no guardadas como archivos para el ticket.
 
 ## Comments
+
+- 2026-09-16 — Hecho y verificado en el simulador iOS (iPhone 17 Pro, perfil demo con hogar "Leo").
+  `mobile/components/week-pager.tsx` (nuevo, sustituye a `week-strip.tsx`, borrado) + cambios en
+  `mobile/app/(app)/hoy.tsx`: estado `visibleWeek`, `useQueries` de logs/plan para la semana visible
+  y sus dos vecinas (cubre semanas a caballo entre meses), plegado de `openDay` al cambiar de semana,
+  `DayPanel` que reutiliza `DayDetailBody`/`DayMenu` según el día sea pasado o no.
+
+  **Verificado en vivo**: paginado nativo por swipe entre semanas (incluida una semana que cruza de
+  septiembre a octubre, "28 sep – 4 oct" con los días 28-30 y 1-4 en la misma fila); chevrons con
+  scroll animado y límite superior correcto (se bloquea justo en la última semana del mes, antes de
+  que el mes siguiente esté desbloqueado); etiqueta "Esta semana"/"Semana pasada"/"Próxima semana" +
+  rango de fechas; píldora "Hoy" que aparece/desaparece y salta de vuelta; selección de día con
+  anillo animado que se mueve entre días de la misma semana; plegado del día abierto al cambiar de
+  semana (por swipe); panel de día futuro (`DayMenu`) y pasado (`DayDetailBody`, con el semáforo
+  verde/naranja real y "Comí lo del plan"/"Comí distinto" editables) renderizando con los datos
+  correctos de la semana visible, no solo del mes en curso.
+
+  **Bug real encontrado y corregido**: faltaba `directionalLockEnabled` en el `ScrollView` exterior
+  de Hoy (lo pedía el diseño del ticket) — sin él, un gesto horizontal sobre la tira podía perderse
+  contra el scroll vertical de la pantalla.
+
+  **Cuelgue de UI investigado y evitado**: la primera versión animaba la etiqueta de la cabecera y
+  el panel del día con una función "entering" a medida de Reanimated que combinaba `opacity` +
+  `transform` en el mismo objeto de animación. Tras varias navegaciones seguidas en el simulador, la
+  app dejaba de responder al tacto por completo (no solo el carrusel — toda la pantalla, incluida la
+  barra de pestañas). Se sustituyó por `FadeIn`/`FadeOut` (presets nativos, solo opacidad) en los dos
+  sitios y el problema desapareció en una sesión de prueba mucho más larga y agresiva después. No se
+  investigó la causa raíz a fondo — queda una tarea en background (`task_b21f5df1`) para confirmarla
+  y, si es un problema real de Reanimated 4, documentarlo en `mobile/AGENTS.md`. Coste: se pierde el
+  desplazamiento lateral de 6-12px que pedía el diseño original; el fundido solo ya cumple la curva
+  de movimiento del proyecto.
+
+  Puertas: `mobile/npx tsc --noEmit` limpio, `bun run lint`/`typecheck`/`test` (345/345) en verde
+  desde la raíz, Prettier sin cambios en los archivos tocados.
+
+  **Pendiente**: probar el límite de la semana del alta, el salto lejano con fundido (>2 semanas),
+  "Reducir movimiento" activado, y guardar capturas de pantalla formales para el ticket.

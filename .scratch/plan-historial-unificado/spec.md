@@ -1,6 +1,7 @@
 # Spec — Unificar Historial dentro de la subpestaña Plan + navegación de meses
 
-Status: implementado en la rama `unifica-historial-en-plan` (2026-08-31), pendiente de commit
+Status: hecho y commiteado en `main` (`d6a4b64`, 2026-08-31). `/historial` es ahora solo un
+redirect a `/plan` ([src/routes/_authenticated/historial.tsx](../../src/routes/_authenticated/historial.tsx)).
 Autor: sesión Claude Code, 2026-08-31
 Feature slug: `plan-historial-unificado`
 

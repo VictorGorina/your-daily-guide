@@ -1,6 +1,6 @@
 # 05 — Semáforo por día en el calendario + apertura de detalle
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: 04
 
 Mobile primero (calendario inline en `mobile/app/(app)/plan.tsx`, ~línea 359), luego web

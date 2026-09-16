@@ -222,7 +222,8 @@ querer:
   columnas de estado para un no planificador). Los platos, las cantidades y la cadencia, no.
 - **`PlanDay.kids`** (`{childId, slot, dish, off?}`): plato aparte de un niño cuando el
   compartido no le vale. Lo emite la IA o lo cambia el planificador con `setChildMeal` (ruta
-  `/api/v1/plan/child-meal`, hoy y pasado bloqueados, la compra no cambia). Se espeja con la
+  `/api/v1/plan/child-meal`, solo pasado bloqueado — hoy en adelante, igual que `setPlanMeal` —,
+  la compra no cambia). Se espeja con la
   comida compartida.
 - **`household_children.feeding_stage`** (`pecho` · `triturados` · `mesa`, default `mesa`):
   los bebés que aún no comen de la mesa van aparte. `eatsTableFood`/`childRation`

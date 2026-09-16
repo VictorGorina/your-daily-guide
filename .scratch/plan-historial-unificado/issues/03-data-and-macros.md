@@ -1,6 +1,6 @@
 # 03 — Capa de datos por mes + extraer macros a módulo compartido
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: —
 
 ## Objetivo

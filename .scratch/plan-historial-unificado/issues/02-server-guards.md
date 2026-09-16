@@ -1,6 +1,6 @@
 # 02 — Fecha de alta + barreras de servidor: generar plan, sync de hogar, push a 7 días
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: 01
 
 ## Objetivo

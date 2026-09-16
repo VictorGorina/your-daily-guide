@@ -1,6 +1,9 @@
 # Spec — Familia: identidad de miembros, comidas compartidas reales y compra por comensales
 
-Status: propuesta, sin empezar (2026-09-01)
+Status: issues 01-08 hechos y en `main` (commits `d210cc6`, `874eadf`, `3223872`, `ca35e6c`, entre
+otros). El issue 09 (QA final) sigue `claimed`: quedan sin verificar en vivo el traspaso de
+planificador (D3) y el espejo entre cuentas, y faltan capturas de simulador de alta de familia
+e Ingredientes con raciones de hogar — ver su `## Answer` para el detalle.
 Autor: sesión Claude Code, 2026-09-01
 Feature slug: `familia-comidas-compartidas`
 

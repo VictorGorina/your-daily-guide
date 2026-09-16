@@ -1,6 +1,6 @@
 # 06 — Navegador de mes + reestructura a 2 subpestañas + gating de Ingredientes
 
-Status: todo
+Status: hecho, en `main` (`d6a4b64`)
 Blocked by: 01, 05
 
 Mobile primero (`mobile/app/(app)/plan.tsx`), verificar en simulador, luego web
