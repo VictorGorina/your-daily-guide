@@ -1,0 +1,12 @@
+-- Picoteo del día (feature `picoteo-hoy`): lo que se pica entre horas, con sus
+-- kcal y macros calculadas, y el libro de cuentas de lo ya compensado en días
+-- futuros. Forma: ver `DaySnacks` en src/lib/snacks.ts.
+--
+-- Columna propia y no dentro de `habits`: `reconcileHabits` reconstruye
+-- `habits` desde el plan en cada carga y borraría el picoteo. NULL = sin
+-- picoteo ese día.
+--
+-- No hacen falta policies nuevas: la fila ya la cubren "insert recent own log"
+-- (20260906120000) y "update own logs" (20260815130000). El picoteo nunca
+-- alimenta monthly_plans.shopping: compensar solo recoloca platos futuros.
+ALTER TABLE public.daily_logs ADD COLUMN IF NOT EXISTS snacks jsonb;

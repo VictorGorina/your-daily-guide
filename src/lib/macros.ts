@@ -44,6 +44,17 @@ export function sumDoneMacros(
   return totals;
 }
 
+/** Suma de dos estimaciones (p. ej. comidas marcadas + picoteo del día). */
+export function addMacros(a: MacroEstimate, b: MacroEstimate): MacroEstimate {
+  return {
+    kcal: a.kcal + b.kcal,
+    protein_g: a.protein_g + b.protein_g,
+    carbs_g: a.carbs_g + b.carbs_g,
+    fat_g: a.fat_g + b.fat_g,
+    fiber_g: a.fiber_g + b.fiber_g,
+  };
+}
+
 /**
  * Desvío en kcal de un lote de cambios de plato frente a lo que preveía el
  * plan: para cada comida cambiada, lo que estima la guía nueva menos lo que

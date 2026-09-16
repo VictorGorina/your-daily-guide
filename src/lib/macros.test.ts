@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { MacroEstimate, MealMacroEstimate } from "./guide.functions";
-import { ZERO_MACROS, kcalDeltaOf, macroTargets, sumDoneMacros } from "./macros";
+import { ZERO_MACROS, addMacros, kcalDeltaOf, macroTargets, sumDoneMacros } from "./macros";
 
 // ---------------------------------------------------------------------------
 // sumDoneMacros — suma las macros de las comidas ya marcadas como comidas
@@ -311,5 +311,25 @@ describe("kcalDeltaOf", () => {
     expect(kcalDeltaOf([{ label: "Cena", prevKcal: null }], [macro("Cena", 900)])).toBeNull();
     expect(kcalDeltaOf([{ label: "Cena", prevKcal: 500 }], null)).toBeNull();
     expect(kcalDeltaOf([], [macro("Cena", 900)])).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// addMacros — comidas marcadas + picoteo del día
+// ---------------------------------------------------------------------------
+
+describe("addMacros", () => {
+  it("suma campo a campo sin mutar las entradas", () => {
+    const a: MacroEstimate = { kcal: 900, protein_g: 40, carbs_g: 90, fat_g: 30, fiber_g: 10 };
+    const b: MacroEstimate = { kcal: 175, protein_g: 6, carbs_g: 6, fat_g: 15, fiber_g: 3 };
+    expect(addMacros(a, b)).toEqual({
+      kcal: 1075,
+      protein_g: 46,
+      carbs_g: 96,
+      fat_g: 45,
+      fiber_g: 13,
+    });
+    expect(a.kcal).toBe(900);
+    expect(addMacros(ZERO_MACROS, b)).toEqual(b);
   });
 });

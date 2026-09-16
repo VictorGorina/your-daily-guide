@@ -1846,8 +1846,17 @@ export function composeDayForUser(
     ...(mineDay.kids ?? []).filter((k) => !sharedSet.has(k.slot)),
     ...(plannerDay.kids ?? []).filter((k) => sharedSet.has(k.slot)),
   ];
-  if (kids.length) next.kids = kids;
-  else delete next.kids;
+  // Si el resultado son los mismos platos que ya había, se deja el array tal
+  // cual: recomponer un día que no cambia (quien planifica congelando sus
+  // compartidas) no debe reescribirlo solo por cambiarles el orden.
+  const kidsKey = (list: readonly ChildMeal[]) =>
+    list
+      .map((k) => JSON.stringify(k))
+      .sort()
+      .join("|");
+  if (kids.length) {
+    next.kids = mineDay.kids && kidsKey(mineDay.kids) === kidsKey(kids) ? mineDay.kids : kids;
+  } else delete next.kids;
 
   const pinned = mirrorPinned(mineDay, plannerDay, sharedSet);
   if (pinned) next.pinned = pinned;
@@ -1975,6 +1984,56 @@ export const addDays = (date: string, days: number) => {
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
+
+/** Días hacia delante en los que se reparte una compensación. */
+export const COMPENSATION_WINDOW_DAYS = 6;
+
+/**
+ * Fechas en las que se puede absorber un desvío de HOY (el picoteo, y más
+ * adelante cualquier cambio de plato, ticket 08 de `hoy-semanas-editables`):
+ * de mañana a hoy + `days`, dentro del mismo mes.
+ *
+ * Solo quedan las fechas con al menos una comida o cena PROPIA ese día: un
+ * desvío personal se corrige en las comidas no compartidas de esa persona,
+ * nunca cambiando la mesa de toda la casa. Y solo las que son la fecha real de
+ * su celda (`dateOfPlanCell`): los días 29 en adelante comparten celda con la
+ * semana 3 y una recolocación sobre ellos se descarta, así que ofrecerlos
+ * gastaría una llamada a la IA que no puede cambiar nada.
+ *
+ * `reason` explica una ventana vacía: `no-meals` (no planifica comidas ni
+ * cenas), `no-days` (se acaba el mes) o `shared-only` (quedan días, pero todas
+ * sus comidas y cenas son de la casa).
+ */
+export function compensationWindow(opts: {
+  today: string;
+  sharedSlots: SharedSlots;
+  selectedSlots: readonly MealSlot[];
+  /**
+   * Sin otro adulto con quien compartir la mesa, "compartido" no protege a
+   * nadie más: se tratan como propias igualmente (p. ej. una persona adulta
+   * sola con peques a cargo).
+   */
+  soloAdult?: boolean;
+  days?: number;
+}): { dates: string[]; reason: "no-meals" | "no-days" | "shared-only" | null } {
+  const month = opts.today.slice(0, 7);
+  const days = opts.days ?? COMPENSATION_WINDOW_DAYS;
+  const movable = (["comida", "cena"] as const).filter((s) => opts.selectedSlots.includes(s));
+  if (!movable.length) return { dates: [], reason: "no-meals" };
+  const inMonth: string[] = [];
+  const dates: string[] = [];
+  for (let i = 1; i <= days; i++) {
+    const date = addDays(opts.today, i);
+    if (date.slice(0, 7) !== month) break;
+    const { weekIndex, dayIndex } = planCursor(date);
+    if (dateOfPlanCell(month, weekIndex, dayIndex) !== date) continue;
+    inMonth.push(date);
+    if (opts.soloAdult || movable.some((slot) => !isSharedSlot(opts.sharedSlots, slot, dayIndex)))
+      dates.push(date);
+  }
+  if (dates.length) return { dates, reason: null };
+  return { dates, reason: inMonth.length ? "shared-only" : "no-days" };
+}
 
 /** Menú de los próximos días, para que el coach sepa qué está cambiando. */
 export function upcomingMeals(plan: MonthlyPlan | null, today: string, days = 7) {

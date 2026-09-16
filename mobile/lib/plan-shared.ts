@@ -536,8 +536,17 @@ export function composeDayForUser(
     ...(mineDay.kids ?? []).filter((k) => !sharedSet.has(k.slot)),
     ...(plannerDay.kids ?? []).filter((k) => sharedSet.has(k.slot)),
   ];
-  if (kids.length) next.kids = kids;
-  else delete next.kids;
+  // Si el resultado son los mismos platos que ya había, se deja el array tal
+  // cual: recomponer un día que no cambia (quien planifica congelando sus
+  // compartidas) no debe reescribirlo solo por cambiarles el orden.
+  const kidsKey = (list: readonly ChildMeal[]) =>
+    list
+      .map((k) => JSON.stringify(k))
+      .sort()
+      .join("|");
+  if (kids.length) {
+    next.kids = mineDay.kids && kidsKey(mineDay.kids) === kidsKey(kids) ? mineDay.kids : kids;
+  } else delete next.kids;
 
   // La marca de "elegido a mano" viaja igual: en un slot compartido, la del
   // planificador; en el resto, la propia.

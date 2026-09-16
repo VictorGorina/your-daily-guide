@@ -74,6 +74,7 @@ import {
   withPlanMeal,
 } from "@/lib/plan-shared";
 import { RateLimitError } from "@/lib/rate-limit-error";
+import { cleanDaySnacks } from "@/lib/snacks";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { ValidationError } from "@/lib/validation-error";
 // Solo el tipo: se borra en compilación, así que no arrastra `household.server`
@@ -1215,7 +1216,7 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
  */
 const FORCE_ADJUST_KCAL = 200;
 
-async function reflowMeals(opts: {
+export async function reflowMeals(opts: {
   supabase: SupabaseClient<never, never, never>;
   userId: string;
   key: string;
@@ -1223,7 +1224,17 @@ async function reflowMeals(opts: {
   today: string;
   note: string;
   kcalDelta: number | null;
-}): Promise<{ plan: MonthlyPlan; summary: string; synced: number }> {
+  /**
+   * Fechas en las que se puede recolocar (ver `compensationWindow`). Sin ella,
+   * cualquier día futuro del mes.
+   */
+  window?: readonly string[];
+  /**
+   * Desvío personal (el picoteo): tampoco quien planifica toca las comidas
+   * compartidas, que son de toda la casa. Se corrige en las suyas en solitario.
+   */
+  soloOnly?: boolean;
+}): Promise<{ plan: MonthlyPlan; before: MonthlyPlan; summary: string; synced: number }> {
   const { supabase, userId, key, month, today, note, kcalDelta } = opts;
 
   const { data: row } = await ownPlanRow(supabase, userId, month, "plan, shopping, pantry_extras");
@@ -1234,16 +1245,32 @@ async function reflowMeals(opts: {
   );
   if (!current) throw new ValidationError("Todavía no hay plan de este mes");
 
-  const [{ data: profile }, { data: logs }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+  const recentLogsQuery = (columns: string) =>
     supabase
       .from("daily_logs")
-      .select("log_date, weight_kg, habits, mood, notes")
+      .select(columns)
       .eq("user_id", userId)
       .lte("log_date", today)
       .order("log_date", { ascending: false })
-      .limit(7),
+      .limit(7);
+  const [{ data: profile }, withSnacks] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    recentLogsQuery("log_date, weight_kg, habits, mood, notes, snacks"),
   ]);
+  // Sin la migración `daily_logs_snacks` la columna no existe (42703): se
+  // relee sin ella en vez de quedarse sin los últimos días en el prompt.
+  const { data: logs } =
+    (withSnacks.error as { code?: string } | null)?.code === "42703"
+      ? await recentLogsQuery("log_date, weight_kg, habits, mood, notes")
+      : withSnacks;
+  // El picoteo va resumido: el libro de cuentas y el último ajuste no le
+  // aportan nada al modelo y alargarían mucho el prompt.
+  const recentLogs = ((logs ?? []) as Record<string, unknown>[]).map(({ snacks, ...log }) => {
+    const entries = cleanDaySnacks(snacks)?.entries ?? [];
+    return entries.length
+      ? { ...log, picoteo: entries.map((e) => `${e.text} (~${e.kcal} kcal)`) }
+      : log;
+  });
 
   const p = (profile ?? {}) as Record<string, unknown>;
   const cursor = planCursor(today);
@@ -1289,11 +1316,23 @@ async function reflowMeals(opts: {
   // prompt Y, por si no lo respeta, se congelan mecánicamente después
   // (mismo patrón "cinturón y tirantes" que el resto de REGLAs).
   const isNonPlannerInHousehold = !!home.plannerId && home.plannerId !== userId;
+  const hasSharedSlots = HOUSEHOLD_MEAL_KEYS.some((m) => home.sharedSlots[m].length);
+  // Sin otro adulto en la mesa, "compartido" no protege a nadie más (p. ej.
+  // una persona adulta sola con peques a cargo): sus comidas se tratan como
+  // propias igualmente, igual que en `compensationWindow`.
+  const soloAdultHousehold = home.members.length <= 1;
+  // Quien planifica también deja quietas las compartidas si el desvío es solo
+  // suyo (`soloOnly`): su picoteo no cambia la cena de toda la casa.
+  const freezeShared =
+    isNonPlannerInHousehold ||
+    (!!opts.soloOnly && !!home.plannerId && hasSharedSlots && !soloAdultHousehold);
   const plannerName =
     home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
   const sharedSlotsLine = isNonPlannerInHousehold
     ? `REGLA 5: Hay comidas compartidas en tu casa que lleva ${plannerName}: ${describeSharedSlots(home.sharedSlots)}. NO las toques — devuélvelas exactamente igual que en el plan actual. Ajusta solo tus comidas en solitario.\n`
-    : "";
+    : freezeShared
+      ? `REGLA 5: Estas comidas se comparten con el resto de la casa: ${describeSharedSlots(home.sharedSlots)}. Este ajuste es solo de esta persona: NO las toques — devuélvelas exactamente igual que en el plan actual. Ajusta solo sus comidas en solitario.\n`
+      : "";
 
   // Comidas que esta persona quiere planificar (ver generateMonthlyPlan):
   // una recolocación tampoco debe reintroducir un slot que ya excluyó.
@@ -1332,7 +1371,7 @@ async function reflowMeals(opts: {
   // de ignorar que una regla en prosa.
   const editableDates = current.weeks
     .flatMap((week, wi) => week.days.map((_, di) => dateOfPlanCell(month, wi, di)))
-    .filter((d): d is string => !!d && d > today);
+    .filter((d): d is string => !!d && d > today && (!opts.window || opts.window.includes(d)));
 
   /**
    * Una pasada de recolocación. `insist` solo lleva texto en el reintento: ver
@@ -1359,7 +1398,7 @@ async function reflowMeals(opts: {
             ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => e.name).join(", ")}\n\n`
             : "") +
           `${goalLine}\n` +
-          `Últimos días reales registrados: ${JSON.stringify(logs ?? [])}\n\n` +
+          `Últimos días reales registrados: ${JSON.stringify(recentLogs)}\n\n` +
           `Hoy es ${today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
           `Lo que ha pasado / lo que cuenta la persona: ${note}\n\n` +
           `REGLA 1: las ÚNICAS fechas que puedes cambiar son ${editableDates.join(", ") || "ninguna"}. Hoy y los días anteriores están cerrados. Guíate por la "fecha" de cada día, no por su posición en la semana. Si un día lleva "fijo", esas comidas las eligió la persona a mano: no las cambies (puedes cambiar la otra comida de ese día).\n` +
@@ -1371,7 +1410,16 @@ async function reflowMeals(opts: {
           "En 'intro', 1-2 frases en lenguaje sencillo explicando qué has recolocado y por qué. " +
           'Devuelve SOLO los días que cambias, no el plan entero, como JSON válido: {"intro": string, "cambios": [{"fecha": "AAAA-MM-DD", "comida": string, "cena": string}]}. Incluye "comida" o "cena" solo si cambian ese plato. Sin markdown.',
       },
-      (parsed) => cleanReflowChanges(parsed, editableDates),
+      (parsed) => {
+        const clean = cleanReflowChanges(parsed, editableDates);
+        const raw = (parsed as { cambios?: unknown } | null)?.cambios;
+        if (clean && Array.isArray(raw) && raw.length > clean.changes.length) {
+          // Cambios que la IA propuso fuera de las fechas permitidas: se
+          // descartan, pero conviene verlo (un "ajuste" que no cambia nada).
+          console.warn("reflowMeals: cambios descartados", JSON.stringify(raw).slice(0, 600));
+        }
+        return clean;
+      },
     );
 
   let reflow = await askReflow("");
@@ -1394,7 +1442,7 @@ async function reflowMeals(opts: {
   // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
   // `current` (congelado) — un no planificador nunca puede acabar
   // escribiendo, ni por accidente, el plato de una comida de la casa.
-  const sharedComposed = isNonPlannerInHousehold
+  const sharedComposed = freezeShared
     ? (composeMonthlyPlanForMember(merged, current, home.sharedSlots) ?? merged)
     : merged;
   // Mismo cinturón que en generateMonthlyPlan: si la IA reintrodujo un slot
@@ -1408,15 +1456,22 @@ async function reflowMeals(opts: {
     .eq("user_id", userId);
   if (error) throw error;
 
-  const { synced } = await syncSharedMeals({ supabase: supabase as never, userId, month, today });
+  // Quien planifica con las compartidas congeladas (`soloOnly`) no ha cambiado
+  // nada de la casa: no hay nada que espejar al resto.
+  const { synced } =
+    freezeShared && !isNonPlannerInHousehold
+      ? { synced: 0 }
+      : await syncSharedMeals({ supabase: supabase as never, userId, month, today });
 
   const summary = isNonPlannerInHousehold
     ? `${final.intro} Las comidas compartidas de tu hogar no las toco — esas las lleva ${plannerName}.`
-    : synced
-      ? `${final.intro} También he ajustado las comidas compartidas de tu hogar.`
-      : final.intro;
+    : freezeShared
+      ? `${final.intro} Las comidas que compartes con tu casa no las toco.`
+      : synced
+        ? `${final.intro} También he ajustado las comidas compartidas de tu hogar.`
+        : final.intro;
 
-  return { plan: final, summary, synced };
+  return { plan: final, before: current, summary, synced };
 }
 
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })
@@ -1589,27 +1644,37 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
   });
 
 /**
- * Ingredientes que pide un plato y no están en la lista de la compra. Se
- * resuelve con el modelo porque casar texto libre con la lista no funciona a
- * ojo ("pechuga de pollo" está cubierto por "pollo", "tomates cherry" por
- * "tomate"). Si la comprobación falla no se marca nada: preferimos no avisar
- * antes que avisar en falso de algo que la persona sí tiene en casa.
+ * Corrige la ortografía de un plato escrito a mano y calcula, en la MISMA
+ * llamada al modelo, qué ingredientes necesita que no están en la compra. Un
+ * plato a mano se guarda tal cual en el plan y se ve así para siempre (sin
+ * corrección posterior) en Hoy, el calendario y la compra — de ahí que haga
+ * falta corregirlo aquí: `setPlanMeal`/`setChildMeal` no pasan por el coach
+ * (que ya cuida su propia ortografía, ver "Ortografía siempre correcta..." en
+ * `coachSystemPrompt`), así que sin esto un cambio directo desde "Comí
+ * distinto" se quedaba con las erratas tal cual las escribió la persona.
+ *
+ * El emparejamiento de ingredientes se resuelve con el modelo porque casar
+ * texto libre con la lista no funciona a ojo ("pechuga de pollo" está
+ * cubierto por "pollo", "tomates cherry" por "tomate"). Si la llamada falla,
+ * el plato se guarda tal cual lo escribió la persona y sin avisos: preferimos
+ * no corregir ni avisar antes que corregir mal o avisar en falso.
  *
  * No tiene cuota horaria propia (el cambio de plato no debe fallar por ella),
  * pero sí cuenta contra el tope de gasto: al llegar a él, el middleware del
- * modelo lanza, cae en el `catch` y el plato se guarda igual sin el aviso.
+ * modelo lanza, cae en el `catch` y el plato se guarda igual, sin corregir.
  */
-async function offShoppingList(
+async function resolveDish(
   userId: string,
   dish: string,
   shopping: ShoppingList,
   pantryExtras: PantryExtra[] = [],
-): Promise<string[]> {
+): Promise<{ dish: string; off: string[] }> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return { dish, off: [] };
+
   const bought = ingredientNames(shopping);
   const extra = pantryExtras.map((e) => e.name).join(", ");
   const names = [bought, extra].filter(Boolean).join(", ");
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!names || !key) return [];
 
   try {
     const ai = createAiProvider(key, userId);
@@ -1617,22 +1682,33 @@ async function offShoppingList(
       model: ai(COACH_MODEL),
       temperature: 0,
       prompt:
-        `Ingredientes disponibles (comprados y los que dice tener en casa): ${names}\n` +
         `Plato: "${dish}"\n\n` +
-        "¿Qué ingredientes necesarios para ese plato NO están disponibles? " +
-        "Da por disponibles la sal, el aceite, el vinagre, el agua y las especias básicas. " +
-        "Cuenta como cubierto todo ingrediente equivalente aunque el nombre no sea idéntico " +
-        "(p. ej. 'pechuga de pollo' lo cubre 'pollo'; 'tomate cherry' lo cubre 'tomate'). " +
-        'Devuelve solo JSON: {"fuera": [ingredientes que faltan, en minúsculas, máx. 5; lista vacía si no falta ninguno]}',
+        "Corrige solo la ortografía de ese nombre de plato (acentos/tildes, mayúscula inicial, " +
+        "erratas), sin cambiar el plato en sí ni añadir nada. Si ya está bien escrito, devuélvelo " +
+        "igual.\n" +
+        (names
+          ? `Ingredientes disponibles (comprados y los que dice tener en casa): ${names}\n` +
+            "Además, ¿qué ingredientes necesarios para ese plato NO están disponibles? " +
+            "Da por disponibles la sal, el aceite, el vinagre, el agua y las especias básicas. " +
+            "Cuenta como cubierto todo ingrediente equivalente aunque el nombre no sea idéntico " +
+            "(p. ej. 'pechuga de pollo' lo cubre 'pollo'; 'tomate cherry' lo cubre 'tomate').\n"
+          : "") +
+        `Devuelve solo JSON: {"plato": "nombre del plato con la ortografía corregida"${
+          names
+            ? ', "fuera": [ingredientes que faltan, en minúsculas, máx. 5; lista vacía si no falta ninguno]'
+            : ""
+        }}`,
     });
-    const parsed = (parseJsonLoose(text) ?? {}) as { fuera?: unknown };
-    return (Array.isArray(parsed.fuera) ? parsed.fuera : [])
+    const parsed = (parseJsonLoose(text) ?? {}) as { plato?: unknown; fuera?: unknown };
+    const corrected = typeof parsed.plato === "string" ? parsed.plato.trim() : "";
+    const off = (Array.isArray(parsed.fuera) ? parsed.fuera : [])
       .map((n) => String(n).trim().toLowerCase())
       .filter(Boolean)
       .slice(0, 5);
+    return { dish: corrected && corrected.length <= 200 ? corrected : dish, off };
   } catch (error) {
-    console.error("offShoppingList", error);
-    return [];
+    console.error("resolveDish", error);
+    return { dish, off: [] };
   }
 }
 
@@ -1708,10 +1784,10 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       const pantryExtras = cleanPantryExtras(
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
       );
-      const off = await offShoppingList(context.userId, data.dish, shopping, pantryExtras);
+      const { dish, off } = await resolveDish(context.userId, data.dish, shopping, pantryExtras);
       const previousPinned = isPinned(current.weeks[at.weekIndex]?.days[at.dayIndex], data.slot);
 
-      const next = withPlanMeal(current, data.date, data.slot, data.dish, { off, pin: data.pin });
+      const next = withPlanMeal(current, data.date, data.slot, dish, { off, pin: data.pin });
       if (!next) throw new ValidationError("Ese día todavía no tiene menú en el plan");
 
       const { error } = await context.supabase
@@ -1735,7 +1811,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       return {
         plan: next,
         label: MEAL_SLOT_LABEL[data.slot],
-        dish: data.dish,
+        dish,
         off,
         previousIdea,
         previousPinned,
@@ -1819,9 +1895,9 @@ export const setChildMeal = createServerFn({ method: "POST" })
       const pantryExtras = cleanPantryExtras(
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
       );
-      const off = data.dish
-        ? await offShoppingList(context.userId, data.dish, shopping, pantryExtras)
-        : [];
+      const { dish, off } = data.dish
+        ? await resolveDish(context.userId, data.dish, shopping, pantryExtras)
+        : { dish: "", off: [] as string[] };
 
       const next: MonthlyPlan = {
         ...current,
@@ -1835,13 +1911,13 @@ export const setChildMeal = createServerFn({ method: "POST" })
                   const others = (day.kids ?? []).filter(
                     (k) => !(k.childId === child.id && k.slot === data.slot),
                   );
-                  const kids: ChildMeal[] = data.dish
+                  const kids: ChildMeal[] = dish
                     ? [
                         ...others,
                         {
                           childId: child.id,
                           slot: data.slot,
-                          dish: data.dish,
+                          dish,
                           ...(off.length ? { off } : {}),
                         },
                       ]
@@ -1876,7 +1952,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
         plan: next,
         childName: child.name,
         label: MEAL_SLOT_LABEL[data.slot],
-        dish: data.dish,
+        dish,
         off,
       };
     },

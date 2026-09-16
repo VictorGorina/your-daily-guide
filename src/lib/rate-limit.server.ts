@@ -41,6 +41,9 @@ const RATE_LIMITS = {
   "onboarding-parse": { limit: 30, windowSeconds: HOUR, action: "guardar tus respuestas" },
   receipt: { limit: 20, windowSeconds: HOUR, action: "escanear un tiquet" },
   recipe: { limit: 40, windowSeconds: HOUR, action: "pedir una receta" },
+  // Calcular las kcal de un picoteo antes de guardarlo (`picoteo-hoy`). La
+  // compensación que pueda venir después gasta de `plan-adjust`.
+  "snack-estimate": { limit: 40, windowSeconds: HOUR, action: "calcular el picoteo" },
   "coach-aux": { limit: 40, windowSeconds: HOUR, action: "pedirle esto al coach" },
   // Sin sesión y por correo, no por cuenta. Se suman al freno de 60 s que ya hay
   // en memoria en `auth.functions.ts`.
@@ -128,7 +131,7 @@ async function spendCapDecision(userId: string): Promise<SpendCapDecision | null
  * Tope de gasto en IA antes de UNA llamada al modelo. Lo usa el middleware de
  * `createAiProvider` en cada llamada, para que ninguna se escape del tope
  * aunque su server function no pase por `enforceUserRateLimit` (p. ej.
- * `offShoppingList` al cambiar un plato). `action` va genérica porque ahí no se
+ * `resolveDish` al cambiar un plato). `action` va genérica porque ahí no se
  * sabe qué operación la pidió.
  */
 export async function enforceAiSpendCap(userId: string, action = "usar el coach"): Promise<void> {

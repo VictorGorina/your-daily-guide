@@ -142,6 +142,15 @@ para medir siempre contra el plan y no contra el cambio anterior). Cada escritur
 por `patchTodayHabits`, que relee la fila justo antes: es una sola columna JSON y dos operaciones
 lentas solapadas se pisaban entera la lista.
 
+**Picoteo en Hoy — se calcula, se guarda aparte y se compensa en código** (feature `picoteo-hoy`,
+sección larga en AGENTS.md). "Añadir picoteo" (encima de "Registrar deporte") calcula las kcal con
+la tabla de composición (`estimateSnack`) y las enseña antes de guardar; sin cifra fiable se piden
+a mano. Se guarda en `daily_logs.snacks` (no en `habits`, que `reconcileHabits` reconstruye) y suma
+en la barra de macros y en el detalle del día. Tras 10 s de calma, `settleSnacks` decide con
+`compensationNeed` (tabla aprobada por objetivo) si recoloca comidas/cenas **propias** de mañana a
+hoy + 6 (`compensationWindow`, `reflowMeals` con `soloOnly`); `compensatedKcal` evita compensar dos
+veces y un borrado ya compensado devuelve energía. La compra, hoy y el pasado no cambian.
+
 **Cantidades de la compra — modelo canónico por semana.** `generateMonthlyPlan` guarda `shopping`
 en **forma canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`) + `weekQty` (cuánto
 piden los platos de cada una de las 4 semanas del plan) + `weekPrice`. La IA ya no inventa un `qty`

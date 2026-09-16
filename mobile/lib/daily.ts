@@ -139,6 +139,8 @@ export type DailyLog = {
   mood: string | null;
   notes: string | null;
   evening_done: boolean;
+  /** Picoteo del día (`picoteo-hoy`). Ver `DaySnacks` y `cleanDaySnacks`. */
+  snacks?: import("./snacks").DaySnacks | null;
 };
 
 /** Fecha local, no UTC: `toISOString()` cambia de día por la noche en España. */

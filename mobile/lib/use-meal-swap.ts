@@ -230,13 +230,22 @@ export function useMealSwap(
 
       saving.add(label);
       publish();
+      let savedDish = dish;
       try {
-        const { previousIdea } = await apiPost<{ previousIdea: string }>("plan/meal", {
+        // `dish` en la respuesta es el texto de la persona con la ortografía
+        // corregida por el servidor (`resolveDish`): es lo que de verdad ha
+        // quedado escrito en el plan, así que es lo que se manda al lote más
+        // abajo (el texto crudo dejaría de coincidir con lo que ya se guardó).
+        const { dish: correctedDish, previousIdea } = await apiPost<{
+          dish: string;
+          previousIdea: string;
+        }>("plan/meal", {
           date: today,
           slot,
           dish,
           today,
         });
+        savedDish = correctedDish;
         await patchTodayHabits((habits) =>
           habits.map((h) =>
             h.label !== label
@@ -276,7 +285,7 @@ export function useMealSwap(
       pending.set(label, {
         label,
         slot,
-        dish,
+        dish: savedDish,
         plannedDish: before?.plannedDish || plannedDish,
         prevKcal: before ? before.prevKcal : prevKcal,
       });

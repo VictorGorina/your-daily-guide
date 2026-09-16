@@ -43,6 +43,46 @@ describe("matchFood", () => {
     expect(matchFood("xyzzy plutonio azul")).toBeNull();
     expect(matchFood("")).toBeNull();
   });
+
+  // Picoteo (feature `picoteo-hoy`): sin estas filas caía todo en el genérico,
+  // y las patatas de bolsa casaban con las fritas caseras (190 vs 536 kcal).
+  it("casa lo típico de un picoteo", () => {
+    const cases: [string, string][] = [
+      ["bolsa de patatas fritas", "patatas-chips"],
+      ["patatas fritas de bolsa", "patatas-chips"],
+      ["nachos", "aperitivo-maiz"],
+      ["palomitas", "palomitas"],
+      ["frutos secos", "frutos-secos-mix"],
+      ["galletas", "galleta"],
+      ["galletas de avena", "galleta"],
+      ["oreo", "galleta-chocolate"],
+      ["croissant", "bolleria"],
+      ["napolitana de chocolate", "bolleria"],
+      ["magdalenas", "magdalena"],
+      ["helado de fresa", "helado"],
+      ["chuches", "gominolas"],
+      ["chocolatinas", "chocolatina"],
+      ["barrita de cereales", "barrita-cereales"],
+      ["barrita proteica", "barrita-proteina"],
+      ["una cerveza", "cerveza"],
+      ["caña", "cerveza"],
+      ["cerveza sin alcohol", "cerveza-sin"],
+      ["gin", "destilado"],
+      ["coca cola", "refresco"],
+      ["coca cola zero", "refresco-zero"],
+    ];
+    for (const [name, key] of cases) expect([name, matchFood(name)?.food.key]).toEqual([name, key]);
+  });
+
+  it("las filas de picoteo no roban alias que ya existían", () => {
+    // En un plato, "patatas fritas" siguen siendo las caseras.
+    expect(matchFood("patatas fritas")?.food.key).toBe("patata-frita");
+    expect(matchFood("almendras")?.food.key).toBe("almendra");
+    expect(matchFood("chocolate")?.food.key).toBe("chocolate-negro");
+    expect(matchFood("vino tinto")?.food.key).toBe("vino-cocinar");
+    expect(matchFood("zumo de naranja")?.food.key).toBe("naranja");
+    expect(matchFood("leche con cacao")?.food.key).toBe("leche-entera");
+  });
 });
 
 // ---------------------------------------------------------------------------

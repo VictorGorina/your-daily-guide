@@ -69,6 +69,7 @@ export type Database = {
           log_date: string;
           mood: string | null;
           notes: string | null;
+          snacks: Json | null;
           updated_at: string;
           user_id: string;
           weight_kg: number | null;
@@ -82,6 +83,7 @@ export type Database = {
           log_date?: string;
           mood?: string | null;
           notes?: string | null;
+          snacks?: Json | null;
           updated_at?: string;
           user_id: string;
           weight_kg?: number | null;
@@ -95,6 +97,7 @@ export type Database = {
           log_date?: string;
           mood?: string | null;
           notes?: string | null;
+          snacks?: Json | null;
           updated_at?: string;
           user_id?: string;
           weight_kg?: number | null;

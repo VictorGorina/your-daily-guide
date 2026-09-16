@@ -1,6 +1,14 @@
 import { X } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 /**
@@ -9,6 +17,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
  * cierra igual que en la web: tocando fuera o con la "X" de la esquina (el
  * tirador de arriba es decorativo). El contenido va en un ScrollView porque en
  * móvil el teclado y los paneles largos necesitan poder desplazarse.
+ *
+ * El panel sube con el teclado (`KeyboardAvoidingView`): sin eso, un campo en la
+ * mitad de abajo (las kcal del picoteo, los minutos del deporte) quedaba tapado
+ * junto con el botón de guardar, y el teclado numérico de iOS no se puede cerrar.
  */
 export function Sheet({
   open,
@@ -30,7 +42,10 @@ export function Sheet({
       animationType="slide"
       onRequestClose={() => onOpenChange(false)}
     >
-      <View className="flex-1 justify-end">
+      <KeyboardAvoidingView
+        className="flex-1 justify-end"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <Pressable
           className="absolute inset-0 bg-foreground/30"
           onPress={() => onOpenChange(false)}
@@ -65,7 +80,7 @@ export function Sheet({
             </ScrollView>
           </SafeAreaView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

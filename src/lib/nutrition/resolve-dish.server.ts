@@ -73,7 +73,13 @@ const memoKey = (dish: string, servings: number) => `${normName(dish)}|${serving
 const RATION_ANCHORS =
   "Anclas de ración POR PERSONA: pasta ≈ 180 g cocida (70 g en seco); arroz ≈ 150 g cocido; " +
   "carne o pescado ≈ 130 g; legumbre ≈ 180 g cocida; verdura de guarnición ≈ 150 g; " +
-  "pan ≈ 60 g; aceite para cocinar ≈ 10 g; fruta de postre ≈ 150 g; yogur ≈ 125 g.";
+  "pan ≈ 60 g; aceite para cocinar ≈ 10 g; fruta de postre ≈ 150 g; yogur ≈ 125 g. " +
+  // "Onza" de chocolate en España es un cuadradito de la tableta, no la onza
+  // anglosajona: sin decirlo, el modelo daba 57 g para "dos onzas".
+  "Picoteo: puñado de frutos secos ≈ 30 g; galleta ≈ 10 g cada una; " +
+  "onza de chocolate = un cuadradito de la tableta ≈ 7 g (NO la onza inglesa de 28 g); " +
+  "bolsa pequeña de patatas ≈ 40 g; caña de cerveza ≈ 200 g; tercio ≈ 330 g; " +
+  "copa de vino ≈ 150 g; copa de licor ≈ 50 g; bola de helado ≈ 60 g.";
 
 /**
  * Descompone varios platos en una sola llamada al modelo. Devuelve un mapa
@@ -120,6 +126,8 @@ export async function decomposeDishes(
         '- "name": ingrediente en español, singular, sin marca (p. ej. "pechuga de pollo")\n' +
         `- "gramos": gramos TOTALES para las ${servings} raciones, tal como se come ` +
         "(arroz, pasta y legumbre en COCIDO). Incluye el aceite de cocinar y los básicos con peso real.\n" +
+        "- Un producto ya hecho (patatas de bolsa, galletas, bollería, helado, chocolatina, refresco, " +
+        "cerveza) es UN solo ingrediente con su key: no lo descompongas en harina, aceite o azúcar.\n" +
         `${RATION_ANCHORS}\n` +
         "Sin markdown, sin texto alrededor.",
     });

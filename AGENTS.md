@@ -144,6 +144,45 @@ ingredientes, la despensa extra y el menú de los próximos días (`coachPlanCon
 fecha de hoy — sin ella el modelo no puede convertir "mañana" en la fecha que necesita la
 herramienta.
 
+## Picoteo en Hoy (`picoteo-hoy`)
+
+Botón "Añadir picoteo" justo encima de "Registrar deporte", en web y móvil. Spec y decisiones en
+`.scratch/picoteo-hoy/spec.md`. Tres piezas:
+
+- **Calcular antes de guardar.** `estimateSnack` descompone el texto con `dishToIngredients` (la
+  misma llamada barata que la guía) y suma contra la tabla de composición; la hoja
+  (`snack-sheet.tsx`) enseña "≈ 175 kcal" y deja corregirla (lo que pone el envase: el resto de
+  macros se escala con `scaleSnackMacros` y la entrada queda `source: "manual"`). Por debajo de
+  0,4 de calidad no hay cifra — la hoja pide las kcal a mano en vez de inventarlas con el genérico —
+  y entre 0,4 y 0,7 avisa de revisarla. La tabla tiene filas propias de picoteo (patatas de bolsa,
+  cerveza, bollería, gominolas…) y el prompt anclas de ración ("onza" = cuadradito de tableta, no
+  la onza inglesa: sin eso "dos onzas" salían 57 g).
+- **Columna propia `daily_logs.snacks`** (`DaySnacks` en `src/lib/snacks.ts`, copia en móvil), no
+  dentro de `habits`: `reconcileHabits` reconstruye `habits` desde el plan en cada carga y lo
+  borraría, y así un picoteo no cuenta en el semáforo. Solo la escriben `logSnack`/`removeSnack`/
+  `settleSnacks` en servidor, con escritura optimista sobre `updated_at` (se relee y reintenta si se
+  cruza otra escritura de la fila). Suma en la barra de macros de Hoy y en `DayDetailBody`
+  (sección "Picoteo").
+- **Compensación decidida en código.** `compensatedKcal` es un libro de cuentas: lo pendiente es
+  `Σ kcal − compensatedKcal`. Tras 10 s de calma (`snack-settle.ts`, misma forma que
+  `plan-recalc.ts`: pendiente persistido, flush al ocultar, relanzado al abrir Hoy) el cliente llama
+  a `POST /api/v1/snacks/settle` solo con `{today}`; el servidor relee y decide con
+  `compensationNeed` (`src/lib/nutrition/compensation.ts`, la tabla aprobada de
+  `hoy-semanas-editables`: perder +200/−400, mantener ±200, ganar +400/−200; embarazo o lactancia
+  nunca recorta). Si toca, **reserva** el pendiente antes de llamar a la IA (dos asentamientos a la
+  vez no compensan lo mismo) y llama a `reflowMeals` con `window` = `compensationWindow` (mañana a
+  hoy + 6, dentro del mes, solo fechas con una comida o cena propia y que sean la fecha real de su
+  celda) y `soloOnly: true` (tampoco quien planifica toca las compartidas: un picoteo es personal).
+  Si el reajuste no mueve ningún plato se devuelve la reserva y cuenta como fallo, para no dar por
+  compensado lo que no lo está. Borrar un picoteo ya compensado deja un pendiente negativo que
+  devuelve energía si pasa el umbral. Los motivos para no reajustar (`no-days`, `shared-only`,
+  `no-meals`, `no-plan`, `pregnancy`) se enseñan en la tarjeta (`snackOutcomeNote`).
+
+El asentamiento no cambia nunca la compra, hoy ni el pasado. `composeDayForUser` conserva el array
+`kids` si el conjunto no cambia, para que congelar las compartidas no reescriba días pasados solo
+por reordenarlo. "Registrar deporte" y el registro guiado del chat siguen yendo por el coach
+(`ajustar_plan_mensual`).
+
 ## Familia — hogar compartido
 
 La pestaña Familia (`/hogar`) modela una casa donde varias personas comen el mismo plato. El

@@ -6,6 +6,7 @@ import {
   Briefcase,
   Check,
   ChevronDown,
+  Cookie,
   Home,
   Info,
   MessageCircle,
@@ -27,6 +28,8 @@ import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { MacroBars } from "../../components/macro-bars";
 import { MealSwapSheet } from "../../components/meal-swap-sheet";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
+import { SnackCard } from "../../components/snack-card";
+import { SnackSheet } from "../../components/snack-sheet";
 import { WeekPager } from "../../components/week-pager";
 import { classifyDish, FOOD_CATEGORIES } from "../../lib/food-categories";
 import { apiPost } from "../../lib/api";
@@ -47,7 +50,7 @@ import {
   type MealStatus,
   type Profile,
 } from "../../lib/daily";
-import { sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
+import { addMacros, sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
 import { fetchHousehold } from "../../lib/household";
 import {
   EMPTY_SCHEDULE,
@@ -71,6 +74,8 @@ import {
   type ShoppingList,
 } from "../../lib/plan-shared";
 import { quoteOfTheDay } from "../../lib/quotes";
+import { scheduleSnackSettle, useSnackSettle } from "../../lib/snack-settle";
+import { cleanDaySnacks, snackTotals } from "../../lib/snacks";
 import { useMealSwap } from "../../lib/use-meal-swap";
 import { addDaysISO, monthsOfWeek, weekDates, weekStartOf } from "../../lib/week-nav";
 import { resolveDeviceTimeZone } from "../../lib/zoned-date";
@@ -169,6 +174,9 @@ export default function Hoy() {
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
   const [infoIndex, setInfoIndex] = useState<number | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [snackOpen, setSnackOpen] = useState(false);
+  const [snackInfoOpen, setSnackInfoOpen] = useState(false);
+  const [removingSnack, setRemovingSnack] = useState<string | null>(null);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
   const autoPlanTriedRef = useRef(false);
@@ -502,8 +510,38 @@ export default function Hoy() {
   // la mueve, en vez de quedarse fija en un total del día entero. Se muestra
   // siempre (arrancando en 0) para que se vea cómo se va llenando según se
   // marcan comidas, en vez de aparecer de golpe con la primera.
-  const doneMacros = sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS;
+  // El picoteo del día (`daily_logs.snacks`) también suma: es comida de verdad,
+  // aunque no cuente como comida del plan.
+  const snacks = cleanDaySnacks(today?.snacks);
+  const doneMacros = addMacros(
+    sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS,
+    snackTotals(snacks),
+  );
   const quote = quoteOfTheDay();
+
+  // El reajuste de días futuros por el picoteo va en un lote aparte (10 s de
+  // calma); al terminar puede haber cambiado el plan y el registro del día.
+  const snackSettle = useSnackSettle(today0, () => {
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    qc.invalidateQueries({ queryKey: ["plan"] });
+  });
+  const afterSnackChange = () => {
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    scheduleSnackSettle(today0);
+  };
+  const removeSnack = async (id: string) => {
+    setRemovingSnack(id);
+    try {
+      await apiPost("snacks/remove", { today: today0, id });
+      afterSnackChange();
+    } catch (e) {
+      Alert.alert(e instanceof Error ? e.message : "No hemos podido quitar el picoteo");
+    } finally {
+      setRemovingSnack(null);
+    }
+  };
 
   const setMealStatus = (index: number, status: MealStatus) => {
     const next = habits.map((h, i) =>
@@ -854,10 +892,29 @@ export default function Hoy() {
           )}
         </View>
 
+        {/* ── Picoteo de hoy: lo apuntado y qué ha pasado con el plan ── */}
+        <SnackCard
+          snacks={snacks}
+          settling={snackSettle.pending || snackSettle.running}
+          failed={snackSettle.failed}
+          removingId={removingSnack}
+          onRemove={(id) => void removeSnack(id)}
+          onShowAdjustment={() => setSnackInfoOpen(true)}
+        />
+
+        {/* ── Añadir picoteo: justo encima de "Registrar deporte" ── */}
+        <Pressable
+          onPress={() => setSnackOpen(true)}
+          className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
+        >
+          <Cookie size={16} color="#3e3d39" />
+          <Text className="font-body-semibold text-sm text-foreground">Añadir picoteo</Text>
+        </Pressable>
+
         {/* ── Registrar deporte: pegado encima de la tira de la semana ── */}
         <Pressable
           onPress={() => setActivityOpen(true)}
-          className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
+          className="mt-2.5 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
         >
           <Activity size={16} color="#3e3d39" />
           <Text className="font-body-semibold text-sm text-foreground">Registrar deporte</Text>
@@ -972,6 +1029,22 @@ export default function Hoy() {
               "lo que comiste")
             : "lo que comiste"
         }
+      />
+
+      <SnackSheet
+        open={snackOpen}
+        onOpenChange={setSnackOpen}
+        today={today0}
+        onSaved={afterSnackChange}
+      />
+
+      {/* Qué ha movido el picoteo en los próximos días. */}
+      <AdjustmentInfoSheet
+        open={snackInfoOpen}
+        onOpenChange={setSnackInfoOpen}
+        changes={snacks?.adjustment?.changes ?? []}
+        kcalDelta={snacks?.adjustment?.kcal ?? null}
+        dish="tu picoteo de hoy"
       />
 
       <GuidedLogSheet

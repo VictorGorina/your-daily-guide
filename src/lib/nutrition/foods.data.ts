@@ -278,6 +278,30 @@ export const FOODS: Food[] = [
   f("cafe", "café", "despensa", 2, 0.1, 0, 0, 0, 1.50, { aliases: ["cafe solo", "infusion", "cafe negro"], densityGPerMl: 1.0, perishable: false }),
   f("salsa-cesar", "salsa césar", "despensa", 430, 3, 5, 44, 0, 1.20, { aliases: ["aliño cesar", "salsa para ensalada", "vinagreta"], perishable: false }),
   f("cacao-avena", "harina de avena", "cereal", 375, 13, 60, 7, 10, 0.30, { aliases: ["harina de avena", "salvado de avena"], perishable: false }),
+
+  // ---------------------------------------------------------------- PICOTEO
+  // Lo que se pica entre horas (feature `picoteo-hoy`). Valores de USDA
+  // FoodData Central (SR Legacy) y CIQUAL, por 100 g tal como se come; las
+  // bebidas llevan su densidad. Van al final a propósito: un alias exacto ya
+  // registrado arriba ("patatas fritas" → casera) sigue mandando.
+  f("patatas-chips", "patatas fritas de bolsa", "despensa", 536, 6.6, 53, 35, 3.1, 0.80, { aliases: ["patatas de bolsa", "patatas chips", "chips", "bolsa de patatas", "bolsa de patatas fritas", "patatas fritas de paquete"], perishable: false }),
+  f("aperitivo-maiz", "aperitivos de maíz", "despensa", 500, 7, 60, 25, 5, 0.90, { aliases: ["aperitivo", "aperitivos", "nachos", "doritos", "gusanitos", "ganchitos", "cheetos", "totopos", "tortilla chips"], perishable: false }),
+  f("palomitas", "palomitas de maíz", "despensa", 500, 9, 58, 28, 10, 0.90, { aliases: ["palomitas", "palomitas de microondas", "cotufas", "popcorn"], perishable: false }),
+  f("frutos-secos-mix", "frutos secos variados", "fruto-seco", 600, 18, 20, 52, 8, 1.30, { aliases: ["frutos secos", "coctel de frutos secos", "mezcla de frutos secos", "puñado de frutos secos"], perishable: false }),
+  f("galleta", "galletas", "cereal", 436, 7, 74, 12, 2.5, 0.50, { aliases: ["galleta", "galletas maria", "galleta maria", "galletas digestive", "galleta digestive"], perishable: false }),
+  f("galleta-chocolate", "galletas con chocolate", "cereal", 490, 5.5, 64, 24, 2.5, 0.90, { aliases: ["galletas de chocolate", "cookies", "cookie", "oreo", "galletas rellenas", "galleta rellena", "galletas con pepitas de chocolate"], perishable: false }),
+  f("bolleria", "bollería", "cereal", 406, 8.2, 46, 21, 2.6, 0.90, { aliases: ["croissant", "cruasan", "napolitana", "napolitana de chocolate", "palmera", "palmera de chocolate", "donut", "berlina", "ensaimada", "caracola", "bolleria industrial"], shelfLifeDays: 4 }),
+  f("magdalena", "magdalenas", "cereal", 440, 6, 52, 23, 1.2, 0.70, { aliases: ["magdalena", "bizcocho", "muffin", "sobao", "cupcake"], shelfLifeDays: 7 }),
+  f("helado", "helado", "lacteo", 207, 3.5, 24, 11, 0.7, 0.70, { aliases: ["helados", "helado de vainilla", "helado de chocolate", "tarrina de helado", "cucurucho", "bombon helado"], perishable: false }),
+  f("gominolas", "gominolas", "despensa", 340, 6, 77, 0, 0, 0.90, { aliases: ["gominola", "chuches", "chucherias", "golosinas", "caramelos de goma", "haribo", "nubes", "regaliz"], perishable: false }),
+  f("chocolatina", "chocolatina", "despensa", 520, 6.5, 60, 28, 1.5, 1.60, { aliases: ["chocolatinas", "bombones", "bombon", "kitkat", "kinder", "barrita de chocolate", "nocilla", "nutella"], perishable: false }),
+  f("barrita-cereales", "barrita de cereales", "cereal", 440, 7, 64, 17, 5, 1.20, { aliases: ["barrita", "barritas", "barrita energetica", "barrita de muesli", "barritas de cereales"], perishable: false }),
+  f("barrita-proteina", "barrita de proteínas", "despensa", 360, 30, 35, 11, 5, 2.50, { aliases: ["barrita proteica", "barrita de proteina", "protein bar"], perishable: false }),
+  f("cerveza", "cerveza", "despensa", 43, 0.5, 3.6, 0, 0, 0.25, { aliases: ["cervezas", "caña", "caña de cerveza", "tercio", "botellin", "cerveza rubia", "jarra de cerveza"], densityGPerMl: 1.01, perishable: false }),
+  f("cerveza-sin", "cerveza sin alcohol", "despensa", 27, 0.3, 5.3, 0, 0, 0.25, { aliases: ["cerveza 0,0", "cerveza 0.0", "cerveza tostada 0,0"], densityGPerMl: 1.01, perishable: false }),
+  f("destilado", "licor destilado", "despensa", 231, 0, 0, 0, 0, 1.50, { aliases: ["ginebra", "gin", "ron", "vodka", "whisky", "whiskey", "tequila", "licor"], densityGPerMl: 0.95, perishable: false }),
+  f("refresco", "refresco azucarado", "despensa", 42, 0, 10.6, 0, 0, 0.15, { aliases: ["refresco", "refrescos", "coca cola", "cocacola", "refresco de cola", "fanta", "refresco de naranja", "refresco de limon", "tonica"], densityGPerMl: 1.04, perishable: false }),
+  f("refresco-zero", "refresco sin azúcar", "despensa", 0, 0, 0, 0, 0, 0.15, { aliases: ["coca cola zero", "cola zero", "refresco zero", "refresco light", "coca cola light", "fanta zero"], densityGPerMl: 1.0, perishable: false }),
 ];
 
 /**

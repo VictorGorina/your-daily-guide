@@ -112,3 +112,11 @@ el resto no cambia. Ese ticket debe respetar `lockedDates` y `pinned`.
 - [ ] Simulador: los mismos casos principales.
 
 ## Comments
+
+- 2026-09-16 (feature `picoteo-hoy`): `compensationNeed` + `COMPENSATION_THRESHOLDS` ya existen en
+  `src/lib/nutrition/compensation.ts` (con tests), igual que `compensationWindow` en
+  `plan-shared.ts` y los parámetros `window` / `soloOnly` de `reflowMeals`. Este ticket los
+  reutiliza. Ojo: devuelve `{ compensate: false, reason }` o `{ compensate: true, kcalDelta,
+  proteinDelta }` en vez de `null`. Corrección del texto de arriba: con embarazo o lactancia lo que
+  nunca se hace es QUITAR energía, es decir, no se compensa un Δkcal > 0 (un Δ < 0 sí se repone).
+

@@ -11,7 +11,7 @@
 
 export type EvalDish = {
   dish: string;
-  slot: "desayuno" | "comida" | "cena" | "merienda";
+  slot: "desayuno" | "comida" | "cena" | "merienda" | "picoteo";
   kcalMin: number;
   kcalMax: number;
 };
@@ -196,4 +196,16 @@ export const EVAL_DISHES: EvalDish[] = [
     kcalMin: 250,
     kcalMax: 550,
   },
+  // --- Picoteo (feature `picoteo-hoy`): lo que se apunta desde "Añadir picoteo"
+  { dish: "Un puñado de almendras", slot: "picoteo", kcalMin: 120, kcalMax: 250 },
+  { dish: "Una bolsa pequeña de patatas fritas", slot: "picoteo", kcalMin: 150, kcalMax: 320 },
+  { dish: "Una caña de cerveza", slot: "picoteo", kcalMin: 60, kcalMax: 130 },
+  { dish: "Dos galletas María", slot: "picoteo", kcalMin: 50, kcalMax: 160 },
+  { dish: "Una napolitana de chocolate", slot: "picoteo", kcalMin: 250, kcalMax: 500 },
+  { dish: "Dos onzas de chocolate negro", slot: "picoteo", kcalMin: 80, kcalMax: 180 },
+  { dish: "Una copa de vino tinto", slot: "picoteo", kcalMin: 90, kcalMax: 170 },
+  { dish: "Una tarrina pequeña de helado", slot: "picoteo", kcalMin: 120, kcalMax: 350 },
+  { dish: "Un bol de palomitas", slot: "picoteo", kcalMin: 100, kcalMax: 350 },
+  { dish: "Un gin tonic", slot: "picoteo", kcalMin: 130, kcalMax: 300 },
+  { dish: "Una lata de refresco de cola", slot: "picoteo", kcalMin: 110, kcalMax: 170 },
 ];

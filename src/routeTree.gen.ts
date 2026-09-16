@@ -51,6 +51,10 @@ import { Route as ApiV1PlanShoppingOwnedRouteImport } from './routes/api/v1/plan
 import { Route as ApiV1PlanTripActualRouteImport } from './routes/api/v1/plan/trip-actual'
 import { Route as ApiV1PlanTripConfirmRouteImport } from './routes/api/v1/plan/trip-confirm'
 import { Route as ApiV1PlanWelcomeRouteImport } from './routes/api/v1/plan/welcome'
+import { Route as ApiV1SnacksEstimateRouteImport } from './routes/api/v1/snacks/estimate'
+import { Route as ApiV1SnacksLogRouteImport } from './routes/api/v1/snacks/log'
+import { Route as ApiV1SnacksRemoveRouteImport } from './routes/api/v1/snacks/remove'
+import { Route as ApiV1SnacksSettleRouteImport } from './routes/api/v1/snacks/settle'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -264,6 +268,26 @@ const ApiV1PlanWelcomeRoute = ApiV1PlanWelcomeRouteImport.update({
   path: '/api/v1/plan/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1SnacksEstimateRoute = ApiV1SnacksEstimateRouteImport.update({
+  id: '/api/v1/snacks/estimate',
+  path: '/api/v1/snacks/estimate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SnacksLogRoute = ApiV1SnacksLogRouteImport.update({
+  id: '/api/v1/snacks/log',
+  path: '/api/v1/snacks/log',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SnacksRemoveRoute = ApiV1SnacksRemoveRouteImport.update({
+  id: '/api/v1/snacks/remove',
+  path: '/api/v1/snacks/remove',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SnacksSettleRoute = ApiV1SnacksSettleRouteImport.update({
+  id: '/api/v1/snacks/settle',
+  path: '/api/v1/snacks/settle',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -307,6 +331,10 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
+  '/api/v1/snacks/estimate': typeof ApiV1SnacksEstimateRoute
+  '/api/v1/snacks/log': typeof ApiV1SnacksLogRoute
+  '/api/v1/snacks/remove': typeof ApiV1SnacksRemoveRoute
+  '/api/v1/snacks/settle': typeof ApiV1SnacksSettleRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -350,6 +378,10 @@ export interface FileRoutesByTo {
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
+  '/api/v1/snacks/estimate': typeof ApiV1SnacksEstimateRoute
+  '/api/v1/snacks/log': typeof ApiV1SnacksLogRoute
+  '/api/v1/snacks/remove': typeof ApiV1SnacksRemoveRoute
+  '/api/v1/snacks/settle': typeof ApiV1SnacksSettleRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -395,6 +427,10 @@ export interface FileRoutesById {
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
+  '/api/v1/snacks/estimate': typeof ApiV1SnacksEstimateRoute
+  '/api/v1/snacks/log': typeof ApiV1SnacksLogRoute
+  '/api/v1/snacks/remove': typeof ApiV1SnacksRemoveRoute
+  '/api/v1/snacks/settle': typeof ApiV1SnacksSettleRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -440,6 +476,10 @@ export interface FileRouteTypes {
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
+    | '/api/v1/snacks/estimate'
+    | '/api/v1/snacks/log'
+    | '/api/v1/snacks/remove'
+    | '/api/v1/snacks/settle'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -483,6 +523,10 @@ export interface FileRouteTypes {
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
+    | '/api/v1/snacks/estimate'
+    | '/api/v1/snacks/log'
+    | '/api/v1/snacks/remove'
+    | '/api/v1/snacks/settle'
   id:
     | '__root__'
     | '/'
@@ -527,6 +571,10 @@ export interface FileRouteTypes {
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
+    | '/api/v1/snacks/estimate'
+    | '/api/v1/snacks/log'
+    | '/api/v1/snacks/remove'
+    | '/api/v1/snacks/settle'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -564,6 +612,10 @@ export interface RootRouteChildren {
   ApiV1PlanTripActualRoute: typeof ApiV1PlanTripActualRoute
   ApiV1PlanTripConfirmRoute: typeof ApiV1PlanTripConfirmRoute
   ApiV1PlanWelcomeRoute: typeof ApiV1PlanWelcomeRoute
+  ApiV1SnacksEstimateRoute: typeof ApiV1SnacksEstimateRoute
+  ApiV1SnacksLogRoute: typeof ApiV1SnacksLogRoute
+  ApiV1SnacksRemoveRoute: typeof ApiV1SnacksRemoveRoute
+  ApiV1SnacksSettleRoute: typeof ApiV1SnacksSettleRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -862,6 +914,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanWelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/snacks/estimate': {
+      id: '/api/v1/snacks/estimate'
+      path: '/api/v1/snacks/estimate'
+      fullPath: '/api/v1/snacks/estimate'
+      preLoaderRoute: typeof ApiV1SnacksEstimateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/snacks/log': {
+      id: '/api/v1/snacks/log'
+      path: '/api/v1/snacks/log'
+      fullPath: '/api/v1/snacks/log'
+      preLoaderRoute: typeof ApiV1SnacksLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/snacks/remove': {
+      id: '/api/v1/snacks/remove'
+      path: '/api/v1/snacks/remove'
+      fullPath: '/api/v1/snacks/remove'
+      preLoaderRoute: typeof ApiV1SnacksRemoveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/snacks/settle': {
+      id: '/api/v1/snacks/settle'
+      path: '/api/v1/snacks/settle'
+      fullPath: '/api/v1/snacks/settle'
+      preLoaderRoute: typeof ApiV1SnacksSettleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -925,6 +1005,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanTripActualRoute: ApiV1PlanTripActualRoute,
   ApiV1PlanTripConfirmRoute: ApiV1PlanTripConfirmRoute,
   ApiV1PlanWelcomeRoute: ApiV1PlanWelcomeRoute,
+  ApiV1SnacksEstimateRoute: ApiV1SnacksEstimateRoute,
+  ApiV1SnacksLogRoute: ApiV1SnacksLogRoute,
+  ApiV1SnacksRemoveRoute: ApiV1SnacksRemoveRoute,
+  ApiV1SnacksSettleRoute: ApiV1SnacksSettleRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -4,4 +4,5 @@
  * `./resolve-dish.server` y se importa aparte, siempre desde código de servidor.
  */
 
+export * from "./compensation";
 export * from "./nutrition";

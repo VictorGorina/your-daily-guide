@@ -18,6 +18,7 @@ import {
   cleanTripReceipts,
   composeDayForUser,
   composeMonthlyPlanForMember,
+  compensationWindow,
   coverageRatio,
   daysLeftInMonth,
   effectiveMealSlots,
@@ -1115,6 +1116,20 @@ describe("composeDayForUser", () => {
     // Lunes=0 comparte comida, no cena → no arrastra el plato de un niño de la cena
     expect(composeDayForUser(mine, planner, slots, 0).kids).toBeUndefined();
   });
+
+  it("no reordena los platos de los niños si el conjunto no cambia (picoteo-hoy)", () => {
+    // Quien planifica congela sus compartidas recomponiendo contra su propio
+    // plan: el día sale igual y no debe reescribirse con otro orden.
+    const kids = [
+      { childId: "leo", slot: "comida" as const, dish: "Puré de arroz" },
+      { childId: "leo", slot: "cena" as const, dish: "Puré de pollo" },
+    ];
+    const own = day("Lunes", "Comida", "Cena", { kids });
+    // Lunes=0: solo se comparte la comida, así que el plato del niño de la
+    // comida "viene del planificador" y el de la cena es el propio.
+    const composed = composeDayForUser(own, own, slots, 0);
+    expect(composed.kids).toBe(kids);
+  });
 });
 
 describe("composeMonthlyPlanForMember", () => {
@@ -1802,5 +1817,94 @@ describe("pinned en el hogar (mirrorPinned / composeDayForUser)", () => {
     const source = day("Lunes", "c", "d", { pinned: ["comida"] });
     expect(mirrorPinned(own, source, new Set(["cena"]))).toBeUndefined();
     expect(mirrorPinned(own, source, new Set(["comida"]))).toEqual(["comida"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compensationWindow — dónde se puede absorber un desvío de hoy
+// ---------------------------------------------------------------------------
+
+describe("compensationWindow", () => {
+  const solo: SharedSlots = { desayuno: [], comida: [], cena: [] };
+  const all = ["desayuno", "comida", "cena", "snack"] as const;
+
+  it("de mañana a hoy + 6, sin tocar hoy", () => {
+    // Miércoles 16 de septiembre de 2026.
+    expect(
+      compensationWindow({ today: "2026-09-16", sharedSlots: solo, selectedSlots: all }),
+    ).toEqual({
+      dates: ["2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22"],
+      reason: null,
+    });
+  });
+
+  it("no cruza de mes y salta los días que comparten celda con la semana 3", () => {
+    // 29 y 30 caen en la fila de la semana 3 (22–28): una recolocación ahí se descarta.
+    expect(
+      compensationWindow({ today: "2026-09-27", sharedSlots: solo, selectedSlots: all }),
+    ).toEqual({
+      dates: ["2026-09-28"],
+      reason: null,
+    });
+    expect(
+      compensationWindow({ today: "2026-09-28", sharedSlots: solo, selectedSlots: all }),
+    ).toEqual({
+      dates: [],
+      reason: "no-days",
+    });
+  });
+
+  it("se queda con los días que tienen alguna comida o cena propia", () => {
+    const everyDay = [0, 1, 2, 3, 4, 5, 6];
+    // Comida siempre compartida; la cena solo es propia el viernes (4).
+    const shared: SharedSlots = { desayuno: [], comida: everyDay, cena: [0, 1, 2, 3, 5, 6] };
+    expect(
+      compensationWindow({ today: "2026-09-16", sharedSlots: shared, selectedSlots: all }).dates,
+    ).toEqual(["2026-09-18"]);
+  });
+
+  it("todo compartido: quedan días, pero no se puede compensar en ellos", () => {
+    const everyDay = [0, 1, 2, 3, 4, 5, 6];
+    const shared: SharedSlots = { desayuno: [], comida: everyDay, cena: everyDay };
+    expect(
+      compensationWindow({ today: "2026-09-16", sharedSlots: shared, selectedSlots: all }),
+    ).toEqual({
+      dates: [],
+      reason: "shared-only",
+    });
+  });
+
+  it("todo compartido pero sin otro adulto en la mesa: se trata como propio", () => {
+    const everyDay = [0, 1, 2, 3, 4, 5, 6];
+    const shared: SharedSlots = { desayuno: [], comida: everyDay, cena: everyDay };
+    expect(
+      compensationWindow({
+        today: "2026-09-16",
+        sharedSlots: shared,
+        selectedSlots: all,
+        soloAdult: true,
+      }),
+    ).toEqual({
+      dates: ["2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22"],
+      reason: null,
+    });
+  });
+
+  it("una comida que no se planifica no cuenta como hueco", () => {
+    const soloDinnerShared: SharedSlots = { desayuno: [], comida: [], cena: [0, 1, 2, 3, 4, 5, 6] };
+    expect(
+      compensationWindow({
+        today: "2026-09-16",
+        sharedSlots: soloDinnerShared,
+        selectedSlots: ["desayuno", "cena"],
+      }).reason,
+    ).toBe("shared-only");
+    expect(
+      compensationWindow({
+        today: "2026-09-16",
+        sharedSlots: solo,
+        selectedSlots: ["desayuno", "snack"],
+      }),
+    ).toEqual({ dates: [], reason: "no-meals" });
   });
 });

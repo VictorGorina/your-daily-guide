@@ -16,7 +16,7 @@ import {
 } from "@/lib/daily";
 import { isSharedSlot, type SharedSlots } from "@/lib/household-shared";
 import { propagateLogToFamily } from "@/lib/household.functions";
-import { sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
+import { addMacros, sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -27,6 +27,7 @@ import {
   suggestedDish,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
+import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 
 const longDate = (date: string) =>
   capitalizeFirst(
@@ -244,7 +245,12 @@ export function DayDetailBody({
     }
   }
 
-  if (!habits.length) {
+  // Picoteo del día (`picoteo-hoy`): solo lectura aquí, el día ya pasó.
+  const snacks = cleanDaySnacks(log?.snacks);
+  const snackEntries = snacks?.entries ?? [];
+  const movedBySnacks = snacks?.adjustment?.changes.length ?? 0;
+
+  if (!habits.length && !snackEntries.length) {
     return (
       <p className="text-sm text-muted-foreground">
         {beforeStart
@@ -259,184 +265,221 @@ export function DayDetailBody({
   // una comida sin registrar es neutra, no un fallo (roadmap UX: "un mal día es
   // gris apagado, nunca se enmarca como fracaso").
   const skippedCount = habits.filter((h) => h.status === "salteo").length;
-  const consumed = sumDoneMacros(log?.guide?.mealMacros, habits) ?? ZERO_MACROS;
+  const consumed = addMacros(
+    sumDoneMacros(log?.guide?.mealMacros, habits) ?? ZERO_MACROS,
+    snackTotals(snacks),
+  );
+  const hasMacros =
+    !!(log?.guide?.macroEstimate || log?.guide?.mealMacros?.length) || snackEntries.length > 0;
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Comidas
-          </span>
-          <span className="font-num text-[11px] tabular-nums text-muted-foreground">
-            {doneCount} de {habits.length}
-            {skippedCount ? ` · ${skippedCount} saltada${skippedCount > 1 ? "s" : ""}` : ""}
-          </span>
-        </div>
-        {habits.map((h, i) => {
-          const planned = plannedByLabel.get(h.label) ?? "";
-          // La sugerencia original del plan para ese momento, si lo que se ve
-          // ya no es ella (ver `plannedIdea` en plan-shared.ts).
-          const wasIdea = suggestedDish(h, planned);
-          const skipped = h.status === "salteo";
-          const unlogged = h.status == null;
-          const changed = h.status === "distinto";
+      {habits.length ? (
+        <div className="space-y-1.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Comidas
+            </span>
+            <span className="font-num text-[11px] tabular-nums text-muted-foreground">
+              {doneCount} de {habits.length}
+              {skippedCount ? ` · ${skippedCount} saltada${skippedCount > 1 ? "s" : ""}` : ""}
+            </span>
+          </div>
+          {habits.map((h, i) => {
+            const planned = plannedByLabel.get(h.label) ?? "";
+            // La sugerencia original del plan para ese momento, si lo que se ve
+            // ya no es ella (ver `plannedIdea` en plan-shared.ts).
+            const wasIdea = suggestedDish(h, planned);
+            const skipped = h.status === "salteo";
+            const unlogged = h.status == null;
+            const changed = h.status === "distinto";
 
-          return (
-            <div key={h.label}>
-              <button
-                type="button"
-                disabled={!editable}
-                onClick={() => {
-                  setEditing((prev) => (prev === i ? null : i));
-                  // Pre-rellenar el draft con el valor existente si lo hay
-                  if (h.actual && !(i in actualDraft)) {
-                    setActualDraft((d) => ({ ...d, [i]: h.actual! }));
-                  }
-                }}
-                className="w-full rounded-xl bg-secondary/50 px-3 py-2.5 text-left disabled:opacity-70"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold tracking-[0.01em] text-foreground">
-                    {h.label}
-                  </span>
-                  <span
-                    className={`text-[11px] font-medium ${
-                      h.status === "plan"
-                        ? "text-success"
-                        : skipped || unlogged
-                          ? "text-muted-foreground"
-                          : "text-primary"
-                    }`}
-                  >
-                    {unlogged ? "Sin registrar" : MEAL_STATUS_LABEL[h.status!]}
-                  </span>
-                </div>
-                {planned || wasIdea ? (
-                  <p
-                    className={`mt-1 text-sm ${
-                      skipped || unlogged
-                        ? "text-muted-foreground line-through"
-                        : changed && h.actual
+            return (
+              <div key={h.label}>
+                <button
+                  type="button"
+                  disabled={!editable}
+                  onClick={() => {
+                    setEditing((prev) => (prev === i ? null : i));
+                    // Pre-rellenar el draft con el valor existente si lo hay
+                    if (h.actual && !(i in actualDraft)) {
+                      setActualDraft((d) => ({ ...d, [i]: h.actual! }));
+                    }
+                  }}
+                  className="w-full rounded-xl bg-secondary/50 px-3 py-2.5 text-left disabled:opacity-70"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold tracking-[0.01em] text-foreground">
+                      {h.label}
+                    </span>
+                    <span
+                      className={`text-[11px] font-medium ${
+                        h.status === "plan"
+                          ? "text-success"
+                          : skipped || unlogged
+                            ? "text-muted-foreground"
+                            : "text-primary"
+                      }`}
+                    >
+                      {unlogged ? "Sin registrar" : MEAL_STATUS_LABEL[h.status!]}
+                    </span>
+                  </div>
+                  {planned || wasIdea ? (
+                    <p
+                      className={`mt-1 text-sm ${
+                        skipped || unlogged
                           ? "text-muted-foreground line-through"
-                          : changed
-                            ? "text-primary"
-                            : "text-foreground"
-                    }`}
-                  >
-                    {planned || wasIdea}
-                  </p>
-                ) : null}
-                {/* Mostrar qué comió realmente si ya lo indicó */}
-                {changed && h.actual ? (
-                  <p className="mt-0.5 text-sm text-primary">Comí: {h.actual}</p>
-                ) : null}
-                {wasIdea ? (
-                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                    Plan sugerido: <span className="line-through">{wasIdea}</span>
-                  </p>
-                ) : null}
-                {(kidMealsByLabel.get(h.label) ?? []).map((k) => (
-                  <p
-                    key={`${k.name}-${k.dish}`}
-                    className="mt-0.5 text-[11px] leading-snug text-muted-foreground"
-                  >
-                    Para {k.name}: <span className="text-foreground">{k.dish}</span>
-                    {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
-                  </p>
-                ))}
-              </button>
-              {editing === i ? (
-                <div className="mt-1.5 space-y-2 rounded-xl bg-secondary/40 p-2.5">
-                  <div className="flex flex-wrap gap-2">
-                    {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                          : changed && h.actual
+                            ? "text-muted-foreground line-through"
+                            : changed
+                              ? "text-primary"
+                              : "text-foreground"
+                      }`}
+                    >
+                      {planned || wasIdea}
+                    </p>
+                  ) : null}
+                  {/* Mostrar qué comió realmente si ya lo indicó */}
+                  {changed && h.actual ? (
+                    <p className="mt-0.5 text-sm text-primary">Comí: {h.actual}</p>
+                  ) : null}
+                  {wasIdea ? (
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                      Plan sugerido: <span className="line-through">{wasIdea}</span>
+                    </p>
+                  ) : null}
+                  {(kidMealsByLabel.get(h.label) ?? []).map((k) => (
+                    <p
+                      key={`${k.name}-${k.dish}`}
+                      className="mt-0.5 text-[11px] leading-snug text-muted-foreground"
+                    >
+                      Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                      {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                    </p>
+                  ))}
+                </button>
+                {editing === i ? (
+                  <div className="mt-1.5 space-y-2 rounded-xl bg-secondary/40 p-2.5">
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            if (s === "distinto") {
+                              // Si no hay texto aún, no cerrar — esperar a que escriba
+                              if (!actualDraft[i]?.trim() && !h.actual) return;
+                            }
+                            setStatus(i, s);
+                          }}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
+                            h.status === s
+                              ? "bg-foreground text-background"
+                              : "bg-surface text-muted-foreground"
+                          }`}
+                        >
+                          {MEAL_STATUS_LABEL[s]}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Toggle "toda la familia comió esto" para comidas compartidas */}
+                    {isShared(h.label) ? (
                       <button
-                        key={s}
                         type="button"
-                        onClick={() => {
-                          if (s === "distinto") {
-                            // Si no hay texto aún, no cerrar — esperar a que escriba
-                            if (!actualDraft[i]?.trim() && !h.actual) return;
-                          }
-                          setStatus(i, s);
-                        }}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors active:scale-95 ${
-                          h.status === s
-                            ? "bg-foreground text-background"
+                        onClick={() => setFamilyToggle((t) => ({ ...t, [i]: !t[i] }))}
+                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                          familyToggle[i]
+                            ? "bg-primary/10 text-primary"
                             : "bg-surface text-muted-foreground"
                         }`}
                       >
-                        {MEAL_STATUS_LABEL[s]}
+                        <Users className="h-4 w-4" />
+                        Toda la familia comió esto
                       </button>
-                    ))}
-                  </div>
-                  {/* Toggle "toda la familia comió esto" para comidas compartidas */}
-                  {isShared(h.label) ? (
-                    <button
-                      type="button"
-                      onClick={() => setFamilyToggle((t) => ({ ...t, [i]: !t[i] }))}
-                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                        familyToggle[i]
-                          ? "bg-primary/10 text-primary"
-                          : "bg-surface text-muted-foreground"
-                      }`}
-                    >
-                      <Users className="h-4 w-4" />
-                      Toda la familia comió esto
-                    </button>
-                  ) : null}
-                  {/* Campo de texto para indicar qué comió realmente */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-medium text-muted-foreground">
-                      ¿Qué comiste realmente?
-                    </label>
-                    <input
-                      type="text"
-                      autoFocus={!h.actual}
-                      value={actualDraft[i] ?? h.actual ?? ""}
-                      onChange={(e) => setActualDraft((d) => ({ ...d, [i]: e.target.value }))}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
+                    ) : null}
+                    {/* Campo de texto para indicar qué comió realmente */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted-foreground">
+                        ¿Qué comiste realmente?
+                      </label>
+                      <input
+                        type="text"
+                        autoFocus={!h.actual}
+                        value={actualDraft[i] ?? h.actual ?? ""}
+                        onChange={(e) => setActualDraft((d) => ({ ...d, [i]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (h.status === "distinto") saveActual(i);
+                            else setStatus(i, "distinto");
+                          }
+                        }}
+                        placeholder="Ej.: pizza, ensalada de pollo..."
+                        className="w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
+                      />
+                      <button
+                        type="button"
+                        disabled={!actualDraft[i]?.trim() && !h.actual}
+                        onClick={() => {
                           if (h.status === "distinto") saveActual(i);
                           else setStatus(i, "distinto");
-                        }
-                      }}
-                      placeholder="Ej.: pizza, ensalada de pollo..."
-                      className="w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
-                    />
-                    <button
-                      type="button"
-                      disabled={!actualDraft[i]?.trim() && !h.actual}
-                      onClick={() => {
-                        if (h.status === "distinto") saveActual(i);
-                        else setStatus(i, "distinto");
-                      }}
-                      className="w-full rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                    >
-                      {h.status === "distinto" ? "Guardar" : "Comí esto"}
-                    </button>
+                        }}
+                        className="w-full rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        {h.status === "distinto" ? "Guardar" : "Comí esto"}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
+            );
+          })}
+          {editable ? (
+            <p className="pt-0.5 text-[11px] text-muted-foreground">
+              Corregir aquí es solo para tu historial: la compra ya hecha de ese mes no cambia.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {snackEntries.length ? (
+        <div className="space-y-1.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Picoteo
+            </span>
+            <span className="font-num text-[11px] tabular-nums text-muted-foreground">
+              ~{snackTotals(snacks).kcal} kcal
+            </span>
+          </div>
+          {snackEntries.map((e) => (
+            <div
+              key={e.id}
+              className="flex items-center justify-between gap-2 rounded-xl bg-secondary/50 px-3 py-2.5"
+            >
+              <span className="min-w-0 flex-1 text-sm text-foreground">{e.text}</span>
+              <span className="font-num text-[11px] tabular-nums text-muted-foreground">
+                {e.kcal} kcal
+              </span>
             </div>
-          );
-        })}
-        {editable ? (
-          <p className="pt-0.5 text-[11px] text-muted-foreground">
-            Corregir aquí es solo para tu historial: la compra ya hecha de ese mes no cambia.
-          </p>
-        ) : null}
-      </div>
+          ))}
+          {movedBySnacks ? (
+            <p className="pt-0.5 text-[11px] text-muted-foreground">
+              Se {movedBySnacks === 1 ? "ajustó 1 comida" : `ajustaron ${movedBySnacks} comidas`} de
+              los días siguientes para compensarlo.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div>
         <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Macros del día
         </span>
-        {log?.guide?.macroEstimate || log?.guide?.mealMacros?.length ? (
+        {hasMacros ? (
           <MacroBars
             estimate={consumed}
-            target={log.guide.macroEstimate ?? null}
+            target={log?.guide?.macroEstimate ?? null}
             weightKg={profile?.current_weight_kg ?? null}
             note={`~${consumed.kcal} kcal de lo que comiste ese día`}
           />

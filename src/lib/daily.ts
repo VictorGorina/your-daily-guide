@@ -274,6 +274,8 @@ export type DailyLog = {
   mood: string | null;
   notes: string | null;
   evening_done: boolean;
+  /** Picoteo del día (`picoteo-hoy`). Ver `DaySnacks` y `cleanDaySnacks`. */
+  snacks?: import("@/lib/snacks").DaySnacks | null;
 };
 
 export type ChatMessage = {

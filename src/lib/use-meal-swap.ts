@@ -291,8 +291,18 @@ export function useMealSwap(
 
       saving.add(label);
       publish();
+      let savedDish = dish;
       try {
-        const { previousIdea } = await changeMeal({ data: { date: today, slot, dish, today } });
+        // `dish` en la respuesta es el texto de la persona con la ortografía
+        // corregida por el servidor (`resolveDish`): es lo que de verdad ha
+        // quedado escrito en el plan, así que es lo que hay que guardar aquí
+        // también — si se guardara el texto crudo, `confirmedIdea` dejaría de
+        // coincidir con el plato del plan y `reconcileHabits` lo trataría como
+        // una confirmación caducada en la siguiente carga.
+        const { dish: correctedDish, previousIdea } = await changeMeal({
+          data: { date: today, slot, dish, today },
+        });
+        savedDish = correctedDish;
         await patchTodayHabits((habits) =>
           habits.map((h) =>
             h.label !== label
@@ -304,7 +314,7 @@ export function useMealSwap(
                   // Contra qué plato del plan se confirmó — ver `confirmedIdea`
                   // en plan-shared.ts. Aquí siempre es el plato nuevo, porque
                   // `changeMeal` ya lo ha escrito en el plan.
-                  confirmedIdea: dish,
+                  confirmedIdea: correctedDish,
                   // El tachado es la sugerencia ORIGINAL del plan, congelada.
                   // `reconcileHabits` ya la habrá puesto al cargar Hoy; esto es
                   // el cinturón para un registro que venga de antes.
@@ -339,7 +349,7 @@ export function useMealSwap(
       pending.set(label, {
         label,
         slot,
-        dish,
+        dish: savedDish,
         plannedDish: before?.plannedDish || plannedDish,
         prevKcal: before ? before.prevKcal : prevKcal,
       });

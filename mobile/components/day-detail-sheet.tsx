@@ -13,7 +13,7 @@ import {
   type Profile,
 } from "../lib/daily";
 import { isSharedSlot, type SharedSlots } from "../lib/household-shared";
-import { sumDoneMacros, ZERO_MACROS } from "../lib/macros";
+import { addMacros, sumDoneMacros, ZERO_MACROS } from "../lib/macros";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -24,6 +24,7 @@ import {
   suggestedDish,
   type MonthlyPlan,
 } from "../lib/plan-shared";
+import { cleanDaySnacks, snackTotals } from "../lib/snacks";
 import { MacroBars } from "./macro-bars";
 import { Dialog } from "./ui/dialog";
 
@@ -224,7 +225,12 @@ export function DayDetailBody({
     }
   }
 
-  if (!habits.length) {
+  // Picoteo del día (`picoteo-hoy`): solo lectura aquí, el día ya pasó.
+  const snacks = cleanDaySnacks(log?.snacks);
+  const snackEntries = snacks?.entries ?? [];
+  const movedBySnacks = snacks?.adjustment?.changes.length ?? 0;
+
+  if (!habits.length && !snackEntries.length) {
     return (
       <Text className="text-sm text-muted-foreground">
         {beforeStart
@@ -238,182 +244,218 @@ export function DayDetailBody({
   // Solo cuenta como "saltada" lo que se marcó explícitamente así; una comida
   // sin registrar es neutra, no un fallo (roadmap UX).
   const skippedCount = habits.filter((h) => h.status === "salteo").length;
-  const consumed = sumDoneMacros(log?.guide?.mealMacros, habits) ?? ZERO_MACROS;
-  const hasMacros = !!(log?.guide?.macroEstimate || log?.guide?.mealMacros?.length);
+  const consumed = addMacros(
+    sumDoneMacros(log?.guide?.mealMacros, habits) ?? ZERO_MACROS,
+    snackTotals(snacks),
+  );
+  const hasMacros =
+    !!(log?.guide?.macroEstimate || log?.guide?.mealMacros?.length) || snackEntries.length > 0;
 
   return (
     <View className="gap-4">
-      <View className="gap-1.5">
-        <View className="flex-row items-baseline justify-between gap-2">
-          <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
-            Comidas
-          </Text>
-          <Text className="font-mono-medium text-[11px] text-muted-foreground">
-            {doneCount} de {habits.length}
-            {skippedCount ? ` · ${skippedCount} saltada${skippedCount > 1 ? "s" : ""}` : ""}
-          </Text>
-        </View>
-        {habits.map((h, i) => {
-          const planned = plannedByLabel.get(h.label) ?? "";
-          // La sugerencia original del plan para ese momento, si lo que se
-          // ve ya no es ella (ver `plannedIdea` en lib/plan-shared.ts).
-          const wasIdea = suggestedDish(h, planned);
-          const skipped = h.status === "salteo";
-          const unlogged = h.status == null;
-          const changed = h.status === "distinto";
+      {habits.length ? (
+        <View className="gap-1.5">
+          <View className="flex-row items-baseline justify-between gap-2">
+            <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
+              Comidas
+            </Text>
+            <Text className="font-mono-medium text-[11px] text-muted-foreground">
+              {doneCount} de {habits.length}
+              {skippedCount ? ` · ${skippedCount} saltada${skippedCount > 1 ? "s" : ""}` : ""}
+            </Text>
+          </View>
+          {habits.map((h, i) => {
+            const planned = plannedByLabel.get(h.label) ?? "";
+            // La sugerencia original del plan para ese momento, si lo que se
+            // ve ya no es ella (ver `plannedIdea` en lib/plan-shared.ts).
+            const wasIdea = suggestedDish(h, planned);
+            const skipped = h.status === "salteo";
+            const unlogged = h.status == null;
+            const changed = h.status === "distinto";
 
-          return (
-            <View key={h.label}>
-              <Pressable
-                disabled={!editable}
-                onPress={() => {
-                  setEditing((prev) => (prev === i ? null : i));
-                  // Pre-rellenar el draft con el valor existente si lo hay
-                  if (h.actual && !(i in actualDraft)) {
-                    setActualDraft((d) => ({ ...d, [i]: h.actual! }));
-                  }
-                }}
-                className="rounded-xl bg-secondary/50 px-3 py-2.5 active:opacity-80"
-                style={!editable ? { opacity: 0.7 } : undefined}
-              >
-                <View className="flex-row items-center justify-between gap-2">
-                  <Text className="text-[11px] font-sans-semibold text-foreground">{h.label}</Text>
-                  <Text
-                    className={`text-[11px] font-sans-medium ${
-                      h.status === "plan"
-                        ? "text-success"
-                        : skipped || unlogged
-                          ? "text-muted-foreground"
-                          : "text-primary"
-                    }`}
-                  >
-                    {unlogged ? "Sin registrar" : MEAL_STATUS_LABEL[h.status!]}
-                  </Text>
-                </View>
-                {planned || wasIdea ? (
-                  <Text
-                    className={`mt-1 text-sm ${
-                      skipped || unlogged
-                        ? "text-muted-foreground line-through"
-                        : changed && h.actual
-                          ? "text-muted-foreground line-through"
-                          : changed
-                            ? "text-primary"
-                            : "text-foreground"
-                    }`}
-                  >
-                    {planned || wasIdea}
-                  </Text>
-                ) : null}
-                {/* Mostrar qué comió realmente si ya lo indicó */}
-                {changed && h.actual ? (
-                  <Text className="mt-0.5 text-sm text-primary">Comí: {h.actual}</Text>
-                ) : null}
-                {wasIdea ? (
-                  <Text className="mt-0.5 text-[11px] text-muted-foreground">
-                    Plan sugerido: <Text className="line-through">{wasIdea}</Text>
-                  </Text>
-                ) : null}
-                {(kidMealsByLabel.get(h.label) ?? []).map((k) => (
-                  <Text
-                    key={`${k.name}-${k.dish}`}
-                    className="mt-0.5 text-[11px] text-muted-foreground"
-                  >
-                    Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
-                    {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
-                  </Text>
-                ))}
-              </Pressable>
-              {editing === i ? (
-                <View className="mt-1.5 gap-2 rounded-xl bg-secondary/40 p-2.5">
-                  <View className="flex-row flex-wrap gap-2">
-                    {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => {
-                      const active = h.status === s;
-                      return (
-                        <Pressable
-                          key={s}
-                          onPress={() => {
-                            if (s === "distinto") {
-                              // Si no hay texto aún, no cerrar — esperar a que escriba
-                              if (!actualDraft[i]?.trim() && !h.actual) return;
-                            }
-                            setStatus(i, s);
-                          }}
-                          className={`rounded-full px-3 py-1.5 active:opacity-80 ${
-                            active ? "bg-foreground" : "bg-surface"
-                          }`}
-                        >
-                          <Text
-                            className={`text-xs font-sans-semibold ${
-                              active ? "text-background" : "text-muted-foreground"
-                            }`}
-                          >
-                            {MEAL_STATUS_LABEL[s]}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  {/* Toggle "toda la familia comió esto" para comidas compartidas */}
-                  {isShared(h.label) ? (
-                    <Pressable
-                      onPress={() => setFamilyToggle((t) => ({ ...t, [i]: !t[i] }))}
-                      className={`flex-row items-center gap-2 rounded-lg px-3 py-2 ${
-                        familyToggle[i] ? "bg-primary-soft" : "bg-surface"
+            return (
+              <View key={h.label}>
+                <Pressable
+                  disabled={!editable}
+                  onPress={() => {
+                    setEditing((prev) => (prev === i ? null : i));
+                    // Pre-rellenar el draft con el valor existente si lo hay
+                    if (h.actual && !(i in actualDraft)) {
+                      setActualDraft((d) => ({ ...d, [i]: h.actual! }));
+                    }
+                  }}
+                  className="rounded-xl bg-secondary/50 px-3 py-2.5 active:opacity-80"
+                  style={!editable ? { opacity: 0.7 } : undefined}
+                >
+                  <View className="flex-row items-center justify-between gap-2">
+                    <Text className="text-[11px] font-sans-semibold text-foreground">
+                      {h.label}
+                    </Text>
+                    <Text
+                      className={`text-[11px] font-sans-medium ${
+                        h.status === "plan"
+                          ? "text-success"
+                          : skipped || unlogged
+                            ? "text-muted-foreground"
+                            : "text-primary"
                       }`}
                     >
-                      <Users size={16} color={familyToggle[i] ? "#ff8a3d" : "#83796c"} />
-                      <Text
-                        className={`text-xs font-sans-medium ${
-                          familyToggle[i] ? "text-primary" : "text-muted-foreground"
+                      {unlogged ? "Sin registrar" : MEAL_STATUS_LABEL[h.status!]}
+                    </Text>
+                  </View>
+                  {planned || wasIdea ? (
+                    <Text
+                      className={`mt-1 text-sm ${
+                        skipped || unlogged
+                          ? "text-muted-foreground line-through"
+                          : changed && h.actual
+                            ? "text-muted-foreground line-through"
+                            : changed
+                              ? "text-primary"
+                              : "text-foreground"
+                      }`}
+                    >
+                      {planned || wasIdea}
+                    </Text>
+                  ) : null}
+                  {/* Mostrar qué comió realmente si ya lo indicó */}
+                  {changed && h.actual ? (
+                    <Text className="mt-0.5 text-sm text-primary">Comí: {h.actual}</Text>
+                  ) : null}
+                  {wasIdea ? (
+                    <Text className="mt-0.5 text-[11px] text-muted-foreground">
+                      Plan sugerido: <Text className="line-through">{wasIdea}</Text>
+                    </Text>
+                  ) : null}
+                  {(kidMealsByLabel.get(h.label) ?? []).map((k) => (
+                    <Text
+                      key={`${k.name}-${k.dish}`}
+                      className="mt-0.5 text-[11px] text-muted-foreground"
+                    >
+                      Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
+                      {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                    </Text>
+                  ))}
+                </Pressable>
+                {editing === i ? (
+                  <View className="mt-1.5 gap-2 rounded-xl bg-secondary/40 p-2.5">
+                    <View className="flex-row flex-wrap gap-2">
+                      {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => {
+                        const active = h.status === s;
+                        return (
+                          <Pressable
+                            key={s}
+                            onPress={() => {
+                              if (s === "distinto") {
+                                // Si no hay texto aún, no cerrar — esperar a que escriba
+                                if (!actualDraft[i]?.trim() && !h.actual) return;
+                              }
+                              setStatus(i, s);
+                            }}
+                            className={`rounded-full px-3 py-1.5 active:opacity-80 ${
+                              active ? "bg-foreground" : "bg-surface"
+                            }`}
+                          >
+                            <Text
+                              className={`text-xs font-sans-semibold ${
+                                active ? "text-background" : "text-muted-foreground"
+                              }`}
+                            >
+                              {MEAL_STATUS_LABEL[s]}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {/* Toggle "toda la familia comió esto" para comidas compartidas */}
+                    {isShared(h.label) ? (
+                      <Pressable
+                        onPress={() => setFamilyToggle((t) => ({ ...t, [i]: !t[i] }))}
+                        className={`flex-row items-center gap-2 rounded-lg px-3 py-2 ${
+                          familyToggle[i] ? "bg-primary-soft" : "bg-surface"
                         }`}
                       >
-                        Toda la familia comió esto
+                        <Users size={16} color={familyToggle[i] ? "#ff8a3d" : "#83796c"} />
+                        <Text
+                          className={`text-xs font-sans-medium ${
+                            familyToggle[i] ? "text-primary" : "text-muted-foreground"
+                          }`}
+                        >
+                          Toda la familia comió esto
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {/* Campo de texto para indicar qué comió realmente */}
+                    <View className="gap-1.5">
+                      <Text className="text-[11px] font-sans-medium text-muted-foreground">
+                        ¿Qué comiste realmente?
                       </Text>
-                    </Pressable>
-                  ) : null}
-                  {/* Campo de texto para indicar qué comió realmente */}
-                  <View className="gap-1.5">
-                    <Text className="text-[11px] font-sans-medium text-muted-foreground">
-                      ¿Qué comiste realmente?
-                    </Text>
-                    <TextInput
-                      autoFocus={!h.actual}
-                      value={actualDraft[i] ?? h.actual ?? ""}
-                      onChangeText={(t) => setActualDraft((d) => ({ ...d, [i]: t }))}
-                      onSubmitEditing={() => {
-                        if (h.status === "distinto") saveActual(i);
-                        else setStatus(i, "distinto");
-                      }}
-                      placeholder="Ej.: pizza, ensalada de pollo..."
-                      placeholderTextColor="#a69d8f"
-                      className="rounded-lg bg-surface px-3 py-2 text-sm text-foreground"
-                    />
-                    <Pressable
-                      disabled={!actualDraft[i]?.trim() && !h.actual}
-                      onPress={() => {
-                        if (h.status === "distinto") saveActual(i);
-                        else setStatus(i, "distinto");
-                      }}
-                      className="items-center rounded-full bg-primary py-2 active:opacity-90"
-                      style={!actualDraft[i]?.trim() && !h.actual ? { opacity: 0.5 } : undefined}
-                    >
-                      <Text className="text-xs font-sans-semibold text-primary-foreground">
-                        {h.status === "distinto" ? "Guardar" : "Comí esto"}
-                      </Text>
-                    </Pressable>
+                      <TextInput
+                        autoFocus={!h.actual}
+                        value={actualDraft[i] ?? h.actual ?? ""}
+                        onChangeText={(t) => setActualDraft((d) => ({ ...d, [i]: t }))}
+                        onSubmitEditing={() => {
+                          if (h.status === "distinto") saveActual(i);
+                          else setStatus(i, "distinto");
+                        }}
+                        placeholder="Ej.: pizza, ensalada de pollo..."
+                        placeholderTextColor="#a69d8f"
+                        className="rounded-lg bg-surface px-3 py-2 text-sm text-foreground"
+                      />
+                      <Pressable
+                        disabled={!actualDraft[i]?.trim() && !h.actual}
+                        onPress={() => {
+                          if (h.status === "distinto") saveActual(i);
+                          else setStatus(i, "distinto");
+                        }}
+                        className="items-center rounded-full bg-primary py-2 active:opacity-90"
+                        style={!actualDraft[i]?.trim() && !h.actual ? { opacity: 0.5 } : undefined}
+                      >
+                        <Text className="text-xs font-sans-semibold text-primary-foreground">
+                          {h.status === "distinto" ? "Guardar" : "Comí esto"}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
-                </View>
-              ) : null}
+                ) : null}
+              </View>
+            );
+          })}
+          {editable ? (
+            <Text className="pt-0.5 text-[11px] text-muted-foreground">
+              Corregir aquí es solo para tu historial: la compra ya hecha de ese mes no cambia.
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {snackEntries.length ? (
+        <View className="gap-1.5">
+          <View className="flex-row items-baseline justify-between gap-2">
+            <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
+              Picoteo
+            </Text>
+            <Text className="font-mono-medium text-[11px] text-muted-foreground">
+              ~{snackTotals(snacks).kcal} kcal
+            </Text>
+          </View>
+          {snackEntries.map((e) => (
+            <View
+              key={e.id}
+              className="flex-row items-center justify-between gap-2 rounded-xl bg-secondary/50 px-3 py-2.5"
+            >
+              <Text className="min-w-0 flex-1 text-sm text-foreground">{e.text}</Text>
+              <Text className="font-mono text-[11px] text-muted-foreground">{e.kcal} kcal</Text>
             </View>
-          );
-        })}
-        {editable ? (
-          <Text className="pt-0.5 text-[11px] text-muted-foreground">
-            Corregir aquí es solo para tu historial: la compra ya hecha de ese mes no cambia.
-          </Text>
-        ) : null}
-      </View>
+          ))}
+          {movedBySnacks ? (
+            <Text className="pt-0.5 text-[11px] text-muted-foreground">
+              Se {movedBySnacks === 1 ? "ajustó 1 comida" : `ajustaron ${movedBySnacks} comidas`} de
+              los días siguientes para compensarlo.
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View>
         <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
