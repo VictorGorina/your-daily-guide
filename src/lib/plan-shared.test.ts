@@ -1525,6 +1525,55 @@ describe("reconcileHabits", () => {
     const { habits } = reconcileHabits([{ label: "Cena", done: false }], meals(["Cena", ""]));
     expect(habits[0]!.plannedIdea).toBeUndefined();
   });
+
+  it("resetea una confirmación obsoleta cuando el plato cambia por detrás (espejo del hogar)", () => {
+    // "Comí esto" se confirmó contra "Sopa", pero el hogar ha espejado un
+    // cambio del planificador y ahora ese momento es "Revuelto": la
+    // confirmación (y las kcal congeladas que arrastraba) ya no describen lo
+    // que de verdad hay en pantalla.
+    const stored = [
+      {
+        label: "Cena",
+        done: true,
+        status: "plan" as const,
+        plannedIdea: "Sopa",
+        confirmedIdea: "Sopa",
+        plannedKcal: 282,
+      },
+    ];
+    const { habits, changed } = reconcileHabits(stored, meals(["Cena", "Revuelto"]));
+    expect(habits).toEqual([{ label: "Cena", done: false, plannedIdea: "Revuelto" }]);
+    expect(changed).toBe(true);
+  });
+
+  it("no resetea si el plato confirmado sigue siendo el mismo", () => {
+    const stored = [
+      {
+        label: "Cena",
+        done: true,
+        status: "distinto" as const,
+        confirmedIdea: "Pizza",
+        plannedIdea: "Sopa",
+      },
+    ];
+    const { habits, changed } = reconcileHabits(stored, meals(["Cena", "Pizza"]));
+    expect(habits[0]).toBe(stored[0]);
+    expect(changed).toBe(false);
+  });
+
+  it("no resetea una comida saltada aunque el plato cambie por detrás", () => {
+    const stored = [
+      {
+        label: "Cena",
+        done: false,
+        status: "salteo" as const,
+        confirmedIdea: "Sopa",
+        plannedIdea: "Sopa",
+      },
+    ];
+    const { habits } = reconcileHabits(stored, meals(["Cena", "Revuelto"]));
+    expect(habits[0]).toBe(stored[0]);
+  });
 });
 
 describe("suggestedDish", () => {

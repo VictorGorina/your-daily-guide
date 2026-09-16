@@ -1653,6 +1653,14 @@ export type MealHabit = {
   adjustmentSummary?: string;
   /** Desvío estimado en kcal del lote frente a lo que preveía el plan. */
   adjustmentKcal?: number;
+  /**
+   * Plato que había en el plan cuando se confirmó "comí esto" o "comí otra
+   * cosa" — no lo que se comió, sino contra qué momento del plan se confirmó.
+   * `reconcileHabits` lo compara con el plato actual del plan para detectar
+   * una confirmación obsoleta (un plato compartido que el hogar cambia por
+   * detrás, nunca una recolocación automática, que no toca hoy).
+   */
+  confirmedIdea?: string;
 };
 
 /**
@@ -1691,6 +1699,22 @@ export function reconcileHabits(
   const next = meals.map((m) => {
     const existing = byLabel.get(m.moment);
     if (!existing) return { label: m.moment, done: false, plannedIdea: m.idea || undefined };
+    // Una confirmación ("comí esto" / "comí otra cosa") queda obsoleta si el
+    // plato que hay AHORA en ese momento ya no es el que se confirmó: pasa
+    // cuando el hogar espeja por detrás un cambio del planificador sobre una
+    // comida compartida, nunca por una recolocación automática (que no toca
+    // hoy). Se trata como una comida nueva — si no, Hoy seguía marcando como
+    // "ya comido" un plato distinto al que de verdad se sirvió, y la barra de
+    // macros sumaba las kcal congeladas del plato antiguo bajo el nombre del
+    // nuevo.
+    if (
+      existing.status &&
+      existing.status !== "salteo" &&
+      existing.confirmedIdea &&
+      existing.confirmedIdea !== m.idea
+    ) {
+      return { label: m.moment, done: false, plannedIdea: m.idea || undefined };
+    }
     // `plannedIdea` solo se rellena si falta: una vez congelado no se toca ni
     // aunque el plato del plan haya cambiado (que es justo lo que pasa tras un
     // cambio a mano — `setPlanMeal` escribe el plato nuevo en el plan).

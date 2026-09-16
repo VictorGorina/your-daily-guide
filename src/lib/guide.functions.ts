@@ -23,8 +23,11 @@ export type MacroEstimate = {
 };
 
 /** Estimación de macros de un plato concreto de hoy, para poder sumar solo
- * las comidas que la persona ya marcó como comidas (ver `mealMacros`). */
-export type MealMacroEstimate = MacroEstimate & { moment: string };
+ * las comidas que la persona ya marcó como comidas (ver `mealMacros`).
+ * `idea` es el plato contra el que se calculó — permite detectar cuándo el
+ * plan ya no coincide (un cambio del hogar espejado por detrás) y hace falta
+ * regenerar en vez de seguir sumando kcal de un plato que ya no es ese. */
+export type MealMacroEstimate = MacroEstimate & { moment: string; idea?: string };
 
 export type GeneratedGuide = {
   intro: string;
@@ -110,7 +113,7 @@ async function macrosFromLookup(
     const b = breakdowns.get(meal.idea.trim());
     const usable = b && b.source === "model" && b.perServing.kcal > 0 && b.quality >= 0.4;
     const macros = usable ? b.perServing : roughMealMacros(meal.moment);
-    return { moment: meal.moment, ...macros };
+    return { moment: meal.moment, idea: meal.idea, ...macros };
   });
 
   const macroEstimate = mealMacros.reduce<MacroEstimate>(addMacros, {

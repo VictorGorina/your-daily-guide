@@ -419,7 +419,21 @@ function Hoy() {
     // `meals`/`tips`, así que la condición de abajo no la pillaría.
     const missingMacros =
       !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
-    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) {
+    // El hogar puede espejar por detrás un cambio del planificador sobre una
+    // comida compartida (ver `composeDayForUser`): el plato de hoy cambia sin
+    // pasar por `use-meal-swap`, que es quien normalmente regenera la guía
+    // tras un cambio. Si el plato de un momento ya no es el que tiene
+    // guardado `mealMacros`, esa cifra ya no describe lo que hay en pantalla.
+    // Solo se compara cuando la guía SÍ trajo `idea` (guías de antes de este
+    // campo no fuerzan una regeneración masiva).
+    const staleMacros =
+      !!g &&
+      todayMeals.some((m) => {
+        if (!m.idea) return false;
+        const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
+        return !!cached?.idea && cached.idea !== m.idea;
+      });
+    if (!g || !g.meals?.length || !g.tips?.length || missingMacros || staleMacros) {
       if (Date.now() - lastAutoGuideAttempt < AUTO_GUIDE_MIN_INTERVAL_MS) return;
       lastAutoGuideAttempt = Date.now();
       void requestGuide({ silent: true });
@@ -486,14 +500,28 @@ function Hoy() {
     .replace(",", "");
 
   const setMealStatus = (index: number, status: MealStatus) => {
+    const confirmed = status === "plan" || status === "distinto";
     const next = habits.map((h, i) =>
-      i === index ? { ...h, status, done: status === "plan" || status === "distinto" } : h,
+      i === index
+        ? {
+            ...h,
+            status,
+            done: confirmed,
+            // Contra qué plato del plan se confirmó — ver `confirmedIdea` en
+            // plan-shared.ts.
+            confirmedIdea: confirmed
+              ? (todayMeals.find((m) => m.moment === h.label)?.idea ?? h.confirmedIdea)
+              : h.confirmedIdea,
+          }
+        : h,
     );
     save.mutate({ habits: next });
   };
 
   const clearMealStatus = (index: number) => {
-    const next = habits.map((h, i) => (i === index ? { ...h, status: undefined, done: false } : h));
+    const next = habits.map((h, i) =>
+      i === index ? { ...h, status: undefined, done: false, confirmedIdea: undefined } : h,
+    );
     save.mutate({ habits: next });
   };
 

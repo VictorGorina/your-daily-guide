@@ -301,6 +301,10 @@ export function useMealSwap(
                   ...h,
                   status: "distinto" as const,
                   done: true,
+                  // Contra qué plato del plan se confirmó — ver `confirmedIdea`
+                  // en plan-shared.ts. Aquí siempre es el plato nuevo, porque
+                  // `changeMeal` ya lo ha escrito en el plan.
+                  confirmedIdea: dish,
                   // El tachado es la sugerencia ORIGINAL del plan, congelada.
                   // `reconcileHabits` ya la habrá puesto al cargar Hoy; esto es
                   // el cinturón para un registro que venga de antes.
