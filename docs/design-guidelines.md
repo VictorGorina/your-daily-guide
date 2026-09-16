@@ -39,7 +39,7 @@ gestionan los diseños del proyecto).
 | Verde fresco     | `#6DBE7B` | Progreso conseguido. Día cumplido: `#4CAE64`.         |
 | Amarillo mostaza | `#F2C14E` | Aviso suave: día a medias, presupuesto al límite.     |
 | Gris salto       | `#F0EDE7` | Comida saltada. Se acompaña de `opacity .55`.         |
-| Fin de semana    | `#F7E2CE` | Sábado y domingo en la tira semanal. Texto `#A85F24`. |
+| Fin de semana    | `#F0C99A` | Sábado y domingo en la tira semanal. Texto `#7A4614`. |
 
 ### Sistema de comida — un color por categoría
 

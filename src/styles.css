@@ -127,8 +127,8 @@
   --success-foreground: #fbfaf7;
   --success-soft: #e1f2e4;
   /* Fin de semana en la tira semanal (docs/design-guidelines.md §2). */
-  --weekend: #f7e2ce;
-  --weekend-foreground: #a85f24;
+  --weekend: #f0c99a;
+  --weekend-foreground: #7a4614;
 
   --chart-1: #6dbe7b;
   --chart-2: #ff8a3d;
@@ -187,8 +187,8 @@
   --success: #6bc17e;
   --success-foreground: #16231a;
   --success-soft: #2c3a2b;
-  --weekend: #3a2c1c;
-  --weekend-foreground: #f0b27e;
+  --weekend: #4a3418;
+  --weekend-foreground: #f5c08a;
 
   --chart-1: #7fcb8d;
   --chart-2: #ff9d5c;

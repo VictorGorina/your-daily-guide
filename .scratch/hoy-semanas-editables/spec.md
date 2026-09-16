@@ -1,7 +1,7 @@
 # Spec — Hoy: semanas navegables y platos editables
 
 Status: decisiones cerradas (2026-09-15; D1 y D2 ampliadas y umbrales aprobados el mismo día).
-Tickets 01 y 02 resueltos; 03 listo para empezar.
+Tickets 01, 02 y 03 resueltos; 04 listo para empezar.
 Feature slug: `hoy-semanas-editables`
 Relacionada con: `.scratch/precision-nutricional/` (tickets 01, 06, 07 y 12; ver "Encaje con
 precision-nutricional").
@@ -15,11 +15,11 @@ plato del plan. **Cualquier cambio de plato**, venga de la tira, de "Comí otra 
 coach, pasa por el mismo análisis de macros en código y, si supera la tabla de umbrales según el
 objetivo, se compensa en otras comidas futuras.
 
-## Estado actual (2026-09-15)
+## Estado actual (2026-09-16)
 
 | | Web | Móvil |
 |---|---|---|
-| Tira | Solo la semana actual, rejilla fija de 7 ([week-strip.tsx](../../src/components/week-strip.tsx)) | Igual ([week-strip.tsx](../../mobile/components/week-strip.tsx)) |
+| Tira | Solo la semana actual, rejilla fija de 7 ([week-strip.tsx](../../src/components/week-strip.tsx)) | Carrusel de semanas con chevrons, etiqueta, píldora "Hoy" y anillo animado (ticket 03, [week-pager.tsx](../../mobile/components/week-pager.tsx); sustituye a `week-strip.tsx`, borrado) |
 | Día pasado | `DayDetailBody` inline; se edita tocando la fila entera, sin pista visible | Igual |
 | Hoy / futuro | `DayMenu` de solo lectura | Igual |
 | Librerías disponibles | `embla-carousel-react`, `motion` | `react-native-reanimated` 4.5 (sin gesture-handler ni haptics) |

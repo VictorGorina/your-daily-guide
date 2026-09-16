@@ -74,8 +74,8 @@ function signalText(signal: ReturnType<typeof ratioSignal>) {
 
 // Fin de semana futuro — mismo hex fijo que la web (docs/design-guidelines.md
 // §2, tokens --weekend/--weekend-foreground en src/styles.css).
-const WEEKEND_BG = "#f7e2ce";
-const WEEKEND_TEXT = "#a85f24";
+const WEEKEND_BG = "#f0c99a";
+const WEEKEND_TEXT = "#7a4614";
 
 type WeekPagerProps = {
   today: string;
@@ -225,7 +225,7 @@ export function WeekPager({
               className="rounded-full bg-primary/10 px-2 py-0.5 active:opacity-70"
             >
               <Text className="font-mono-medium text-[9.5px] uppercase tracking-wide text-primary">
-                Hoy
+                Volver a hoy
               </Text>
             </Pressable>
           ) : null}
