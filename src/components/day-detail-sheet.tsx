@@ -87,7 +87,7 @@ export function DayDetailSheet({
 
 /**
  * Cuerpo del detalle de un día pasado, sin wrapper de diálogo. Se exporta para
- * que Hoy lo pueda renderizar inline al tocar un día pasado en el WeekStrip.
+ * que Hoy lo pueda renderizar inline al tocar un día pasado en la tira de WeekPager.
  */
 /** Contexto del hogar que necesita el toggle "toda la familia comió esto". */
 export type DayDetailHousehold = {

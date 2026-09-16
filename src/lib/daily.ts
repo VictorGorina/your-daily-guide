@@ -696,7 +696,7 @@ export function goalProgress(profile: Profile | null): GoalProgress {
 export type RatioSignal = "success" | "warning" | "muted" | "none";
 
 /**
- * Semáforo de cumplimiento diario, compartido por WeekStrip, MonthCalendar y
+ * Semáforo de cumplimiento diario, compartido por WeekPager, MonthCalendar y
  * el mapa de calor de Historial. Deliberadamente sin rojo: un día flojo se
  * marca "muted" (gris neutro), nunca como fallo — ver área 5 del roadmap UX
  * ("motivación y retención"). "none" es solo para días sin ningún registro.

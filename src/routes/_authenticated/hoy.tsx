@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Briefcase,
@@ -14,12 +14,13 @@ import {
   PencilLine,
   X,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 
 import { AdjustmentInfoSheet } from "@/components/adjustment-info-sheet";
 import { BottomNav } from "@/components/bottom-nav";
 import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
-import { DayDetailBody } from "@/components/day-detail-sheet";
+import { DayDetailBody, type DayDetailHousehold } from "@/components/day-detail-sheet";
 import { DishRecipe } from "@/components/dish-recipe";
 import { DishCategoryIcon, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
@@ -28,11 +29,12 @@ import { MealSwapSheet } from "@/components/meal-swap-sheet";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
 import { SnackCard } from "@/components/snack-card";
 import { SnackSheet } from "@/components/snack-sheet";
-import { WeekStrip } from "@/components/week-strip";
+import { WeekPager } from "@/components/week-pager";
 import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
 import {
   ensureTodayLog,
   fetchLogs,
+  fetchLogsForMonth,
   fetchMonthlyPlan,
   fetchProfile,
   impulsoFrom,
@@ -43,6 +45,7 @@ import {
   weeklyTrendFrom,
   type DailyLog,
   type MealStatus,
+  type Profile,
 } from "@/lib/daily";
 
 import { generateDailyGuide } from "@/lib/guide.functions";
@@ -78,7 +81,12 @@ import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
 import { useMealSwap } from "@/lib/use-meal-swap";
 import { applyTheme } from "@/lib/theme";
 import { quoteOfTheDay } from "@/lib/quotes";
+import { monthsOfWeek, weekDates, weekStartOf } from "@/lib/week-nav";
 import { resolveDeviceTimeZone } from "@/lib/zoned-date";
+
+// Misma curva que el resto de la app (docs/design-guidelines.md §7) y que
+// `week-pager.tsx`, para que el panel del día y la tira se muevan igual.
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 export const Route = createFileRoute("/_authenticated/hoy")({
   component: Hoy,
@@ -242,6 +250,64 @@ function Hoy() {
   }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
   const today0 = todayISO();
+  const [visibleWeek, setVisibleWeek] = useState(() => weekStartOf(today0));
+  // Dirección (izquierda/derecha) del último cambio de día abierto en la
+  // tira, para que el panel entre desde el lado del día tocado (ver
+  // `DayPanel` más abajo). Se fija al tocar un día nuevo; da igual mientras
+  // `openDay` sea null.
+  const [dayDir, setDayDir] = useState(1);
+  const appStartedOn = profileQ.data?.app_started_on ?? null;
+
+  // Meses que puede llegar a pisar la tira: la semana visible y sus dos
+  // vecinas (lo que `WeekPager` puede llegar a pintar con su ventana de ±2),
+  // para que deslizar hasta el borde de un mes no se quede sin datos. Solo
+  // cambia cuando cambia de semana, no en cada frame de scroll.
+  const pagerMonths = useMemo(() => {
+    const months = new Set([
+      ...monthsOfWeek(visibleWeek),
+      ...monthsOfWeek(weekDates(visibleWeek)[0]),
+      ...monthsOfWeek(weekDates(visibleWeek)[6]),
+    ]);
+    return [...months].sort();
+  }, [visibleWeek]);
+  const pagerLogsQ = useQueries({
+    queries: pagerMonths.map((m) => ({
+      queryKey: ["logs", m],
+      queryFn: () => fetchLogsForMonth(m),
+    })),
+  });
+  const pagerPlanQ = useQueries({
+    queries: pagerMonths.map((m) => ({
+      queryKey: ["plan", m],
+      queryFn: () => fetchMonthlyPlan(m),
+    })),
+  });
+  const logByDate = useMemo(() => {
+    const map = new Map<string, DailyLog>();
+    for (const q of pagerLogsQ) for (const l of q.data ?? []) map.set(l.log_date, l);
+    return map;
+  }, [pagerLogsQ]);
+  const planByMonth = useMemo(() => {
+    const map = new Map<string, MonthlyPlan | null>();
+    pagerMonths.forEach((m, i) => map.set(m, (pagerPlanQ[i]?.data?.plan as MonthlyPlan) ?? null));
+    return map;
+  }, [pagerMonths, pagerPlanQ]);
+
+  const onSelectDay = (d: string) => {
+    if (openDay === d) {
+      setOpenDay(null);
+      return;
+    }
+    if (openDay) setDayDir(d > openDay ? 1 : -1);
+    setOpenDay(d);
+  };
+  // Plegar el panel del día si deja de pertenecer a la semana visible (p. ej.
+  // tras deslizar a otra semana con el día abierto).
+  useEffect(() => {
+    if (openDay && !weekDates(visibleWeek).includes(openDay)) setOpenDay(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleWeek]);
+
   // Cinturón extra sobre el filtro por contenido de `mealsForDate`: si el
   // plato de hoy vino espejado de una comida compartida del hogar (que no
   // sabe de las preferencias de cada persona), esto lo descarta igual cuando
@@ -949,42 +1015,41 @@ function Hoy() {
       </button>
 
       <section className="animate-rise mt-6">
-        <WeekStrip
+        <WeekPager
+          today={today0}
+          appStartedOn={appStartedOn}
           selected={openDay}
-          onSelect={(d) => setOpenDay((prev) => (prev === d ? null : d))}
-          logs={logsQ.data ?? []}
+          onSelect={onSelectDay}
+          visibleWeek={visibleWeek}
+          onVisibleWeekChange={setVisibleWeek}
+          logsFor={(d) => logByDate.get(d)}
           todayHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
         />
-        {openDay && openDay < todayISO() ? (
-          <div className="mt-3 rounded-2xl bg-surface p-4">
-            <p className="mb-3 text-xs font-semibold text-foreground">
-              {capitalizeFirst(
-                new Date(`${openDay}T00:00:00`).toLocaleDateString("es-ES", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                }),
-              )}
-            </p>
-            <DayDetailBody
-              date={openDay}
-              plan={planQ.data?.plan ?? null}
-              log={logsQ.data?.find((l) => l.log_date === openDay)}
-              profile={profile ?? null}
-              householdChildren={householdQ.data?.children}
-              household={
-                householdQ.data?.household?.shared_slots
-                  ? {
-                      sharedSlots: householdQ.data.household.shared_slots,
-                      memberCount: (householdQ.data.members ?? []).filter((m) => m.user_id).length,
-                    }
-                  : undefined
-              }
-            />
-          </div>
-        ) : openDay ? (
-          <DayMenu date={openDay} plan={planQ.data?.plan ?? null} selectedSlots={mySlots} />
-        ) : null}
+        <motion.div layout transition={{ duration: 0.35, ease: EASE }}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {openDay ? (
+              <DayPanel
+                key={openDay}
+                date={openDay}
+                direction={dayDir}
+                plan={planByMonth.get(openDay.slice(0, 7)) ?? null}
+                log={logByDate.get(openDay)}
+                profile={profile ?? null}
+                householdChildren={householdQ.data?.children}
+                household={
+                  householdQ.data?.household?.shared_slots
+                    ? {
+                        sharedSlots: householdQ.data.household.shared_slots,
+                        memberCount: (householdQ.data.members ?? []).filter((m) => m.user_id)
+                          .length,
+                      }
+                    : undefined
+                }
+                mySlots={mySlots}
+              />
+            ) : null}
+          </AnimatePresence>
+        </motion.div>
         <p className="mt-2.5 px-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
           {openDay && openDay < todayISO()
             ? "Toca una comida para corregir lo que comiste."
@@ -1085,6 +1150,67 @@ function Hoy() {
 
       <BottomNav />
     </main>
+  );
+}
+
+// ── Contenido del día abierto en la tira: pasado (corrección) o futuro/hoy
+// (menú), con un deslizamiento simple al cambiar de día (ticket 04 de
+// hoy-semanas-editables). `key={date}` en el llamador fuerza el
+// entrar/salir de `AnimatePresence`; `direction` decide desde qué lado entra
+// (mismo criterio que la etiqueta de `WeekPager`: día posterior entra desde
+// la derecha, anterior desde la izquierda).
+function DayPanel({
+  date,
+  direction,
+  plan,
+  log,
+  profile,
+  householdChildren,
+  household,
+  mySlots,
+}: {
+  date: string;
+  direction: number;
+  plan: MonthlyPlan | null;
+  log: DailyLog | undefined;
+  profile: Profile | null;
+  householdChildren?: { id: string; name: string }[];
+  household?: DayDetailHousehold;
+  mySlots: readonly MealSlot[];
+}) {
+  const isPast = date < todayISO();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: direction * 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -direction * 12 }}
+      transition={{ duration: 0.2, ease: EASE }}
+    >
+      {isPast ? (
+        <div className="mt-3 rounded-2xl bg-surface p-4">
+          <p className="mb-3 text-xs font-semibold text-foreground">
+            {capitalizeFirst(
+              new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              }),
+            )}
+          </p>
+          <DayDetailBody
+            date={date}
+            plan={plan}
+            log={log}
+            profile={profile}
+            householdChildren={householdChildren}
+            household={household}
+          />
+        </div>
+      ) : (
+        <DayMenu date={date} plan={plan} selectedSlots={mySlots} />
+      )}
+    </motion.div>
   );
 }
 

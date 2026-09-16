@@ -582,7 +582,7 @@ async function generatePlanBody(opts: {
         `${budgetLine} ` +
         `${cadenceLine} ` +
         "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
-        "Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: en las comidas fuera de casa propón una opción de menú o restaurante y no cuentes sus ingredientes en la compra. " +
+        'Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: incluso en las comidas fuera de casa da SIEMPRE un plato concreto y realista, tipo fiambrera o menú de oficina (ensalada de atún, pechuga con arroz, sándwich de pavo...), nunca "come fuera", un menú del día o un restaurante genéricos — la única excepción es un cheat day puntual (por ejemplo, tras hacer mucho deporte o comer poco ese día), donde sí vale dejarlo abierto. No cuentes los ingredientes de esas comidas fuera de casa en la lista de la compra. ' +
         `${mealSlotsLine}` +
         `${servingsLine}` +
         `${kidsLine}` +
