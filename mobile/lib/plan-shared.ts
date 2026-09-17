@@ -344,6 +344,17 @@ export type MealHabit = {
   adjustmentSummary?: string;
   /** Desvío estimado en kcal del lote frente a lo que preveía el plan. */
   adjustmentKcal?: number;
+  /**
+   * Desvío en kcal de ESTA comida frente al plan, capturado al cambiarla
+   * (`compensateDishChanges`). Se sobrescribe si se vuelve a cambiar la misma
+   * comida. Vive aparte de `adjustmentKcal` (que es el total ya compensado de
+   * un lote) porque hace falta poder sumar el desvío de varios cambios
+   * repartidos en distintos lotes del mismo día antes de que ninguno cruce el
+   * umbral por separado — ver `pendingSwapKcal`.
+   */
+  swapKcalDelta?: number;
+  /** Si `swapKcalDelta` ya se mandó a `reflowMeals`. */
+  swapCompensated?: boolean;
 };
 
 /**
@@ -355,6 +366,11 @@ export function suggestedDish(habit: MealHabit, currentIdea: string): string | n
   const suggested = habit.plannedIdea || habit.wasIdea;
   return suggested && suggested !== currentIdea ? suggested : null;
 }
+
+// `pendingSwapKcal` (web: src/lib/plan-shared.ts) no se porta aquí: la decide
+// siempre el servidor dentro de `compensateDishChanges`, igual que
+// `compensationNeed`/`compensationWindow` — el cliente móvil solo avisa de
+// qué ha cambiado, nunca suma kcal por su cuenta.
 
 /**
  * Casa el registro del día con las comidas que el plan tiene HOY para esta

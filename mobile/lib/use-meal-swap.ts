@@ -14,14 +14,8 @@ import {
   type DailyGuide,
   type DailyLog,
 } from "./daily";
-import { kcalDeltaOf } from "./macros";
-import {
-  diffFutureMeals,
-  mealsForDate,
-  type MealChange,
-  type MealSlot,
-  type MonthlyPlan,
-} from "./plan-shared";
+import { perMealKcalDeltas } from "./macros";
+import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "./plan-shared";
 
 export type { MealChange };
 
@@ -35,8 +29,11 @@ export type { MealChange };
  * cual y se marca esa comida como "comí distinto". Nada bloquea la pantalla.
  *
  * **Tras `BATCH_MS` sin tocar nada (un lote, dos llamadas):** se regenera la
- * guía del día una sola vez y se llama una sola vez a `plan/adjust` con el
- * desvío real en kcal.
+ * guía del día una sola vez y se llama una sola vez a `plan/compensate`, con
+ * el desvío por comida. El servidor decide EN CÓDIGO (núcleo de
+ * compensación, ticket 08 de `hoy-semanas-editables`) si el desvío del día
+ * completo (este lote + lo pendiente de lotes anteriores) pide recolocar —
+ * ver `compensateDishChanges` en `src/lib/plan.functions.ts` de la web.
  */
 
 /** Ventana de calma antes de mandar el lote. */
@@ -84,13 +81,6 @@ async function readPersisted(date: string): Promise<PendingChange[]> {
   }
 }
 
-function noteFor(changes: PendingChange[]) {
-  const lines = changes.map(
-    (c) => `${c.label}: ha comido "${c.dish}" en vez de "${c.plannedDish || "(plato del plan)"}"`,
-  );
-  return `Cambios de hoy — ${lines.join("; ")}. Recoloca los días futuros para compensar.`;
-}
-
 async function run(): Promise<void> {
   if (timer) {
     clearTimeout(timer);
@@ -125,26 +115,22 @@ async function run(): Promise<void> {
     };
     await updateTodayLog({ guide });
 
-    const kcalDelta = kcalDeltaOf(changes, freshGuide.mealMacros);
-
-    const { plan: planAfter, summary } = await apiPost<{ plan: MonthlyPlan; summary: string }>(
-      "plan/adjust",
-      { month, note: noteFor(changes), today, kcalDelta },
-    );
-
-    const futureChanges = diffFutureMeals(planBefore, planAfter, today);
-    await patchTodayHabits((habits) =>
-      habits.map((h) =>
-        changes.some((c) => c.label === h.label)
-          ? {
-              ...h,
-              adjustmentChanges: futureChanges,
-              adjustmentSummary: summary,
-              ...(kcalDelta == null ? {} : { adjustmentKcal: kcalDelta }),
-            }
-          : h,
-      ),
-    );
+    // El servidor decide si el desvío del DÍA (este lote + lo que quedara
+    // pendiente de lotes anteriores) pide recolocar; escribe él mismo
+    // `adjustmentChanges`/`adjustmentSummary`/`adjustmentKcal` sobre las
+    // comidas que de verdad compensó — `onDone` invalida `["today"]` y la UI
+    // los recoge de ahí.
+    const deltas = perMealKcalDeltas(changes, freshGuide.mealMacros);
+    if (deltas.length) {
+      const byLabel = new Map(changes.map((c) => [c.label, c]));
+      await apiPost("plan/compensate", {
+        today,
+        changes: deltas.map(({ label, kcalDelta }) => {
+          const c = byLabel.get(label)!;
+          return { label, slot: c.slot, dish: c.dish, plannedDish: c.plannedDish, kcalDelta };
+        }),
+      });
+    }
   } catch (err) {
     console.warn("meal swap batch failed", err);
     Alert.alert(

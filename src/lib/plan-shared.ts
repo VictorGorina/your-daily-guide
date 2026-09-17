@@ -1654,6 +1654,17 @@ export type MealHabit = {
   /** Desvío estimado en kcal del lote frente a lo que preveía el plan. */
   adjustmentKcal?: number;
   /**
+   * Desvío en kcal de ESTA comida frente al plan, capturado al cambiarla
+   * (`compensateDishChanges`). Se sobrescribe si se vuelve a cambiar la misma
+   * comida. Vive aparte de `adjustmentKcal` (que es el total ya compensado de
+   * un lote) porque hace falta poder sumar el desvío de varios cambios
+   * repartidos en distintos lotes del mismo día antes de que ninguno cruce el
+   * umbral por separado — ver `pendingSwapKcal`.
+   */
+  swapKcalDelta?: number;
+  /** Si `swapKcalDelta` ya se mandó a `reflowMeals`. */
+  swapCompensated?: boolean;
+  /**
    * Plato que había en el plan cuando se confirmó "comí esto" o "comí otra
    * cosa" — no lo que se comió, sino contra qué momento del plan se confirmó.
    * `reconcileHabits` lo compara con el plato actual del plan para detectar
@@ -1671,6 +1682,22 @@ export type MealHabit = {
 export function suggestedDish(habit: MealHabit, currentIdea: string): string | null {
   const suggested = habit.plannedIdea || habit.wasIdea;
   return suggested && suggested !== currentIdea ? suggested : null;
+}
+
+/**
+ * kcal de cambios de plato de hoy que todavía no se han mandado a
+ * `reflowMeals` (con signo): la suma de `swapKcalDelta` de las comidas cuyo
+ * `swapCompensated` no es `true`. Mismo papel que `pendingSnackKcal` para el
+ * picoteo — deja que dos cambios pequeños en lotes distintos se sumen hasta
+ * pasar el umbral de `compensationNeed` aunque ninguno lo cruce por separado.
+ */
+export function pendingSwapKcal(habits: readonly MealHabit[]): number {
+  let total = 0;
+  for (const h of habits) {
+    if (h.swapCompensated || h.swapKcalDelta == null) continue;
+    total += h.swapKcalDelta;
+  }
+  return Math.round(total);
 }
 
 /**

@@ -120,3 +120,13 @@ el resto no cambia. Ese ticket debe respetar `lockedDates` y `pinned`.
   proteinDelta }` en vez de `null`. Corrección del texto de arriba: con embarazo o lactancia lo que
   nunca se hace es QUITAR energía, es decir, no se compensa un Δkcal > 0 (un Δ < 0 sí se repone).
 
+- 2026-09-17: el ticket 09 (Hoy) está hecho, pero con un diseño distinto al de arriba — ver su
+  comentario. No hay `dish-change-batch.ts` ni `computeDishMacros` ni `lockedDates`/`proteinDelta`
+  en `reflowMeals`: `compensateDishChanges` guarda el desvío por comida directamente en
+  `MealHabit.swapKcalDelta`/`swapCompensated` y decide con la suma del día completo
+  (`pendingSwapKcal`), que además cierra un hueco que el diseño de arriba tampoco resolvía (Δkcal
+  se agrupaba solo dentro de un lote, nunca entre lotes separados del mismo día). Si la tira de
+  días futuros (ticket 07) o el coach (ticket 10) llegan a necesitar un núcleo compartido de
+  verdad, hace falta generalizar esto — hoy solo tiene un consumidor (Hoy) y no vale la pena
+  construir la abstracción sin un segundo caso real.
+

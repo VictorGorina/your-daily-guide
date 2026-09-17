@@ -50,6 +50,7 @@ import {
   boughtTotal,
   homeTotal,
   ownedTotal,
+  pendingSwapKcal,
   pendingTotal,
   dateOfPlanCell,
   planForDate,
@@ -1604,6 +1605,40 @@ describe("suggestedDish", () => {
 
   it("cae a wasIdea para registros antiguos", () => {
     expect(suggestedDish({ label: "Cena", done: true, wasIdea: "Crema" }, "Pizza")).toBe("Crema");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pendingSwapKcal — desvío de cambios de plato aún no compensado
+// ---------------------------------------------------------------------------
+
+describe("pendingSwapKcal", () => {
+  it("suma el desvío de varias comidas cambiadas en lotes distintos", () => {
+    expect(
+      pendingSwapKcal([
+        { label: "Comida", done: true, swapKcalDelta: 120, swapCompensated: false },
+        { label: "Cena", done: true, swapKcalDelta: 150, swapCompensated: false },
+      ]),
+    ).toBe(270);
+  });
+
+  it("no cuenta un desvío ya compensado", () => {
+    expect(
+      pendingSwapKcal([
+        { label: "Comida", done: true, swapKcalDelta: 120, swapCompensated: true },
+        { label: "Cena", done: true, swapKcalDelta: 150, swapCompensated: false },
+      ]),
+    ).toBe(150);
+  });
+
+  it("ignora las comidas sin cambio de plato", () => {
+    expect(pendingSwapKcal([{ label: "Desayuno", done: true }])).toBe(0);
+  });
+
+  it("admite un desvío negativo (se ha comido menos de lo previsto)", () => {
+    expect(
+      pendingSwapKcal([{ label: "Cena", done: true, swapKcalDelta: -80, swapCompensated: false }]),
+    ).toBe(-80);
   });
 });
 

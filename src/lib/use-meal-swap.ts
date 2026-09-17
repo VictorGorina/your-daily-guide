@@ -14,15 +14,9 @@ import {
   type DailyLog,
 } from "@/lib/daily";
 import { generateDailyGuide, type GeneratedGuide } from "@/lib/guide.functions";
-import { kcalDeltaOf } from "@/lib/macros";
-import { adjustMonthlyPlan, setPlanMeal } from "@/lib/plan.functions";
-import {
-  diffFutureMeals,
-  mealsForDate,
-  type MealChange,
-  type MealSlot,
-  type MonthlyPlan,
-} from "@/lib/plan-shared";
+import { perMealKcalDeltas } from "@/lib/macros";
+import { compensateDishChanges, setPlanMeal } from "@/lib/plan.functions";
+import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "@/lib/plan-shared";
 
 export type { MealChange };
 
@@ -35,8 +29,13 @@ export type { MealChange };
  *
  * **Tras `BATCH_MS` sin tocar nada (un lote, dos llamadas):** se regenera la
  * guía del día una sola vez (macros nuevas) y se llama una sola vez a
- * `adjustMonthlyPlan` para recolocar los días futuros, con el desvío real en
- * kcal calculado a partir de las macros de antes y de después.
+ * `compensateDishChanges`, con el desvío por comida calculado a partir de las
+ * macros de antes y de después. Esa función decide EN CÓDIGO (núcleo de
+ * compensación, ticket 08 de `hoy-semanas-editables`) si hace falta recolocar
+ * días futuros — el modelo ya no decide "suave" o "fuerte" leyendo el prompt.
+ * El desvío se guarda por comida en `habits` y se acumula entre lotes
+ * distintos del mismo día: dos cambios pequeños que por separado no llegarían
+ * al umbral sí lo cruzan sumados.
  *
  * Antes cada plato disparaba sus dos llamadas de IA en cadena y bloqueaba el
  * sheet entero mientras tanto (~10-25 s por plato), así que cambiar tres
@@ -70,9 +69,18 @@ type PendingChange = {
  * lote puede saltar con la pantalla de Hoy ya desmontada.
  */
 type BatchDeps = {
-  adjustPlan: (opts: {
-    data: { month: string; note: string; today: string; kcalDelta: number | null };
-  }) => Promise<{ plan: MonthlyPlan; summary: string }>;
+  compensate: (opts: {
+    data: {
+      today: string;
+      changes: {
+        label: string;
+        slot: MealSlot;
+        dish: string;
+        plannedDish: string;
+        kcalDelta: number;
+      }[];
+    };
+  }) => Promise<{ adjusted: boolean; reason?: string; summary?: string }>;
   makeGuide: (opts: {
     data: { meals: { moment: string; idea: string }[] };
   }) => Promise<GeneratedGuide>;
@@ -120,18 +128,11 @@ function readPersisted(date: string): PendingChange[] {
   }
 }
 
-/** "Cena: has comido X en vez de Y" para cada comida del lote. */
-function noteFor(changes: PendingChange[]) {
-  const lines = changes.map(
-    (c) => `${c.label}: ha comido "${c.dish}" en vez de "${c.plannedDish || "(plato del plan)"}"`,
-  );
-  return `Cambios de hoy — ${lines.join("; ")}. Recoloca los días futuros para compensar.`;
-}
-
 /**
- * Manda el lote: una llamada para las macros, otra para recolocar el plan.
- * Nunca lanza — un fallo de IA no debe dejar la pantalla rota, y el plato ya
- * está guardado de todas formas.
+ * Manda el lote: una llamada para las macros, otra para que el servidor
+ * decida (en código, no el modelo) si el día acumula desvío suficiente para
+ * recolocar el plan. Nunca lanza — un fallo de IA no debe dejar la pantalla
+ * rota, y el plato ya está guardado de todas formas.
  */
 async function run(): Promise<void> {
   if (timer) {
@@ -146,7 +147,7 @@ async function run(): Promise<void> {
     return;
   }
   const changes = [...pending.values()];
-  const { adjustPlan, makeGuide, onDone } = deps;
+  const { compensate, makeGuide, onDone } = deps;
   const today = pendingDate;
   const month = today.slice(0, 7);
   running = true;
@@ -175,26 +176,25 @@ async function run(): Promise<void> {
     };
     await updateTodayLog({ guide });
 
-    const kcalDelta = kcalDeltaOf(changes, freshGuide.mealMacros);
-
-    // --- Recolocación de días futuros: UNA llamada para todo el lote ---
-    const { plan: planAfter, summary } = await adjustPlan({
-      data: { month, note: noteFor(changes), today, kcalDelta },
-    });
-
-    const futureChanges = diffFutureMeals(planBefore, planAfter, today);
-    await patchTodayHabits((habits) =>
-      habits.map((h) =>
-        changes.some((c) => c.label === h.label)
-          ? {
-              ...h,
-              adjustmentChanges: futureChanges,
-              adjustmentSummary: summary,
-              ...(kcalDelta == null ? {} : { adjustmentKcal: kcalDelta }),
-            }
-          : h,
-      ),
-    );
+    // --- Compensación: el servidor decide si el desvío del DÍA (este lote +
+    // lo que quedara pendiente de lotes anteriores) pide recolocar ---
+    const deltas = perMealKcalDeltas(changes, freshGuide.mealMacros);
+    if (deltas.length) {
+      const byLabel = new Map(changes.map((c) => [c.label, c]));
+      await compensate({
+        data: {
+          today,
+          changes: deltas.map(({ label, kcalDelta }) => {
+            const c = byLabel.get(label)!;
+            return { label, slot: c.slot, dish: c.dish, plannedDish: c.plannedDish, kcalDelta };
+          }),
+        },
+      });
+    }
+    // Los campos `adjustmentChanges`/`adjustmentSummary`/`adjustmentKcal` los
+    // escribe el propio servidor sobre las comidas que de verdad compensó
+    // (pueden ser más que las de este lote, si arrastraba un pendiente de
+    // antes) — `onDone` invalida `["today"]` y la UI los recoge de ahí.
   } catch (err) {
     console.error("meal swap batch failed", err);
     toast.error("El plato se ha cambiado, pero no se han podido ajustar los días futuros.");
@@ -225,7 +225,7 @@ export function useMealSwap(
 ) {
   const qc = useQueryClient();
   const changeMeal = useServerFn(setPlanMeal);
-  const adjustPlan = useServerFn(adjustMonthlyPlan);
+  const compensate = useServerFn(compensateDishChanges);
   const makeGuide = useServerFn(generateDailyGuide);
 
   const state = useSyncExternalStore(
@@ -239,7 +239,7 @@ export function useMealSwap(
 
   const bindDeps = useCallback(() => {
     deps = {
-      adjustPlan,
+      compensate,
       makeGuide,
       onDone: () => {
         qc.invalidateQueries({ queryKey: ["today"] });
@@ -247,7 +247,7 @@ export function useMealSwap(
         qc.invalidateQueries({ queryKey: ["plan"] });
       },
     };
-  }, [adjustPlan, makeGuide, qc]);
+  }, [compensate, makeGuide, qc]);
 
   // Red de seguridad: si la app se cerró dentro de la ventana de calma, el lote
   // guardado se manda al volver a Hoy. El plato ya estaba guardado; lo que se

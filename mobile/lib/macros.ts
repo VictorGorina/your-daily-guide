@@ -52,32 +52,31 @@ export function sumDoneMacros(
 }
 
 /**
- * Desvío en kcal de un lote de cambios de plato frente a lo que preveía el
- * plan: para cada comida cambiada, lo que estima la guía nueva menos lo que
- * estimaba la guía que había antes de tocarla.
+ * Desvío en kcal de cada comida cambiada frente a lo que preveía el plan: lo
+ * que estima la guía nueva menos lo que estimaba la guía de antes de tocarla,
+ * UNA cifra por comida (no ya sumadas).
  *
- * Es lo que convierte "he comido pizza y cerveza" en una cifra que la IA puede
- * usar para recolocar los días siguientes (`kcalDelta` en `adjustMonthlyPlan`).
- * Antes no se le pasaba nada desde Hoy y el coach solía responder que el plan
- * ya estaba equilibrado.
+ * Es lo que convierte "he comido pizza y cerveza" en algo que el servidor
+ * puede acumular día a día (`compensateDishChanges`, que guarda cada cifra en
+ * `MealHabit.swapKcalDelta` y decide con `pendingSwapKcal` si hace falta
+ * recolocar el plan): dos cambios pequeños por separado deben poder sumar
+ * hasta pasar el umbral aunque cada lote solo vea el suyo.
  *
- * Devuelve `null` si no hay ninguna comida con las dos cifras — sin dato es
- * mejor no inventarse un cero, que la IA leería como "no ha pasado nada".
+ * Omite las comidas sin las dos cifras — sin dato es mejor no inventarse un
+ * cero, que se leería como "no ha pasado nada".
  */
-export function kcalDeltaOf(
+export function perMealKcalDeltas(
   changes: readonly { label: string; prevKcal: number | null }[],
   mealMacros: MealMacroEstimate[] | null | undefined,
-): number | null {
-  let total = 0;
-  let counted = 0;
+): { label: string; kcalDelta: number }[] {
+  const out: { label: string; kcalDelta: number }[] = [];
   for (const change of changes) {
     if (change.prevKcal == null) continue;
     const now = mealMacros?.find((m) => m.moment === change.label)?.kcal;
     if (typeof now !== "number") continue;
-    total += now - change.prevKcal;
-    counted += 1;
+    out.push({ label: change.label, kcalDelta: Math.round(now - change.prevKcal) });
   }
-  return counted ? Math.round(total) : null;
+  return out;
 }
 
 /**
