@@ -186,7 +186,9 @@ function markAutoPlanAttempt(month: string) {
 //      nivel de módulo, no por montaje), para no martillear la IA. Mismo
 //      criterio que `AUTO_PLAN_MIN_INTERVAL_MS`.
 const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
+const AUTO_GUIDE_BACKOFF_MS = 600_000;
 let lastAutoGuideAttempt = 0;
+let lastAutoGuideFailed = false;
 
 function Hoy() {
   const navigate = useNavigate();
@@ -473,12 +475,15 @@ function Hoy() {
         },
       });
       await updateTodayLog({ guide: g });
+      lastAutoGuideFailed = false;
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
-      // El reintento automático (`silent`) falla sin ruido: hay un botón
-      // "Generar" a la vista para reintentar a mano, y así un fallo no deja un
-      // toast por cada vez que Hoy se vuelve a montar.
-      if (!silent) toast.error("El coach no ha podido responder ahora mismo");
+      if (silent) {
+        lastAutoGuideFailed = true;
+      } else {
+        lastAutoGuideFailed = false;
+        toast.error("El coach no ha podido responder ahora mismo");
+      }
     } finally {
       setGenerating(false);
     }
@@ -509,7 +514,8 @@ function Hoy() {
         return !!cached?.idea && cached.idea !== m.idea;
       });
     if (!g || !g.meals?.length || !g.tips?.length || missingMacros || staleMacros) {
-      if (Date.now() - lastAutoGuideAttempt < AUTO_GUIDE_MIN_INTERVAL_MS) return;
+      const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
+      if (Date.now() - lastAutoGuideAttempt < cooldown) return;
       lastAutoGuideAttempt = Date.now();
       void requestGuide({ silent: true });
     }
