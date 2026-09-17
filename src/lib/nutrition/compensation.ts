@@ -53,12 +53,24 @@ export function compensationNeed(input: {
   deltaProtein?: number | null;
   goal: string | null | undefined;
   pregnancyStatus?: string | null;
+  /**
+   * Deshace una compensación ya aplicada (se borra o reduce un picoteo que ya
+   * había recolocado días futuros), no es un desvío nuevo. El umbral "a favor"
+   * del objetivo (`below`) no aplica aquí: ese margen existe para no tocar el
+   * plan por un déficit real que conviene dejar estar, pero esto no es un
+   * déficit — es deshacer un ajuste que ya no tiene motivo. Se repone en
+   * cuanto llega al mismo umbral (`above`) que hizo falta para aplicarlo, para
+   * que sumar y quitar el mismo picoteo sea simétrico.
+   */
+  reversing?: boolean;
 }): CompensationDecision {
   const deltaKcal = Math.round(input.deltaKcal);
   const deltaProtein = input.deltaProtein == null ? null : Math.round(input.deltaProtein);
   const limits = COMPENSATION_THRESHOLDS[isGoal(input.goal) ? input.goal : "mantener"];
 
-  const kcalHit = deltaKcal >= limits.above || deltaKcal <= limits.below;
+  const kcalHit = input.reversing
+    ? Math.abs(deltaKcal) >= limits.above
+    : deltaKcal >= limits.above || deltaKcal <= limits.below;
   const proteinHit = deltaProtein != null && deltaProtein <= COMPENSATION_PROTEIN_DROP_G;
   if (!kcalHit && !proteinHit) return { compensate: false, reason: "below-threshold" };
 

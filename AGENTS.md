@@ -174,9 +174,13 @@ Botón "Añadir picoteo" justo encima de "Registrar deporte", en web y móvil. S
   hoy + 6, dentro del mes, solo fechas con una comida o cena propia y que sean la fecha real de su
   celda) y `soloOnly: true` (tampoco quien planifica toca las compartidas: un picoteo es personal).
   Si el reajuste no mueve ningún plato se devuelve la reserva y cuenta como fallo, para no dar por
-  compensado lo que no lo está. Borrar un picoteo ya compensado deja un pendiente negativo que
-  devuelve energía si pasa el umbral. Los motivos para no reajustar (`no-days`, `shared-only`,
-  `no-meals`, `no-plan`, `pregnancy`) se enseñan en la tarjeta (`snackOutcomeNote`).
+  compensado lo que no lo está. Borrar (o reducir) un picoteo ya compensado deja un pendiente
+  negativo: como no es un déficit real sino deshacer un ajuste que ya no tiene motivo, no se le
+  aplica el umbral "a favor" del objetivo (el `−400` de perder, pensado para dejar pasar un déficit
+  genuino) — `compensationNeed({ reversing: true })` compara con el mismo umbral que hizo falta para
+  aplicar la compensación (`+200`/`+400`), para que sumar y quitar el mismo picoteo sea simétrico.
+  Los motivos para no reajustar (`no-days`, `shared-only`, `no-meals`, `no-plan`, `pregnancy`) se
+  enseñan en la tarjeta (`snackOutcomeNote`).
 
 El asentamiento no cambia nunca la compra, hoy ni el pasado. `composeDayForUser` conserva el array
 `kids` si el conjunto no cambia, para que congelar las compartidas no reescriba días pasados solo

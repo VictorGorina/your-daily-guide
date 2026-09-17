@@ -75,6 +75,21 @@ describe("compensationNeed", () => {
     expect(decide(600, "perder", { pregnancyStatus: "no" }).compensate).toBe(true);
   });
 
+  it("reversing: deshacer una compensación usa el umbral de exceso, no el de déficit", () => {
+    // Perder: +200 sí compensaba (umbral de exceso). Deshacerlo (-200) debe
+    // volver a compensar aunque no llegue al -400 de un déficit real.
+    expect(decide(-199, "perder", { reversing: true }).compensate).toBe(false);
+    expect(decide(-200, "perder", { reversing: true })).toEqual({
+      compensate: true,
+      kcalDelta: -200,
+      proteinDelta: null,
+    });
+    // Ganar: +400 compensaba; deshacerlo por completo también debe hacerlo,
+    // no solo a partir de -200 (su umbral de déficit real, más laxo aquí).
+    expect(decide(-399, "ganar", { reversing: true }).compensate).toBe(false);
+    expect(decide(-400, "ganar", { reversing: true }).compensate).toBe(true);
+  });
+
   it("redondea el desvío", () => {
     expect(decide(199.6, "perder")).toEqual({
       compensate: true,

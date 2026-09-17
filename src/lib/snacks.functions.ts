@@ -307,6 +307,10 @@ export const settleSnacks = createServerFn({ method: "POST" })
       deltaKcal: firstPending,
       goal: goalOf(profile),
       pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
+      // Pendiente negativo con algo ya compensado: se ha borrado o reducido
+      // picoteo que ya había recolocado días futuros. No es un déficit nuevo
+      // que convenga dejar pasar, es deshacer un ajuste que ya no aplica.
+      reversing: first.snacks.compensatedKcal > 0 && firstPending < 0,
     });
     if (!decision.compensate) {
       await recordOutcome(decision.reason);

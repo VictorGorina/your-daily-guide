@@ -262,3 +262,13 @@ Si hoy hay picoteo pero ninguna comida registrada, la sección aparece igualment
   regla de hogar aprobada, pero conviene confirmarlo con el usuario (p. ej. una persona adulta sola
   con peques).
 
+### 2026-09-17 — asimetría al deshacer un picoteo
+
+Reportado por el usuario: con objetivo "perder", un picoteo de +200 kcal (justo el umbral de
+exceso) sí recolocaba el plan, pero borrarlo después (pendiente −200) no lo revertía, porque el
+umbral de déficit de "perder" es −400. La compensación quedaba pisada sin motivo: no había ningún
+picoteo real que justificara el desvío. La asimetría de la tabla (línea 76 de este documento) tiene
+sentido para un déficit genuino, pero no para deshacer un ajuste que la propia app aplicó. Arreglado
+con `compensationNeed({ reversing: true })`: al deshacer, compara con el umbral de exceso (`above`),
+el mismo que hizo falta para aplicar la compensación, en vez del de déficit (`below`).
+
