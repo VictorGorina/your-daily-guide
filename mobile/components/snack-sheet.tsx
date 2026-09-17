@@ -16,18 +16,41 @@ type SnackEstimate = {
 };
 
 /** Atajos: la etiqueta corta del chip y la frase que rellena, con cantidad. */
-const PRESETS: { label: string; text: string }[] = [
-  { label: "Frutos secos", text: "Un puñado de frutos secos" },
-  { label: "Galletas", text: "Dos galletas" },
-  { label: "Chocolate", text: "Dos onzas de chocolate" },
-  { label: "Patatas de bolsa", text: "Una bolsa pequeña de patatas fritas" },
-  { label: "Cerveza", text: "Una caña de cerveza" },
-  { label: "Vino", text: "Una copa de vino" },
-  { label: "Fruta", text: "Una pieza de fruta" },
-  { label: "Queso", text: "Unos taquitos de queso" },
+const PRESETS: { label: string; text: (n: number) => string }[] = [
+  {
+    label: "Frutos secos",
+    text: (n) => (n === 1 ? "Un puñado de frutos secos" : `${n} puñados de frutos secos`),
+  },
+  { label: "Galletas", text: (n) => (n === 1 ? "Dos galletas" : `${n * 2} galletas`) },
+  {
+    label: "Chocolate",
+    text: (n) => (n === 1 ? "Dos onzas de chocolate" : `${n * 2} onzas de chocolate`),
+  },
+  {
+    label: "Patatas de bolsa",
+    text: (n) =>
+      n === 1 ? "Una bolsa pequeña de patatas fritas" : `${n} bolsas pequeñas de patatas fritas`,
+  },
+  { label: "Cerveza", text: (n) => (n === 1 ? "Una caña de cerveza" : `${n} cañas de cerveza`) },
+  { label: "Vino", text: (n) => (n === 1 ? "Una copa de vino" : `${n} copas de vino`) },
+  { label: "Fruta", text: (n) => (n === 1 ? "Una pieza de fruta" : `${n} piezas de fruta`) },
+  {
+    label: "Queso",
+    text: (n) => (n === 1 ? "Unos taquitos de queso" : `${n} raciones de taquitos de queso`),
+  },
 ];
 
-function Chip({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
+function Chip({
+  active,
+  label,
+  count,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
@@ -37,6 +60,7 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
     >
       <Text className={`text-xs ${active ? "text-primary-foreground" : "text-muted-foreground"}`}>
         {label}
+        {active && count > 1 ? ` ×${count}` : ""}
       </Text>
     </Pressable>
   );
@@ -70,6 +94,7 @@ export function SnackSheet({
   const [kcalInput, setKcalInput] = useState<string | null>(null);
   const [busy, setBusy] = useState<"estimate" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [presetState, setPresetState] = useState<{ idx: number; count: number } | null>(null);
 
   const reset = () => {
     setText("");
@@ -77,6 +102,7 @@ export function SnackSheet({
     setKcalInput(null);
     setBusy(null);
     setError(null);
+    setPresetState(null);
   };
 
   const changeText = (next: string) => {
@@ -85,6 +111,16 @@ export function SnackSheet({
     setEstimate(null);
     setKcalInput(null);
     setError(null);
+    setPresetState(null);
+  };
+
+  const clickPreset = (idx: number) => {
+    const count = presetState?.idx === idx ? presetState.count + 1 : 1;
+    setText(PRESETS[idx].text(count));
+    setEstimate(null);
+    setKcalInput(null);
+    setError(null);
+    setPresetState({ idx, count });
   };
 
   const calculate = async () => {
@@ -152,12 +188,13 @@ export function SnackSheet({
     >
       <View className="gap-4 px-4 pb-8 pt-2">
         <View className="flex-row flex-wrap gap-2">
-          {PRESETS.map((p) => (
+          {PRESETS.map((p, i) => (
             <Chip
               key={p.label}
               label={p.label}
-              active={text === p.text}
-              onPress={() => changeText(p.text)}
+              active={presetState?.idx === i}
+              count={presetState?.idx === i ? presetState.count : 0}
+              onPress={() => clickPreset(i)}
             />
           ))}
         </View>
