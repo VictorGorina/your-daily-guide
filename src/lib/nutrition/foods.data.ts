@@ -100,7 +100,15 @@ export const FOODS: Food[] = [
   f("cerdo-lomo", "lomo de cerdo", "proteina", 210, 27, 0, 11, 0, 0.7, { aliases: ["cerdo", "lomo", "cinta de lomo", "filete de cerdo"], shelfLifeDays: 3 }),
   f("jamon-serrano", "jamón serrano", "proteina", 240, 31, 1, 12, 0, 3.5, { aliases: ["jamon", "jamon iberico", "jamon curado"], shelfLifeDays: 20 }),
   f("jamon-cocido", "jamón cocido", "proteina", 110, 18, 1.5, 3.5, 0, 1.2, { aliases: ["jamon york", "fiambre", "pechuga de pavo loncheada", "lacon"], shelfLifeDays: 6 }),
-  f("chorizo", "chorizo", "proteina", 350, 24, 2, 28, 0, 1.2, { aliases: ["chorizo fresco", "salchichon", "morcilla", "butifarra", "salchicha"], shelfLifeDays: 15 }),
+  f("chorizo", "chorizo", "proteina", 350, 24, 2, 28, 0, 1.2, { shelfLifeDays: 15 }),
+  // Separados de "chorizo" (issue de precisión, 2026-09-17): compartían la fila
+  // pero sus macros reales difieren mucho — sobre todo la proteína, casi el
+  // doble en el curado que en el fresco o el cocido. Valores anclados a BEDCA.
+  f("chorizo-fresco", "chorizo fresco para freír", "proteina", 296, 14, 4, 25, 0, 0.9, { aliases: ["chorizo crudo", "chorizo para freir", "chorizo criollo"], shelfLifeDays: 4 }),
+  f("salchichon", "salchichón", "proteina", 420, 26, 2, 35, 0, 1.3, { shelfLifeDays: 20 }),
+  f("butifarra", "butifarra", "proteina", 240, 10, 5, 20, 0, 1.0, { aliases: ["butifarra fresca", "botifarra"], shelfLifeDays: 4 }),
+  f("salchicha", "salchicha tipo frankfurt", "proteina", 260, 13, 1.5, 23, 0, 0.8, { aliases: ["salchichas", "frankfurt", "salchicha de frankfurt"], shelfLifeDays: 6 }),
+  f("morcilla", "morcilla", "proteina", 325, 11, 3, 30, 0, 1.1, { aliases: ["morcilla de burgos", "morcilla de arroz", "morcilla de cebolla", "moronga"], shelfLifeDays: 5 }),
   f("huevo", "huevo", "proteina", 143, 13, 1.1, 9.5, 0, 0.30, { aliases: ["huevos", "huevo cocido", "huevo frito", "huevo duro"], shelfLifeDays: 21 }),
   f("clara-huevo", "clara de huevo", "proteina", 52, 11, 0.7, 0.2, 0, 0.40, { aliases: ["claras", "clara"], shelfLifeDays: 10 }),
   f("salmon", "salmón", "proteina", 208, 20, 0, 13, 0, 2.2, { aliases: ["salmon fresco", "lomo de salmon"], shelfLifeDays: 2 }),

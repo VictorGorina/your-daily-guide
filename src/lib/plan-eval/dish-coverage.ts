@@ -8,6 +8,11 @@
  * - calidad media (proporción de gramos identificados con confianza alta)
  * - platos con kcal/ración fuera de su rango razonable
  * - ingredientes que cayeron en GENERIC_FOOD → candidatos a entrar en la tabla
+ * - alias sospechosos: una `key` a la que caen nombres de ingrediente muy
+ *   distintos entre sí (candidato a partirse en varias filas, como pasó con
+ *   "chorizo" absorbiendo "salchicha"/"morcilla"/"butifarra" — resolvía con
+ *   confianza alta y kcal plausible, así que ni la calidad ni el rango lo
+ *   habrían pillado; solo la diversidad de nombres reales lo delata)
  *
  * No es un test unitario: gasta llamadas al modelo. Se corre a mano:
  *
@@ -54,6 +59,9 @@ async function main() {
   const kcalOut: string[] = [];
   const lowQuality: string[] = [];
   const genericIngredients = new Map<string, number>();
+  // Nombre normalizado de ingrediente → key de la tabla a la que casó, sin
+  // duplicados, para detectar una key que absorbe demasiada variedad real.
+  const namesByKey = new Map<string, Set<string>>();
 
   for (const spec of EVAL_DISHES) {
     const b = breakdowns.get(spec.dish);
@@ -75,6 +83,9 @@ async function main() {
       if (ing.food === GENERIC_FOOD) {
         genericIngredients.set(ing.name, (genericIngredients.get(ing.name) ?? 0) + 1);
       }
+      const names = namesByKey.get(ing.food.key) ?? new Set<string>();
+      names.add(ing.name.trim().toLowerCase());
+      namesByKey.set(ing.food.key, names);
     }
   }
 
@@ -101,6 +112,17 @@ async function main() {
       .sort((a, b) => b[1] - a[1])
       .forEach(([name, n]) => console.log(`  ${n}×  ${name}`));
   }
+
+  // Una key con muchos nombres de ingrediente distintos detrás es candidata a
+  // partirse en varias filas: revisar a mano si de verdad comparten macros
+  // (no lo decide el script — solo señala dónde mirar).
+  const broadAliasKeys = [...namesByKey.entries()]
+    .filter(([, names]) => names.size >= 3)
+    .sort((a, b) => b[1].size - a[1].size);
+  if (broadAliasKeys.length) {
+    console.log("\nKeys con más variedad de nombres detrás (revisar si de verdad son lo mismo):");
+    broadAliasKeys.forEach(([key, names]) => console.log(`  ${key} ← ${[...names].join(", ")}`));
+  }
   console.log("");
 
   const summary = {
@@ -111,6 +133,7 @@ async function main() {
     meanQualityPct: Math.round((qualitySum / Math.max(1, resolved)) * 100),
     kcalOutOfRange: kcalOut.length,
     unidentifiedIngredients: Object.fromEntries(genericIngredients),
+    broadAliasKeys: Object.fromEntries(broadAliasKeys.map(([key, names]) => [key, [...names]])),
   };
   writeFileSync(
     new URL("./baseline.json", import.meta.url),

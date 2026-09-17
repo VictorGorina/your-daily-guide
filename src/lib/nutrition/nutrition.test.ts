@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { GENERIC_FOOD } from "./foods.data";
+import { FOODS, GENERIC_FOOD } from "./foods.data";
 import {
   clampGrams,
   macrosOf,
@@ -72,6 +72,32 @@ describe("matchFood", () => {
       ["coca cola zero", "refresco-zero"],
     ];
     for (const [name, key] of cases) expect([name, matchFood(name)?.food.key]).toEqual([name, key]);
+  });
+
+  // Embutidos (issue de precisión, 2026-09-17): compartían todos la fila de
+  // "chorizo" (350 kcal, 24 g proteína) aunque sus macros reales difieren
+  // mucho — la salchicha tipo frankfurt tiene casi la mitad de proteína, y la
+  // morcilla y la butifarra son mucho más bajas en kcal y grasa.
+  it("distingue cada embutido de chorizo, con su propia proteína", () => {
+    const cases: [string, string][] = [
+      ["chorizo", "chorizo"],
+      ["chorizo fresco", "chorizo-fresco"],
+      ["chorizo crudo", "chorizo-fresco"],
+      ["salchichón", "salchichon"],
+      ["butifarra", "butifarra"],
+      ["botifarra", "butifarra"],
+      ["salchichas", "salchicha"],
+      ["frankfurt", "salchicha"],
+      ["morcilla de burgos", "morcilla"],
+      ["moronga", "morcilla"],
+    ];
+    for (const [name, key] of cases) expect([name, matchFood(name)?.food.key]).toEqual([name, key]);
+
+    // La proteína no puede quedar igualada entre ellos: eso era el bug.
+    const proteinOf = (key: string) => FOODS.find((food) => food.key === key)?.protein_g;
+    expect(proteinOf("chorizo")).toBe(24);
+    expect(proteinOf("salchicha")).toBeLessThan(proteinOf("chorizo")! - 5);
+    expect(proteinOf("chorizo-fresco")).toBeLessThan(proteinOf("chorizo")! - 5);
   });
 
   it("las filas de picoteo no roban alias que ya existían", () => {

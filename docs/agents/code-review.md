@@ -42,6 +42,21 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
       devuelve `500` tanto para fallos reales como para errores de validación pensados para
       enseñarse en pantalla ("Mes no válido").
 
+## Tabla de composición de alimentos (`foods.data.ts`)
+
+- [ ] Un alias nuevo en una fila **ya existente** de
+      [src/lib/nutrition/foods.data.ts](../../src/lib/nutrition/foods.data.ts) es una afirmación
+      de que ese alimento comparte macros con la fila, no una conveniencia léxica: contrástalo
+      contra BEDCA/USDA antes de añadirlo, y si se desvía más de ~15-20% en kcal o proteína, dale
+      su propia fila. Pasó con `chorizo` absorbiendo `salchicha`/`morcilla`/`butifarra`: la
+      salchicha real lleva casi la mitad de proteína, y resolvía con confianza alta y kcal
+      plausible, así que ni la calidad de resolución ni el rango del eval lo habrían pillado —
+      solo lo delata contrastar el alimento en sí.
+- [ ] Al correr `bun run eval:dishes`, mira también la sección "Keys con más variedad de nombres
+      detrás" del informe (y `broadAliasKeys` en `baseline.json`): una `key` a la que caen muchos
+      nombres de ingrediente distintos es candidata a partirse, aunque el resto del eval salga
+      limpio.
+
 ## Invariantes del plan y la compra
 
 Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
