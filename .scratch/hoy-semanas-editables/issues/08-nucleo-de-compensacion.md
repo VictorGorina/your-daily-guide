@@ -130,3 +130,11 @@ el resto no cambia. Ese ticket debe respetar `lockedDates` y `pinned`.
   verdad, hace falta generalizar esto — hoy solo tiene un consumidor (Hoy) y no vale la pena
   construir la abstracción sin un segundo caso real.
 
+- 2026-09-17 (más tarde, mismo día): el ticket 10 (coach) también está hecho, y confirma que NO
+  hacía falta generalizar — el coach reusa `compensateDishChanges` tal cual para hoy, y para un día
+  futuro usa una función hermana nueva (`compensateFutureDishChange`, sin `habits` ni acumulación,
+  decide con `decomposeDishes` en el momento). Dos consumidores reales y sigue sin necesitar
+  `dish-change-batch.ts`. Queda el ticket 07 (tira de días futuros) como el único caso que
+  podría, si acaba necesitando compensación con acumulación entre cambios en la misma sesión,
+  justificar por fin la abstracción compartida — hasta entonces, no construirla.
+

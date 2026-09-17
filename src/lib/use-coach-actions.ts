@@ -13,7 +13,15 @@ import {
   type Profile,
 } from "@/lib/daily";
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { adjustMonthlyPlan, goalImpact, setChildMeal, setPlanMeal } from "@/lib/plan.functions";
+import { perMealKcalDeltas } from "@/lib/macros";
+import {
+  adjustMonthlyPlan,
+  compensateDishChanges,
+  compensateFutureDishChange,
+  goalImpact,
+  setChildMeal,
+  setPlanMeal,
+} from "@/lib/plan.functions";
 import { mealsForDate, type MonthlyPlan } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "@/lib/profile-fields";
 
@@ -39,6 +47,8 @@ export function useCoachActions(
   const changeMeal = useServerFn(setPlanMeal);
   const changeChildMeal = useServerFn(setChildMeal);
   const checkGoal = useServerFn(goalImpact);
+  const compensate = useServerFn(compensateDishChanges);
+  const compensateFuture = useServerFn(compensateFutureDishChange);
   const date = todayISO();
 
   const refresh = useCallback(() => {
@@ -95,6 +105,13 @@ export function useCoachActions(
         const { plan, label, off, previousIdea } = await changeMeal({
           data: { date: targetDate, slot, dish, today: date },
         });
+        // Compensación EN CÓDIGO del cambio (memoria `manual-dish-change-
+        // compensation`, ticket 10 de `hoy-semanas-editables`): el modelo ya no
+        // estima un `kcal_extra` para este plato ni llama a `ajustar_plan_mensual`
+        // por él (ver el prompt en `api/chat.ts`) — aquí se mide el desvío real y
+        // se decide con la misma tabla que la tira y Hoy. Sin plato anterior que
+        // comparar (o sin cambio real) no hay nada que compensar.
+        let adjustedNote = "";
         // Si el plato cambiado es el de HOY, la estimación de macros guardada en
         // la guía (`macroEstimate`/`mealMacros`) queda desactualizada — todavía
         // habla del plato viejo. Se regenera solo para eso, para que la barra de
@@ -141,6 +158,48 @@ export function useCoachActions(
                 )
               : habits;
           await updateTodayLog({ guide, habits: nextHabits });
+
+          if (previousIdea && previousIdea !== dish) {
+            const prevKcal =
+              habits.find((h) => h.label === label)?.plannedKcal ??
+              currentGuide?.mealMacros?.find((m) => m.moment === label)?.kcal ??
+              null;
+            const deltas = perMealKcalDeltas([{ label, prevKcal }], freshGuide.mealMacros);
+            if (deltas.length) {
+              try {
+                const result = await compensate({
+                  data: {
+                    today: date,
+                    changes: [
+                      {
+                        label,
+                        slot,
+                        dish,
+                        plannedDish: previousIdea,
+                        kcalDelta: deltas[0].kcalDelta,
+                      },
+                    ],
+                  },
+                });
+                if (result.adjusted) {
+                  adjustedNote = ` He ajustado ${result.changes?.length ?? 0} comida(s) de los próximos días para compensarlo.`;
+                }
+              } catch (err) {
+                console.error("cambiar_plato: compensate", err);
+              }
+            }
+          }
+        } else if (previousIdea && previousIdea !== dish) {
+          try {
+            const result = await compensateFuture({
+              data: { today: date, date: targetDate, label, slot, dish, plannedDish: previousIdea },
+            });
+            if (result.adjusted) {
+              adjustedNote = ` He ajustado ${result.changes?.length ?? 0} comida(s) de los próximos días para compensarlo.`;
+            }
+          } catch (err) {
+            console.error("cambiar_plato: compensateFuture", err);
+          }
         }
         const dayLabel = /^\d{4}-\d{2}-\d{2}$/.test(targetDate)
           ? new Date(`${targetDate}T00:00:00`).toLocaleDateString("es-ES", {
@@ -150,9 +209,11 @@ export function useCoachActions(
             })
           : targetDate;
         const base = `${label} del ${dayLabel}: ${dish}`;
-        return off.length
-          ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
-          : `${base} (con lo que ya tienes comprado)`;
+        return (
+          (off.length
+            ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
+            : `${base} (con lo que ya tienes comprado)`) + adjustedNote
+        );
       }
       if (toolName === "cambiar_plato_nino") {
         const targetDate = String(input.fecha ?? "");
@@ -239,7 +300,18 @@ export function useCoachActions(
       }
       return "Acción desconocida";
     },
-    [adjustPlan, changeMeal, changeChildMeal, checkGoal, date, getLog, getPlan, makeGuide],
+    [
+      adjustPlan,
+      changeMeal,
+      changeChildMeal,
+      checkGoal,
+      compensate,
+      compensateFuture,
+      date,
+      getLog,
+      getPlan,
+      makeGuide,
+    ],
   );
 
   return { runTool, refresh };

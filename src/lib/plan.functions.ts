@@ -1593,6 +1593,19 @@ function dishChangeNote(
 
 const DISH_CHANGE_MAX = 10;
 
+/** `goal` que pide `compensationNeed`, a partir del perfil — mismo criterio que
+ * usa el prompt del coach (peso objetivo si existe, si no el legacy `goal_type`). */
+function resolveCompensationGoal(profile: Record<string, unknown>) {
+  return profile.target_weight_kg != null
+    ? deriveGoalType(
+        Number(profile.current_weight_kg ?? profile.start_weight_kg ?? profile.target_weight_kg),
+        Number(profile.target_weight_kg),
+      )
+    : profile.goal_type
+      ? normalizeGoalType(String(profile.goal_type))
+      : null;
+}
+
 /**
  * Decide EN CÓDIGO (memoria `manual-dish-change-compensation`: "el modelo
  * nunca decide si compensar") si un cambio de plato de Hoy pide recolocar
@@ -1677,17 +1690,7 @@ export const compensateDishChanges = createServerFn({ method: "POST" })
         .eq("id", userId)
         .maybeSingle();
       const profile = (profileRow ?? {}) as Record<string, unknown>;
-      const goal =
-        profile.target_weight_kg != null
-          ? deriveGoalType(
-              Number(
-                profile.current_weight_kg ?? profile.start_weight_kg ?? profile.target_weight_kg,
-              ),
-              Number(profile.target_weight_kg),
-            )
-          : profile.goal_type
-            ? normalizeGoalType(String(profile.goal_type))
-            : null;
+      const goal = resolveCompensationGoal(profile);
 
       const decision = compensationNeed({
         deltaKcal: pending,
@@ -1764,6 +1767,118 @@ export const compensateDishChanges = createServerFn({ method: "POST" })
         ).catch((releaseError) => console.error("compensateDishChanges: release", releaseError));
         throw error;
       }
+    },
+  );
+
+/**
+ * Compensación de un cambio de plato de un día FUTURO (ticket 10 de
+ * `hoy-semanas-editables`: el coach cambia un plato que no es el de hoy, p.
+ * ej. "el jueves quiero pollo en vez de pechuga"). No pasa por `habits` (eso
+ * es solo de la pestaña Hoy, que solo existe para el día de hoy): aquí no
+ * hace falta acumular entre llamadas porque el coach manda un cambio a la
+ * vez, así que se decide y se aplica en el momento con las macros reales de
+ * los dos platos (`decomposeDishes`, la misma descomposición que usa la guía
+ * diaria, sin atarla a "hoy"). Sin cifras fiables de alguno de los dos platos
+ * no se compensa a ciegas.
+ */
+export const compensateFutureDishChange = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    (input: {
+      today?: string;
+      date?: string;
+      label?: string;
+      slot?: string;
+      dish?: string;
+      plannedDish?: string;
+    }) => {
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+      const date = String(input?.date ?? "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date <= today) {
+        throw new ValidationError("Fecha no válida: tiene que ser un día futuro");
+      }
+      const label = String(input?.label ?? "").slice(0, 60);
+      const slot = String(input?.slot ?? "").slice(0, 20);
+      const dish = String(input?.dish ?? "").slice(0, 200);
+      const plannedDish = String(input?.plannedDish ?? "").slice(0, 200);
+      if (!label || !dish || !plannedDish || dish === plannedDish) {
+        throw new ValidationError("No hay cambio que compensar");
+      }
+      return { today, date, label, slot, dish, plannedDish };
+    },
+  )
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{
+      adjusted: boolean;
+      reason?: string;
+      changes?: MealChange[];
+      summary?: string;
+      kcalDelta?: number;
+    }> => {
+      const supabase = context.supabase as never as SupabaseClient<never, never, never>;
+      const { userId } = context;
+      const { today, date, label, dish, plannedDish } = data;
+      const month = today.slice(0, 7);
+
+      const key = process.env.OPENROUTER_API_KEY;
+      if (!key) throw new Error("Falta la clave de IA");
+
+      const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+      await enforceUserRateLimit(userId, "plan-adjust");
+
+      const { decomposeDishes } = await import("@/lib/nutrition/resolve-dish.server");
+      const breakdowns = await decomposeDishes([plannedDish, dish], { apiKey: key, userId });
+      const from = breakdowns.get(plannedDish.trim());
+      const to = breakdowns.get(dish.trim());
+      const usable = (b: typeof from) => !!b && b.source === "model" && b.quality >= 0.4;
+      if (!usable(from) || !usable(to)) return { adjusted: false, reason: "no-macros" };
+
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+      const profile = (profileRow ?? {}) as Record<string, unknown>;
+      const goal = resolveCompensationGoal(profile);
+
+      const decision = compensationNeed({
+        deltaKcal: to!.perServing.kcal - from!.perServing.kcal,
+        deltaProtein: to!.perServing.protein_g - from!.perServing.protein_g,
+        goal,
+        pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
+      });
+      if (!decision.compensate) return { adjusted: false, reason: decision.reason };
+
+      const { householdContext } = await import("@/lib/household.server");
+      const home = await householdContext(supabase, userId);
+      const window = compensationWindow({
+        today,
+        sharedSlots: home.sharedSlots,
+        selectedSlots: effectiveMealSlots(
+          profile as { meal_slots?: unknown; meals_to_plan?: string | null },
+        ),
+        soloAdult: home.members.length <= 1,
+      });
+      if (window.reason) return { adjusted: false, reason: window.reason };
+
+      const note = `Ha elegido «${dish}» en vez de «${plannedDish}» para ${label.toLowerCase()} del ${weekdayName(date)} ${Number(date.slice(8, 10))}.`;
+      const { plan, before, summary } = await reflowMeals({
+        supabase,
+        userId,
+        key,
+        month,
+        today,
+        note,
+        kcalDelta: decision.kcalDelta,
+        window: window.dates,
+        soloOnly: true,
+      });
+      const futureChanges = diffFutureMeals(before, plan, today);
+      if (!futureChanges.length) return { adjusted: false, reason: "no-change" };
+      return { adjusted: true, changes: futureChanges, summary, kcalDelta: decision.kcalDelta };
     },
   );
 

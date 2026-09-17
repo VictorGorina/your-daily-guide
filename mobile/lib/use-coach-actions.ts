@@ -11,7 +11,8 @@ import {
   type DailyLog,
   type Profile,
 } from "./daily";
-import { mealsForDate, type MonthlyPlan } from "./plan-shared";
+import { perMealKcalDeltas } from "./macros";
+import { mealsForDate, type MealChange, type MonthlyPlan } from "./plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "./profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
@@ -77,6 +78,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       if (toolName === "cambiar_plato") {
         const fecha = String(input.fecha ?? "");
         const plato = String(input.plato ?? "").trim();
+        const slot = String(input.comida ?? "");
         const { plan, label, off, previousIdea } = await apiPost<{
           plan: MonthlyPlan;
           label: string;
@@ -84,10 +86,13 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
           previousIdea: string;
         }>("plan/meal", {
           date: fecha,
-          slot: String(input.comida ?? ""),
+          slot,
           dish: plato,
           today: date,
         });
+        // Compensación EN CÓDIGO del cambio (ver `use-coach-actions.ts` de la
+        // web) — el modelo ya no estima un `kcal_extra` para este plato.
+        let adjustedNote = "";
         // Si el plato cambiado es el de HOY, la estimación de macros guardada en
         // la guía (`macroEstimate`/`mealMacros`) queda desactualizada — todavía
         // habla del plato viejo. Se regenera solo para eso, para que la barra de
@@ -117,6 +122,50 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
                 )
               : habits;
           await updateTodayLog({ guide, habits: nextHabits });
+
+          if (previousIdea && previousIdea !== plato) {
+            const prevKcal =
+              habits.find((h) => h.label === label)?.plannedKcal ??
+              currentGuide?.mealMacros?.find((m) => m.moment === label)?.kcal ??
+              null;
+            const deltas = perMealKcalDeltas([{ label, prevKcal }], freshGuide.mealMacros);
+            if (deltas.length) {
+              try {
+                const result = await apiPost<{ adjusted: boolean; changes?: MealChange[] }>(
+                  "plan/compensate",
+                  {
+                    today: date,
+                    changes: [
+                      {
+                        label,
+                        slot,
+                        dish: plato,
+                        plannedDish: previousIdea,
+                        kcalDelta: deltas[0].kcalDelta,
+                      },
+                    ],
+                  },
+                );
+                if (result.adjusted) {
+                  adjustedNote = ` He ajustado ${result.changes?.length ?? 0} comida(s) de los próximos días para compensarlo.`;
+                }
+              } catch (err) {
+                console.error("cambiar_plato: compensate", err);
+              }
+            }
+          }
+        } else if (previousIdea && previousIdea !== plato) {
+          try {
+            const result = await apiPost<{ adjusted: boolean; changes?: MealChange[] }>(
+              "plan/compensate-future",
+              { today: date, date: fecha, label, slot, dish: plato, plannedDish: previousIdea },
+            );
+            if (result.adjusted) {
+              adjustedNote = ` He ajustado ${result.changes?.length ?? 0} comida(s) de los próximos días para compensarlo.`;
+            }
+          } catch (err) {
+            console.error("cambiar_plato: compensateFuture", err);
+          }
         }
         const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha)
           ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-ES", {
@@ -126,9 +175,11 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
             })
           : fecha;
         const base = `${label} del ${dia}: ${plato}`;
-        return off.length
-          ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
-          : `${base} (con lo que ya tienes comprado)`;
+        return (
+          (off.length
+            ? `${base}. Ojo: ${off.join(", ")} no está en tu lista de la compra.`
+            : `${base} (con lo que ya tienes comprado)`) + adjustedNote
+        );
       }
       if (toolName === "cambiar_plato_nino") {
         const fecha = String(input.fecha ?? "");
