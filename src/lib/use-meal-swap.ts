@@ -167,12 +167,12 @@ async function run(): Promise<void> {
       .map((m) => ({ moment: m.moment, idea: m.idea }));
     const freshGuide = await makeGuide({ data: { meals } });
     const currentGuide = (await fetchTodayLog())?.guide ?? null;
-    // El objetivo de la barra (`macroEstimate`) se fija con el plan original y
-    // no se mueve: un cambio de plato tiene que poder quedar por encima o por
-    // debajo, no desplazar el listón. `mealMacros` sí se actualiza entero.
     const guide: DailyGuide = {
       ...freshGuide,
+      // El target de la barra se fija con el plan original y no se mueve.
       macroEstimate: currentGuide?.macroEstimate ?? freshGuide.macroEstimate,
+      // Si el lookup falla, conservar las macros anteriores en vez de borrarlas.
+      mealMacros: freshGuide.mealMacros ?? currentGuide?.mealMacros ?? null,
     };
     await updateTodayLog({ guide });
 

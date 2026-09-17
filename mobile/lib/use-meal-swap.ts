@@ -112,6 +112,8 @@ async function run(): Promise<void> {
     const guide: DailyGuide = {
       ...freshGuide,
       macroEstimate: currentGuide?.macroEstimate ?? freshGuide.macroEstimate,
+      // Si el lookup falla, conservar las macros anteriores en vez de borrarlas.
+      mealMacros: freshGuide.mealMacros ?? currentGuide?.mealMacros ?? null,
     };
     await updateTodayLog({ guide });
 
