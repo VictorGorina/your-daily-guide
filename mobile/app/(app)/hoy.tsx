@@ -465,7 +465,14 @@ export default function Hoy() {
     // `meals`/`tips`, así que la condición de abajo no la pillaría.
     const missingMacros =
       !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
-    if (!g || !g.meals?.length || !g.tips?.length || missingMacros) {
+    const staleMacros =
+      !!g &&
+      todayMeals.some((m) => {
+        if (!m.idea) return false;
+        const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
+        return !!cached?.idea && cached.idea !== m.idea;
+      });
+    if (!g || !g.meals?.length || !g.tips?.length || missingMacros || staleMacros) {
       const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
       if (Date.now() - lastAutoGuideAttempt < cooldown) return;
       lastAutoGuideAttempt = Date.now();
