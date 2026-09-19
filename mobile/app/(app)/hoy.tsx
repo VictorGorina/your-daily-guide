@@ -745,7 +745,11 @@ export default function Hoy() {
                     key={h.label}
                     className="rounded-[20px] px-3.5 py-3"
                     style={{
-                      backgroundColor: isSkip ? "#f0ede7" : tintBg(accent, isNext ? 22 : 13),
+                      backgroundColor: isSkip
+                        ? "#f0ede7"
+                        : isDone
+                          ? "#e1f2e4"
+                          : tintBg(accent, isNext ? 22 : 13),
                       opacity: isSkip ? 0.55 : 1,
                     }}
                   >
@@ -841,8 +845,7 @@ export default function Hoy() {
                         ) : isDone ? (
                           <Pressable
                             onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
-                            className="h-[34px] w-[34px] items-center justify-center rounded-full"
-                            style={{ backgroundColor: accent }}
+                            className="h-[34px] w-[34px] items-center justify-center rounded-full bg-success"
                           >
                             <Undo2 size={15} color="#fbfaf7" strokeWidth={2.4} />
                           </Pressable>
