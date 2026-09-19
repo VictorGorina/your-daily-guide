@@ -29,13 +29,18 @@ export const PLAN_MODEL = "google/gemini-2.5-pro";
  * Modelo para `decomposeDishes` (resolve-dish.server.ts): la única llamada de
  * todo el pipeline de nutrición, la que decide en qué ingredientes y gramos se
  * traduce un plato. Una llamada al día por persona como mucho (memoizada), así
- * que el mismo salto de precisión que `PLAN_MODEL` sale casi gratis aquí y es
- * justo la pieza que sostiene la precisión de kcal/macros de toda la app
- * (~$1.25 / $10 por millón de tokens, igual que `PLAN_MODEL` hoy — se separa
- * en su propia constante porque no tienen por qué evolucionar juntos. Si
- * cambia, cambia también `DISH_MODEL_USD_PER_MTOK` en `ai-spend.ts`).
+ * que un salto de precisión sale casi gratis aquí y es justo la pieza que
+ * sostiene la precisión de kcal/macros de toda la app.
+ *
+ * Comparado contra `google/gemini-2.5-pro` en 10 platos deliberadamente
+ * difíciles (cocina no mediterránea, ración ambigua, carne cruda, fritos —
+ * fuera del banco de `eval:dishes`, 2026-09-19): GPT-5 dio menos platos fuera
+ * del rango de kcal esperado (3/10 vs 5/10), calidad media más alta (99% vs
+ * 97%) y menos ingredientes sin identificar (2 vs 7) — al MISMO precio
+ * ($1.25 / $10 por millón de tokens). Si cambia, cambia también
+ * `DISH_MODEL_USD_PER_MTOK` en `ai-spend.ts`.
  */
-export const DISH_MODEL = "google/gemini-2.5-pro";
+export const DISH_MODEL = "openai/gpt-5";
 
 /**
  * Modelos de OpenRouter que cuentan su gasto contra el tope de la persona.

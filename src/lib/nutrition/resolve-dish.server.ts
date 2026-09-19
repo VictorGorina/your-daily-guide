@@ -149,7 +149,7 @@ const applyFryingOilFloor = (
  */
 export async function decomposeDishes(
   dishes: string[],
-  opts: { servings?: number; apiKey?: string; userId: string | null },
+  opts: { servings?: number; apiKey?: string; userId: string | null; model?: string },
 ): Promise<Map<string, DishBreakdown>> {
   const servings = Math.max(1, Math.round(opts.servings ?? 1));
   const unique = Array.from(new Set(dishes.map((d) => d.trim()).filter(Boolean)));
@@ -172,7 +172,7 @@ export async function decomposeDishes(
   try {
     const ai = createAiProvider(apiKey, opts.userId);
     const { text } = await generateText({
-      model: ai(DISH_MODEL),
+      model: ai(opts.model ?? DISH_MODEL),
       temperature: 0,
       prompt:
         `Descompón cada plato en sus ingredientes, con la cantidad en GRAMOS para ${servings} ` +

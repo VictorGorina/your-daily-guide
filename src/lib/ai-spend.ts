@@ -32,6 +32,7 @@ export const DISH_MODEL_USD_PER_MTOK = { input: 1.25, output: 10 } as const;
 const MODEL_USD_PER_MTOK: Record<string, { input: number; output: number }> = {
   "google/gemini-2.5-flash": COACH_MODEL_USD_PER_MTOK,
   "google/gemini-2.5-pro": PLAN_MODEL_USD_PER_MTOK,
+  "openai/gpt-5": DISH_MODEL_USD_PER_MTOK,
 };
 
 /** Lo que miramos de un resultado del modelo: sirve igual para `doGenerate`

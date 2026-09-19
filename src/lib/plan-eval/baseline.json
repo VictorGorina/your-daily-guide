@@ -1,27 +1,28 @@
 {
-  "ranAt": "2026-09-19T14:37:04.882Z",
+  "ranAt": "2026-09-19T18:40:02.259Z",
   "dishes": 61,
   "resolved": 61,
   "resolvedPct": 100,
   "meanQualityPct": 100,
-  "kcalOutOfRange": 0,
-  "unidentifiedIngredients": {},
+  "kcalOutOfRange": 1,
+  "unidentifiedIngredients": {
+    "picatostes": 2
+  },
   "broadAliasKeys": {
     "especias": [
       "canela",
-      "azafrán",
-      "orégano",
-      "pimienta negra",
-      "pimentón",
-      "laurel",
-      "curry en polvo",
-      "comino",
       "especias",
+      "pimentón",
+      "azafrán",
+      "especia",
+      "especia de curry",
       "jengibre"
     ],
-    "caldo": ["caldo de verduras", "caldo de pollo", "caldo de pescado", "caldo"],
-    "lentejas": ["lentejas", "lenteja", "lenteja roja"],
-    "arroz-blanco": ["arroz", "arroz basmati", "arroz blanco"],
-    "pasta": ["macarrones", "pasta", "fideo"]
+    "huevo": ["huevo", "huevo cocido", "huevo duro", "huevo poché"],
+    "arroz-blanco": ["arroz blanco", "arroz", "arroz basmati"],
+    "pasta": ["macarrón", "pasta", "fideo"],
+    "vino-cocinar": ["vino blanco", "vino para cocinar", "vino tinto"],
+    "hierba-fresca": ["perejil", "hierba fresca", "hierbabuena"],
+    "caldo": ["caldo de verduras", "caldo", "caldo de pescado"]
   }
 }
