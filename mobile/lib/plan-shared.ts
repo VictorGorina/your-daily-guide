@@ -141,6 +141,21 @@ export const isPinned = (day: PlanDay | null | undefined, slot: MealSlot): boole
  */
 export type PlanCoverage = { fromDay: number; toDay: number };
 
+/**
+ * Lo que la persona contó antes de que se genere el plan de un mes: si va a
+ * estar fuera de casa un tramo (viaje, etc.) y cualquier otra nota libre.
+ * Vive en `month_constraints`, una fila por `(user_id, month)`; su sola
+ * existencia es la marca de "ya se le preguntó" (ver `setMonthConstraints`,
+ * en `src/lib/plan.functions.ts` — solo la web genera el plan, esto es solo
+ * el tipo para leer/guardar la fila desde el móvil).
+ */
+export type MonthConstraints = {
+  month: string;
+  awayStart: string | null;
+  awayEnd: string | null;
+  notes: string | null;
+};
+
 export type MonthlyPlan = {
   intro: string;
   focus: string[];

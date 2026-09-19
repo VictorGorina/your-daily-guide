@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import type { SharedSlots } from "./household-shared";
 import {
   addMonths,
+  awayPlanLine,
   cadenceOf,
   carryOwnedByName,
   carryOwnedCanonical,
@@ -34,6 +35,7 @@ import {
   isPinnedByViewer,
   isPlanCellAhead,
   isPlanWeekAhead,
+  MEAL_SLOTS,
   mealsForDate,
   mirrorPinned,
   monthParts,
@@ -2006,5 +2008,116 @@ describe("compensationWindow", () => {
         selectedSlots: ["desayuno", "snack"],
       }),
     ).toEqual({ dates: [], reason: "no-meals" });
+  });
+});
+
+describe("awayPlanLine", () => {
+  // Septiembre de 2026 empieza en martes (día 1 = martes), así que el rango
+  // 6-9 cruza la semana 0 (domingo 6, lunes 7) y la semana 1 (martes 8,
+  // miércoles 9) — mismo mes que usan los tests de `dateOfPlanCell`.
+  const solo: SharedSlots = { desayuno: [], comida: [], cena: [] };
+  const fullMonth = { fromDay: 1, toDay: 30 };
+
+  it("sin ausencia ni notas, no dice nada", () => {
+    expect(
+      awayPlanLine({
+        month: "2026-09",
+        coverage: fullMonth,
+        awayStart: null,
+        awayEnd: null,
+        notes: null,
+        sharedSlots: solo,
+        mealSlots: MEAL_SLOTS,
+      }),
+    ).toBe("");
+  });
+
+  it("solo notas, sin ausencia", () => {
+    const line = awayPlanLine({
+      month: "2026-09",
+      coverage: fullMonth,
+      awayStart: null,
+      awayEnd: null,
+      notes: "Voy a hacer más deporte este mes",
+      sharedSlots: solo,
+      mealSlots: MEAL_SLOTS,
+    });
+    expect(line).toContain("Voy a hacer más deporte este mes");
+    expect(line).not.toContain("AUSENCIA");
+  });
+
+  it("usuario solo: agrupa el rango por semana y pide plato concreto en todas las comidas personales", () => {
+    const line = awayPlanLine({
+      month: "2026-09",
+      coverage: fullMonth,
+      awayStart: "2026-09-06",
+      awayEnd: "2026-09-09",
+      notes: null,
+      sharedSlots: solo,
+      mealSlots: MEAL_SLOTS,
+    });
+    expect(line).toContain("AUSENCIA: vas a estar fuera de casa del 2026-09-06 al 2026-09-09");
+    expect(line).toContain("Semana 1: Domingo, Lunes; Semana 2: Martes, Miércoles");
+    expect(line).toContain("desayuno y una merienda concretos");
+    expect(line).toContain("comida y cena personales");
+    expect(line).not.toContain("no la toques");
+  });
+
+  it("hogar: separa la comida compartida (no se toca) de la cena personal (sí se adapta)", () => {
+    const sharedSlots: SharedSlots = { desayuno: [], comida: [0, 1, 2, 3, 4, 5, 6], cena: [] };
+    const line = awayPlanLine({
+      month: "2026-09",
+      coverage: fullMonth,
+      awayStart: "2026-09-06",
+      awayEnd: "2026-09-09",
+      notes: null,
+      sharedSlots,
+      mealSlots: MEAL_SLOTS,
+    });
+    expect(line).toContain("comida y cena personales");
+    expect(line).toContain("no la toques");
+  });
+
+  it("si no planifica desayuno ni merienda, no las menciona", () => {
+    const line = awayPlanLine({
+      month: "2026-09",
+      coverage: fullMonth,
+      awayStart: "2026-09-06",
+      awayEnd: "2026-09-09",
+      notes: null,
+      sharedSlots: solo,
+      mealSlots: ["comida", "cena"],
+    });
+    expect(line).not.toContain("desayuno y una merienda");
+    expect(line).toContain("comida y cena personales");
+  });
+
+  it("recorta el rango a lo que cubre el plan (un plan que empieza a media de mes)", () => {
+    const line = awayPlanLine({
+      month: "2026-09",
+      coverage: { fromDay: 8, toDay: 30 },
+      awayStart: "2026-09-06",
+      awayEnd: "2026-09-09",
+      notes: null,
+      sharedSlots: solo,
+      mealSlots: MEAL_SLOTS,
+    });
+    expect(line).toContain("Semana 2: Martes, Miércoles");
+    expect(line).not.toContain("Semana 1");
+  });
+
+  it("si el rango cae fuera de lo que cubre el plan, solo quedan las notas", () => {
+    const line = awayPlanLine({
+      month: "2026-09",
+      coverage: { fromDay: 15, toDay: 30 },
+      awayStart: "2026-09-06",
+      awayEnd: "2026-09-09",
+      notes: "algo",
+      sharedSlots: solo,
+      mealSlots: MEAL_SLOTS,
+    });
+    expect(line).toBe(
+      'NOTAS PARA ESTE MES (contexto adicional de la persona, tenlo en cuenta si es relevante): "algo"',
+    );
   });
 });

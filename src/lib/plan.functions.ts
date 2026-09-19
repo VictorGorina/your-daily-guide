@@ -8,6 +8,7 @@ import {
   coachSystemPrompt,
   createAiProvider,
   currencySymbol,
+  PLAN_MODEL,
 } from "@/lib/ai-provider.server";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import {
@@ -37,6 +38,7 @@ import {
   diffFutureMeals,
   effectiveMealSlots,
   applyPlanChanges,
+  awayPlanLine,
   cleanReflowChanges,
   dateOfPlanCell,
   daysInMonth,
@@ -69,6 +71,7 @@ import {
   weekdayName,
   type ChildMeal,
   type MealSlot,
+  type MonthConstraints,
   type MonthlyPlan,
   type PantryExtra,
   type PlanDay,
@@ -96,6 +99,23 @@ export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared"
  * tiene equivalente, porque nunca es una comida compartida del hogar (D5).
  */
 const mealKeyOf = (slot: MealSlot): MealKey | null => (slot === "snack" ? null : slot);
+
+/** Lee lo que la persona avisó para un mes antes de generar el plan (§`setMonthConstraints`). */
+async function fetchMonthConstraints(
+  supabase: SupabaseClient,
+  userId: string,
+  month: string,
+): Promise<MonthConstraints | null> {
+  const { data } = await supabase
+    .from("month_constraints")
+    .select("away_start, away_end, notes")
+    .eq("user_id", userId)
+    .eq("month", month)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as { away_start: string | null; away_end: string | null; notes: string | null };
+  return { month, awayStart: row.away_start, awayEnd: row.away_end, notes: row.notes };
+}
 
 /**
  * Lee la fila `monthly_plans` PROPIA del que llama para un mes. Se filtra por
@@ -312,7 +332,7 @@ function blankUnselectedSlots(plan: MonthlyPlan, selected: readonly MealSlot[]):
 
 /** Pide el JSON al modelo en streaming (evita cortes por timeout) y lo intenta varias veces. */
 async function askForJson<T>(
-  opts: { key: string; userId: string; system: string; prompt: string },
+  opts: { key: string; userId: string; system: string; prompt: string; model?: string },
   extract: (parsed: unknown) => T | null,
   attempts = 3,
 ): Promise<T> {
@@ -325,7 +345,7 @@ async function askForJson<T>(
     let streamError: unknown = null;
     try {
       const result = streamText({
-        model: ai(COACH_MODEL),
+        model: ai(opts.model ?? COACH_MODEL),
         system: opts.system,
         prompt:
           i === 0
@@ -369,6 +389,7 @@ async function enforceBudget(
   shopping: ShoppingList,
   target: number,
   sym = "€",
+  model = COACH_MODEL,
 ): Promise<ShoppingList> {
   if (!(target > 0) || shoppingTotal(shopping) <= target * 1.02) return shopping;
 
@@ -376,7 +397,7 @@ async function enforceBudget(
   try {
     const ai = createAiProvider(key, userId);
     const { text } = await generateText({
-      model: ai(COACH_MODEL),
+      model: ai(model),
       system,
       temperature: 0.2,
       prompt:
@@ -447,8 +468,9 @@ async function generatePlanBody(opts: {
   coverage: PlanCoverage;
   home: HouseholdContext;
   profile: unknown;
+  constraints: MonthConstraints | null;
 }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> {
-  const { key, userId, month, cadence, coverage, home, profile } = opts;
+  const { key, userId, month, cadence, coverage, home, profile, constraints } = opts;
 
   // Qué comidas quiere que se le planifiquen (issue merienda/slots elegidos):
   // único punto de lectura, compartido con `mealsForDate` en la pantalla, así
@@ -568,10 +590,26 @@ async function generatePlanBody(opts: {
           .join(" ")
       : "";
 
+  // Viaje/ausencia avisada antes de generar el plan (ver `setMonthConstraints`):
+  // solo cambia las comidas personales de quien la avisó, nunca las
+  // compartidas del hogar.
+  const awayLine = constraints
+    ? awayPlanLine({
+        month,
+        coverage,
+        awayStart: constraints.awayStart,
+        awayEnd: constraints.awayEnd,
+        notes: constraints.notes,
+        sharedSlots: home.sharedSlots,
+        mealSlots: selectedSlots,
+      })
+    : "";
+
   const { plan: rawPlan, shopping: rawShopping } = await askForJson(
     {
       key,
       userId,
+      model: PLAN_MODEL,
       system: coachSystemPrompt(profile as never, home.text),
       prompt:
         `Crea el plan del mes ${month} y su lista de la compra. Devuelve solo JSON válido:\n` +
@@ -593,6 +631,7 @@ async function generatePlanBody(opts: {
         `${mealSlotsLine}` +
         `${servingsLine}` +
         `${kidsLine}` +
+        `${awayLine ? `${awayLine} ` : ""}` +
         "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
     },
     (parsed) => {
@@ -613,6 +652,7 @@ async function generatePlanBody(opts: {
     rawShopping,
     proratedBudget,
     sym,
+    PLAN_MODEL,
   );
   // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
   // una comida compartida, se vacía aquí — la fila de un no planificador
@@ -657,11 +697,10 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "plan-generate");
 
-    const { data: profile } = await context.supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", context.userId)
-      .maybeSingle();
+    const [{ data: profile }, constraints] = await Promise.all([
+      context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
+      fetchMonthConstraints(context.supabase as never, context.userId, data.month),
+    ]);
 
     const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
     const home = await householdContext(context.supabase as never, context.userId);
@@ -674,6 +713,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       coverage: monthCoverage(data.month, data.today),
       home,
       profile,
+      constraints,
     });
 
     const { error } = await context.supabase.from("monthly_plans").upsert(
@@ -1396,6 +1436,7 @@ export async function reflowMeals(opts: {
       {
         key,
         userId,
+        model: PLAN_MODEL,
         system: coachSystemPrompt(profile as never, home.text),
         prompt:
           insist +
@@ -1956,9 +1997,10 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     // scope: "full" — cambió la mesa. Regenera plan y cantidades con el hogar
     // nuevo y hace merge conservando hoy/pasado y las marcas de compra.
     const { syncSharedMeals } = await import("@/lib/household.server");
-    const [{ data: profile }, home] = await Promise.all([
+    const [{ data: profile }, home, constraints] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
       householdContext(context.supabase as never, context.userId),
+      fetchMonthConstraints(context.supabase as never, context.userId, data.month),
     ]);
     const currentShopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
     const cadence: ShoppingCadence = current.cadence ?? cadenceOf(currentShopping);
@@ -1972,6 +2014,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
       coverage,
       home,
       profile,
+      constraints,
     });
 
     const validChildIds = home.children.map((c) => c.id);
@@ -2193,6 +2236,66 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       };
     },
   );
+
+/**
+ * Guarda lo que la persona contó antes de generar el plan de un mes: si va a
+ * estar fuera de casa un tramo (viaje, etc.) y cualquier nota libre. Se
+ * pregunta una vez, en la ventana en la que se desbloquea el mes que viene
+ * (ver `MonthConstraintsGate`); la fila en sí — aunque quede toda a `null`
+ * porque la persona pasó de largo — es la marca de que ya se preguntó, así no
+ * vuelve a aparecer. Dato personal: no se comparte con el resto del hogar
+ * (`generatePlanBody` solo lo aplica a las comidas propias de quien lo
+ * guardó, nunca a las compartidas).
+ */
+export const setMonthConstraints = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    (input: {
+      month: string;
+      awayStart?: string | null;
+      awayEnd?: string | null;
+      notes?: string | null;
+    }) => {
+      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
+      const hasStart = input?.awayStart != null && input.awayStart !== "";
+      const hasEnd = input?.awayEnd != null && input.awayEnd !== "";
+      if (hasStart !== hasEnd) throw new ValidationError("Rango de fechas no válido");
+      if (
+        hasStart &&
+        (!/^\d{4}-\d{2}-\d{2}$/.test(input.awayStart!) ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(input.awayEnd!) ||
+          input.awayStart! > input.awayEnd!)
+      ) {
+        throw new ValidationError("Rango de fechas no válido");
+      }
+      const notes = String(input?.notes ?? "")
+        .trim()
+        .slice(0, 300);
+      return {
+        month: input.month,
+        awayStart: hasStart ? input.awayStart! : null,
+        awayEnd: hasStart ? input.awayEnd! : null,
+        notes: notes || null,
+      };
+    },
+  )
+  .handler(async ({ data, context }): Promise<MonthConstraints> => {
+    const { error } = await context.supabase.from("month_constraints").upsert(
+      {
+        user_id: context.userId,
+        month: data.month,
+        away_start: data.awayStart,
+        away_end: data.awayEnd,
+        notes: data.notes,
+      } as never,
+      { onConflict: "user_id,month" },
+    );
+    if (error) {
+      console.error("setMonthConstraints", error);
+      throw new Error("No hemos podido guardar esto. Inténtalo otra vez.");
+    }
+    return data;
+  });
 
 /**
  * Pone (o quita) el plato aparte de un niño para un día concreto — paralela a
@@ -2432,6 +2535,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
         {
           key,
           userId: context.userId,
+          model: PLAN_MODEL,
           system: coachSystemPrompt(profile as never, home.text),
           prompt:
             "A un plan del mes ya hecho le faltan platos de bebés de triturados (se dieron de alta después de generar el plan). NO cambies ni menciones el plato de la mesa: solo propón, para CADA hueco de esta lista, el puré o triturado de ese bebé:\n" +

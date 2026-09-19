@@ -231,6 +231,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      month_constraints: {
+        Row: {
+          away_end: string | null;
+          away_start: string | null;
+          created_at: string;
+          id: string;
+          month: string;
+          notes: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          away_end?: string | null;
+          away_start?: string | null;
+          created_at?: string;
+          id?: string;
+          month: string;
+          notes?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          away_end?: string | null;
+          away_start?: string | null;
+          created_at?: string;
+          id?: string;
+          month?: string;
+          notes?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       monthly_plans: {
         Row: {
           confirmed_at: string | null;

@@ -9,6 +9,7 @@ import {
   type MealHabit,
   type MealSlot,
   type MealStatus,
+  type MonthConstraints,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
 
@@ -214,6 +215,26 @@ export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | 
         pantry_extras: null,
         trip_receipts: null,
       };
+}
+
+/**
+ * Lo que la persona contó antes de que se genere el plan de este mes (viaje o
+ * ausencia, notas libres) — ver `setMonthConstraints`. `null` si todavía no
+ * se le ha preguntado; una fila con todo a `null` significa que se le
+ * preguntó y pasó de largo, así que la pregunta no debe volver a aparecer.
+ */
+export async function fetchMonthConstraints(month: string): Promise<MonthConstraints | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
+  const { data } = await supabase
+    .from("month_constraints")
+    .select("away_start, away_end, notes")
+    .eq("user_id", userId)
+    .eq("month", month)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as { away_start: string | null; away_end: string | null; notes: string | null };
+  return { month, awayStart: row.away_start, awayEnd: row.away_end, notes: row.notes };
 }
 
 export type PlannerShoppingRow = {

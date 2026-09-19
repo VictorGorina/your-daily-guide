@@ -38,6 +38,7 @@ import { BottomNav } from "../../components/bottom-nav";
 import { DayDetailSheet } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
 import { GoalWeightSummary } from "../../components/goal-weight-summary";
+import { MonthConstraintsGate } from "../../components/month-constraints-gate";
 import { MonthSpendSummary } from "../../components/month-spend-summary";
 import { PlanUpdatedBanner } from "../../components/plan-updated-banner";
 import { Dialog } from "../../components/ui/dialog";
@@ -45,6 +46,7 @@ import { apiPost } from "../../lib/api";
 import {
   fetchLogs,
   fetchLogsForMonth,
+  fetchMonthConstraints,
   fetchMonthlyPlan,
   fetchPlannerShopping,
   fetchProfile,
@@ -254,6 +256,18 @@ export default function Plan() {
   const actionable = isMonthActionable(month, today);
   const bounds = planNavBounds(today, appStartedOn);
   const [openDay, setOpenDay] = useState<string | null>(null);
+
+  // Preguntas rápidas (viaje/ausencia, notas) antes de crear el plan del mes
+  // que viene — solo en la ventana en la que se desbloquea (empuje del push
+  // de renovación). `null` = todavía no se le preguntó; una fila vacía cuenta
+  // como "ya preguntado y pasó de largo".
+  const constraintsQ = useQuery({
+    queryKey: ["month-constraints", month],
+    queryFn: () => fetchMonthConstraints(month),
+    enabled: monthStatus === "next-unlocked",
+  });
+  const needsConstraints =
+    monthStatus === "next-unlocked" && !constraintsQ.isLoading && !constraintsQ.data;
 
   const generate = useMutation({
     mutationFn: (nextCadence?: ShoppingCadence) =>
@@ -610,7 +624,12 @@ export default function Plan() {
           ) : null}
         </View>
 
-        {showCreateTakeover ? (
+        {showCreateTakeover && needsConstraints ? (
+          <MonthConstraintsGate
+            month={month}
+            onDone={() => qc.invalidateQueries({ queryKey: ["month-constraints", month] })}
+          />
+        ) : showCreateTakeover ? (
           <View className="mt-8 items-center rounded-3xl bg-surface p-6">
             <CalendarRange size={28} color="#ff8a3d" />
             <Text className="mt-3 text-sm font-sans-semibold text-foreground">

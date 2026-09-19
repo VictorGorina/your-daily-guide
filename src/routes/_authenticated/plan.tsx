@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { BottomNav } from "@/components/bottom-nav";
 import { DayDetailSheet } from "@/components/day-detail-sheet";
 import { GoalWeightSummary } from "@/components/goal-weight-summary";
+import { MonthConstraintsGate } from "@/components/month-constraints-gate";
 import { MonthSpendSummary } from "@/components/month-spend-summary";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
 import { PlanUpdatedBanner } from "@/components/plan-updated-banner";
@@ -45,6 +46,7 @@ import {
 import {
   fetchLogs,
   fetchLogsForMonth,
+  fetchMonthConstraints,
   fetchMonthlyPlan,
   fetchPlannerShopping,
   fetchProfile,
@@ -210,6 +212,19 @@ function PlanPage() {
   const appStartedOn = profileQ.data?.app_started_on ?? null;
   const monthStatus = planMonthStatus(month, today);
   const actionable = isMonthActionable(month, today);
+
+  // Preguntas rápidas (viaje/ausencia, notas) antes de crear el plan del mes
+  // que viene — solo en la ventana en la que se desbloquea (empuje del push
+  // de renovación). `null` = todavía no se le preguntó; una fila vacía cuenta
+  // como "ya preguntado y pasó de largo".
+  const constraintsQ = useQuery({
+    queryKey: ["month-constraints", month],
+    queryFn: () => fetchMonthConstraints(month),
+    enabled: monthStatus === "next-unlocked",
+  });
+  const needsConstraints =
+    monthStatus === "next-unlocked" && !constraintsQ.isLoading && !constraintsQ.data;
+
   const bounds = planNavBounds(today, appStartedOn);
   const [openDay, setOpenDay] = useState<string | null>(null);
 
@@ -615,7 +630,12 @@ function PlanPage() {
         ) : null}
       </header>
 
-      {showCreateTakeover ? (
+      {showCreateTakeover && needsConstraints ? (
+        <MonthConstraintsGate
+          month={month}
+          onDone={() => qc.invalidateQueries({ queryKey: ["month-constraints", month] })}
+        />
+      ) : showCreateTakeover ? (
         <section className="surface-card animate-rise mt-8 p-6 text-center">
           <CalendarRange className="mx-auto h-7 w-7 text-primary" />
           <h2 className="mt-3 text-sm font-semibold">
