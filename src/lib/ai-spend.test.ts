@@ -4,6 +4,7 @@ import {
   callCostUsd,
   COACH_MODEL_USD_PER_MTOK,
   decideSpendCap,
+  PLAN_MODEL_USD_PER_MTOK,
   utcDayISO,
   utcMonthStartISO,
 } from "./ai-spend";
@@ -54,6 +55,31 @@ describe("callCostUsd", () => {
   it("sin uso ni coste cuenta 0, nunca NaN", () => {
     expect(callCostUsd({})).toBe(0);
     expect(callCostUsd({ usage: { inputTokens: { total: undefined } } })).toBe(0);
+  });
+
+  it("estima al precio de PLAN_MODEL cuando la llamada fue con ese modelo", () => {
+    const usage = { inputTokens: { total: 2000 }, outputTokens: { total: 400 } };
+    const estimate = callCostUsd(
+      { usage, providerMetadata: { openrouter: { usage: {} } } },
+      "google/gemini-2.5-pro",
+    );
+    expect(estimate).toBeCloseTo(
+      (2000 * PLAN_MODEL_USD_PER_MTOK.input + 400 * PLAN_MODEL_USD_PER_MTOK.output) / 1e6,
+      12,
+    );
+  });
+
+  it("un modelId desconocido cae al precio más caro conocido, no al de coach", () => {
+    const usage = { inputTokens: { total: 1_000_000 }, outputTokens: { total: 0 } };
+    const knownExpensive = callCostUsd(
+      { usage, providerMetadata: { openrouter: { usage: {} } } },
+      "google/gemini-2.5-pro",
+    );
+    const unknown = callCostUsd(
+      { usage, providerMetadata: { openrouter: { usage: {} } } },
+      "algun-modelo-nuevo-sin-precio",
+    );
+    expect(unknown).toBe(knownExpensive);
   });
 });
 

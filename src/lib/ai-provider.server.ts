@@ -6,11 +6,36 @@ import { callCostUsd } from "@/lib/ai-spend";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 
 /** Modelo usado por el coach vía OpenRouter: Gemini 2.5 Flash da un buen
- * equilibrio coste/calidad para chat conversacional en español y generación
- * de JSON estructurado (guías, planes), con salidas consistentes y baratas
+ * equilibrio coste/calidad para chat conversacional en español, y es el que
+ * usa cualquier llamada que no tenga un modelo más caro asignado explícitamente
+ * (`askForJson` sin `opts.model`) — volumen alto, precisión menos crítica
  * (~$0.30 / $2.50 por millón de tokens de entrada/salida en OpenRouter; si
  * cambia, cambia también `COACH_MODEL_USD_PER_MTOK` en `ai-spend.ts`). */
 export const COACH_MODEL = "google/gemini-2.5-flash";
+
+/**
+ * Modelo para lo que decide QUÉ hay en el plan: `generatePlanBody`
+ * (`generateMonthlyPlan` y el reflow "full"), `enforceBudget` y `reflowMeals`
+ * (`adjustMonthlyPlan` y el reflow "meals"), más `fillChildMeals`. Volumen bajo
+ * (unas pocas llamadas al mes por persona, nunca a diario) y es justo donde
+ * más se nota variedad/coherencia — de ahí el salto a un tier "pro" real, no
+ * preview, para no depender de un modelo que Google puede retirar sin aviso
+ * (~$1.25 / $10 por millón de tokens; ~4x el coste de `COACH_MODEL`. Si
+ * cambia, cambia también `PLAN_MODEL_USD_PER_MTOK` en `ai-spend.ts`).
+ */
+export const PLAN_MODEL = "google/gemini-2.5-pro";
+
+/**
+ * Modelo para `decomposeDishes` (resolve-dish.server.ts): la única llamada de
+ * todo el pipeline de nutrición, la que decide en qué ingredientes y gramos se
+ * traduce un plato. Una llamada al día por persona como mucho (memoizada), así
+ * que el mismo salto de precisión que `PLAN_MODEL` sale casi gratis aquí y es
+ * justo la pieza que sostiene la precisión de kcal/macros de toda la app
+ * (~$1.25 / $10 por millón de tokens, igual que `PLAN_MODEL` hoy — se separa
+ * en su propia constante porque no tienen por qué evolucionar juntos. Si
+ * cambia, cambia también `DISH_MODEL_USD_PER_MTOK` en `ai-spend.ts`).
+ */
+export const DISH_MODEL = "google/gemini-2.5-pro";
 
 /**
  * Modelos de OpenRouter que cuentan su gasto contra el tope de la persona.
@@ -25,7 +50,9 @@ export function createAiProvider(apiKey: string, userId: string | null) {
     // Sin `usage.include`, OpenRouter no manda `usage.cost` y solo quedaría
     // estimarlo con los tokens.
     const model = openrouter.chat(modelId, { usage: { include: true } });
-    return userId ? wrapLanguageModel({ model, middleware: aiSpendMiddleware(userId) }) : model;
+    return userId
+      ? wrapLanguageModel({ model, middleware: aiSpendMiddleware(userId, modelId) })
+      : model;
   };
 }
 
@@ -37,7 +64,7 @@ export function createAiProvider(apiKey: string, userId: string | null) {
  * `rate-limit.server` se carga dentro: arrastra el cliente de servicio, y este
  * módulo lo importan arriba del todo archivos que también van al navegador.
  */
-function aiSpendMiddleware(userId: string): LanguageModelMiddleware {
+function aiSpendMiddleware(userId: string, modelId: string): LanguageModelMiddleware {
   const spend = () => import("@/lib/rate-limit.server");
   return {
     specificationVersion: "v4",
@@ -45,7 +72,7 @@ function aiSpendMiddleware(userId: string): LanguageModelMiddleware {
       const { enforceAiSpendCap, recordAiSpend } = await spend();
       await enforceAiSpendCap(userId);
       const result = await doGenerate();
-      await recordAiSpend(userId, callCostUsd(result));
+      await recordAiSpend(userId, callCostUsd(result, modelId));
       return result;
     },
     wrapStream: async ({ doStream }) => {
@@ -54,7 +81,7 @@ function aiSpendMiddleware(userId: string): LanguageModelMiddleware {
       const { stream, ...rest } = await doStream();
       return {
         ...rest,
-        stream: onFinishPart(stream, (part) => recordAiSpend(userId, callCostUsd(part))),
+        stream: onFinishPart(stream, (part) => recordAiSpend(userId, callCostUsd(part, modelId))),
       };
     },
   };

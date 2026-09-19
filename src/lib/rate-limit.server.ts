@@ -55,13 +55,18 @@ const RATE_LIMITS = {
  * Tope de gasto en IA por persona, en dólares de OpenRouter. Complementa a
  * `RATE_LIMITS`, no lo sustituye: esas cuotas son por hora, y una cuenta
  * automatizada que las respete todas puede gastar ~50-70 $/mes POR operación.
- * Una persona que usa mucho la app gasta ~0,85 $/mes (medido el 2026-09-15:
- * un mensaje al coach ≈ 0,0014 $, la guía ≈ 0,0013 $, el plan del mes ≈ 0,01 $),
- * así que estos topes no los roza nadie que use la app de verdad.
+ *
+ * Una persona que usa mucho la app gastaba ~0,85 $/mes solo con `COACH_MODEL`
+ * (medido el 2026-09-15: un mensaje al coach ≈ 0,0014 $, la guía ≈ 0,0013 $, el
+ * plan del mes ≈ 0,01 $). Desde que `PLAN_MODEL`/`DISH_MODEL` (Gemini 2.5 Pro,
+ * ~4x el precio de Flash) llevan la generación/reajuste del plan y la
+ * descomposición de platos (issue "reorganizar IAs", 2026-09-19), el gasto
+ * intensivo proyectado sube pero se queda bien por debajo de este tope — el
+ * chat, con más volumen que nada, se queda en Flash sin cambios.
  *
  * El día y el mes van en UTC (ver `ai-spend.ts`). `Infinity` desactiva un tope.
  */
-const AI_SPEND_CAPS: AiSpendCaps = { dailyUsd: 0.25, monthlyUsd: 3 };
+const AI_SPEND_CAPS: AiSpendCaps = { dailyUsd: 0.75, monthlyUsd: 5 };
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;
 

@@ -20,12 +20,19 @@ export type SpendCapDecision = {
 } & ({ allowed: true } | { allowed: false; scope: "day" | "month"; retryAfterSeconds: number });
 
 /**
- * Precio de `COACH_MODEL` (Gemini 2.5 Flash) en OpenRouter, en $ por millón de
- * tokens. Solo se usa si una respuesta llega sin `usage.cost`: mejor contar una
- * estimación que dejar esa llamada fuera del tope. Si cambia el modelo, cambia
- * esto también.
+ * Precio de cada modelo en OpenRouter, en $ por millón de tokens. Solo se usa
+ * si una respuesta llega sin `usage.cost`: mejor contar una estimación que
+ * dejar esa llamada fuera del tope. Si cambia el precio de un modelo (o se
+ * añade uno nuevo en `ai-provider.server.ts`), cambia esto también.
  */
 export const COACH_MODEL_USD_PER_MTOK = { input: 0.3, output: 2.5 } as const;
+export const PLAN_MODEL_USD_PER_MTOK = { input: 1.25, output: 10 } as const;
+export const DISH_MODEL_USD_PER_MTOK = { input: 1.25, output: 10 } as const;
+
+const MODEL_USD_PER_MTOK: Record<string, { input: number; output: number }> = {
+  "google/gemini-2.5-flash": COACH_MODEL_USD_PER_MTOK,
+  "google/gemini-2.5-pro": PLAN_MODEL_USD_PER_MTOK,
+};
 
 /** Lo que miramos de un resultado del modelo: sirve igual para `doGenerate`
  *  que para la parte `finish` de un stream. */
@@ -37,19 +44,30 @@ export type CallUsage = {
 /**
  * Coste en dólares de una llamada. Manda lo que factura OpenRouter
  * (`providerMetadata.openrouter.usage.cost`, que solo llega con
- * `usage: { include: true }`); si no viene, se estima con los tokens.
+ * `usage: { include: true }`); si no viene, se estima con los tokens al
+ * precio de `modelId`. Un modelo que no esté en `MODEL_USD_PER_MTOK` (nuevo,
+ * o id mal escrito) cae al precio más caro conocido: mejor sobrestimar contra
+ * el tope de gasto que dejar pasar una llamada cara como si fuera barata.
  */
-export function callCostUsd({ usage, providerMetadata }: CallUsage): number {
+export function callCostUsd({ usage, providerMetadata }: CallUsage, modelId?: string): number {
   const openrouter = providerMetadata?.openrouter as { usage?: { cost?: unknown } } | undefined;
   const reported = openrouter?.usage?.cost;
   if (typeof reported === "number" && Number.isFinite(reported) && reported >= 0) {
     return reported;
   }
 
+  const priceTable = Object.values(MODEL_USD_PER_MTOK);
+  const mostExpensive = priceTable.reduce((a, b) =>
+    b.input + b.output > a.input + a.output ? b : a,
+  );
+  // Sin `modelId` (nadie más lo pasa hoy salvo los tests) se asume el modelo
+  // por defecto; con un `modelId` presente pero no reconocido, el más caro.
+  const price = modelId ? (MODEL_USD_PER_MTOK[modelId] ?? mostExpensive) : COACH_MODEL_USD_PER_MTOK;
+
   const tokens = (n: number | undefined) => (Number.isFinite(n) && n! > 0 ? n! : 0);
   return (
-    (tokens(usage?.inputTokens?.total) * COACH_MODEL_USD_PER_MTOK.input +
-      tokens(usage?.outputTokens?.total) * COACH_MODEL_USD_PER_MTOK.output) /
+    (tokens(usage?.inputTokens?.total) * price.input +
+      tokens(usage?.outputTokens?.total) * price.output) /
     1_000_000
   );
 }
