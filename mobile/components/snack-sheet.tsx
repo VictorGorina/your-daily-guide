@@ -1,3 +1,4 @@
+import { X } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
@@ -45,30 +46,53 @@ function Chip({
   label,
   count,
   onPress,
+  onRemove,
 }: {
   active: boolean;
   label: string;
   count: number;
   onPress: () => void;
+  onRemove: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      className={`rounded-full px-3 py-1.5 active:opacity-80 ${
-        active ? "bg-primary" : "bg-secondary"
-      }`}
+    <View
+      className={`flex-row items-center rounded-full ${active ? "bg-primary" : "bg-secondary"}`}
     >
-      <Text className={`text-xs ${active ? "text-primary-foreground" : "text-muted-foreground"}`}>
-        {label}
-        {active && count > 1 ? ` ×${count}` : ""}
-      </Text>
-    </Pressable>
+      <Pressable onPress={onPress} className="px-3 py-1.5 active:opacity-80">
+        <Text className={`text-xs ${active ? "text-primary-foreground" : "text-muted-foreground"}`}>
+          {label}
+          {active && count > 1 ? ` ×${count}` : ""}
+        </Text>
+      </Pressable>
+      {active ? (
+        <Pressable onPress={onRemove} hitSlop={8} className="py-1.5 pr-2.5 active:opacity-70">
+          <X size={12} color="#fbfaf7" />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
 const parseKcal = (raw: string): number | null => {
   const n = Number(raw.replace(",", ".").trim());
   return raw.trim() && Number.isFinite(n) && n >= 0 && n <= SNACK_KCAL_MAX ? Math.round(n) : null;
+};
+
+/** Junta frases en una lista natural: "A", "A y B", "A, B y C". */
+const joinNaturally = (parts: string[]): string => {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
+};
+
+/** Reconstruye el texto libre a partir de los presets activos (varios a la vez). */
+const buildPresetText = (counts: Record<number, number>): string => {
+  const parts = PRESETS.map((preset, idx) => {
+    const count = counts[idx] ?? 0;
+    return count > 0 ? preset.text(count) : null;
+  }).filter((p): p is string => p !== null);
+  return joinNaturally(
+    parts.map((part, i) => (i === 0 ? part : part.charAt(0).toLowerCase() + part.slice(1))),
+  );
 };
 
 /**
@@ -98,7 +122,8 @@ export function SnackSheet({
   const [kcalInput, setKcalInput] = useState<string | null>(null);
   const [busy, setBusy] = useState<"estimate" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [presetState, setPresetState] = useState<{ idx: number; count: number } | null>(null);
+  /** Presets activos ahora mismo: idx del preset -> nº de veces pulsado. */
+  const [presetCounts, setPresetCounts] = useState<Record<number, number>>({});
 
   const reset = () => {
     setText("");
@@ -106,7 +131,7 @@ export function SnackSheet({
     setKcalInput(null);
     setBusy(null);
     setError(null);
-    setPresetState(null);
+    setPresetCounts({});
   };
 
   const changeText = (next: string) => {
@@ -115,16 +140,27 @@ export function SnackSheet({
     setEstimate(null);
     setKcalInput(null);
     setError(null);
-    setPresetState(null);
+    // El texto ya no coincide con los presets: un próximo toque empieza de cero.
+    setPresetCounts({});
   };
 
   const clickPreset = (idx: number) => {
-    const count = presetState?.idx === idx ? presetState.count + 1 : 1;
-    setText(PRESETS[idx].text(count));
+    const next = { ...presetCounts, [idx]: (presetCounts[idx] ?? 0) + 1 };
+    setPresetCounts(next);
+    setText(buildPresetText(next));
     setEstimate(null);
     setKcalInput(null);
     setError(null);
-    setPresetState({ idx, count });
+  };
+
+  const removePreset = (idx: number) => {
+    const next = { ...presetCounts };
+    delete next[idx];
+    setPresetCounts(next);
+    setText(buildPresetText(next));
+    setEstimate(null);
+    setKcalInput(null);
+    setError(null);
   };
 
   const calculate = async () => {
@@ -200,9 +236,10 @@ export function SnackSheet({
             <Chip
               key={p.label}
               label={p.label}
-              active={presetState?.idx === i}
-              count={presetState?.idx === i ? presetState.count : 0}
+              active={(presetCounts[i] ?? 0) > 0}
+              count={presetCounts[i] ?? 0}
               onPress={() => clickPreset(i)}
+              onRemove={() => removePreset(i)}
             />
           ))}
         </View>

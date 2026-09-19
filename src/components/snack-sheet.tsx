@@ -1,5 +1,5 @@
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useState } from "react";
 
 import { DictateButton } from "@/components/dictate-button";
@@ -42,10 +42,27 @@ const PRESETS: { label: string; text: (n: number) => string }[] = [
   },
 ];
 
-const chipClass = (active: boolean) =>
-  `rounded-full px-3 py-1.5 text-xs transition-colors ${
+const pillGroupClass = (active: boolean) =>
+  `flex items-center gap-0.5 rounded-full text-xs transition-colors ${
     active ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
   }`;
+
+/** Junta frases en una lista natural: "A", "A y B", "A, B y C". */
+const joinNaturally = (parts: string[]): string => {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
+};
+
+/** Reconstruye el texto libre a partir de los presets activos (varios a la vez). */
+const buildPresetText = (counts: Record<number, number>): string => {
+  const parts = PRESETS.map((preset, idx) => {
+    const count = counts[idx] ?? 0;
+    return count > 0 ? preset.text(count) : null;
+  }).filter((p): p is string => p !== null);
+  return joinNaturally(
+    parts.map((part, i) => (i === 0 ? part : part.charAt(0).toLowerCase() + part.slice(1))),
+  );
+};
 
 const parseKcal = (raw: string): number | null => {
   const n = Number(raw.replace(",", ".").trim());
@@ -81,7 +98,8 @@ export function SnackSheet({
   const [kcalInput, setKcalInput] = useState<string | null>(null);
   const [busy, setBusy] = useState<"estimate" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [presetState, setPresetState] = useState<{ idx: number; count: number } | null>(null);
+  /** Presets activos ahora mismo: idx del preset -> nº de veces pulsado. */
+  const [presetCounts, setPresetCounts] = useState<Record<number, number>>({});
 
   const reset = () => {
     setText("");
@@ -89,7 +107,7 @@ export function SnackSheet({
     setKcalInput(null);
     setBusy(null);
     setError(null);
-    setPresetState(null);
+    setPresetCounts({});
   };
 
   const changeText = (next: string) => {
@@ -98,16 +116,27 @@ export function SnackSheet({
     setEstimate(null);
     setKcalInput(null);
     setError(null);
-    setPresetState(null);
+    // El texto ya no coincide con los presets: un próximo clic empieza de cero.
+    setPresetCounts({});
   };
 
   const clickPreset = (idx: number) => {
-    const count = presetState?.idx === idx ? presetState.count + 1 : 1;
-    setText(PRESETS[idx].text(count));
+    const next = { ...presetCounts, [idx]: (presetCounts[idx] ?? 0) + 1 };
+    setPresetCounts(next);
+    setText(buildPresetText(next));
     setEstimate(null);
     setKcalInput(null);
     setError(null);
-    setPresetState({ idx, count });
+  };
+
+  const removePreset = (idx: number) => {
+    const next = { ...presetCounts };
+    delete next[idx];
+    setPresetCounts(next);
+    setText(buildPresetText(next));
+    setEstimate(null);
+    setKcalInput(null);
+    setError(null);
   };
 
   const calculate = async () => {
@@ -180,17 +209,28 @@ export function SnackSheet({
 
         <div className="space-y-4 px-4 pb-8">
           <div className="flex flex-wrap gap-2">
-            {PRESETS.map((p, i) => (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() => clickPreset(i)}
-                className={chipClass(presetState?.idx === i)}
-              >
-                {p.label}
-                {presetState?.idx === i && presetState.count > 1 ? ` ×${presetState.count}` : ""}
-              </button>
-            ))}
+            {PRESETS.map((p, i) => {
+              const count = presetCounts[i] ?? 0;
+              const active = count > 0;
+              return (
+                <div key={p.label} className={pillGroupClass(active)}>
+                  <button type="button" onClick={() => clickPreset(i)} className="px-3 py-1.5">
+                    {p.label}
+                    {active && count > 1 ? ` ×${count}` : ""}
+                  </button>
+                  {active ? (
+                    <button
+                      type="button"
+                      onClick={() => removePreset(i)}
+                      aria-label={`Quitar ${p.label}`}
+                      className="py-1.5 pr-2.5 opacity-80"
+                    >
+                      <X className="h-3 w-3" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
 
           <div className="space-y-2">
