@@ -1,9 +1,27 @@
 {
-  "ranAt": "2026-09-16T21:07:27.242Z",
+  "ranAt": "2026-09-19T14:37:04.882Z",
   "dishes": 61,
   "resolved": 61,
   "resolvedPct": 100,
   "meanQualityPct": 100,
   "kcalOutOfRange": 0,
-  "unidentifiedIngredients": {}
+  "unidentifiedIngredients": {},
+  "broadAliasKeys": {
+    "especias": [
+      "canela",
+      "azafrán",
+      "orégano",
+      "pimienta negra",
+      "pimentón",
+      "laurel",
+      "curry en polvo",
+      "comino",
+      "especias",
+      "jengibre"
+    ],
+    "caldo": ["caldo de verduras", "caldo de pollo", "caldo de pescado", "caldo"],
+    "lentejas": ["lentejas", "lenteja", "lenteja roja"],
+    "arroz-blanco": ["arroz", "arroz basmati", "arroz blanco"],
+    "pasta": ["macarrones", "pasta", "fideo"]
+  }
 }

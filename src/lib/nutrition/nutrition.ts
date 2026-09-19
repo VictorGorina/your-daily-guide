@@ -186,6 +186,21 @@ export const clampGrams = (g: unknown): number => {
 };
 
 /**
+ * Convierte un peso que el modelo marcó como CRUDO al equivalente ya cocinado,
+ * cuando el alimento casado tiene `cookedYield` (carne/pescado fresco cuya fila
+ * de la tabla es el valor asado/cocinado). Sin `cookedYield` no hay nada que
+ * convertir — devuelve los gramos tal cual (curados, enlatados, huevo,
+ * proteína vegetal, o cualquier alimento que no se pese en crudo).
+ *
+ * Deliberadamente en código y no en el prompt: pedirle al modelo que calcule
+ * "200 × 0.75" en prosa acertaba unas veces y otras no (issue de precisión,
+ * 2026-09-19). Aquí el modelo solo tiene que clasificar sí/no — el número lo
+ * pone la tabla, no el modelo.
+ */
+const gramsAsEaten = (grams: number, food: Food, wasRaw: boolean | undefined): number =>
+  wasRaw && food.cookedYield ? Math.round(grams * food.cookedYield) : grams;
+
+/**
  * Resuelve un ingrediente crudo (lo que devuelve el modelo) contra la tabla:
  * primero por `key` explícita, luego por nombre, y si nada casa cae en
  * `GENERIC_FOOD` con `confidence: "low"` para que la suma siga teniendo sentido.
@@ -194,17 +209,34 @@ export function resolveIngredient(raw: {
   key?: string | null;
   name?: string | null;
   grams?: unknown;
+  /** El modelo marca esto cuando el gramaje del plato es el peso ANTES de
+   * cocinar (carne o pescado crudos) — ver `gramsAsEaten`. */
+  wasRaw?: boolean;
 }): ResolvedIngredient {
   const name = String(raw.name ?? "").trim();
   const grams = clampGrams(raw.grams);
 
   if (raw.key) {
     const byKey = FOOD_BY_KEY.get(String(raw.key).trim());
-    if (byKey) return { name: name || byKey.label, grams, food: byKey, confidence: "high" };
+    if (byKey) {
+      return {
+        name: name || byKey.label,
+        grams: gramsAsEaten(grams, byKey, raw.wasRaw),
+        food: byKey,
+        confidence: "high",
+      };
+    }
   }
 
   const matched = matchFood(name);
-  if (matched) return { name, grams, food: matched.food, confidence: matched.confidence };
+  if (matched) {
+    return {
+      name,
+      grams: gramsAsEaten(grams, matched.food, raw.wasRaw),
+      food: matched.food,
+      confidence: matched.confidence,
+    };
+  }
 
   return { name: name || "ingrediente", grams, food: GENERIC_FOOD, confidence: "low" };
 }

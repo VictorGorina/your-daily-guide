@@ -48,6 +48,16 @@ export type Food = {
   /** Días que aguanta en casa (nevera normal, sin congelar). `Infinity` = despensa. */
   shelfLifeDays: number;
   pricePer100Eur: number;
+  /**
+   * Solo carne/pescado fresco cuya fila es el valor YA COCINADO: qué fracción del peso
+   * en crudo queda tras cocinar (se pierde agua, no energía). `resolveIngredient` la usa
+   * para convertir un peso que el modelo marcó como crudo al equivalente cocinado antes
+   * de multiplicar por `kcal` — así no hace falta que el modelo calcule la conversión él
+   * mismo (issue de precisión, 2026-09-19: en prosa el modelo acertaba unas veces y otras
+   * no). `undefined` en curados, enlatados, huevo, proteína vegetal y todo lo que no se
+   * pese en crudo antes de cocinar.
+   */
+  cookedYield?: number;
 };
 
 type FoodOpts = {
@@ -55,6 +65,7 @@ type FoodOpts = {
   densityGPerMl?: number;
   perishable?: boolean;
   shelfLifeDays?: number;
+  cookedYield?: number;
 };
 
 const f = (
@@ -84,6 +95,7 @@ const f = (
     perishable,
     shelfLifeDays: opts.shelfLifeDays ?? (perishable ? 6 : Infinity),
     pricePer100Eur,
+    cookedYield: opts.cookedYield,
   };
 };
 
@@ -92,12 +104,12 @@ const PERISHABLE_BY_DEFAULT = new Set<FoodCategory>(["proteina", "verdura", "fru
 // prettier-ignore
 export const FOODS: Food[] = [
   // ---------------------------------------------------------------- PROTEÍNA
-  f("pechuga-pollo", "pechuga de pollo", "proteina", 165, 31, 0, 3.6, 0, 0.75, { aliases: ["pollo", "pechuga pollo", "pollo a la plancha", "pollo asado"], shelfLifeDays: 2 }),
-  f("muslo-pollo", "muslo de pollo", "proteina", 209, 26, 0, 11, 0, 0.55, { aliases: ["contramuslo", "jamoncitos de pollo", "muslo pollo"], shelfLifeDays: 2 }),
-  f("pavo-pechuga", "pechuga de pavo", "proteina", 135, 29, 0, 1.5, 0, 0.95, { aliases: ["pavo", "filete de pavo"], shelfLifeDays: 2 }),
-  f("ternera-magra", "ternera magra", "proteina", 217, 27, 0, 12, 0, 1.4, { aliases: ["ternera", "filete de ternera", "carne de ternera", "vacuno", "carne", "carne de vacuno"], shelfLifeDays: 3 }),
-  f("carne-picada", "carne picada mixta", "proteina", 250, 18, 0, 20, 0, 0.8, { aliases: ["carne picada", "picada", "carne molida"], shelfLifeDays: 2 }),
-  f("cerdo-lomo", "lomo de cerdo", "proteina", 210, 27, 0, 11, 0, 0.7, { aliases: ["cerdo", "lomo", "cinta de lomo", "filete de cerdo"], shelfLifeDays: 3 }),
+  f("pechuga-pollo", "pechuga de pollo", "proteina", 165, 31, 0, 3.6, 0, 0.75, { aliases: ["pollo", "pechuga pollo", "pollo a la plancha", "pollo asado"], shelfLifeDays: 2, cookedYield: 0.75 }),
+  f("muslo-pollo", "muslo de pollo", "proteina", 209, 26, 0, 11, 0, 0.55, { aliases: ["contramuslo", "jamoncitos de pollo", "muslo pollo"], shelfLifeDays: 2, cookedYield: 0.78 }),
+  f("pavo-pechuga", "pechuga de pavo", "proteina", 135, 29, 0, 1.5, 0, 0.95, { aliases: ["pavo", "filete de pavo"], shelfLifeDays: 2, cookedYield: 0.75 }),
+  f("ternera-magra", "ternera magra", "proteina", 217, 27, 0, 12, 0, 1.4, { aliases: ["ternera", "filete de ternera", "carne de ternera", "vacuno", "carne", "carne de vacuno"], shelfLifeDays: 3, cookedYield: 0.75 }),
+  f("carne-picada", "carne picada mixta", "proteina", 250, 18, 0, 20, 0, 0.8, { aliases: ["carne picada", "picada", "carne molida"], shelfLifeDays: 2, cookedYield: 0.75 }),
+  f("cerdo-lomo", "lomo de cerdo", "proteina", 210, 27, 0, 11, 0, 0.7, { aliases: ["cerdo", "lomo", "cinta de lomo", "filete de cerdo"], shelfLifeDays: 3, cookedYield: 0.75 }),
   f("jamon-serrano", "jamón serrano", "proteina", 240, 31, 1, 12, 0, 3.5, { aliases: ["jamon", "jamon iberico", "jamon curado"], shelfLifeDays: 20 }),
   f("jamon-cocido", "jamón cocido", "proteina", 110, 18, 1.5, 3.5, 0, 1.2, { aliases: ["jamon york", "fiambre", "pechuga de pavo loncheada", "lacon"], shelfLifeDays: 6 }),
   f("chorizo", "chorizo", "proteina", 350, 24, 2, 28, 0, 1.2, { shelfLifeDays: 15 }),
@@ -111,18 +123,18 @@ export const FOODS: Food[] = [
   f("morcilla", "morcilla", "proteina", 325, 11, 3, 30, 0, 1.1, { aliases: ["morcilla de burgos", "morcilla de arroz", "morcilla de cebolla", "moronga"], shelfLifeDays: 5 }),
   f("huevo", "huevo", "proteina", 143, 13, 1.1, 9.5, 0, 0.30, { aliases: ["huevos", "huevo cocido", "huevo frito", "huevo duro"], shelfLifeDays: 21 }),
   f("clara-huevo", "clara de huevo", "proteina", 52, 11, 0.7, 0.2, 0, 0.40, { aliases: ["claras", "clara"], shelfLifeDays: 10 }),
-  f("salmon", "salmón", "proteina", 208, 20, 0, 13, 0, 2.2, { aliases: ["salmon fresco", "lomo de salmon"], shelfLifeDays: 2 }),
-  f("merluza", "merluza", "proteina", 90, 18, 0, 2, 0, 1.6, { aliases: ["pescadilla", "filete de merluza", "pescado", "pescado blanco al horno"], shelfLifeDays: 2 }),
-  f("bacalao", "bacalao", "proteina", 105, 23, 0, 1, 0, 2.5, { aliases: ["bacalao fresco", "bacalao desalado"], shelfLifeDays: 2 }),
-  f("atun-fresco", "atún fresco", "proteina", 130, 28, 0, 1, 0, 2.5, { aliases: ["atun", "bonito", "lomo de atun"], shelfLifeDays: 2 }),
+  f("salmon", "salmón", "proteina", 208, 20, 0, 13, 0, 2.2, { aliases: ["salmon fresco", "lomo de salmon"], shelfLifeDays: 2, cookedYield: 0.80 }),
+  f("merluza", "merluza", "proteina", 90, 18, 0, 2, 0, 1.6, { aliases: ["pescadilla", "filete de merluza", "pescado", "pescado blanco al horno"], shelfLifeDays: 2, cookedYield: 0.85 }),
+  f("bacalao", "bacalao", "proteina", 105, 23, 0, 1, 0, 2.5, { aliases: ["bacalao fresco", "bacalao desalado"], shelfLifeDays: 2, cookedYield: 0.85 }),
+  f("atun-fresco", "atún fresco", "proteina", 130, 28, 0, 1, 0, 2.5, { aliases: ["atun", "bonito", "lomo de atun"], shelfLifeDays: 2, cookedYield: 0.80 }),
   f("atun-lata", "atún en lata al natural", "proteina", 116, 26, 0, 1, 0, 1.4, { aliases: ["atun en conserva", "atun claro", "lata de atun", "atun al natural"], perishable: false }),
   f("atun-lata-aceite", "atún en lata en aceite", "proteina", 190, 25, 0, 10, 0, 1.5, { aliases: ["atun en aceite"], perishable: false }),
-  f("sardina", "sardina", "proteina", 208, 25, 0, 11, 0, 1.0, { aliases: ["sardinas", "sardinas en lata"], shelfLifeDays: 2 }),
-  f("caballa", "caballa", "proteina", 205, 19, 0, 14, 0, 0.9, { aliases: ["verdel", "melva"], shelfLifeDays: 2 }),
-  f("dorada", "dorada o lubina", "proteina", 115, 20, 0, 4, 0, 1.8, { aliases: ["lubina", "dorada", "pescado blanco"], shelfLifeDays: 2 }),
-  f("gambas", "gambas o langostinos", "proteina", 99, 24, 0, 0.3, 0, 2.0, { aliases: ["gamba", "langostino", "langostinos", "camaron", "marisco"], shelfLifeDays: 2 }),
-  f("mejillones", "mejillones", "proteina", 86, 12, 3.7, 2.2, 0, 0.7, { aliases: ["mejillon", "almeja", "almejas", "berberechos"], shelfLifeDays: 2 }),
-  f("calamar", "calamar", "proteina", 92, 16, 3, 1.4, 0, 1.8, { aliases: ["calamares", "sepia", "chipiron", "anillas de calamar"], shelfLifeDays: 2 }),
+  f("sardina", "sardina", "proteina", 208, 25, 0, 11, 0, 1.0, { aliases: ["sardinas", "sardinas en lata"], shelfLifeDays: 2, cookedYield: 0.80 }),
+  f("caballa", "caballa", "proteina", 205, 19, 0, 14, 0, 0.9, { aliases: ["verdel", "melva"], shelfLifeDays: 2, cookedYield: 0.80 }),
+  f("dorada", "dorada o lubina", "proteina", 115, 20, 0, 4, 0, 1.8, { aliases: ["lubina", "dorada", "pescado blanco"], shelfLifeDays: 2, cookedYield: 0.85 }),
+  f("gambas", "gambas o langostinos", "proteina", 99, 24, 0, 0.3, 0, 2.0, { aliases: ["gamba", "langostino", "langostinos", "camaron", "marisco"], shelfLifeDays: 2, cookedYield: 0.85 }),
+  f("mejillones", "mejillones", "proteina", 86, 12, 3.7, 2.2, 0, 0.7, { aliases: ["mejillon", "almeja", "almejas", "berberechos"], shelfLifeDays: 2, cookedYield: 0.85 }),
+  f("calamar", "calamar", "proteina", 92, 16, 3, 1.4, 0, 1.8, { aliases: ["calamares", "sepia", "chipiron", "anillas de calamar"], shelfLifeDays: 2, cookedYield: 0.85 }),
   f("pulpo", "pulpo", "proteina", 82, 15, 2, 1, 0, 2.5, { aliases: ["pulpo cocido"], shelfLifeDays: 3 }),
   f("tofu", "tofu", "proteina", 76, 8, 1.9, 4.8, 0.3, 0.9, { aliases: ["tofu firme"], shelfLifeDays: 10 }),
   f("tempeh", "tempeh", "proteina", 190, 19, 9, 11, 0, 1.5, { shelfLifeDays: 10 }),
@@ -188,7 +200,10 @@ export const FOODS: Food[] = [
   f("alcachofa", "alcachofa", "verdura", 47, 3.3, 11, 0.2, 5.4, 0.40, { aliases: ["alcachofas"], shelfLifeDays: 7 }),
   f("remolacha", "remolacha cocida", "verdura", 44, 1.7, 10, 0.2, 2, 0.30, { shelfLifeDays: 14 }),
   f("apio", "apio", "verdura", 16, 0.7, 3, 0.2, 1.6, 0.20, { shelfLifeDays: 10 }),
-  f("gazpacho", "gazpacho", "verdura", 35, 1, 4, 1.8, 1, 0.30, { aliases: ["salmorejo"], densityGPerMl: 1.02, shelfLifeDays: 4 }),
+  f("gazpacho", "gazpacho", "verdura", 35, 1, 4, 1.8, 1, 0.30, { densityGPerMl: 1.02, shelfLifeDays: 4 }),
+  // Separado de "gazpacho" (issue de precisión, 2026-09-19): compartía alias pese a llevar mucho
+  // más pan y aceite por ración — el salmorejo casi cuadriplica las kcal/100g del gazpacho.
+  f("salmorejo", "salmorejo", "verdura", 128, 2, 10, 9, 1.2, 0.35, { densityGPerMl: 1.03, shelfLifeDays: 4 }),
   f("aceituna", "aceitunas", "grasa", 145, 1, 4, 15, 3, 0.60, { aliases: ["aceituna", "olivas", "aceitunas negras", "aceitunas verdes"], perishable: false }),
 
   // ------------------------------------------------------------------ FRUTA
