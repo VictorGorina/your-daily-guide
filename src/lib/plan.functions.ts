@@ -40,7 +40,7 @@ import {
   cleanReflowChanges,
   dateOfPlanCell,
   daysInMonth,
-  formatQty,
+  formatShoppingQty,
   ingredientNames,
   isCanonicalShopping,
   isNextMonthUnlocked,
@@ -417,7 +417,8 @@ const scaleShoppingToBudget = (shopping: ShoppingList, factor: number): Shopping
           ...i,
           weekQty,
           weekPrice,
-          qty: formatQty(
+          qty: formatShoppingQty(
+            i.name,
             weekQty.reduce((s, n) => s + n, 0),
             i.unit ?? "ud",
           ),

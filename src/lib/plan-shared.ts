@@ -279,7 +279,93 @@ export const formatQty = (value: number, unit: QtyUnit): string => {
     const big = unit === "g" ? "kg" : "l";
     return v >= 1000 ? `${num(v / 1000, 2)} ${big}` : `${num(v, 0)} ${unit}`;
   }
-  return `${num(Math.round(raw), 0)} ud`;
+  // Nunca "0 ud": el reparto por compra (`projectItemForTrip`) puede dejar una
+  // fracción de pieza cuando el tramo de esa compra no cubre la semana entera
+  // (`tripDayRange` no se alinea con `weekOfDay`). Una cantidad positiva, por
+  // pequeña que sea, redondea como mínimo a 1 pieza.
+  return `${num(raw > 0 ? Math.max(1, Math.round(raw)) : 0, 0)} ud`;
+};
+
+/**
+ * Peso medio de una pieza para las frutas/verduras que la IA cuenta por "ud"
+ * en la compra (ver el prompt de `generateMonthlyPlan`: "ud para
+ * piezas/manojos/latas"). Solo sirve para MOSTRAR el total en gramos junto al
+ * nº de piezas aproximado — no toca `weekQty`/`unit`, que siguen en piezas
+ * para no romper la invariante "Σ entre compras = lo que pide el mes". Pesos
+ * de una pieza mediana, a ojo de supermercado español; deliberadamente
+ * incompleta (solo lo que de verdad se compra por pieza, no verduras de hoja
+ * o bayas que siempre se compran a peso/bolsa).
+ */
+const PRODUCE_UNIT_GRAMS: { key: string; aliases?: string[]; grams: number }[] = [
+  { key: "tomate", aliases: ["tomates", "tomate rama", "tomate pera"], grams: 120 },
+  { key: "cebolla", aliases: ["cebollas", "cebolleta", "cebolla morada", "chalota"], grams: 150 },
+  { key: "ajo", aliases: ["diente de ajo", "dientes de ajo", "ajos"], grams: 5 },
+  {
+    key: "pimiento",
+    aliases: ["pimientos", "pimiento rojo", "pimiento verde", "pimiento amarillo"],
+    grams: 150,
+  },
+  { key: "calabacin", aliases: ["calabacines", "zucchini"], grams: 250 },
+  { key: "berenjena", aliases: ["berenjenas"], grams: 250 },
+  { key: "zanahoria", aliases: ["zanahorias"], grams: 80 },
+  { key: "pepino", aliases: ["pepinos"], grams: 250 },
+  { key: "patata", aliases: ["patatas"], grams: 150 },
+  { key: "puerro", aliases: ["puerros"], grams: 150 },
+  { key: "aguacate", aliases: ["aguacates"], grams: 200 },
+  { key: "manzana", aliases: ["manzanas"], grams: 180 },
+  { key: "platano", aliases: ["platanos", "plátano", "plátanos", "banana", "bananas"], grams: 120 },
+  { key: "naranja", aliases: ["naranjas"], grams: 200 },
+  { key: "pera", aliases: ["peras"], grams: 180 },
+  { key: "limon", aliases: ["limones", "lima", "limón"], grams: 100 },
+  { key: "kiwi", aliases: ["kiwis"], grams: 80 },
+  { key: "mango", aliases: ["mangos"], grams: 300 },
+  { key: "mandarina", aliases: ["mandarinas", "clementina", "clementinas"], grams: 80 },
+  {
+    key: "melocoton",
+    aliases: ["melocotón", "melocotones", "nectarina", "nectarinas", "paraguayo"],
+    grams: 150,
+  },
+  { key: "ciruela", aliases: ["ciruelas"], grams: 70 },
+  { key: "granada", aliases: ["granadas"], grams: 300 },
+  { key: "pina", aliases: ["piña", "piñas"], grams: 1200 },
+  { key: "melon", aliases: ["melón"], grams: 1300 },
+  { key: "sandia", aliases: ["sandía"], grams: 3000 },
+  { key: "albaricoque", aliases: ["albaricoques", "damasco"], grams: 60 },
+];
+
+const normalizeForMatch = (s: string): string =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+/** Gramos aproximados de una pieza de este ingrediente, o `null` si no lo reconoce. */
+export const approxUnitGrams = (name: string): number | null => {
+  const n = normalizeForMatch(name);
+  if (!n) return null;
+  const matches = (entry: (typeof PRODUCE_UNIT_GRAMS)[number]) =>
+    n === normalizeForMatch(entry.key) ||
+    (entry.aliases ?? []).some((a) => n === normalizeForMatch(a));
+  const contains = (entry: (typeof PRODUCE_UNIT_GRAMS)[number]) =>
+    n.includes(normalizeForMatch(entry.key)) ||
+    (entry.aliases ?? []).some((a) => n.includes(normalizeForMatch(a)));
+  return (
+    PRODUCE_UNIT_GRAMS.find(matches)?.grams ?? PRODUCE_UNIT_GRAMS.find(contains)?.grams ?? null
+  );
+};
+
+/**
+ * Cantidad legible de un artículo de la compra: para "g"/"ml", igual que
+ * `formatQty`. Para "ud" de una fruta o verdura reconocida, muestra los
+ * gramos (redondeados como el resto de la compra) con el nº de piezas
+ * aproximado entre paréntesis — así "0 ud" (ver `formatQty`) nunca llega a
+ * pantalla y el peso, no la pieza, es el dato accionable al comprar. El resto
+ * de "ud" (huevos, latas, manojos...) se queda como antes.
+ */
+export const formatShoppingQty = (name: string, value: number, unit: QtyUnit): string => {
+  const raw = Math.max(0, Number(value) || 0);
+  if (unit !== "ud" || raw <= 0) return formatQty(value, unit);
+  const grams = approxUnitGrams(name);
+  if (grams == null) return formatQty(value, unit);
+  const pieces = Math.max(1, Math.round(raw));
+  return `${formatQty(raw * grams, "g")} (≈${pieces} ud)`;
 };
 
 /**
@@ -734,7 +820,7 @@ const projectItemForTrip = (
   const source = item.ownedTrips?.[trip];
   return {
     name: item.name,
-    qty: formatQty(qty, unit),
+    qty: formatShoppingQty(item.name, qty, unit),
     qtyValue: Math.round(qty * 100) / 100,
     price_eur: Math.round(price * 100) / 100,
     trip,
@@ -876,7 +962,7 @@ const asItem = (raw: unknown): ShoppingItem | null => {
     const ownedTrips = asOwnedTrips(o.ownedTrips);
     return {
       name,
-      qty: formatQty(totalQty, unit),
+      qty: formatShoppingQty(name, totalQty, unit),
       price_eur: Math.round(weekPrice.reduce((s, n) => s + n, 0) * 100) / 100,
       trip: 0,
       perishable,

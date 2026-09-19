@@ -23,6 +23,7 @@ import {
   daysLeftInMonth,
   effectiveMealSlots,
   formatQty,
+  formatShoppingQty,
   groupByTrip,
   isBeforeAppStart,
   isCanonicalShopping,
@@ -1279,6 +1280,28 @@ describe("normalizeUnit / formatQty / parseQtyLegacy", () => {
     expect(formatQty(1150, "g")).toBe("1 kg");
     // Las unidades sueltas no se tocan: siguen al entero más próximo de siempre.
     expect(formatQty(4.4, "ud")).toBe("4 ud");
+  });
+
+  it('nunca enseña "0 ud": una cantidad positiva redondea como mínimo a 1 pieza', () => {
+    // Bug real: el reparto por compra puede dejar una fracción de pieza
+    // cuando el tramo de esa compra no cubre la semana entera.
+    expect(formatQty(0.4, "ud")).toBe("1 ud");
+    expect(formatQty(0.05, "ud")).toBe("1 ud");
+    expect(formatQty(0, "ud")).toBe("0 ud");
+  });
+
+  it("formatShoppingQty muestra gramos + piezas aprox. para frutas/verduras conocidas", () => {
+    // 3 manzanas × 180 g ≈ 540 g → redondeado al paso comprable (issue 03).
+    expect(formatShoppingQty("manzana", 3, "ud")).toBe("550 g (≈3 ud)");
+    expect(formatShoppingQty("tomates", 0.4, "ud")).toBe("50 g (≈1 ud)");
+    expect(formatShoppingQty("cebolla morada", 2, "ud")).toBe("300 g (≈2 ud)");
+  });
+
+  it("formatShoppingQty deja g/ml igual y cae al formato de siempre fuera de la tabla", () => {
+    expect(formatShoppingQty("manzana", 500, "g")).toBe(formatQty(500, "g"));
+    // "ud" que no es fruta/verdura (huevos, latas...) no lleva conversión.
+    expect(formatShoppingQty("huevos", 0.4, "ud")).toBe("1 ud");
+    expect(formatShoppingQty("lata de atún", 6, "ud")).toBe("6 ud");
   });
 
   it("interpreta el qty de texto libre de una lista antigua", () => {
