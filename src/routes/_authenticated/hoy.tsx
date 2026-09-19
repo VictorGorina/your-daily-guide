@@ -809,7 +809,9 @@ function Hoy() {
                   style={{
                     backgroundColor: isSkip
                       ? "var(--color-muted)"
-                      : tint(cat.accent, isNext ? 22 : 13),
+                      : h.done
+                        ? "var(--color-success-soft)"
+                        : tint(cat.accent, isNext ? 22 : 13),
                     opacity: isSkip ? 0.55 : 1,
                   }}
                 >
@@ -918,8 +920,7 @@ function Hoy() {
                           title="Deshacer"
                           aria-label={`${h.label}: deshacer`}
                           onClick={() => clearMealStatus(i)}
-                          className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full transition-transform active:scale-95"
-                          style={{ backgroundColor: cat.accent, color: onAccent(cat.accent) }}
+                          className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full bg-success text-success-foreground transition-transform active:scale-95"
                         >
                           <Check className="h-[17px] w-[17px]" strokeWidth={2.6} />
                         </button>
