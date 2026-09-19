@@ -142,6 +142,8 @@ export type DailyLog = {
   evening_done: boolean;
   /** Picoteo del día (`picoteo-hoy`). Ver `DaySnacks` y `cleanDaySnacks`. */
   snacks?: import("./snacks").DaySnacks | null;
+  /** Deporte del día. Ver `DayExercise` y `cleanDayExercise`. */
+  exercise?: import("./exercise").DayExercise | null;
 };
 
 /** Fecha local, no UTC: `toISOString()` cambia de día por la noche en España. */

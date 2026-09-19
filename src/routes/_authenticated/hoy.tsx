@@ -12,6 +12,7 @@ import {
   Info,
   Loader2,
   PencilLine,
+  Undo2,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -22,8 +23,9 @@ import { BottomNav } from "@/components/bottom-nav";
 import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
 import { DayDetailBody, type DayDetailHousehold } from "@/components/day-detail-sheet";
 import { DishRecipe } from "@/components/dish-recipe";
+import { ExerciseCard } from "@/components/exercise-card";
+import { ExerciseSheet } from "@/components/exercise-sheet";
 import { DishCategoryIcon, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
-import { GuidedLogSheet } from "@/components/guided-log-sheet";
 import { MacroBars } from "@/components/macro-bars";
 import { MealSwapSheet } from "@/components/meal-swap-sheet";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
@@ -59,7 +61,6 @@ import {
   type MealKey,
   type SharedSlots,
 } from "@/lib/household-shared";
-import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -78,6 +79,9 @@ import {
   type MonthlyPlan,
 } from "@/lib/plan-shared";
 import { fillChildMeals, generateMonthlyPlan } from "@/lib/plan.functions";
+import { scheduleExerciseSettle, useExerciseSettle } from "@/lib/exercise-settle";
+import { cleanDayExercise } from "@/lib/exercise";
+import { removeExercise as removeExerciseFn } from "@/lib/exercise.functions";
 import { scheduleSnackSettle, useSnackSettle } from "@/lib/snack-settle";
 import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
@@ -202,6 +206,8 @@ function Hoy() {
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [exerciseInfoOpen, setExerciseInfoOpen] = useState(false);
+  const [removingExercise, setRemovingExercise] = useState<string | null>(null);
   const [snackOpen, setSnackOpen] = useState(false);
   const [snackInfoOpen, setSnackInfoOpen] = useState(false);
   const [removingSnack, setRemovingSnack] = useState<string | null>(null);
@@ -594,6 +600,34 @@ function Hoy() {
     sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS,
     snackTotals(snacks),
   );
+  // El deporte del día (`daily_logs.exercise`) no suma a las macros: es un
+  // gasto, no algo que se coma.
+  const exercise = cleanDayExercise(today?.exercise);
+
+  // El reajuste de días futuros por el deporte va en un lote aparte (10 s de
+  // calma), igual que el picoteo pero reponiendo energía en vez de quitarla.
+  const removeExerciseCall = useServerFn(removeExerciseFn);
+  const exerciseSettle = useExerciseSettle(today0, () => {
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    qc.invalidateQueries({ queryKey: ["plan"] });
+  });
+  const afterExerciseChange = () => {
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    scheduleExerciseSettle(today0);
+  };
+  const removeExercise = async (id: string) => {
+    setRemovingExercise(id);
+    try {
+      await removeExerciseCall({ data: { today: today0, id } });
+      afterExerciseChange();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No hemos podido quitar el deporte");
+    } finally {
+      setRemovingExercise(null);
+    }
+  };
 
   // El reajuste de días futuros por el picoteo va en un lote aparte (10 s de
   // calma); al terminar puede haber cambiado el plan y el registro del día.
@@ -922,7 +956,7 @@ function Hoy() {
                           onClick={() => clearMealStatus(i)}
                           className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full bg-success text-success-foreground transition-transform active:scale-95"
                         >
-                          <Check className="h-[17px] w-[17px]" strokeWidth={2.6} />
+                          <Undo2 className="h-[15px] w-[15px]" strokeWidth={2.4} />
                         </button>
                       ) : (
                         <button
@@ -1022,6 +1056,17 @@ function Hoy() {
         onShowAdjustment={() => setSnackInfoOpen(true)}
       />
 
+      {/* Deporte de hoy: mismo formato que el picoteo, lo apuntado y qué ha
+          pasado con el plan. */}
+      <ExerciseCard
+        exercise={exercise}
+        settling={exerciseSettle.pending || exerciseSettle.running}
+        failed={exerciseSettle.failed}
+        removingId={removingExercise}
+        onRemove={(id) => void removeExercise(id)}
+        onShowAdjustment={() => setExerciseInfoOpen(true)}
+      />
+
       {/* Añadir picoteo: justo encima de "Registrar deporte", como en móvil. */}
       <button
         type="button"
@@ -1032,8 +1077,8 @@ function Hoy() {
         Añadir picoteo
       </button>
 
-      {/* Registrar deporte: pegado encima de la tira de la semana, como en la
-          app móvil. Abre el registro guiado en modo actividad. */}
+      {/* Registrar deporte: mismo formato que "Añadir picoteo", pegado encima
+          de la tira de la semana, como en la app móvil. */}
       <button
         type="button"
         onClick={() => setActivityOpen(true)}
@@ -1153,18 +1198,21 @@ function Hoy() {
         dish="tu picoteo de hoy"
       />
 
-      {/* Registrar deporte: mismo sheet, modo actividad, abierto desde el botón
-          de encima de la tira de la semana. Igual que en la app móvil. */}
-      <GuidedLogSheet
-        trigger={false}
-        initialMode="actividad"
+      <ExerciseSheet
         open={activityOpen}
         onOpenChange={setActivityOpen}
-        onSend={(text) => {
-          setPendingChatMessage(text);
-          setActivityOpen(false);
-          navigate({ to: "/chat" });
-        }}
+        today={today0}
+        onSaved={afterExerciseChange}
+      />
+
+      {/* Qué ha repuesto el deporte en los próximos días. */}
+      <AdjustmentInfoSheet
+        open={exerciseInfoOpen}
+        onOpenChange={setExerciseInfoOpen}
+        changes={exercise?.adjustment?.changes ?? []}
+        kcalDelta={exercise?.adjustment?.kcal ?? null}
+        dish="tu deporte de hoy"
+        verb="hacer"
       />
 
       <NightlyReviewSheet

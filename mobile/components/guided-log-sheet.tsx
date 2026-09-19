@@ -1,23 +1,12 @@
-import { Activity, X } from "lucide-react-native";
+import { X } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import {
+  EXERCISE_ACTIVITIES as ACTIVITIES,
+  EXERCISE_INTENSITY as INTENSITY,
+} from "../lib/exercise";
 import { Sheet } from "./ui/sheet";
-
-const ACTIVITIES = [
-  { label: "Correr", kcalPerMin: 10 },
-  { label: "Caminar", kcalPerMin: 4 },
-  { label: "Bici", kcalPerMin: 8 },
-  { label: "Gimnasio / pesas", kcalPerMin: 7 },
-  { label: "Natación", kcalPerMin: 9 },
-  { label: "Otra", kcalPerMin: 6 },
-];
-
-const INTENSITY: { label: string; factor: number }[] = [
-  { label: "Suave", factor: 0.8 },
-  { label: "Normal", factor: 1 },
-  { label: "Fuerte", factor: 1.25 },
-];
 
 const EXCESS_PRESETS = [
   "Comida fuera de casa",

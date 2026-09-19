@@ -1,0 +1,13 @@
+-- Deporte del día (mismo patrón que `picoteo-hoy`): actividad, minutos e
+-- intensidad, con las kcal quemadas calculadas en código (tabla determinista,
+-- sin IA) y el libro de cuentas de lo ya compensado en días futuros. Forma:
+-- ver `DayExercise` en src/lib/exercise.ts.
+--
+-- Columna propia y no dentro de `habits`: `reconcileHabits` reconstruye
+-- `habits` desde el plan en cada carga y borraría el deporte. NULL = sin
+-- deporte ese día.
+--
+-- No hacen falta policies nuevas: la fila ya la cubren "insert recent own log"
+-- (20260906120000) y "update own logs" (20260815130000). El deporte nunca
+-- alimenta monthly_plans.shopping: compensar solo recoloca platos futuros.
+ALTER TABLE public.daily_logs ADD COLUMN IF NOT EXISTS exercise jsonb;

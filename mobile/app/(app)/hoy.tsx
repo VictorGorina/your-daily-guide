@@ -11,6 +11,7 @@ import {
   Info,
   MessageCircle,
   PencilLine,
+  Undo2,
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,8 +24,9 @@ import { BottomNav } from "../../components/bottom-nav";
 import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { DayDetailBody, type DayDetailHousehold } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
+import { ExerciseCard } from "../../components/exercise-card";
+import { ExerciseSheet } from "../../components/exercise-sheet";
 import { DishCategoryIcon } from "../../components/food-category-bg";
-import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { MacroBars } from "../../components/macro-bars";
 import { MealSwapSheet } from "../../components/meal-swap-sheet";
 import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
@@ -59,7 +61,6 @@ import {
   whoIsHome,
   type MealKey,
 } from "../../lib/household-shared";
-import { setPendingChatMessage } from "../../lib/pending-chat-message";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -74,6 +75,8 @@ import {
   type ShoppingList,
 } from "../../lib/plan-shared";
 import { quoteOfTheDay } from "../../lib/quotes";
+import { scheduleExerciseSettle, useExerciseSettle } from "../../lib/exercise-settle";
+import { cleanDayExercise } from "../../lib/exercise";
 import { scheduleSnackSettle, useSnackSettle } from "../../lib/snack-settle";
 import { cleanDaySnacks, snackTotals } from "../../lib/snacks";
 import { useMealSwap } from "../../lib/use-meal-swap";
@@ -176,6 +179,8 @@ export default function Hoy() {
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
   const [infoIndex, setInfoIndex] = useState<number | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [exerciseInfoOpen, setExerciseInfoOpen] = useState(false);
+  const [removingExercise, setRemovingExercise] = useState<string | null>(null);
   const [snackOpen, setSnackOpen] = useState(false);
   const [snackInfoOpen, setSnackInfoOpen] = useState(false);
   const [removingSnack, setRemovingSnack] = useState<string | null>(null);
@@ -530,7 +535,34 @@ export default function Hoy() {
     sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS,
     snackTotals(snacks),
   );
+  // El deporte del día (`daily_logs.exercise`) no suma a las macros: es un
+  // gasto, no algo que se coma.
+  const exercise = cleanDayExercise(today?.exercise);
   const quote = quoteOfTheDay();
+
+  // El reajuste de días futuros por el deporte va en un lote aparte (10 s de
+  // calma), igual que el picoteo pero reponiendo energía en vez de quitarla.
+  const exerciseSettle = useExerciseSettle(today0, () => {
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    qc.invalidateQueries({ queryKey: ["plan"] });
+  });
+  const afterExerciseChange = () => {
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    scheduleExerciseSettle(today0);
+  };
+  const removeExercise = async (id: string) => {
+    setRemovingExercise(id);
+    try {
+      await apiPost("exercise/remove", { today: today0, id });
+      afterExerciseChange();
+    } catch (e) {
+      Alert.alert(e instanceof Error ? e.message : "No hemos podido quitar el deporte");
+    } finally {
+      setRemovingExercise(null);
+    }
+  };
 
   // El reajuste de días futuros por el picoteo va en un lote aparte (10 s de
   // calma); al terminar puede haber cambiado el plan y el registro del día.
@@ -812,7 +844,7 @@ export default function Hoy() {
                             className="h-[34px] w-[34px] items-center justify-center rounded-full"
                             style={{ backgroundColor: accent }}
                           >
-                            <Check size={17} color="#fbfaf7" strokeWidth={2.6} />
+                            <Undo2 size={15} color="#fbfaf7" strokeWidth={2.4} />
                           </Pressable>
                         ) : isSkip ? (
                           <Pressable
@@ -913,6 +945,16 @@ export default function Hoy() {
           removingId={removingSnack}
           onRemove={(id) => void removeSnack(id)}
           onShowAdjustment={() => setSnackInfoOpen(true)}
+        />
+
+        {/* ── Deporte de hoy: mismo formato que el picoteo ── */}
+        <ExerciseCard
+          exercise={exercise}
+          settling={exerciseSettle.pending || exerciseSettle.running}
+          failed={exerciseSettle.failed}
+          removingId={removingExercise}
+          onRemove={(id) => void removeExercise(id)}
+          onShowAdjustment={() => setExerciseInfoOpen(true)}
         />
 
         {/* ── Añadir picoteo: justo encima de "Registrar deporte" ── */}
@@ -1060,15 +1102,21 @@ export default function Hoy() {
         dish="tu picoteo de hoy"
       />
 
-      <GuidedLogSheet
-        mode="activity"
+      <ExerciseSheet
         open={activityOpen}
         onOpenChange={setActivityOpen}
-        onSend={(text) => {
-          setPendingChatMessage(text);
-          setActivityOpen(false);
-          router.navigate("/chat");
-        }}
+        today={today0}
+        onSaved={afterExerciseChange}
+      />
+
+      {/* Qué ha repuesto el deporte en los próximos días. */}
+      <AdjustmentInfoSheet
+        open={exerciseInfoOpen}
+        onOpenChange={setExerciseInfoOpen}
+        changes={exercise?.adjustment?.changes ?? []}
+        kcalDelta={exercise?.adjustment?.kcal ?? null}
+        dish="tu deporte de hoy"
+        verb="hacer"
       />
 
       <NightlyReviewSheet

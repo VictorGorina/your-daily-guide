@@ -297,6 +297,8 @@ export type DailyLog = {
   evening_done: boolean;
   /** Picoteo del día (`picoteo-hoy`). Ver `DaySnacks` y `cleanDaySnacks`. */
   snacks?: import("@/lib/snacks").DaySnacks | null;
+  /** Deporte del día. Ver `DayExercise` y `cleanDayExercise`. */
+  exercise?: import("@/lib/exercise").DayExercise | null;
 };
 
 export type ChatMessage = {

@@ -19,6 +19,7 @@ export function AdjustmentInfoSheet({
   changes,
   dish,
   kcalDelta,
+  verb = "comer",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -26,6 +27,8 @@ export function AdjustmentInfoSheet({
   dish: string;
   /** Desvío estimado del día frente a lo que preveía el plan, si se pudo calcular. */
   kcalDelta?: number | null;
+  /** "Tras {verb} {dish}...": otros orígenes del desvío (p.ej. el deporte) no son algo que se come. */
+  verb?: string;
 }) {
   // Redondeo en decenas: es una estimación de la IA, no una cifra exacta.
   const rounded =
@@ -37,7 +40,7 @@ export function AdjustmentInfoSheet({
     <Sheet open={open} onOpenChange={onOpenChange} title="Ajuste del plan">
       <View className="gap-3 px-4 pb-8">
         <Text className="text-sm text-muted-foreground">
-          Tras comer <Text className="font-medium text-foreground">{dish}</Text>
+          Tras {verb} <Text className="font-medium text-foreground">{dish}</Text>
           {rounded ? (
             <Text>
               , hoy llevas <Text className="font-medium text-foreground">{rounded}</Text> frente a

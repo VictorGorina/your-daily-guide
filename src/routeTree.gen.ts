@@ -31,6 +31,9 @@ import { Route as ApiV1GuideRouteImport } from './routes/api/v1/guide'
 import { Route as ApiV1AccountDeleteRouteImport } from './routes/api/v1/account/delete'
 import { Route as ApiV1AuthConfirmRouteImport } from './routes/api/v1/auth/confirm'
 import { Route as ApiV1AuthResetRouteImport } from './routes/api/v1/auth/reset'
+import { Route as ApiV1ExerciseLogRouteImport } from './routes/api/v1/exercise/log'
+import { Route as ApiV1ExerciseRemoveRouteImport } from './routes/api/v1/exercise/remove'
+import { Route as ApiV1ExerciseSettleRouteImport } from './routes/api/v1/exercise/settle'
 import { Route as ApiV1HouseholdHomeScheduleRouteImport } from './routes/api/v1/household/home-schedule'
 import { Route as ApiV1HouseholdPropagateLogRouteImport } from './routes/api/v1/household/propagate-log'
 import { Route as ApiV1HouseholdSharedSlotsRouteImport } from './routes/api/v1/household/shared-slots'
@@ -166,6 +169,21 @@ const ApiV1AuthConfirmRoute = ApiV1AuthConfirmRouteImport.update({
 const ApiV1AuthResetRoute = ApiV1AuthResetRouteImport.update({
   id: '/api/v1/auth/reset',
   path: '/api/v1/auth/reset',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ExerciseLogRoute = ApiV1ExerciseLogRouteImport.update({
+  id: '/api/v1/exercise/log',
+  path: '/api/v1/exercise/log',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ExerciseRemoveRoute = ApiV1ExerciseRemoveRouteImport.update({
+  id: '/api/v1/exercise/remove',
+  path: '/api/v1/exercise/remove',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ExerciseSettleRoute = ApiV1ExerciseSettleRouteImport.update({
+  id: '/api/v1/exercise/settle',
+  path: '/api/v1/exercise/settle',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1HouseholdHomeScheduleRoute =
@@ -330,6 +348,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/exercise/log': typeof ApiV1ExerciseLogRoute
+  '/api/v1/exercise/remove': typeof ApiV1ExerciseRemoveRoute
+  '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
   '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
@@ -380,6 +401,9 @@ export interface FileRoutesByTo {
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/exercise/log': typeof ApiV1ExerciseLogRoute
+  '/api/v1/exercise/remove': typeof ApiV1ExerciseRemoveRoute
+  '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
   '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
@@ -432,6 +456,9 @@ export interface FileRoutesById {
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/exercise/log': typeof ApiV1ExerciseLogRoute
+  '/api/v1/exercise/remove': typeof ApiV1ExerciseRemoveRoute
+  '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
   '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
@@ -484,6 +511,9 @@ export interface FileRouteTypes {
     | '/api/v1/account/delete'
     | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
+    | '/api/v1/exercise/log'
+    | '/api/v1/exercise/remove'
+    | '/api/v1/exercise/settle'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
     | '/api/v1/household/shared-slots'
@@ -534,6 +564,9 @@ export interface FileRouteTypes {
     | '/api/v1/account/delete'
     | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
+    | '/api/v1/exercise/log'
+    | '/api/v1/exercise/remove'
+    | '/api/v1/exercise/settle'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
     | '/api/v1/household/shared-slots'
@@ -585,6 +618,9 @@ export interface FileRouteTypes {
     | '/api/v1/account/delete'
     | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
+    | '/api/v1/exercise/log'
+    | '/api/v1/exercise/remove'
+    | '/api/v1/exercise/settle'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
     | '/api/v1/household/shared-slots'
@@ -629,6 +665,9 @@ export interface RootRouteChildren {
   ApiV1AccountDeleteRoute: typeof ApiV1AccountDeleteRoute
   ApiV1AuthConfirmRoute: typeof ApiV1AuthConfirmRoute
   ApiV1AuthResetRoute: typeof ApiV1AuthResetRoute
+  ApiV1ExerciseLogRoute: typeof ApiV1ExerciseLogRoute
+  ApiV1ExerciseRemoveRoute: typeof ApiV1ExerciseRemoveRoute
+  ApiV1ExerciseSettleRoute: typeof ApiV1ExerciseSettleRoute
   ApiV1HouseholdHomeScheduleRoute: typeof ApiV1HouseholdHomeScheduleRoute
   ApiV1HouseholdPropagateLogRoute: typeof ApiV1HouseholdPropagateLogRoute
   ApiV1HouseholdSharedSlotsRoute: typeof ApiV1HouseholdSharedSlotsRoute
@@ -812,6 +851,27 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/auth/reset'
       fullPath: '/api/v1/auth/reset'
       preLoaderRoute: typeof ApiV1AuthResetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/exercise/log': {
+      id: '/api/v1/exercise/log'
+      path: '/api/v1/exercise/log'
+      fullPath: '/api/v1/exercise/log'
+      preLoaderRoute: typeof ApiV1ExerciseLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/exercise/remove': {
+      id: '/api/v1/exercise/remove'
+      path: '/api/v1/exercise/remove'
+      fullPath: '/api/v1/exercise/remove'
+      preLoaderRoute: typeof ApiV1ExerciseRemoveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/exercise/settle': {
+      id: '/api/v1/exercise/settle'
+      path: '/api/v1/exercise/settle'
+      fullPath: '/api/v1/exercise/settle'
+      preLoaderRoute: typeof ApiV1ExerciseSettleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/household/home-schedule': {
@@ -1046,6 +1106,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1AccountDeleteRoute: ApiV1AccountDeleteRoute,
   ApiV1AuthConfirmRoute: ApiV1AuthConfirmRoute,
   ApiV1AuthResetRoute: ApiV1AuthResetRoute,
+  ApiV1ExerciseLogRoute: ApiV1ExerciseLogRoute,
+  ApiV1ExerciseRemoveRoute: ApiV1ExerciseRemoveRoute,
+  ApiV1ExerciseSettleRoute: ApiV1ExerciseSettleRoute,
   ApiV1HouseholdHomeScheduleRoute: ApiV1HouseholdHomeScheduleRoute,
   ApiV1HouseholdPropagateLogRoute: ApiV1HouseholdPropagateLogRoute,
   ApiV1HouseholdSharedSlotsRoute: ApiV1HouseholdSharedSlotsRoute,
