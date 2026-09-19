@@ -57,19 +57,22 @@ import {
   personColor,
   whoIsHome,
   type MealKey,
+  type SharedSlots,
 } from "@/lib/household-shared";
 import { setPendingChatMessage } from "@/lib/pending-chat-message";
 import {
   capitalizeFirst,
   childMealsForDate,
   childPureeGaps,
+  dishChangeIsMine,
   effectiveMealSlots,
-  isPinned,
+  isPinnedByViewer,
   mealsForDate,
   offListNote,
   planForDate,
   reconcileHabits,
   suggestedDish,
+  type HouseholdPinContext,
   type MealChange,
   type MealSlot,
   type MonthlyPlan,
@@ -317,6 +320,17 @@ function Hoy() {
   const mySlots = effectiveMealSlots(profileQ.data ?? {});
   const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0, mySlots);
   const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
+  // Base para `dishChangeIsMine`/`isPinnedByViewer` (issue: en un hogar
+  // compartido, un plato fijado o cambiado por quien planifica se veía como
+  // "cambiado a mano" también para el resto, y les ocultaba "Ver receta" sin
+  // que ellos hubieran tocado nada).
+  const homePlanner = householdQ.data?.household
+    ? {
+        isPlanner: !!householdQ.data.me?.is_planner,
+        sharedSlots: householdQ.data.household.shared_slots,
+      }
+    : null;
+  const homeCtxFor = (weekday: number) => (homePlanner ? { ...homePlanner, weekday } : null);
   /** Who is eating at home for this meal today? Returns null if no household or not a main meal. */
   const mealCompanions = (label: string) => {
     const mealKey = MOMENT_TO_MEAL_KEY[label];
@@ -781,6 +795,12 @@ function Hoy() {
               // plan-shared.ts). Si se vuelve al plato sugerido, deja de contar
               // como editado.
               const wasIdea = suggestedDish(h, idea);
+              // La receta solo se oculta si el cambio lo hizo la propia
+              // persona: en un slot compartido, `wasIdea` también se dispara
+              // cuando quien planifica cambia la comida de la casa después de
+              // que esta persona ya vio el día — y no ha tocado nada ella.
+              const mealKey = MOMENT_TO_MEAL_KEY[h.label] ?? "snack";
+              const hideRecipe = !!wasIdea && dishChangeIsMine(mealKey, homeCtxFor(todayWeekday));
 
               return (
                 <div
@@ -970,18 +990,20 @@ function Hoy() {
                     );
                   })()}
                   {kidMeals.map((k) => (
-                    <p
-                      key={`${k.name}-${k.dish}`}
-                      className="mt-2 text-[11px] leading-relaxed text-muted-foreground"
-                    >
-                      Para {k.name}: <span className="text-foreground">{k.dish}</span>
-                      {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
-                    </p>
+                    <div key={`${k.name}-${k.dish}`} className="mt-2">
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                        {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                      </p>
+                      <DishRecipe dish={k.dish} month={month} />
+                    </div>
                   ))}
                   {/* Sin receta si el plato ya se cambió a mano: ya se sabe qué
                       se va a comer, así que enseñarla solo gastaría una
-                      llamada a la IA sin aportar nada. */}
-                  {idea && !wasIdea ? <DishRecipe dish={idea} month={month} /> : null}
+                      llamada a la IA sin aportar nada. En un hogar compartido
+                      esto solo se aplica a quien de verdad lo cambió
+                      (`hideRecipe`), no al resto de miembros. */}
+                  {idea && !hideRecipe ? <DishRecipe dish={idea} month={month} /> : null}
                 </div>
               );
             })}
@@ -1052,6 +1074,7 @@ function Hoy() {
                     : undefined
                 }
                 mySlots={mySlots}
+                homePlanner={homePlanner}
               />
             ) : null}
           </AnimatePresence>
@@ -1174,6 +1197,7 @@ function DayPanel({
   householdChildren,
   household,
   mySlots,
+  homePlanner,
 }: {
   date: string;
   direction: number;
@@ -1183,6 +1207,9 @@ function DayPanel({
   householdChildren?: { id: string; name: string }[];
   household?: DayDetailHousehold;
   mySlots: readonly MealSlot[];
+  /** Para saber si un plato compartido fijado lo cambió esta persona o el
+   *  resto del hogar (ver `dishChangeIsMine`). */
+  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
   const isPast = date < todayISO();
 
@@ -1214,7 +1241,7 @@ function DayPanel({
           />
         </div>
       ) : (
-        <DayMenu date={date} plan={plan} selectedSlots={mySlots} />
+        <DayMenu date={date} plan={plan} selectedSlots={mySlots} homePlanner={homePlanner} />
       )}
     </motion.div>
   );
@@ -1224,18 +1251,23 @@ function DayMenu({
   date,
   plan,
   selectedSlots,
+  homePlanner,
 }: {
   date: string;
   plan: MonthlyPlan | null;
   selectedSlots: readonly MealSlot[];
+  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
   // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
   // para ese día), no la lista entera de desayunos de la semana.
   const meals = mealsForDate(plan, date, selectedSlots);
   // Día crudo del plan, para saber qué slots están fijados a mano (`pinned`) y
   // no ofrecerles receta: ya se sabe qué se va a comer, así que enseñarla solo
-  // gastaría una llamada a la IA sin aportar nada.
+  // gastaría una llamada a la IA sin aportar nada — salvo que el cambio lo
+  // haya hecho otra persona del hogar (`isPinnedByViewer`).
   const day = planForDate(plan, date)?.day ?? null;
+  const weekday = (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+  const homeCtx: HouseholdPinContext | null = homePlanner ? { ...homePlanner, weekday } : null;
   const label = capitalizeFirst(
     new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
       weekday: "long",
@@ -1259,7 +1291,7 @@ function DayMenu({
               value={m.idea}
               note={offListNote(m.off)}
               recipeMonth={date.slice(0, 7)}
-              pinned={isPinned(day, m.slot)}
+              pinned={isPinnedByViewer(day, m.slot, homeCtx)}
             />
           ))}
         </div>

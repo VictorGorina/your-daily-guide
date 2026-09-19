@@ -889,13 +889,13 @@ export default function Hoy() {
                       );
                     })()}
                     {childMealsFor(h.label).map((k) => (
-                      <Text
-                        key={`${k.name}-${k.dish}`}
-                        className="font-body mt-2 text-[11px] leading-relaxed text-muted-foreground"
-                      >
-                        Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
-                        {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
-                      </Text>
+                      <View key={`${k.name}-${k.dish}`} className="mt-2">
+                        <Text className="font-body text-[11px] leading-relaxed text-muted-foreground">
+                          Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
+                          {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                        </Text>
+                        <DishRecipe dish={k.dish} month={month} />
+                      </View>
                     ))}
                     {planned?.idea ? <DishRecipe dish={dish} month={month} /> : null}
                   </View>

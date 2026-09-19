@@ -1101,13 +1101,13 @@ function PlanMonthCalendar({
                       </View>
                     ) : null}
                     {(kidMealsBySlot.get(meal.slot) ?? []).map((k) => (
-                      <Text
-                        key={`${k.name}-${k.dish}`}
-                        className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground"
-                      >
-                        Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
-                        {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
-                      </Text>
+                      <View key={`${k.name}-${k.dish}`} className="mt-1.5">
+                        <Text className="text-[11px] leading-relaxed text-muted-foreground">
+                          Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
+                          {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                        </Text>
+                        <DishRecipe dish={k.dish} month={month} />
+                      </View>
                     ))}
                     <DishRecipe dish={meal.idea} month={month} />
                   </View>

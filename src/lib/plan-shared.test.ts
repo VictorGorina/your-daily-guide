@@ -21,6 +21,7 @@ import {
   compensationWindow,
   coverageRatio,
   daysLeftInMonth,
+  dishChangeIsMine,
   effectiveMealSlots,
   formatQty,
   formatShoppingQty,
@@ -30,6 +31,7 @@ import {
   isMonthActionable,
   isNextMonthUnlocked,
   isPinned,
+  isPinnedByViewer,
   isPlanCellAhead,
   isPlanWeekAhead,
   mealsForDate,
@@ -1875,6 +1877,46 @@ describe("pinned en el hogar (mirrorPinned / composeDayForUser)", () => {
     const source = day("Lunes", "c", "d", { pinned: ["comida"] });
     expect(mirrorPinned(own, source, new Set(["cena"]))).toBeUndefined();
     expect(mirrorPinned(own, source, new Set(["comida"]))).toEqual(["comida"]);
+  });
+});
+
+describe("dishChangeIsMine / isPinnedByViewer", () => {
+  // Jueves=3 comparte cena; comida no se comparte ningún día.
+  const sharedSlots: SharedSlots = { desayuno: [], comida: [], cena: [3] };
+  const notPlanner = { isPlanner: false, sharedSlots, weekday: 3 };
+  const planner = { isPlanner: true, sharedSlots, weekday: 3 };
+
+  it("sin hogar, el cambio siempre es propio", () => {
+    expect(dishChangeIsMine("cena", null)).toBe(true);
+  });
+
+  it("quien planifica: el cambio de un slot compartido es siempre suyo", () => {
+    expect(dishChangeIsMine("cena", planner)).toBe(true);
+  });
+
+  it("no planificador en un slot compartido ese día: el cambio no es suyo", () => {
+    expect(dishChangeIsMine("cena", notPlanner)).toBe(false);
+  });
+
+  it("no planificador en un slot que ese día no se comparte: el cambio sí es suyo", () => {
+    expect(dishChangeIsMine("comida", notPlanner)).toBe(true);
+  });
+
+  it("la merienda nunca es compartida, aunque no se planifique", () => {
+    expect(dishChangeIsMine("snack", notPlanner)).toBe(true);
+  });
+
+  it("isPinnedByViewer: fijado por el planificador en la cena compartida no cuenta para el resto", () => {
+    // Como haría composeDayForUser al espejar el pin del planificador.
+    const composed = day("Jueves", "a", "b", { pinned: ["cena"] });
+    expect(isPinned(composed, "cena")).toBe(true);
+    expect(isPinnedByViewer(composed, "cena", notPlanner)).toBe(false);
+    expect(isPinnedByViewer(composed, "cena", planner)).toBe(true);
+  });
+
+  it("isPinnedByViewer: fijado en la propia comida en solitario sí oculta la receta al no planificador", () => {
+    const mine = day("Jueves", "a", "b", { pinned: ["comida"] });
+    expect(isPinnedByViewer(mine, "comida", notPlanner)).toBe(true);
   });
 });
 

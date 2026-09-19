@@ -165,6 +165,9 @@ function PlanPage() {
   const isSoloPlanner = !!hh?.me && !!hh?.planner && hh.me.id !== hh.planner.id;
   const plannerName = hh?.planner?.display_name ?? "quien lleva la cocina";
   const sharedSlots = hh?.household?.shared_slots ?? null;
+  // Para que el calendario del mes solo oculte "Ver receta" a quien de verdad
+  // cambió un plato compartido, no al resto del hogar (`dishChangeIsMine`).
+  const homePlanner = sharedSlots ? { isPlanner: !!hh?.me?.is_planner, sharedSlots } : null;
   const hasSharedMeals =
     !!sharedSlots &&
     sharedSlots.desayuno.length + sharedSlots.comida.length + sharedSlots.cena.length > 0;
@@ -723,6 +726,7 @@ function PlanPage() {
                 householdChildren={hh?.children}
                 selectedMealSlots={effectiveMealSlots(profileQ.data ?? {})}
                 onOpenDay={setOpenDay}
+                homePlanner={homePlanner}
               />
 
               {!plan && !(monthLogsQ.data?.length ?? 0) ? (

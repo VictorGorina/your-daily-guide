@@ -4,14 +4,16 @@ import { DishRecipe } from "@/components/dish-recipe";
 import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ratioSignal, todayISO, type DailyLog } from "@/lib/daily";
+import type { SharedSlots } from "@/lib/household-shared";
 import {
   capitalizeFirst,
   childMealsForDate,
   isBeforeAppStart,
-  isPinned,
+  isPinnedByViewer,
   mealsForDate,
   offListNote,
   planForDate,
+  type HouseholdPinContext,
   type MealSlot,
   type MonthlyPlan,
   type PlanMonthStatus,
@@ -43,6 +45,7 @@ export function PlanMonthCalendar({
   householdChildren,
   selectedMealSlots,
   onOpenDay,
+  homePlanner,
 }: {
   plan: MonthlyPlan | null;
   month: string;
@@ -55,6 +58,9 @@ export function PlanMonthCalendar({
    *  contenido de `mealsForDate` (ver hoy.tsx para el porqué). */
   selectedMealSlots: readonly MealSlot[];
   onOpenDay: (date: string) => void;
+  /** Para saber si un plato compartido fijado lo cambió esta persona o el
+   *  resto del hogar (ver `dishChangeIsMine`). */
+  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
@@ -78,6 +84,10 @@ export function PlanMonthCalendar({
 
   const detail = selected ? planForDate(plan, selected) : null;
   const meals = selected ? mealsForDate(plan, selected, selectedMealSlots) : [];
+  const homeCtx: HouseholdPinContext | null =
+    selected && homePlanner
+      ? { ...homePlanner, weekday: (new Date(`${selected}T00:00:00`).getDay() + 6) % 7 }
+      : null;
   // Platos aparte de los niños ese día (issue 07), por slot, para colgarlos bajo
   // el plato compartido correspondiente.
   const kidMealsBySlot = new Map<string, { name: string; dish: string; off: string[] }[]>();
@@ -198,18 +208,20 @@ export function PlanMonthCalendar({
                       </span>
                     ) : null}
                     {(kidMealsBySlot.get(meal.slot) ?? []).map((k) => (
-                      <p
-                        key={`${k.name}-${k.dish}`}
-                        className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground"
-                      >
-                        Para {k.name}: <span className="text-foreground">{k.dish}</span>
-                        {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
-                      </p>
+                      <div key={`${k.name}-${k.dish}`} className="mt-1.5">
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                          {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                        </p>
+                        <DishRecipe dish={k.dish} month={month} />
+                      </div>
                     ))}
                     {/* Sin receta si el plato se eligió a mano: ya se sabe qué
                         se va a comer, así que enseñarla solo gastaría una
-                        llamada a la IA sin aportar nada. */}
-                    {!isPinned(detail.day, meal.slot) ? (
+                        llamada a la IA sin aportar nada. En un hogar
+                        compartido esto solo cuenta para quien de verdad lo
+                        cambió (`isPinnedByViewer`), no para el resto. */}
+                    {!isPinnedByViewer(detail.day, meal.slot, homeCtx) ? (
                       <DishRecipe dish={meal.idea} month={month} />
                     ) : null}
                   </div>

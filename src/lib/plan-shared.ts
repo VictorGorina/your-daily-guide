@@ -135,6 +135,43 @@ export const isPinned = (day: PlanDay | null | undefined, slot: MealSlot): boole
   !!day?.pinned?.includes(slot);
 
 /**
+ * Lo que hace falta saber del hogar para distinguir "lo cambié yo" de "lo
+ * cambió el hogar" en un slot concreto — ver `dishChangeIsMine`.
+ */
+export type HouseholdPinContext = {
+  isPlanner: boolean;
+  sharedSlots: SharedSlots;
+  weekday: number;
+};
+
+/**
+ * ¿Un cambio de plato en este slot, si lo hay, lo hizo la propia persona que
+ * está mirando la pantalla? En un slot compartido de un hogar solo quien
+ * planifica puede cambiarlo (`guardSharedSlotWrite` bloquea al resto), así
+ * que para cualquier otro miembro un plato distinto al esperado siempre vino
+ * de fuera. Sin hogar (`home` null), o en un slot en solitario (merienda, o
+ * una comida ese día no compartida), el cambio es siempre propio.
+ */
+export function dishChangeIsMine(slot: MealSlot, home: HouseholdPinContext | null): boolean {
+  if (!home || home.isPlanner || slot === "snack") return true;
+  return !isSharedSlot(home.sharedSlots, slot, home.weekday);
+}
+
+/**
+ * ¿La eligió a mano la propia persona que está mirando la pantalla, y no
+ * otra? En un slot compartido del hogar, `pinned` viaja siempre desde la fila
+ * del planificador (`mirrorPinned`), así que un no planificador puede verlo
+ * fijado sin haber tocado nada él mismo.
+ */
+export function isPinnedByViewer(
+  day: PlanDay | null | undefined,
+  slot: MealSlot,
+  home: HouseholdPinContext | null,
+): boolean {
+  return isPinned(day, slot) && dishChangeIsMine(slot, home);
+}
+
+/**
  * Días del mes que cubre el plan. Un plan creado a media de mes solo cubre de
  * hoy a fin de mes (ver `monthCoverage`), y de ahí salen tanto la prorrata del
  * presupuesto como los rangos de días de cada compra.

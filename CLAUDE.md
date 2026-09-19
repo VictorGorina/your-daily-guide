@@ -247,6 +247,14 @@ querer:
 - **RLS**: toda lectura de `monthly_plans` que espere una sola fila propia filtra por
   `.eq("user_id", …)` (`ownPlanRow` / `fetchOwnMonthlyPlan`) — hay una policy de SELECT que si
   no deja ver 2 filas y lanza `PGRST116`.
+- **`PlanDay.pinned` en un slot compartido no distingue quién lo cambió**: `mirrorPinned`
+  copia el pin del planificador a todos los miembros por igual, así que un `isPinned(...)` a
+  pelo en la UI (p. ej. para ocultar "Ver receta" tras un cambio a mano) apagaba la receta a
+  todo el hogar aunque solo el planificador hubiera tocado el plato. Como `guardSharedSlotWrite`
+  impide que un no planificador escriba un slot compartido, "lo cambié yo" para ese slot
+  equivale a "soy el planificador" — de ahí `dishChangeIsMine`/`isPinnedByViewer`
+  (`plan-shared.ts`), que sí lo distinguen y son los que debe usar cualquier UI nueva que decida
+  algo por "este plato se cambió a mano".
 
 **Notificaciones push:** Web Push real (VAPID) vía `@pushforge/builder`, elegido porque solo usa
 Web Crypto API (el paquete `web-push` de npm no funciona en el runtime de despliegue). El disparo
