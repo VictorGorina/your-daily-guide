@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Users } from "lucide-react";
+import { Cookie, Loader2, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { MacroBars } from "@/components/macro-bars";
+import { SnackSheet } from "@/components/snack-sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   MEAL_STATUS_LABEL,
@@ -28,6 +29,7 @@ import {
   type MonthlyPlan,
 } from "@/lib/plan-shared";
 import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
+import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
 
 const longDate = (date: string) =>
   capitalizeFirst(
@@ -118,7 +120,30 @@ export function DayDetailBody({
   const [actualDraft, setActualDraft] = useState<Record<number, string>>({});
   // Toggle "toda la familia comió esto" por índice de habit.
   const [familyToggle, setFamilyToggle] = useState<Record<number, boolean>>({});
+  const [snackSheetOpen, setSnackSheetOpen] = useState(false);
+  const [removingSnackId, setRemovingSnackId] = useState<string | null>(null);
   const propagate = useServerFn(propagateLogToFamily);
+  const removeSnackCall = useServerFn(removeSnackFn);
+
+  const refreshLogs = () => {
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    qc.invalidateQueries({ queryKey: ["logs", date.slice(0, 7)] });
+  };
+
+  // Corregir el picoteo de un día pasado solo actualiza su historial: a
+  // diferencia de hoy, no se llama a `scheduleSnackSettle` (el asentamiento
+  // recoloca días posteriores a HOY, no a un día que ya pasó).
+  const removeSnack = async (id: string) => {
+    setRemovingSnackId(id);
+    try {
+      await removeSnackCall({ data: { today: date, id } });
+      refreshLogs();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No hemos podido quitar el picoteo");
+    } finally {
+      setRemovingSnackId(null);
+    }
+  };
 
   const editable = date < todayISO();
   const beforeStart = isBeforeAppStart(date, profile?.app_started_on);
@@ -139,10 +164,7 @@ export function DayDetailBody({
 
   const correct = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateLogByDate(date, patch),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["logs"] });
-      qc.invalidateQueries({ queryKey: ["logs", date.slice(0, 7)] });
-    },
+    onSuccess: refreshLogs,
     onError: () => toast.error("No hemos podido guardar la corrección"),
   });
 
@@ -245,17 +267,17 @@ export function DayDetailBody({
     }
   }
 
-  // Picoteo del día (`picoteo-hoy`): solo lectura aquí, el día ya pasó.
+  // Picoteo del día (`picoteo-hoy`): editable (añadir/quitar) igual que hoy,
+  // pero sin disparar el asentamiento — ese ajusta días posteriores a HOY, no
+  // a un día que ya pasó (ver `resumeSnackSettle` en snack-settle.ts).
   const snacks = cleanDaySnacks(log?.snacks);
   const snackEntries = snacks?.entries ?? [];
   const movedBySnacks = snacks?.adjustment?.changes.length ?? 0;
 
-  if (!habits.length && !snackEntries.length) {
+  if (!habits.length && !snackEntries.length && beforeStart) {
     return (
       <p className="text-sm text-muted-foreground">
-        {beforeStart
-          ? "Antes de empezar a usar Peppers. No hay nada registrado de este día."
-          : "No registraste ninguna comida este día."}
+        Antes de empezar a usar Peppers. No hay nada registrado de este día.
       </p>
     );
   }
@@ -442,25 +464,42 @@ export function DayDetailBody({
         </div>
       ) : null}
 
-      {snackEntries.length ? (
+      {!beforeStart || snackEntries.length ? (
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Picoteo
             </span>
-            <span className="font-num text-[11px] tabular-nums text-muted-foreground">
-              ~{snackTotals(snacks).kcal} kcal
-            </span>
+            {snackEntries.length ? (
+              <span className="font-num text-[11px] tabular-nums text-muted-foreground">
+                ~{snackTotals(snacks).kcal} kcal
+              </span>
+            ) : null}
           </div>
           {snackEntries.map((e) => (
             <div
               key={e.id}
-              className="flex items-center justify-between gap-2 rounded-xl bg-secondary/50 px-3 py-2.5"
+              className="flex items-center gap-2 rounded-xl bg-secondary/50 px-3 py-2.5"
             >
               <span className="min-w-0 flex-1 text-sm text-foreground">{e.text}</span>
               <span className="font-num text-[11px] tabular-nums text-muted-foreground">
                 {e.kcal} kcal
               </span>
+              {!beforeStart ? (
+                <button
+                  type="button"
+                  onClick={() => void removeSnack(e.id)}
+                  disabled={removingSnackId != null}
+                  aria-label={`Quitar ${e.text}`}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-background text-muted-foreground transition-opacity hover:text-foreground disabled:opacity-60"
+                >
+                  {removingSnackId === e.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                </button>
+              ) : null}
             </div>
           ))}
           {movedBySnacks ? (
@@ -469,8 +508,26 @@ export function DayDetailBody({
               los días siguientes para compensarlo.
             </p>
           ) : null}
+          {!beforeStart ? (
+            <button
+              type="button"
+              onClick={() => setSnackSheetOpen(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-full bg-secondary/50 py-2 text-xs font-semibold text-foreground transition-transform active:scale-[0.99]"
+            >
+              <Cookie className="h-3.5 w-3.5" aria-hidden />
+              Añadir picoteo
+            </button>
+          ) : null}
         </div>
       ) : null}
+
+      <SnackSheet
+        open={snackSheetOpen}
+        onOpenChange={setSnackSheetOpen}
+        today={date}
+        onSaved={refreshLogs}
+        pastDay
+      />
 
       <div>
         <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

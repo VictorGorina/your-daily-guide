@@ -272,3 +272,26 @@ sentido para un déficit genuino, pero no para deshacer un ajuste que la propia 
 con `compensationNeed({ reversing: true })`: al deshacer, compara con el umbral de exceso (`above`),
 el mismo que hizo falta para aplicar la compensación, en vez del de déficit (`below`).
 
+### 2026-09-19 — editar picoteo de un día pasado
+
+Cierra el punto de "Fuera de alcance" de arriba ("Añadir picoteo a un día pasado"), sin esperar a
+los tickets 05/06/11 de `hoy-semanas-editables` (esos siguen pendientes para corregir comidas). La
+sección "Picoteo" de `DayDetailBody` (web y móvil) deja de ser de solo lectura: enseña una X para
+quitar cada entrada y un botón "Añadir picoteo" que abre `SnackSheet` con la fecha de ese día. Los
+dos sitios que usan `DayDetailBody` (el calendario de Plan y la tira de Hoy dentro de la semana) lo
+heredan gratis.
+
+Deliberadamente **no** pasa por `settleSnacks`/`scheduleSnackSettle`: ese asentamiento recoloca
+comidas y cenas de los días siguientes a HOY (ver `resumeSnackSettle` en `snack-settle.ts`, que ya
+descartaba a propósito un pendiente de otro día), y un día pasado no tiene "días siguientes a él
+mismo" que tenga sentido tocar. Editar picoteo de un día pasado es solo corregir el historial de
+ese día — igual que corregir una comida con `updateLogByDate` no mueve kcal (H2 de
+`hoy-semanas-editables`). `logSnack`/`removeSnack` ya aceptaban cualquier fecha (nunca estuvieron
+atados a "hoy" en el servidor); el cambio es solo de UI. `SnackSheet` gana un prop `pastDay` que
+cambia el copy ("Es solo para tu historial: no cambia el plan ni la compra.") para no prometer un
+reajuste que no va a pasar.
+
+Verificado en el navegador con el perfil demo: añadir y quitar un picoteo en un día pasado desde
+Plan y desde Hoy, en los dos casos las macros del día se actualizan al momento y ninguna llamada de
+red toca `/snacks/settle` ni cambia el plan.
+

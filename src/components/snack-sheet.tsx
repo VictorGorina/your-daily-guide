@@ -63,11 +63,15 @@ export function SnackSheet({
   onOpenChange,
   today,
   onSaved,
+  pastDay = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   today: string;
   onSaved: (snacks: DaySnacks) => void;
+  /** Se abre desde el detalle de un día pasado (Plan y Hoy): solo corrige el
+   * historial de ese día, no dispara el reajuste del plan. Cambia el copy. */
+  pastDay?: boolean;
 }) {
   const estimateFn = useServerFn(estimateSnack);
   const logFn = useServerFn(logSnack);
@@ -168,8 +172,9 @@ export function SnackSheet({
             Añadir picoteo
           </SheetTitle>
           <SheetDescription>
-            Apunta lo que has picado entre horas. Calculo sus kcal y, si hace falta, ajusto los
-            próximos días.
+            {pastDay
+              ? "Apunta lo que picaste ese día para completar tu historial."
+              : "Apunta lo que has picado entre horas. Calculo sus kcal y, si hace falta, ajusto los próximos días."}
           </SheetDescription>
         </SheetHeader>
 
@@ -312,7 +317,9 @@ export function SnackSheet({
           ) : null}
 
           <p className="text-center text-xs text-muted-foreground">
-            Hoy y la lista de la compra no cambian: si hace falta, ajusto los próximos días.
+            {pastDay
+              ? "Es solo para tu historial: no cambia el plan ni la compra."
+              : "Hoy y la lista de la compra no cambian: si hace falta, ajusto los próximos días."}
           </p>
         </div>
       </SheetContent>

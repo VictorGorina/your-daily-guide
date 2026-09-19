@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users } from "lucide-react-native";
+import { Cookie, Users, X } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { apiPost } from "../lib/api";
 import {
@@ -26,6 +26,7 @@ import {
 } from "../lib/plan-shared";
 import { cleanDaySnacks, snackTotals } from "../lib/snacks";
 import { MacroBars } from "./macro-bars";
+import { SnackSheet } from "./snack-sheet";
 import { Dialog } from "./ui/dialog";
 
 const longDate = (date: string) =>
@@ -105,6 +106,28 @@ export function DayDetailBody({
   const [actualDraft, setActualDraft] = useState<Record<number, string>>({});
   // Toggle "toda la familia comió esto" por índice de habit.
   const [familyToggle, setFamilyToggle] = useState<Record<number, boolean>>({});
+  const [snackSheetOpen, setSnackSheetOpen] = useState(false);
+  const [removingSnackId, setRemovingSnackId] = useState<string | null>(null);
+
+  const refreshLogs = () => {
+    qc.invalidateQueries({ queryKey: ["logs"] });
+    qc.invalidateQueries({ queryKey: ["logs", date.slice(0, 7)] });
+  };
+
+  // Corregir el picoteo de un día pasado solo actualiza su historial: a
+  // diferencia de hoy, no se llama a `scheduleSnackSettle` (el asentamiento
+  // recoloca días posteriores a HOY, no a un día que ya pasó).
+  const removeSnack = async (id: string) => {
+    setRemovingSnackId(id);
+    try {
+      await apiPost("snacks/remove", { today: date, id });
+      refreshLogs();
+    } catch (e) {
+      Alert.alert(e instanceof Error ? e.message : "No hemos podido quitar el picoteo");
+    } finally {
+      setRemovingSnackId(null);
+    }
+  };
 
   const editable = date < todayISO();
   const beforeStart = isBeforeAppStart(date, profile?.app_started_on);
@@ -125,10 +148,7 @@ export function DayDetailBody({
 
   const correct = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateLogByDate(date, patch),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["logs"] });
-      qc.invalidateQueries({ queryKey: ["logs", date.slice(0, 7)] });
-    },
+    onSuccess: refreshLogs,
     onError: () => Alert.alert("No hemos podido guardar la corrección"),
   });
 
@@ -225,17 +245,17 @@ export function DayDetailBody({
     }
   }
 
-  // Picoteo del día (`picoteo-hoy`): solo lectura aquí, el día ya pasó.
+  // Picoteo del día (`picoteo-hoy`): editable (añadir/quitar) igual que hoy,
+  // pero sin disparar el asentamiento — ese ajusta días posteriores a HOY, no
+  // a un día que ya pasó (ver `resumeSnackSettle` en lib/snack-settle.ts).
   const snacks = cleanDaySnacks(log?.snacks);
   const snackEntries = snacks?.entries ?? [];
   const movedBySnacks = snacks?.adjustment?.changes.length ?? 0;
 
-  if (!habits.length && !snackEntries.length) {
+  if (!habits.length && !snackEntries.length && beforeStart) {
     return (
       <Text className="text-sm text-muted-foreground">
-        {beforeStart
-          ? "Antes de empezar a usar Peppers. No hay nada registrado de este día."
-          : "No registraste ninguna comida este día."}
+        Antes de empezar a usar Peppers. No hay nada registrado de este día.
       </Text>
     );
   }
@@ -429,23 +449,40 @@ export function DayDetailBody({
         </View>
       ) : null}
 
-      {snackEntries.length ? (
+      {!beforeStart || snackEntries.length ? (
         <View className="gap-1.5">
           <View className="flex-row items-baseline justify-between gap-2">
             <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
               Picoteo
             </Text>
-            <Text className="font-mono-medium text-[11px] text-muted-foreground">
-              ~{snackTotals(snacks).kcal} kcal
-            </Text>
+            {snackEntries.length ? (
+              <Text className="font-mono-medium text-[11px] text-muted-foreground">
+                ~{snackTotals(snacks).kcal} kcal
+              </Text>
+            ) : null}
           </View>
           {snackEntries.map((e) => (
             <View
               key={e.id}
-              className="flex-row items-center justify-between gap-2 rounded-xl bg-secondary/50 px-3 py-2.5"
+              className="flex-row items-center gap-2 rounded-xl bg-secondary/50 px-3 py-2.5"
             >
               <Text className="min-w-0 flex-1 text-sm text-foreground">{e.text}</Text>
               <Text className="font-mono text-[11px] text-muted-foreground">{e.kcal} kcal</Text>
+              {!beforeStart ? (
+                <Pressable
+                  onPress={() => void removeSnack(e.id)}
+                  disabled={removingSnackId != null}
+                  hitSlop={6}
+                  accessibilityLabel={`Quitar ${e.text}`}
+                  className="h-7 w-7 items-center justify-center rounded-full bg-background active:opacity-70"
+                >
+                  {removingSnackId === e.id ? (
+                    <ActivityIndicator size="small" color="#83796c" />
+                  ) : (
+                    <X size={13} color="#83796c" />
+                  )}
+                </Pressable>
+              ) : null}
             </View>
           ))}
           {movedBySnacks ? (
@@ -454,8 +491,25 @@ export function DayDetailBody({
               los días siguientes para compensarlo.
             </Text>
           ) : null}
+          {!beforeStart ? (
+            <Pressable
+              onPress={() => setSnackSheetOpen(true)}
+              className="flex-row items-center justify-center gap-1.5 rounded-full bg-secondary/50 py-2 active:opacity-80"
+            >
+              <Cookie size={14} color="#83796c" />
+              <Text className="text-xs font-sans-semibold text-foreground">Añadir picoteo</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
+
+      <SnackSheet
+        open={snackSheetOpen}
+        onOpenChange={setSnackSheetOpen}
+        today={date}
+        onSaved={refreshLogs}
+        pastDay
+      />
 
       <View>
         <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">

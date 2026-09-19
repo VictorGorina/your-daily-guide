@@ -187,6 +187,14 @@ El asentamiento no cambia nunca la compra, hoy ni el pasado. `composeDayForUser`
 por reordenarlo. "Registrar deporte" y el registro guiado del chat siguen yendo por el coach
 (`ajustar_plan_mensual`).
 
+**Editar el picoteo de un día pasado (2026-09-19) es solo corregir el historial.** La sección
+"Picoteo" de `DayDetailBody` (calendario de Plan y tira de Hoy) deja de ser de solo lectura: una X
+por entrada y un botón "Añadir picoteo" abren el mismo `SnackSheet` con la fecha de ese día
+(`logSnack`/`removeSnack` ya aceptaban cualquier fecha; el cambio es de UI). A propósito **no**
+llama a `settleSnacks`: el asentamiento recoloca días posteriores a HOY, y un día pasado no tiene
+ninguno que tenga sentido tocar — igual que corregir una comida con `updateLogByDate` no mueve kcal.
+`SnackSheet` gana un prop `pastDay` que cambia el copy para no prometer un reajuste que no llega.
+
 ## Familia — hogar compartido
 
 La pestaña Familia (`/hogar`) modela una casa donde varias personas comen el mismo plato. El
