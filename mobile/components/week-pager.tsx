@@ -19,7 +19,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { ratioSignal, type DailyLog } from "../lib/daily";
+import type { DailyLog } from "../lib/daily";
+import { daySignalOf, type DaySignal } from "../lib/macros";
 import {
   dayKind,
   mondayAt,
@@ -42,29 +43,37 @@ const FADE_JUMP_MS = 180;
 const GAP = 6;
 const ROW_HEIGHT = 64;
 
-function habitSignal(log: DailyLog | undefined, fallbackHabits: string[]) {
-  const habits = log?.habits ?? (fallbackHabits ?? []).map((label) => ({ label, done: false }));
-  return ratioSignal(habits.filter((h) => h.done).length, habits.length);
+/**
+ * Mismo semáforo que el calendario del mes (`daySignal` en lib/macros.ts): el
+ * color de un día pasado dice cómo quedó frente al objetivo del día, no cuántas
+ * comidas se marcaron.
+ */
+function habitSignal(log: DailyLog | undefined) {
+  return daySignalOf(log);
 }
 
-function signalClasses(signal: ReturnType<typeof ratioSignal>) {
+function signalClasses(signal: DaySignal) {
   switch (signal) {
     case "success":
       return "bg-success";
     case "warning":
       return "bg-warning";
+    case "over":
+      return "bg-danger";
     case "muted":
       return "bg-muted";
     default:
       return "";
   }
 }
-function signalText(signal: ReturnType<typeof ratioSignal>) {
+function signalText(signal: DaySignal) {
   switch (signal) {
     case "success":
       return "text-success-foreground";
     case "warning":
       return "text-warning-foreground";
+    case "over":
+      return "text-danger-foreground";
     case "muted":
       return "text-muted-foreground";
     default:
@@ -87,7 +96,6 @@ type WeekPagerProps = {
   visibleWeek: string;
   onVisibleWeekChange: (monday: string) => void;
   logsFor: (date: string) => DailyLog | undefined;
-  todayHabits?: string[];
   renderBadge?: (date: string) => ReactNode;
 };
 
@@ -110,7 +118,6 @@ export function WeekPager({
   visibleWeek,
   onVisibleWeekChange,
   logsFor,
-  todayHabits = [],
   renderBadge,
 }: WeekPagerProps) {
   const reducedMotion = useReducedMotion();
@@ -270,7 +277,6 @@ export function WeekPager({
                   selected={selected}
                   onSelect={onSelect}
                   logsFor={logsFor}
-                  todayHabits={todayHabits}
                   renderBadge={renderBadge}
                   reducedMotion={reducedMotion}
                 />
@@ -292,7 +298,6 @@ function WeekPage({
   selected,
   onSelect,
   logsFor,
-  todayHabits,
   renderBadge,
   reducedMotion,
 }: {
@@ -304,7 +309,6 @@ function WeekPage({
   selected?: string | null;
   onSelect?: (date: string) => void;
   logsFor: (date: string) => DailyLog | undefined;
-  todayHabits: string[];
   renderBadge?: (date: string) => ReactNode;
   reducedMotion: boolean;
 }) {
@@ -338,7 +342,7 @@ function WeekPage({
           const isBeforeStart = kind === "before-start";
           const d = new Date(`${date}T00:00:00`);
           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-          const signal = isPast ? habitSignal(logsFor(date), todayHabits) : "none";
+          const signal: DaySignal = isPast ? habitSignal(logsFor(date)) : "none";
           const isFutureWeekend = !isToday && !isPast && !isBeforeStart && isWeekend;
 
           const containerBase = isBeforeStart

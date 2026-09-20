@@ -50,11 +50,11 @@ import {
   fetchMonthlyPlan,
   fetchPlannerShopping,
   fetchProfile,
-  ratioSignal,
   todayISO,
   type DailyLog,
 } from "../../lib/daily";
 import { fetchHousehold } from "../../lib/household";
+import { daySignalOf } from "../../lib/macros";
 import {
   addMonths,
   boughtTotal,
@@ -69,6 +69,7 @@ import {
   homeTotal,
   isBeforeAppStart,
   isMonthActionable,
+  isPinnedByViewer,
   mealsForDate,
   monthParts,
   monthTitle,
@@ -80,9 +81,10 @@ import {
   projectTrips,
   shoppingTotal,
   tripDayRange,
-  tripsOfCadence,
+  tripsForCoverage,
   tripTiming,
   WEEK_COUNT,
+  type HouseholdPinContext,
   type MealSlot,
   type MonthlyPlan,
   type PantryExtra,
@@ -95,6 +97,7 @@ import {
   type TripConfirmations,
   type TripReceipts,
 } from "../../lib/plan-shared";
+import type { SharedSlots } from "../../lib/household-shared";
 import { freshRiskNames, freshRisksForTrip } from "../../lib/perishability";
 import {
   flushPlanRecalc,
@@ -153,6 +156,9 @@ export default function Plan() {
   const isSoloPlanner = !!hh?.me && !!hh?.planner && hh.me.id !== hh.planner.id;
   const plannerName = hh?.planner?.display_name ?? "quien lleva la cocina";
   const sharedSlots = hh?.household?.shared_slots ?? null;
+  // Para que el calendario del mes solo oculte "Ver receta" a quien de verdad
+  // cambió un plato compartido, no al resto del hogar (`dishChangeIsMine`).
+  const homePlanner = sharedSlots ? { isPlanner: !!hh?.me?.is_planner, sharedSlots } : null;
   const hasSharedMeals =
     !!sharedSlots &&
     sharedSlots.desayuno.length + sharedSlots.comida.length + sharedSlots.cena.length > 0;
@@ -175,8 +181,8 @@ export default function Plan() {
   const plannerShopping = plannerShoppingQ.data?.shopping ?? null;
   const plannerPlan = plannerShoppingQ.data?.plan ?? null;
   const plannerCadence: ShoppingCadence = plannerPlan?.cadence ?? cadenceOf(plannerShopping);
-  const plannerTripsTotal = tripsOfCadence(plannerCadence);
   const plannerCoverage = plannerPlan?.coverage;
+  const plannerTripsTotal = tripsForCoverage(plannerCadence, plannerCoverage);
   const hhTrips = projectTrips(
     plannerShopping,
     plannerCadence,
@@ -388,7 +394,7 @@ export default function Plan() {
   const pantryExtras: PantryExtra[] = planQ.data?.pantry_extras ?? [];
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = plan?.cadence ?? cadenceOf(shopping);
-  const tripsTotal = tripsOfCadence(activeCadence);
+  const tripsTotal = tripsForCoverage(activeCadence, coverage);
   // Cada compra suma lo que piden los platos de las semanas que cubre
   // (`projectTrips`); cambiar de cadencia solo re-trocea el mismo total del mes.
   const projCoverage = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
@@ -753,6 +759,7 @@ export default function Plan() {
                   householdChildren={hh?.children}
                   selectedMealSlots={effectiveMealSlots(profileQ.data ?? {})}
                   onOpenDay={setOpenDay}
+                  homePlanner={homePlanner}
                 />
 
                 {!plan && !(monthLogsQ.data?.length ?? 0) ? (
@@ -955,6 +962,7 @@ const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 const SIGNAL_BG: Record<string, string> = {
   success: "bg-success",
   warning: "bg-warning",
+  over: "bg-danger",
   muted: "bg-muted",
 };
 
@@ -970,6 +978,7 @@ function PlanMonthCalendar({
   householdChildren,
   selectedMealSlots,
   onOpenDay,
+  homePlanner,
 }: {
   plan: MonthlyPlan | null;
   month: string;
@@ -982,6 +991,9 @@ function PlanMonthCalendar({
    *  contenido de `mealsForDate` (ver hoy.tsx para el porqué). */
   selectedMealSlots: readonly MealSlot[];
   onOpenDay: (date: string) => void;
+  /** Para saber si un plato fijado lo cambió esta persona o el resto del hogar
+   *  (ver `dishChangeIsMine`). */
+  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
@@ -1002,6 +1014,10 @@ function PlanMonthCalendar({
 
   const detail = selected ? planForDate(plan, selected) : null;
   const meals = selected ? mealsForDate(plan, selected, selectedMealSlots) : [];
+  const homeCtx: HouseholdPinContext | null =
+    selected && homePlanner
+      ? { ...homePlanner, weekday: (new Date(`${selected}T00:00:00`).getDay() + 6) % 7 }
+      : null;
   // Platos aparte de los niños ese día (issue 07), por slot.
   const kidMealsBySlot = new Map<string, { name: string; dish: string; off: string[] }[]>();
   if (selected) {
@@ -1052,8 +1068,10 @@ function PlanMonthCalendar({
           }
 
           if (isPast) {
-            const habits = log?.habits ?? [];
-            const signal = ratioSignal(habits.filter((h) => h.done).length, habits.length);
+            // El color dice cómo quedó el día frente a su objetivo (lo que el
+            // plan proponía), no cuántas comidas se marcaron — ver `daySignal`
+            // en lib/macros.ts.
+            const signal = daySignalOf(log);
             const bg = SIGNAL_BG[signal] ?? "bg-secondary/70";
             return (
               <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
@@ -1084,7 +1102,8 @@ function PlanMonthCalendar({
       </View>
 
       <Text className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Verde: todas las comidas. Amarillo: comiste algo. Gris: sin comidas ese día.
+        Verde: día en tu objetivo. Amarillo: te desviaste. Rojo: bastante por encima. Gris: sin
+        registro.
       </Text>
 
       <Dialog
@@ -1128,7 +1147,14 @@ function PlanMonthCalendar({
                         <DishRecipe dish={k.dish} month={month} />
                       </View>
                     ))}
-                    <DishRecipe dish={meal.idea} month={month} />
+                    {/* Sin receta si el plato se eligió a mano: ya se sabe qué
+                        se va a comer, así que enseñarla solo gastaría una
+                        llamada a la IA sin aportar nada. En un hogar compartido
+                        esto solo cuenta para quien de verdad lo cambió
+                        (`isPinnedByViewer`), no para el resto. */}
+                    {!isPinnedByViewer(detail.day, meal.slot, homeCtx) ? (
+                      <DishRecipe dish={meal.idea} month={month} />
+                    ) : null}
                   </View>
                 );
               })}

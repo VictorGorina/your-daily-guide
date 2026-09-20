@@ -1,5 +1,6 @@
 import type { DailyLog } from "@/lib/daily";
 import type { MacroEstimate, MealMacroEstimate } from "@/lib/guide.functions";
+import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 
 /**
  * Punto de partida de la barra de macros mientras no hay nada que sumar todavía
@@ -94,4 +95,95 @@ export function perMealKcalDeltas(
 export function macroTargets(weightKg: number | null) {
   const proteinTarget = Math.round(Math.min(200, Math.max(45, (weightKg ?? 70) * 1.2)));
   return { protein_g: proteinTarget, carbs_g: 250, fat_g: 70, fiber_g: 30 };
+}
+
+/**
+ * Semáforo de un día, por CIFRAS y no por cumplimiento.
+ *
+ * Hasta 2026-09-20 el color de un día en el calendario salía de `ratioSignal`:
+ * cuántas de sus comidas se habían marcado. Eso decía si la persona había usado
+ * la app ese día, no cómo le había ido. Ahora compara lo que comió (comidas
+ * confirmadas + picoteo) con el objetivo del día, que es lo que la barra de
+ * macros ya enseña como `target`: la suma de lo que el plan proponía
+ * (`guide.macroEstimate`).
+ *
+ * El rojo se reserva para pasarse de largo (decisión del usuario, 2026-09-20,
+ * que revisa el "sin rojo" del roadmap UX): quedarse corto NUNCA es rojo, y un
+ * día sin registro sigue siendo neutro.
+ */
+export type DaySignal = "success" | "warning" | "over" | "muted" | "none";
+
+/** Margen alrededor del objetivo que se considera "en su sitio" (±10 %). */
+export const ON_TARGET_RATIO = 0.1;
+/** A partir de aquí el día no se desvió: se pasó de largo (+25 %). */
+export const OVER_TARGET_RATIO = 0.25;
+
+export function daySignal(
+  consumedKcal: number,
+  targetKcal: number | null | undefined,
+  /** ¿Hay algo registrado ese día? Sin registro el día es neutro, no "por debajo". */
+  logged: boolean,
+): DaySignal {
+  if (!logged) return "none";
+  // Un día registrado pero sin estimación de macros (guía que falló, día
+  // anterior a que existiera la barra) no se puede juzgar: gris, no verde.
+  if (!targetKcal || targetKcal <= 0) return "muted";
+  const ratio = consumedKcal / targetKcal;
+  if (ratio > 1 + OVER_TARGET_RATIO) return "over";
+  if (ratio > 1 + ON_TARGET_RATIO) return "warning";
+  if (ratio >= 1 - ON_TARGET_RATIO) return "success";
+  return "warning";
+}
+
+/**
+ * Lo que una persona comió de verdad en un día: las comidas que marcó (con las
+ * macros por plato de la guía) más el picoteo apuntado. Es la misma cifra que
+ * el detalle del día pone bajo "Macros del día" y la que alimenta el semáforo
+ * del calendario, para que el color y el número nunca se contradigan.
+ */
+export function consumedMacrosOf(log: DailyLog | null | undefined): MacroEstimate {
+  return addMacros(
+    sumDoneMacros(log?.guide?.mealMacros, log?.habits ?? []) ?? ZERO_MACROS,
+    snackTotals(cleanDaySnacks(log?.snacks)),
+  );
+}
+
+/** ¿Hay algo registrado de ese día? Una comida resuelta o un picoteo apuntado. */
+export function hasDayRecord(log: DailyLog | null | undefined): boolean {
+  const habits = log?.habits ?? [];
+  return habits.some((h) => h.status != null) || !!cleanDaySnacks(log?.snacks)?.entries.length;
+}
+
+/** Semáforo de un día a partir de su registro completo (ver `daySignal`). */
+export function daySignalOf(log: DailyLog | null | undefined): DaySignal {
+  return daySignal(consumedMacrosOf(log).kcal, log?.guide?.macroEstimate?.kcal, hasDayRecord(log));
+}
+
+/** Lo único que a esta capa le importa de una guía: sus cifras. */
+type GuideNumbers = {
+  macroEstimate?: MacroEstimate | null;
+  mealMacros?: MealMacroEstimate[] | null;
+};
+
+/**
+ * Funde una guía recién generada con la que ya estaba guardada, de forma que
+ * **regenerar nunca pueda dejar el día con menos cifras de las que tenía**.
+ *
+ * Hace falta porque `generateDailyGuide` puede devolver su texto de respaldo
+ * sin macros (el modelo falló, se agotó el tope de gasto, se cortó por tiempo),
+ * y guardarlo tal cual borraba unas macros que sí eran buenas. A partir de ahí
+ * el reintento automático las daba por perdidas y solo el botón manual las
+ * recuperaba.
+ *
+ * Si la nueva trae cifras, mandan ellas: son las del plato que hay AHORA.
+ */
+export function mergeGuide<T extends GuideNumbers>(
+  prev: GuideNumbers | null | undefined,
+  fresh: T,
+): T {
+  return {
+    ...fresh,
+    macroEstimate: fresh.macroEstimate ?? prev?.macroEstimate ?? null,
+    mealMacros: fresh.mealMacros?.length ? fresh.mealMacros : (prev?.mealMacros ?? null),
+  } as T;
 }

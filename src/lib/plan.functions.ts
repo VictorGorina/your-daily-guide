@@ -56,7 +56,7 @@ import {
   planForDate,
   repartitionTrips,
   tripDayRange,
-  tripsOfCadence,
+  tripsForCoverage,
   type MealChange,
   type MealHabit,
   type PlanCoverage,
@@ -514,7 +514,7 @@ async function generatePlanBody(opts: {
       ? `IMPORTANTE: este plan empieza a media de mes. Cubre SOLO del día ${coverage.fromDay} al ${coverage.toDay} de este mes (${coveredDays} días). La lista de la compra y todas las comidas son únicamente para esos días; no planifiques ni compres para días anteriores al ${coverage.fromDay}.`
       : `El plan cubre el mes completo (días 1 al ${coverage.toDay}).`;
 
-  const trips = tripsOfCadence(cadence);
+  const trips = tripsForCoverage(cadence, coverage);
   const tripRanges = Array.from({ length: trips }, (_, t) => {
     const { from, to } = tripDayRange(coverage, trips, t);
     return `días ${from}-${to}`;
@@ -768,9 +768,16 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     const current = cleanPlan(typed?.plan);
     if (!current) throw new ValidationError("Todavía no hay plan de este mes");
     const prevShopping = cleanShopping(typed?.shopping);
+    // Una lista antigua se reparte entre EXACTAMENTE las compras que la
+    // pantalla va a enseñar para esta cobertura: repartir entre más las dejaría
+    // fuera de la vista (ver `repartitionTrips`).
+    const tripCount = tripsForCoverage(
+      data.cadence,
+      current.coverage ?? monthCoverage(data.month, zonedTodayISO()),
+    );
     const shopping = isCanonicalShopping(prevShopping)
       ? prevShopping
-      : carryOwnedByName(prevShopping, repartitionTrips(prevShopping, data.cadence));
+      : carryOwnedByName(prevShopping, repartitionTrips(prevShopping, data.cadence, tripCount));
     const plan: MonthlyPlan = { ...current, cadence: data.cadence };
 
     const { error } = await context.supabase
@@ -1233,8 +1240,15 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     // El número "oficial" de tramos es el de la cadencia guardada, no el que se
     // deduzca de los datos (un tramo sin artículos asignados no debe contar de
     // menos y dar por fijado el mes entero antes de tiempo).
-    const cadence = cleanPlan(typed?.plan)?.cadence ?? cadenceOf(shopping);
-    const allConfirmed = Object.keys(next).length >= tripsOfCadence(cadence);
+    const planRow = cleanPlan(typed?.plan);
+    const cadence = planRow?.cadence ?? cadenceOf(shopping);
+    // El nº de compras sale de la cobertura real del plan, igual que en pantalla
+    // (`tripsForCoverage`): con una cadencia semanal sobre los últimos 12 días
+    // del mes hay 2 compras, no 4, y esperar a 4 dejaría el mes sin poder
+    // fijarse nunca.
+    const allConfirmed =
+      Object.keys(next).length >=
+      tripsForCoverage(cadence, planRow?.coverage ?? monthCoverage(data.month, zonedTodayISO()));
 
     const { error } = await writeShoppingState(context.supabase, target, data.month, {
       confirmed_trips: next as never,

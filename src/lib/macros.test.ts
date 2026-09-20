@@ -1,7 +1,18 @@
 import { describe, expect, it } from "bun:test";
 
+import type { DailyLog } from "./daily";
 import type { MacroEstimate, MealMacroEstimate } from "./guide.functions";
-import { ZERO_MACROS, addMacros, macroTargets, perMealKcalDeltas, sumDoneMacros } from "./macros";
+import {
+  ZERO_MACROS,
+  addMacros,
+  daySignal,
+  daySignalOf,
+  hasDayRecord,
+  macroTargets,
+  mergeGuide,
+  perMealKcalDeltas,
+  sumDoneMacros,
+} from "./macros";
 
 // ---------------------------------------------------------------------------
 // sumDoneMacros — suma las macros de las comidas ya marcadas como comidas
@@ -336,5 +347,122 @@ describe("addMacros", () => {
     });
     expect(a.kcal).toBe(900);
     expect(addMacros(ZERO_MACROS, b)).toEqual(b);
+  });
+});
+
+describe("daySignal", () => {
+  it("verde dentro del ±10 % del objetivo", () => {
+    expect(daySignal(2000, 2000, true)).toBe("success");
+    expect(daySignal(2200, 2000, true)).toBe("success");
+    expect(daySignal(1800, 2000, true)).toBe("success");
+  });
+
+  it("ámbar si se desvía, por arriba o por abajo", () => {
+    expect(daySignal(2300, 2000, true)).toBe("warning");
+    expect(daySignal(1500, 2000, true)).toBe("warning");
+    expect(daySignal(600, 2000, true)).toBe("warning");
+  });
+
+  // Decisión del usuario (2026-09-20): rojo solo "si te lo petas mucho".
+  it("rojo solo pasándose de largo, nunca por quedarse corto", () => {
+    expect(daySignal(2600, 2000, true)).toBe("over");
+    expect(daySignal(4000, 2000, true)).toBe("over");
+    expect(daySignal(0, 2000, true)).toBe("warning");
+  });
+
+  it("un día sin registro es neutro, no un fallo", () => {
+    expect(daySignal(0, 2000, false)).toBe("none");
+    expect(daySignal(3000, 2000, false)).toBe("none");
+  });
+
+  it("un día registrado sin objetivo no se juzga", () => {
+    expect(daySignal(1800, null, true)).toBe("muted");
+    expect(daySignal(1800, 0, true)).toBe("muted");
+  });
+});
+
+describe("daySignalOf / hasDayRecord", () => {
+  const guide = (kcal: number, perMeal: number) => ({
+    intro: "",
+    calories: "",
+    macros: "",
+    macroEstimate: { kcal, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
+    mealMacros: [
+      { moment: "Comida", kcal: perMeal, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
+    ],
+    behaviors: [],
+    meals: [],
+    tips: [],
+  });
+
+  it("suma el picoteo al juzgar el día", () => {
+    const base = {
+      habits: [{ label: "Comida", done: true, status: "plan" as const }],
+      guide: guide(1000, 1000),
+    } as unknown as DailyLog;
+    expect(daySignalOf(base)).toBe("success");
+
+    const conPicoteo = {
+      ...base,
+      snacks: {
+        entries: [
+          {
+            id: "a",
+            text: "bollos",
+            at: "2026-09-20T18:00:00Z",
+            kcal: 600,
+            protein_g: 0,
+            carbs_g: 0,
+            fat_g: 0,
+            fiber_g: 0,
+          },
+        ],
+      },
+    } as unknown as DailyLog;
+    expect(daySignalOf(conPicoteo)).toBe("over");
+  });
+
+  it("una comida sin resolver no cuenta como registro", () => {
+    const sinTocar = { habits: [{ label: "Comida", done: false }] } as unknown as DailyLog;
+    expect(hasDayRecord(sinTocar)).toBe(false);
+    expect(daySignalOf(sinTocar)).toBe("none");
+  });
+});
+
+describe("mergeGuide", () => {
+  const macros = (kcal: number): MacroEstimate => ({
+    kcal,
+    protein_g: 0,
+    carbs_g: 0,
+    fat_g: 0,
+    fiber_g: 0,
+  });
+  const meal = (kcal: number): MealMacroEstimate => ({ moment: "Comida", ...macros(kcal) });
+
+  it("una guía de respaldo sin cifras no borra las que había", () => {
+    const prev = { macroEstimate: macros(2000), mealMacros: [meal(600)] };
+    const merged = mergeGuide(prev, { intro: "x", macroEstimate: null, mealMacros: null });
+    expect(merged.macroEstimate).toEqual(macros(2000));
+    expect(merged.mealMacros).toEqual([meal(600)]);
+    expect(merged.intro).toBe("x");
+  });
+
+  it("si la nueva trae cifras, mandan ellas", () => {
+    const prev = { macroEstimate: macros(2000), mealMacros: [meal(600)] };
+    const merged = mergeGuide(prev, { macroEstimate: macros(1700), mealMacros: [meal(450)] });
+    expect(merged.macroEstimate).toEqual(macros(1700));
+    expect(merged.mealMacros).toEqual([meal(450)]);
+  });
+
+  it("sin guía previa se queda con lo que venga", () => {
+    expect(mergeGuide(null, { macroEstimate: null, mealMacros: null }).macroEstimate).toBeNull();
+    expect(mergeGuide(undefined, { macroEstimate: macros(1200) }).macroEstimate).toEqual(
+      macros(1200),
+    );
+  });
+
+  it("una lista de platos vacía cuenta como «sin cifras»", () => {
+    const prev = { macroEstimate: macros(2000), mealMacros: [meal(600)] };
+    expect(mergeGuide(prev, { mealMacros: [] }).mealMacros).toEqual([meal(600)]);
   });
 });

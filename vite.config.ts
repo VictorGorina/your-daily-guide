@@ -57,7 +57,20 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
   // Nitro solo hace falta al construir para producción/preview, no en `vite dev`.
   if (command === "build") {
     const { nitro } = await import("nitro/vite");
-    plugins.push(nitro({ defaultPreset: "vercel" }));
+    plugins.push(
+      nitro({
+        defaultPreset: "vercel",
+        // Toda la app se despliega como UNA función de Vercel, así que este
+        // techo lo comparten las páginas y `/api/v1/*`. Se fija a mano porque
+        // el límite por defecto (10 s) corta las llamadas largas a la IA: la
+        // guía del día descompone los platos con un modelo razonador
+        // (`DISH_MODEL`) y puede tardar bastante más. Cuando se cortaba, el
+        // servidor devolvía su texto de respaldo sin macros y la barra de Hoy
+        // se quedaba a cero. 60 s es el máximo del plan Hobby (ver la memoria
+        // `infra-deploy`); no se cobra por el techo sino por lo que tarde.
+        vercel: { functions: { maxDuration: 60 } },
+      }),
+    );
   }
 
   plugins.push(viteReact());

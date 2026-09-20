@@ -73,7 +73,7 @@ import {
   projectTrips,
   shoppingToText,
   tripDayRange,
-  tripsOfCadence,
+  tripsForCoverage,
   WEEK_COUNT,
   tripTiming,
   tripToText,
@@ -193,8 +193,8 @@ function PlanPage() {
   const plannerShopping = plannerShoppingQ.data?.shopping ?? null;
   const plannerPlan = plannerShoppingQ.data?.plan ?? null;
   const plannerCadence: ShoppingCadence = plannerPlan?.cadence ?? cadenceOf(plannerShopping);
-  const plannerTripsTotal = tripsOfCadence(plannerCadence);
   const plannerCoverage = plannerPlan?.coverage;
+  const plannerTripsTotal = tripsForCoverage(plannerCadence, plannerCoverage);
   const hhTrips = projectTrips(
     plannerShopping,
     plannerCadence,
@@ -409,7 +409,7 @@ function PlanPage() {
   const confirmedTrips = planQ.data?.confirmed_trips ?? {};
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = plan?.cadence ?? cadenceOf(shopping);
-  const tripsTotal = tripsOfCadence(activeCadence);
+  const tripsTotal = tripsForCoverage(activeCadence, coverage);
   // Cada compra suma lo que piden los platos de las semanas que cubre
   // (`projectTrips`); cambiar de cadencia solo re-trocea el mismo total del mes.
   const projCoverage = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };

@@ -104,8 +104,13 @@ export type MacroEstimate = {
   fiber_g: number;
 };
 
-/** Estimación de macros de un plato concreto de hoy — ver `mealMacros` abajo. */
-export type MealMacroEstimate = MacroEstimate & { moment: string };
+/** Estimación de macros de un plato concreto de hoy — ver `mealMacros` abajo.
+ *  `idea` es el plato contra el que se calculó: permite detectar que el plan ya
+ *  no coincide (un cambio del hogar espejado por detrás) y hay que regenerar,
+ *  en vez de seguir sumando kcal de un plato que ya no es ese. Lo manda el
+ *  servidor desde `MealMacroEstimate` de `src/lib/guide.functions.ts`; faltaba
+ *  aquí y Hoy lo leía igualmente. */
+export type MealMacroEstimate = MacroEstimate & { moment: string; idea?: string };
 
 export type DailyGuide = {
   intro: string;

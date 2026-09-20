@@ -67,6 +67,8 @@ import {
   tripActualsTotal,
   tripCount,
   tripDayRange,
+  tripLabel,
+  tripsForCoverage,
   weekDayCounts,
   withPlanMeal,
 } from "./plan-shared";
@@ -250,6 +252,70 @@ describe("tripDayRange", () => {
     for (let i = 1; i < ranges.length; i++) {
       expect(ranges[i]!.from).toBe(ranges[i - 1]!.to + 1);
     }
+  });
+});
+
+describe("tripsForCoverage", () => {
+  // Invariante de no-regresión: un plan de mes completo tiene que seguir dando
+  // exactamente las mismas compras que antes de este cambio (4 semanales, 2
+  // bisemanales), para que ningún plan ya generado se reorganice solo.
+  it("un mes completo da las mismas compras de siempre", () => {
+    for (const toDay of [28, 29, 30, 31]) {
+      const coverage = { fromDay: 1, toDay };
+      expect(tripsForCoverage("semanal", coverage)).toBe(4);
+      expect(tripsForCoverage("bisemanal", coverage)).toBe(2);
+      expect(tripsForCoverage("mensual", coverage)).toBe(1);
+    }
+  });
+
+  // El caso del issue: pasar a semanal el día 20 daba 4 compras de 3 días
+  // rotuladas "semana 1 de 4". Una compra semanal cubre ~7 días.
+  it("a media de mes cuenta las compras que caben de verdad", () => {
+    const desdeEl20 = { fromDay: 20, toDay: 31 }; // 12 días
+    expect(tripsForCoverage("semanal", desdeEl20)).toBe(2);
+    expect(tripsForCoverage("bisemanal", desdeEl20)).toBe(1);
+    expect(tripsForCoverage("mensual", desdeEl20)).toBe(1);
+  });
+
+  it("con pocos días queda una sola compra, sea cual sea la cadencia", () => {
+    const ultimaSemana = { fromDay: 25, toDay: 31 }; // 7 días
+    expect(tripsForCoverage("semanal", ultimaSemana)).toBe(1);
+    expect(tripsForCoverage("bisemanal", ultimaSemana)).toBe(1);
+
+    const tresDias = { fromDay: 29, toDay: 31 };
+    expect(tripsForCoverage("semanal", tresDias)).toBe(1);
+    expect(tripsForCoverage("bisemanal", tresDias)).toBe(1);
+  });
+
+  it("media docena de semanas nunca: el resto corto se absorbe en la última", () => {
+    // 1-31 con periodo 7 daría 5 tramos al redondear hacia arriba; el último
+    // sería de 3 días. Se redondea al entero más cercano, así que son 4.
+    expect(tripsForCoverage("semanal", { fromDay: 1, toDay: 31 })).toBe(4);
+    // 15-31 (17 días) son 2 compras semanales de 8-9 días, no 3.
+    expect(tripsForCoverage("semanal", { fromDay: 15, toDay: 31 })).toBe(2);
+  });
+
+  it("sin cobertura cae al valor de mes completo", () => {
+    expect(tripsForCoverage("semanal", null)).toBe(4);
+    expect(tripsForCoverage("bisemanal", undefined)).toBe(2);
+  });
+});
+
+describe("tripLabel", () => {
+  it("solo la cadencia semanal habla de semanas", () => {
+    expect(tripLabel("semanal", 0, { fromDay: 1, toDay: 31 })).toBe(
+      "Ingredientes de la semana 1 de 4 · días 1-8",
+    );
+    expect(tripLabel("bisemanal", 1, { fromDay: 1, toDay: 31 })).toBe(
+      "Ingredientes de la compra 2 de 2 · días 17-31",
+    );
+    expect(tripLabel("mensual", 0, { fromDay: 1, toDay: 31 })).toBe(
+      "Ingredientes del mes · días 1-31",
+    );
+  });
+
+  it("no pone «1 de 1» cuando la cadencia se resuelve en una sola compra", () => {
+    expect(tripLabel("semanal", 0, { fromDay: 25, toDay: 31 })).toBe("Ingredientes · días 25-31");
   });
 });
 

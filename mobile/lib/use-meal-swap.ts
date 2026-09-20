@@ -14,7 +14,7 @@ import {
   type DailyGuide,
   type DailyLog,
 } from "./daily";
-import { perMealKcalDeltas } from "./macros";
+import { mergeGuide, perMealKcalDeltas } from "./macros";
 import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "./plan-shared";
 
 export type { MealChange };
@@ -46,15 +46,33 @@ type PendingChange = {
   dish: string;
   plannedDish: string;
   prevKcal: number | null;
+  /**
+   * Desvío en kcal ya decidido, en vez de deducirlo de las macros de antes y
+   * de después. Lo usa "Deshacer": al volver al plato del plan hay que
+   * DEVOLVER la energía que el cambio movió en los días futuros, y esa cifra
+   * es la del cambio original con el signo cambiado. Mismo criterio que borrar
+   * un picoteo ya compensado.
+   */
+  kcalDeltaOverride?: number;
 };
 
-type BatchDeps = { onDone: () => void };
+type BatchDeps = {
+  /** Comidas que esta persona planifica de verdad (`effectiveMealSlots`). */
+  slots: readonly MealSlot[];
+  onDone: () => void;
+};
 
 let pending = new Map<string, PendingChange>();
 let pendingDate = "";
 let deps: BatchDeps | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
+/**
+ * El lote en vuelo, para poder esperarlo. "Deshacer" lo necesita: si pulsa
+ * mientras el lote está compensando ESA comida, el `swapKcalDelta` que hay
+ * guardado todavía no es el definitivo y se devolvería la energía equivocada.
+ */
+let runningPromise: Promise<void> | null = null;
 const saving = new Set<string>();
 
 let snapshot = { pending: new Set<string>(), saving: new Set<string>() };
@@ -88,11 +106,11 @@ async function run(): Promise<void> {
   }
   if (!pending.size || !deps) return;
   if (running) {
-    timer = setTimeout(() => void run(), BATCH_MS);
+    timer = setTimeout(startRun, BATCH_MS);
     return;
   }
   const changes = [...pending.values()];
-  const { onDone } = deps;
+  const { onDone, slots } = deps;
   const today = pendingDate;
   const month = today.slice(0, 7);
   running = true;
@@ -104,16 +122,21 @@ async function run(): Promise<void> {
     const planRow = await fetchMonthlyPlan(month);
     const planBefore = ((planRow?.plan as MonthlyPlan | null) ?? null) as MonthlyPlan | null;
 
-    const meals = mealsForDate(planBefore, today)
+    // Solo las comidas que esta persona planifica: con todas, el objetivo del
+    // día (`macroEstimate`) salía inflado con una merienda que ni se muestra en
+    // Hoy, y ese objetivo es contra el que se miden la barra de macros y el
+    // semáforo del calendario.
+    const meals = mealsForDate(planBefore, today, slots)
       .filter((m) => m.idea)
       .map((m) => ({ moment: m.moment, idea: m.idea }));
     const freshGuide = await apiPost<DailyGuide>("guide", { meals });
     const currentGuide = (await fetchTodayLog())?.guide ?? null;
     const guide: DailyGuide = {
-      ...freshGuide,
-      macroEstimate: currentGuide?.macroEstimate ?? freshGuide.macroEstimate,
-      // Si el lookup falla, conservar las macros anteriores en vez de borrarlas.
-      mealMacros: freshGuide.mealMacros ?? currentGuide?.mealMacros ?? null,
+      // Nunca perder cifras buenas si la regeneración vuelve sin ellas.
+      ...mergeGuide(currentGuide, freshGuide),
+      // Y el objetivo de la barra se fija con el plan original: no se mueve
+      // porque la persona haya cambiado un plato.
+      macroEstimate: currentGuide?.macroEstimate ?? freshGuide.macroEstimate ?? null,
     };
     await updateTodayLog({ guide });
 
@@ -122,7 +145,15 @@ async function run(): Promise<void> {
     // `adjustmentChanges`/`adjustmentSummary`/`adjustmentKcal` sobre las
     // comidas que de verdad compensó — `onDone` invalida `["today"]` y la UI
     // los recoge de ahí.
-    const deltas = perMealKcalDeltas(changes, freshGuide.mealMacros);
+    const deltas = [
+      ...perMealKcalDeltas(
+        changes.filter((c) => c.kcalDeltaOverride == null),
+        freshGuide.mealMacros,
+      ),
+      ...changes
+        .filter((c) => c.kcalDeltaOverride != null)
+        .map((c) => ({ label: c.label, kcalDelta: c.kcalDeltaOverride! })),
+    ];
     if (deltas.length) {
       const byLabel = new Map(changes.map((c) => [c.label, c]));
       await apiPost("plan/compensate", {
@@ -146,8 +177,15 @@ async function run(): Promise<void> {
   }
 }
 
+/** Lanza el lote guardando su promesa, para que "Deshacer" pueda esperarlo. */
+function startRun(): void {
+  runningPromise = run().finally(() => {
+    runningPromise = null;
+  });
+}
+
 export function flushMealSwapBatch(): void {
-  if (pending.size) void run();
+  if (pending.size) startRun();
 }
 
 let wired = false;
@@ -162,6 +200,8 @@ function wireFlushOnBackground() {
 export function useMealSwap(
   getLog: () => DailyLog | undefined,
   getPlan: () => MonthlyPlan | null | undefined,
+  /** Comidas que esta persona planifica (`effectiveMealSlots` de su perfil). */
+  slots: readonly MealSlot[],
 ) {
   const qc = useQueryClient();
 
@@ -177,13 +217,14 @@ export function useMealSwap(
 
   const bindDeps = useCallback(() => {
     deps = {
+      slots,
       onDone: () => {
         qc.invalidateQueries({ queryKey: ["today"] });
         qc.invalidateQueries({ queryKey: ["logs"] });
         qc.invalidateQueries({ queryKey: ["plan"] });
       },
     };
-  }, [qc]);
+  }, [qc, slots]);
 
   const restoredRef = useRef(false);
   useEffect(() => {
@@ -197,7 +238,7 @@ export function useMealSwap(
       pending = new Map(stored.map((c) => [c.label, c]));
       bindDeps();
       publish();
-      void run();
+      startRun();
     });
   }, [bindDeps]);
 
@@ -281,13 +322,122 @@ export function useMealSwap(
       persist();
       publish();
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void run(), BATCH_MS);
+      timer = setTimeout(startRun, BATCH_MS);
+    },
+    [bindDeps, getLog, getPlan, qc],
+  );
+
+  /**
+   * "Deshacer" de una comida de hoy: además de quitarle el estado, **devuelve
+   * el plato del plan** si se había cambiado a mano. Es lo que hace que "Ver
+   * receta" vuelva a aparecer: la receta se oculta porque el plato ya no es el
+   * del plan (`suggestedDish`), así que restaurarlo la recupera sin ninguna
+   * regla aparte. Si el cambio ya había movido días futuros, se encola el
+   * desvío contrario. Copia de `src/lib/use-meal-swap.ts` de la web.
+   *
+   * `null` si no había nada que restaurar (la pantalla limpia entonces el
+   * estado a secas).
+   */
+  const revert = useCallback(
+    async (label: string, slot: MealSlot): Promise<DailyLog["habits"] | null> => {
+      const today = todayISO();
+      const currentDish = mealsForDate(getPlan() ?? null, today).find((m) => m.slot === slot)?.idea;
+
+      // Un cambio aún sin mandar se retira del lote: compensarlo ya no tiene
+      // sentido, el plato vuelve a ser el del plan.
+      const queued = pending.get(label);
+      if (queued) {
+        pending.delete(label);
+        persist();
+        publish();
+      }
+      // La fila se marca ocupada YA: si el lote está en vuelo hay que esperarlo
+      // (abajo) y son decenas de segundos en los que el botón parecería muerto.
+      saving.add(label);
+      publish();
+      try {
+        // Si el lote de ESTA comida está en vuelo, hay que esperarlo: el desvío
+        // que escribe el servidor es justo la cifra que luego hay que devolver.
+        if (!queued && runningPromise) await runningPromise.catch(() => {});
+
+        // El registro se relee de la base de datos, no de la caché de la
+        // pantalla: `swapCompensated` lo escribe el servidor y la caché puede ir
+        // por detrás justo después de un lote.
+        const habit =
+          (await fetchTodayLog().catch(() => null))?.habits?.find((h) => h.label === label) ??
+          getLog()?.habits?.find((h) => h.label === label);
+        const plannedDish = habit?.plannedIdea || habit?.wasIdea || "";
+        // Nada que restaurar: el plato ya es el del plan (o nunca se cambió).
+        if (!plannedDish || plannedDish === currentDish) return null;
+
+        // Lo que el cambio movió en los días futuros y hay que devolver. Si
+        // seguía en la cola, no se movió nada.
+        const compensated = !queued && habit?.swapCompensated ? (habit.swapKcalDelta ?? 0) : 0;
+        await apiPost("plan/meal", {
+          date: today,
+          slot,
+          dish: plannedDish,
+          today,
+          pin: false,
+        });
+        const next = await patchTodayHabits((habits) =>
+          habits.map((h) =>
+            h.label !== label
+              ? h
+              : {
+                  label: h.label,
+                  done: false,
+                  // `plannedIdea` se vuelve a congelar AQUÍ, con el plato que
+                  // se acaba de restaurar, en vez de dejárselo a
+                  // `reconcileHabits` en la siguiente carga: esa corre con el
+                  // plan que tenga la caché en ese instante y, si todavía va
+                  // por detrás, congelaba el plato cambiado — con lo que la
+                  // comida seguía saliendo como "editada" (tachado y sin
+                  // receta) después de deshacer.
+                  plannedIdea: plannedDish,
+                  // Lo demás describía el cambio y ya no existe: el estado, la
+                  // referencia de kcal y el resumen del ajuste.
+                  ...(compensated ? { swapKcalDelta: -compensated, swapCompensated: false } : {}),
+                },
+          ),
+        );
+        if (compensated) {
+          if (pendingDate !== today) {
+            pendingDate = today;
+            pending = new Map();
+          }
+          pending.set(label, {
+            label,
+            slot,
+            dish: plannedDish,
+            plannedDish,
+            prevKcal: null,
+            kcalDeltaOverride: -compensated,
+          });
+          bindDeps();
+          persist();
+          publish();
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(startRun, BATCH_MS);
+        }
+        qc.invalidateQueries({ queryKey: ["today"] });
+        qc.invalidateQueries({ queryKey: ["logs"] });
+        qc.invalidateQueries({ queryKey: ["plan"] });
+        return next;
+      } catch (err) {
+        Alert.alert(err instanceof Error ? err.message : "No hemos podido deshacer el cambio");
+        return null;
+      } finally {
+        saving.delete(label);
+        publish();
+      }
     },
     [bindDeps, getLog, getPlan, qc],
   );
 
   return {
     swap,
+    revert,
     isSaving: (label: string) => state.saving.has(label),
     isAdjusting: (label: string) => state.pending.has(label),
   };

@@ -52,7 +52,7 @@ import {
   type MealStatus,
   type Profile,
 } from "../../lib/daily";
-import { addMacros, sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
+import { addMacros, mergeGuide, sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
 import { fetchHousehold } from "../../lib/household";
 import {
   EMPTY_SCHEDULE,
@@ -60,16 +60,21 @@ import {
   personColor,
   whoIsHome,
   type MealKey,
+  type SharedSlots,
 } from "../../lib/household-shared";
 import {
   capitalizeFirst,
   childMealsForDate,
   childPureeGaps,
+  dishChangeIsMine,
   effectiveMealSlots,
+  isPinnedByViewer,
   mealsForDate,
   offListNote,
+  planForDate,
   reconcileHabits,
   suggestedDish,
+  type HouseholdPinContext,
   type MealSlot,
   type MonthlyPlan,
   type ShoppingList,
@@ -150,6 +155,8 @@ const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
 const AUTO_GUIDE_BACKOFF_MS = 600_000;
 let lastAutoGuideAttempt = 0;
 let lastAutoGuideFailed = false;
+/** Por qué se pidió la guía la última vez (ver `guideNeed`). */
+let lastAutoGuideKey = "";
 
 /** ms desde el último intento (de cualquier apertura de la app), o null si no hay uno registrado. */
 async function msSinceLastAutoPlanAttempt(month: string): Promise<number | null> {
@@ -300,6 +307,16 @@ export default function Hoy() {
     mySlots,
   );
   const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
+  // Base para `dishChangeIsMine`: en un hogar compartido, un plato que cambia
+  // quien planifica no es un cambio "a mano" para el resto, así que no debe
+  // quitarles la receta.
+  const homePlanner = householdQ.data?.household
+    ? {
+        isPlanner: !!householdQ.data.me?.is_planner,
+        sharedSlots: householdQ.data.household.shared_slots,
+      }
+    : null;
+  const homeCtxFor = (weekday: number) => (homePlanner ? { ...homePlanner, weekday } : null);
   /** Who is eating at home for this meal today? Returns null if no household or not a main meal. */
   const mealCompanions = (label: string) => {
     const mealKey = MOMENT_TO_MEAL_KEY[label];
@@ -445,7 +462,10 @@ export default function Hoy() {
       const g = await apiPost<DailyGuide>("guide", {
         meals: todayMeals.filter((m) => m.idea).map((m) => ({ moment: m.moment, idea: m.idea })),
       });
-      await updateTodayLog({ guide: g });
+      // Si la generación vuelve con el texto de respaldo y sin cifras, se
+      // conservan las que ya tuviera el día: regenerar nunca debe dejar la
+      // barra de macros peor de como estaba (ver `mergeGuide`).
+      await updateTodayLog({ guide: mergeGuide(today?.guide, g) });
       lastAutoGuideFailed = false;
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
@@ -460,31 +480,41 @@ export default function Hoy() {
     }
   };
 
-  useEffect(() => {
-    if (!today || generating) return;
+  // Por qué habría que (re)generar la guía, como una cadena estable. El efecto
+  // depende del MOTIVO y no del id del registro: `today.id` no cambia en todo
+  // el día y esta pantalla no se desmonta nunca (queda bajo el Stack de
+  // expo-router), así que un cambio de plato no volvía a disparar nada y la
+  // barra de macros se quedaba igual hasta pulsar "Generar" a mano.
+  const guideNeed = (() => {
+    if (!today) return "";
     const g = today.guide;
-    // Si ya hay platos reales de hoy pero la guía guardada es de antes de que
-    // existiera la barra de macros (o el modelo no la rellenó, o es de antes
-    // de que la barra sumara por plato), regenera para rellenar `mealMacros`
-    // — si no, se queda sin barras para siempre: esta guía ya tiene
-    // `meals`/`tips`, así que la condición de abajo no la pillaría.
-    const missingMacros =
-      !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
-    const staleMacros =
-      !!g &&
-      todayMeals.some((m) => {
-        if (!m.idea) return false;
-        const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
-        return !!cached?.idea && cached.idea !== m.idea;
-      });
-    if (!g || !g.meals?.length || !g.tips?.length || missingMacros || staleMacros) {
-      const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
-      if (Date.now() - lastAutoGuideAttempt < cooldown) return;
-      lastAutoGuideAttempt = Date.now();
-      void requestGuide({ silent: true });
-    }
+    if (!g || !g.meals?.length || !g.tips?.length) return "sin-guia";
+    const dishes = todayMeals.filter((m) => m.idea);
+    if (!dishes.length) return "";
+    // Guía guardada de antes de que existiera la barra de macros (o el lookup
+    // no salió): sin esto se queda sin barras para siempre.
+    if (g.macroEstimate == null || !g.mealMacros?.length) return "sin-macros";
+    // El hogar puede espejar por detrás un cambio del planificador sobre una
+    // comida compartida: el plato de hoy cambia sin pasar por `use-meal-swap`.
+    const stale = dishes.filter((m) => {
+      const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
+      return !!cached?.idea && cached.idea !== m.idea;
+    });
+    return stale.length ? `platos:${stale.map((m) => `${m.moment}=${m.idea}`).join("|")}` : "";
+  })();
+
+  useEffect(() => {
+    if (!guideNeed || generating) return;
+    const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
+    // El tope de un intento por minuto es para no repetir EL MISMO intento (el
+    // bucle de alertas de 2026-09-01). Un motivo nuevo — cambió un plato de
+    // hoy — no tiene por qué esperar al minuto del intento anterior.
+    if (guideNeed === lastAutoGuideKey && Date.now() - lastAutoGuideAttempt < cooldown) return;
+    lastAutoGuideKey = guideNeed;
+    lastAutoGuideAttempt = Date.now();
+    void requestGuide({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today?.id]);
+  }, [guideNeed, generating]);
 
   useEffect(() => {
     if (nightlyAutoOpenedRef.current || !profile?.evening_time || !today) return;
@@ -598,7 +628,38 @@ export default function Hoy() {
   const mealSwap = useMealSwap(
     () => todayQ.data,
     () => planQ.data?.plan ?? null,
+    mySlots,
   );
+
+  /**
+   * "Deshacer" de una comida: quita el estado ("comí esto" / "comí otra cosa")
+   * y, si el plato se había cambiado a mano, devuelve además el plato del plan
+   * — con lo que "Ver receta" vuelve a aparecer sola, porque la receta se
+   * oculta justamente por no ser ya el plato del plan. `revert` deshace también
+   * lo que ese cambio hubiera movido en los días futuros.
+   */
+  const clearMealStatus = (index: number) => {
+    const habit = habits[index];
+    if (!habit) return;
+    const slot = todayMeals.find((m) => m.moment === habit.label)?.slot;
+    const mealKey = MOMENT_TO_MEAL_KEY[habit.label] ?? "snack";
+    // En un slot compartido del hogar, un no planificador no puede escribir el
+    // plato (`guardSharedSlotWrite`): ahí "Deshacer" solo limpia su registro.
+    const canRestore = !!slot && dishChangeIsMine(mealKey, homeCtxFor(todayWeekday));
+    const clearStatus = () => {
+      const next = habits.map((h, i) =>
+        i === index ? { ...h, status: undefined, done: false, confirmedIdea: undefined } : h,
+      );
+      save.mutate({ habits: next });
+    };
+    if (!canRestore) {
+      clearStatus();
+      return;
+    }
+    void mealSwap.revert(habit.label, slot).then((restored) => {
+      if (!restored) clearStatus();
+    });
+  };
 
   // Datos para el sheet de cambio y el de información del ajuste.
   const swapMeal =
@@ -737,6 +798,13 @@ export default function Hoy() {
                 // — congelada, así que sigue igual tras veinte cambios (ver
                 // `plannedIdea` en lib/plan-shared.ts).
                 const wasIdea = suggestedDish(h, dish);
+                // Sin receta si el plato ya se cambió a mano: ya se sabe qué se
+                // va a comer, así que enseñarla solo gastaría una llamada a la
+                // IA sin aportar nada. Solo cuenta para quien de verdad lo
+                // cambió (`dishChangeIsMine`), no para el resto del hogar.
+                const mealKeyForPin = MOMENT_TO_MEAL_KEY[h.label] ?? "snack";
+                const hideRecipe =
+                  !!wasIdea && dishChangeIsMine(mealKeyForPin, homeCtxFor(todayWeekday));
                 const note = offListNote(planned?.off);
                 const shared = sharedWith(h.label);
 
@@ -844,14 +912,14 @@ export default function Hoy() {
                           </>
                         ) : isDone ? (
                           <Pressable
-                            onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
+                            onPress={() => clearMealStatus(i)}
                             className="h-[34px] w-[34px] items-center justify-center rounded-full bg-success"
                           >
                             <Undo2 size={15} color="#fbfaf7" strokeWidth={2.4} />
                           </Pressable>
                         ) : isSkip ? (
                           <Pressable
-                            onPress={() => setMealStatus(i, undefined as unknown as MealStatus)}
+                            onPress={() => clearMealStatus(i)}
                             className="h-[34px] w-[34px] items-center justify-center rounded-full bg-secondary"
                           >
                             <X size={15} color="#83796c" strokeWidth={2.2} />
@@ -932,7 +1000,7 @@ export default function Hoy() {
                         <DishRecipe dish={k.dish} month={month} />
                       </View>
                     ))}
-                    {planned?.idea ? <DishRecipe dish={dish} month={month} /> : null}
+                    {planned?.idea && !hideRecipe ? <DishRecipe dish={dish} month={month} /> : null}
                   </View>
                 );
               })}
@@ -988,9 +1056,6 @@ export default function Hoy() {
             visibleWeek={visibleWeek}
             onVisibleWeekChange={setVisibleWeek}
             logsFor={(d) => logByDate.get(d)}
-            todayHabits={
-              habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)
-            }
           />
           <Animated.View layout={LinearTransition.duration(350).easing(EASING)}>
             {openDay ? (
@@ -1011,6 +1076,7 @@ export default function Hoy() {
                     : undefined
                 }
                 mySlots={mySlots}
+                homePlanner={homePlanner}
               />
             ) : null}
           </Animated.View>
@@ -1154,6 +1220,7 @@ function DayPanel({
   householdChildren,
   household,
   mySlots,
+  homePlanner,
 }: {
   date: string;
   plan: MonthlyPlan | null;
@@ -1162,6 +1229,9 @@ function DayPanel({
   householdChildren?: { id: string; name: string }[];
   household?: DayDetailHousehold;
   mySlots: readonly MealSlot[];
+  /** Para saber si un plato fijado lo cambió esta persona o el resto del hogar
+   *  (ver `dishChangeIsMine`). */
+  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
   const isPast = date < todayISO();
 
@@ -1193,7 +1263,7 @@ function DayPanel({
           </View>
         </View>
       ) : (
-        <DayMenu date={date} plan={plan} selectedSlots={mySlots} />
+        <DayMenu date={date} plan={plan} selectedSlots={mySlots} homePlanner={homePlanner} />
       )}
     </Animated.View>
   );
@@ -1204,12 +1274,18 @@ function DayMenu({
   date,
   plan,
   selectedSlots,
+  homePlanner,
 }: {
   date: string;
   plan: MonthlyPlan | null;
   selectedSlots: readonly MealSlot[];
+  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
   const meals = mealsForDate(plan, date, selectedSlots);
+  const day = planForDate(plan, date)?.day ?? null;
+  const homeCtx: HouseholdPinContext | null = homePlanner
+    ? { ...homePlanner, weekday: (new Date(`${date}T00:00:00`).getDay() + 6) % 7 }
+    : null;
   const label = capitalizeFirst(
     new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
       weekday: "long",
@@ -1233,6 +1309,7 @@ function DayMenu({
               value={m.idea}
               note={offListNote(m.off)}
               recipeMonth={date.slice(0, 7)}
+              pinned={isPinnedByViewer(day, m.slot, homeCtx)}
             />
           ))}
         </View>
@@ -1250,12 +1327,16 @@ function Field({
   value,
   note,
   recipeMonth,
+  pinned,
 }: {
   label: string;
   value: string;
   note?: string | null;
-  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes. */
+  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes
+   *  (salvo que `pinned` sea true). */
   recipeMonth?: string;
+  /** Este plato lo eligió a mano quien mira la pantalla: no se ofrece receta. */
+  pinned?: boolean;
 }) {
   return (
     <View className="rounded-xl bg-secondary/60 p-3">
@@ -1268,7 +1349,7 @@ function Field({
           <Text className="font-body-medium text-[11px] text-foreground">{note}</Text>
         </View>
       ) : null}
-      {recipeMonth ? <DishRecipe dish={value} month={recipeMonth} /> : null}
+      {recipeMonth && !pinned ? <DishRecipe dish={value} month={recipeMonth} /> : null}
     </View>
   );
 }

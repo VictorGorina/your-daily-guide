@@ -51,7 +51,7 @@ import {
 } from "@/lib/daily";
 
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { addMacros, sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
+import { addMacros, mergeGuide, sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import { fetchHousehold } from "@/lib/household";
 import {
   EMPTY_SCHEDULE,
@@ -196,6 +196,8 @@ const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
 const AUTO_GUIDE_BACKOFF_MS = 600_000;
 let lastAutoGuideAttempt = 0;
 let lastAutoGuideFailed = false;
+/** Por qué se pidió la guía la última vez (ver `guideNeed`). */
+let lastAutoGuideKey = "";
 
 function Hoy() {
   const navigate = useNavigate();
@@ -449,6 +451,7 @@ function Hoy() {
   const mealSwap = useMealSwap(
     () => todayQ.data,
     () => planQ.data?.plan ?? null,
+    mySlots,
   );
 
   useEffect(() => {
@@ -494,7 +497,10 @@ function Hoy() {
           meals: todayMeals.filter((m) => m.idea).map((m) => ({ moment: m.moment, idea: m.idea })),
         },
       });
-      await updateTodayLog({ guide: g });
+      // Si la generación vuelve con el texto de respaldo y sin cifras, se
+      // conservan las que ya tuviera el día: regenerar nunca debe dejar la
+      // barra de macros peor de como estaba (ver `mergeGuide`).
+      await updateTodayLog({ guide: mergeGuide(today?.guide, g) });
       lastAutoGuideFailed = false;
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
@@ -509,38 +515,49 @@ function Hoy() {
     }
   };
 
-  useEffect(() => {
-    if (!today || generating) return;
+  // Por qué habría que (re)generar la guía, como una cadena estable. Se calcula
+  // fuera del efecto a propósito: el efecto depende del MOTIVO y no del id del
+  // registro, porque `today.id` no cambia en todo el día y en la app móvil la
+  // pantalla de Hoy no se desmonta nunca (queda bajo el Stack de expo-router),
+  // así que un cambio de plato no volvía a disparar nada y la barra de macros
+  // se quedaba como estaba hasta pulsar "Generar" a mano.
+  const guideNeed = (() => {
+    if (!today) return "";
     const g = today.guide;
-    // Si ya hay platos reales de hoy pero la guía guardada es de antes de que
-    // existiera la barra de macros (o el modelo no la rellenó, o es de antes
-    // de que la barra sumara por plato), regenera para rellenar `mealMacros`
-    // — si no, se queda sin barras para siempre: esta guía ya tiene
-    // `meals`/`tips`, así que la condición de abajo no la pillaría.
-    const missingMacros =
-      !!g && todayMeals.some((m) => m.idea) && (g.macroEstimate == null || !g.mealMacros?.length);
+    if (!g || !g.meals?.length || !g.tips?.length) return "sin-guia";
+    const dishes = todayMeals.filter((m) => m.idea);
+    if (!dishes.length) return "";
+    // Guía guardada de antes de que existiera la barra de macros (o el lookup
+    // no salió): sin esto se queda sin barras para siempre, porque ya tiene
+    // `meals`/`tips` y la condición de arriba no la pilla.
+    if (g.macroEstimate == null || !g.mealMacros?.length) return "sin-macros";
     // El hogar puede espejar por detrás un cambio del planificador sobre una
     // comida compartida (ver `composeDayForUser`): el plato de hoy cambia sin
-    // pasar por `use-meal-swap`, que es quien normalmente regenera la guía
-    // tras un cambio. Si el plato de un momento ya no es el que tiene
-    // guardado `mealMacros`, esa cifra ya no describe lo que hay en pantalla.
-    // Solo se compara cuando la guía SÍ trajo `idea` (guías de antes de este
-    // campo no fuerzan una regeneración masiva).
-    const staleMacros =
-      !!g &&
-      todayMeals.some((m) => {
-        if (!m.idea) return false;
-        const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
-        return !!cached?.idea && cached.idea !== m.idea;
-      });
-    if (!g || !g.meals?.length || !g.tips?.length || missingMacros || staleMacros) {
-      const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
-      if (Date.now() - lastAutoGuideAttempt < cooldown) return;
-      lastAutoGuideAttempt = Date.now();
-      void requestGuide({ silent: true });
-    }
+    // pasar por `use-meal-swap`, que es quien normalmente regenera la guía tras
+    // un cambio. Si el plato de un momento ya no es el que tiene guardado
+    // `mealMacros`, esa cifra ya no describe lo que hay en pantalla. Solo se
+    // compara cuando la guía SÍ trajo `idea` (las guías anteriores a ese campo
+    // no fuerzan una regeneración masiva).
+    const stale = dishes.filter((m) => {
+      const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
+      return !!cached?.idea && cached.idea !== m.idea;
+    });
+    return stale.length ? `platos:${stale.map((m) => `${m.moment}=${m.idea}`).join("|")}` : "";
+  })();
+
+  useEffect(() => {
+    if (!guideNeed || generating) return;
+    const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
+    // El tope de un intento por minuto es para no repetir EL MISMO intento (ver
+    // la memoria del bucle de reintentos de 2026-09-01). Un motivo nuevo —
+    // cambió un plato de hoy — no tiene por qué esperar al minuto del intento
+    // anterior, que era de otra cosa.
+    if (guideNeed === lastAutoGuideKey && Date.now() - lastAutoGuideAttempt < cooldown) return;
+    lastAutoGuideKey = guideNeed;
+    lastAutoGuideAttempt = Date.now();
+    void requestGuide({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today?.id]);
+  }, [guideNeed, generating]);
 
   // Abre el repaso nocturno solo (una vez por carga) si ya ha pasado la hora
   // configurada y hoy aún no se ha cerrado. Se asume la hora local del
@@ -678,11 +695,35 @@ function Hoy() {
     save.mutate({ habits: next });
   };
 
+  /**
+   * "Deshacer" de una comida: quita el estado ("comí esto" / "comí otra cosa")
+   * y, si el plato se había cambiado a mano, devuelve además el plato del plan
+   * — con lo que "Ver receta" vuelve a aparecer sola, porque la receta se
+   * oculta justamente por no ser ya el plato del plan. `revert` se encarga de
+   * deshacer también lo que ese cambio hubiera movido en los días futuros.
+   */
   const clearMealStatus = (index: number) => {
-    const next = habits.map((h, i) =>
-      i === index ? { ...h, status: undefined, done: false, confirmedIdea: undefined } : h,
-    );
-    save.mutate({ habits: next });
+    const habit = habits[index];
+    if (!habit) return;
+    const slot = todayMeals.find((m) => m.moment === habit.label)?.slot;
+    const mealKey = MOMENT_TO_MEAL_KEY[habit.label] ?? "snack";
+    // En un slot compartido del hogar, un no planificador no puede escribir el
+    // plato (`guardSharedSlotWrite`): ahí "Deshacer" solo limpia su registro.
+    const canRestore = !!slot && dishChangeIsMine(mealKey, homeCtxFor(todayWeekday));
+    const clearStatus = () => {
+      const next = habits.map((h, i) =>
+        i === index ? { ...h, status: undefined, done: false, confirmedIdea: undefined } : h,
+      );
+      save.mutate({ habits: next });
+    };
+    if (!canRestore) {
+      clearStatus();
+      return;
+    }
+    void mealSwap.revert(habit.label, slot).then((restored) => {
+      // `null` = no había plato que restaurar: se limpia el estado a secas.
+      if (!restored) clearStatus();
+    });
   };
 
   // Datos para el swap sheet y el info sheet
@@ -1097,7 +1138,6 @@ function Hoy() {
           visibleWeek={visibleWeek}
           onVisibleWeekChange={setVisibleWeek}
           logsFor={(d) => logByDate.get(d)}
-          todayHabits={habits.length ? habits.map((h) => h.label) : todayMeals.map((m) => m.moment)}
         />
         <motion.div layout transition={{ duration: 0.35, ease: EASE }}>
           <AnimatePresence mode="popLayout" initial={false}>

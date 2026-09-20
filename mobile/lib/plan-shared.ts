@@ -135,6 +135,43 @@ export const isPinned = (day: PlanDay | null | undefined, slot: MealSlot): boole
   !!day?.pinned?.includes(slot);
 
 /**
+ * Lo que hace falta saber del hogar para distinguir "lo cambié yo" de "lo
+ * cambió el hogar" en un slot concreto — ver `dishChangeIsMine`.
+ */
+export type HouseholdPinContext = {
+  isPlanner: boolean;
+  sharedSlots: SharedSlots;
+  weekday: number;
+};
+
+/**
+ * ¿Un cambio de plato en este slot, si lo hay, lo hizo la propia persona que
+ * está mirando la pantalla? En un slot compartido de un hogar solo quien
+ * planifica puede cambiarlo (`guardSharedSlotWrite` bloquea al resto), así
+ * que para cualquier otro miembro un plato distinto al esperado siempre vino
+ * de fuera. Sin hogar (`home` null), o en un slot en solitario (merienda, o
+ * una comida ese día no compartida), el cambio es siempre propio.
+ */
+export function dishChangeIsMine(slot: MealSlot, home: HouseholdPinContext | null): boolean {
+  if (!home || home.isPlanner || slot === "snack") return true;
+  return !isSharedSlot(home.sharedSlots, slot, home.weekday);
+}
+
+/**
+ * ¿La eligió a mano la propia persona que está mirando la pantalla, y no
+ * otra? En un slot compartido del hogar, `pinned` viaja siempre desde la fila
+ * del planificador (`mirrorPinned`), así que un no planificador puede verlo
+ * fijado sin haber tocado nada él mismo.
+ */
+export function isPinnedByViewer(
+  day: PlanDay | null | undefined,
+  slot: MealSlot,
+  home: HouseholdPinContext | null,
+): boolean {
+  return isPinned(day, slot) && dishChangeIsMine(slot, home);
+}
+
+/**
  * Días del mes que cubre el plan. Un plan creado a media de mes solo cubre de
  * hoy a fin de mes (ver `monthCoverage`), y de ahí salen tanto la prorrata del
  * presupuesto como los rangos de días de cada compra.
@@ -657,10 +694,20 @@ export const addDays = (date: string, days: number) => {
 
 export type ShoppingCadence = "semanal" | "bisemanal" | "mensual";
 
-export const CADENCES: { key: ShoppingCadence; label: string; trips: number }[] = [
-  { key: "semanal", label: "Semanal", trips: 4 },
-  { key: "bisemanal", label: "Cada 2 semanas", trips: 2 },
-  { key: "mensual", label: "Mensual", trips: 1 },
+export const CADENCES: {
+  key: ShoppingCadence;
+  label: string;
+  /** Nº de compras de un mes completo. Es el techo, no una cifra fija: lo que
+   *  manda es `periodDays` sobre los días que el plan cubre de verdad
+   *  (`tripsForCoverage`). */
+  trips: number;
+  /** Cada cuántos días se va a comprar. Es lo que da sentido a la cadencia:
+   *  "semanal" son compras de ~7 días, no "un cuarto de lo que quede de mes". */
+  periodDays: number;
+}[] = [
+  { key: "semanal", label: "Semanal", trips: 4, periodDays: 7 },
+  { key: "bisemanal", label: "Cada 2 semanas", trips: 2, periodDays: 14 },
+  { key: "mensual", label: "Mensual", trips: 1, periodDays: 31 },
 ];
 
 /** Unidad canónica de una cantidad de compra. Todo se normaliza a estas tres. */
@@ -879,8 +926,40 @@ export const cadenceOf = (shopping: ShoppingList | null | undefined): ShoppingCa
 };
 
 /** Número "oficial" de tramos de una cadencia (4 semanal, 2 bisemanal, 1 mensual). */
+/**
+ * Nº de compras de una cadencia en un mes COMPLETO. Solo para los caminos que
+ * no saben qué días cubre el plan (listas antiguas sin `coverage`, y el reparto
+ * heredado de `repartitionTrips`). Todo lo que se enseña en pantalla debe usar
+ * `tripsForCoverage`, que sí mira la cobertura real.
+ */
 export const tripsOfCadence = (cadence: ShoppingCadence) =>
   CADENCES.find((c) => c.key === cadence)?.trips ?? 1;
+
+/**
+ * Nº de compras de una cadencia sobre los días que el plan cubre DE VERDAD.
+ *
+ * Antes era una constante (4 / 2 / 1) y `tripDayRange` partía la cobertura en
+ * ese número de trozos iguales, así que un plan creado el día 20 (12 días de
+ * cobertura) con cadencia semanal salían "4 compras" de 3 días cada una,
+ * rotuladas "semana 1 de 4 · días 20-22". Una compra semanal es una compra de
+ * ~7 días: si solo quedan 12, son dos; si quedan 5, es una.
+ *
+ * Se redondea al entero más cercano (no hacia arriba) para que el resto corto
+ * del final se absorba en la última compra en vez de generar un tramo de
+ * relleno: un mes completo de 31 días sigue dando 4 compras semanales y 2
+ * bisemanales, exactamente como antes de este cambio, así que ningún plan ya
+ * generado cambia de forma.
+ */
+export const tripsForCoverage = (
+  cadence: ShoppingCadence,
+  coverage: PlanCoverage | null | undefined,
+): number => {
+  if (cadence === "mensual") return 1;
+  if (!coverage) return tripsOfCadence(cadence);
+  const period = CADENCES.find((c) => c.key === cadence)?.periodDays ?? 31;
+  const days = Math.max(1, coverage.toDay - coverage.fromDay + 1);
+  return Math.max(1, Math.round(days / period));
+};
 
 /** A quién se refiere cada tramo de ingredientes, en palabras, según la cadencia. */
 export const cadenceScopeLabel = (cadence: ShoppingCadence) =>
@@ -1056,21 +1135,28 @@ export const tripTiming = (
 /**
  * Etiqueta legible de cada tramo de ingredientes con los días que comprende
  * (ej. "Ingredientes de la semana 2 de 4 · días 8-14"), calculada a partir de
- * la cobertura real del plan para que un plan creado a media de mes muestre los
- * días correctos. El "de N" deja claro, sobre todo con semanal/bisemanal, que
- * cada tramo es una lista distinta y no un trozo de la misma.
+ * la cobertura real del plan para que un plan creado a media de mes muestre
+ * los días correctos. El "de N" deja claro, sobre todo con semanal/bisemanal,
+ * que cada tramo es una lista distinta y no un trozo de la misma.
+ *
+ * Solo la cadencia semanal habla de "semana": una compra bisemanal no lo es, y
+ * cuando el plan cubre tan pocos días que la cadencia se resuelve en una sola
+ * compra, un "1 de 1" sobra.
  */
 export const tripLabel = (
   cadence: ShoppingCadence,
   trip: number,
   coverage: PlanCoverage = FULL_MONTH_COVERAGE,
-  trips = tripsOfCadence(cadence),
+  trips = tripsForCoverage(cadence, coverage),
 ) => {
   const { from, to } = tripDayRange(coverage, trips, trip);
+  const unit = cadence === "semanal" ? "semana" : "compra";
   const prefix =
     cadence === "mensual"
       ? "Ingredientes del mes"
-      : `Ingredientes de la semana ${trip + 1} de ${trips}`;
+      : trips <= 1
+        ? "Ingredientes"
+        : `Ingredientes de la ${unit} ${trip + 1} de ${trips}`;
   return `${prefix} · días ${from}-${to}`;
 };
 
@@ -1120,7 +1206,7 @@ export const projectTrips = (
   coverage: PlanCoverage,
   weekCount: number = WEEK_COUNT,
 ): TripGroups[] => {
-  const trips = tripsOfCadence(cadence);
+  const trips = tripsForCoverage(cadence, coverage);
   if (!isCanonicalShopping(shopping)) return groupByTrip(shopping, trips);
 
   const wc = Math.max(1, weekCount);

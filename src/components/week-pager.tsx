@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ratioSignal, type DailyLog } from "@/lib/daily";
+import type { DailyLog } from "@/lib/daily";
+import { daySignalOf, type DaySignal } from "@/lib/macros";
 import {
   dayKind,
   mondayAt,
@@ -27,12 +28,17 @@ const RING_S = 0.35;
 const LABEL_S = 0.2;
 const FADE_JUMP_MS = 180;
 
-function habitSignal(log: DailyLog | undefined, fallbackHabits: string[]) {
-  const habits = log?.habits ?? (fallbackHabits ?? []).map((label) => ({ label, done: false }));
-  return ratioSignal(habits.filter((h) => h.done).length, habits.length);
+/**
+ * Mismo semáforo que el calendario del mes (`daySignal` en macros.ts): el color
+ * de un día pasado dice cómo quedó frente al objetivo del día, no cuántas
+ * comidas se marcaron. Las dos superficies tienen que decir lo mismo del mismo
+ * día, o el color deja de significar nada.
+ */
+function habitSignal(log: DailyLog | undefined) {
+  return daySignalOf(log);
 }
 
-function dayClasses(kind: DayKind, isWeekend: boolean, signal: ReturnType<typeof ratioSignal>) {
+function dayClasses(kind: DayKind, isWeekend: boolean, signal: DaySignal) {
   if (kind === "before-start") return "bg-secondary text-muted-foreground";
   if (kind === "today") return "bg-foreground text-background";
   if (kind === "past") {
@@ -41,6 +47,8 @@ function dayClasses(kind: DayKind, isWeekend: boolean, signal: ReturnType<typeof
         return "bg-success text-success-foreground";
       case "warning":
         return "bg-warning text-warning-foreground";
+      case "over":
+        return "bg-danger text-danger-foreground";
       case "muted":
         return "bg-muted text-muted-foreground";
       default:
@@ -61,7 +69,6 @@ type WeekPagerProps = {
   visibleWeek: string;
   onVisibleWeekChange: (monday: string) => void;
   logsFor: (date: string) => DailyLog | undefined;
-  todayHabits?: string[];
   renderBadge?: (date: string) => ReactNode;
 };
 
@@ -81,7 +88,6 @@ export function WeekPager({
   visibleWeek,
   onVisibleWeekChange,
   logsFor,
-  todayHabits = [],
   renderBadge,
 }: WeekPagerProps) {
   const reducedMotion = !!useReducedMotion();
@@ -246,7 +252,6 @@ export function WeekPager({
                     selected={selected}
                     onSelect={onSelect}
                     logsFor={logsFor}
-                    todayHabits={todayHabits}
                     renderBadge={renderBadge}
                     reducedMotion={reducedMotion}
                   />
@@ -267,7 +272,6 @@ function WeekPage({
   selected,
   onSelect,
   logsFor,
-  todayHabits,
   renderBadge,
   reducedMotion,
 }: {
@@ -277,7 +281,6 @@ function WeekPage({
   selected?: string | null;
   onSelect?: (date: string) => void;
   logsFor: (date: string) => DailyLog | undefined;
-  todayHabits: string[];
   renderBadge?: (date: string) => ReactNode;
   reducedMotion: boolean;
 }) {
@@ -290,7 +293,7 @@ function WeekPage({
         const isBeforeStart = kind === "before-start";
         const d = new Date(`${date}T00:00:00`);
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-        const signal = kind === "past" ? habitSignal(logsFor(date), todayHabits) : "none";
+        const signal: DaySignal = kind === "past" ? habitSignal(logsFor(date)) : "none";
         const isOpen = selected === date;
 
         return (

@@ -3,8 +3,9 @@ import { useState } from "react";
 import { DishRecipe } from "@/components/dish-recipe";
 import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ratioSignal, todayISO, type DailyLog } from "@/lib/daily";
+import { todayISO, type DailyLog } from "@/lib/daily";
 import type { SharedSlots } from "@/lib/household-shared";
+import { daySignalOf } from "@/lib/macros";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -26,6 +27,7 @@ const dayNum = (date: string) => Number(date.slice(8, 10));
 const SIGNAL_CLASS: Record<string, string> = {
   success: "bg-success text-success-foreground",
   warning: "bg-warning text-warning-foreground",
+  over: "bg-danger text-danger-foreground",
   muted: "bg-muted text-muted-foreground",
 };
 
@@ -140,8 +142,10 @@ export function PlanMonthCalendar({
           }
 
           if (isPast) {
-            const habits = log?.habits ?? [];
-            const signal = ratioSignal(habits.filter((h) => h.done).length, habits.length);
+            // El color del día dice cómo quedó frente al objetivo del día (lo
+            // que el plan proponía), no cuántas comidas se marcaron: ver
+            // `daySignal` en macros.ts.
+            const signal = daySignalOf(log);
             const signalClass = SIGNAL_CLASS[signal] ?? "bg-secondary/70 text-muted-foreground";
             return (
               <button
@@ -170,7 +174,8 @@ export function PlanMonthCalendar({
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Verde: todas las comidas. Amarillo: comiste algo. Gris: sin comidas ese día.
+        Verde: día en tu objetivo. Amarillo: te desviaste. Rojo: bastante por encima. Gris: sin
+        registro.
       </p>
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>

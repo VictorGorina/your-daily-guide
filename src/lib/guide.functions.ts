@@ -170,42 +170,63 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
       : Promise.resolve(null);
 
     const ai = createAiProvider(key, context.userId);
-    try {
-      const [{ text }, lookup] = await Promise.all([
-        generateText({
-          model: ai(COACH_MODEL),
-          system: coachSystemPrompt(profile as never),
-          prompt:
-            "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +
-            '{"intro": string (1 frase cálida y motivadora, sin presión), "calories": string (rango orientativo, nunca una cifra rígida), "macros": string (orientación de macros en una frase), ' +
-            '"behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Merienda", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
-            dishesLine +
-            "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
-        }),
-        macrosPromise,
-      ]);
-      const parsed = parseJsonLoose(text) as GeneratedGuide;
-      if (!parsed.behaviors?.length) return fallback;
-      return {
-        intro: String(parsed.intro ?? fallback.intro),
-        calories: String(parsed.calories ?? fallback.calories),
-        macros: String(parsed.macros ?? fallback.macros),
-        macroEstimate: lookup?.macroEstimate.kcal ? lookup.macroEstimate : null,
-        mealMacros: lookup?.mealMacros.length ? lookup.mealMacros : null,
-        behaviors: parsed.behaviors.slice(0, 3).map(String),
-        meals: Array.isArray(parsed.meals)
-          ? parsed.meals
-              .slice(0, 4)
-              .map((m) => ({ moment: String(m?.moment ?? ""), idea: String(m?.idea ?? "") }))
-              .filter((m) => m.moment && m.idea)
-          : fallback.meals,
-        tips:
-          Array.isArray(parsed.tips) && parsed.tips.length
-            ? parsed.tips.slice(0, 4).map(String)
-            : fallback.tips,
-      };
-    } catch (error) {
-      console.error("generateDailyGuide", error);
-      return fallback;
+    // El texto no puede tumbar las macros. Antes ambas llamadas compartían un
+    // solo `try`, así que un fallo del texto (o del tope de gasto, o un corte
+    // por tiempo del modelo) devolvía el `fallback` entero y se tiraban unas
+    // macros que ya estaban calculadas: la barra de Hoy se quedaba a cero y solo
+    // el botón manual "Generar" la recuperaba. Ahora cada mitad falla por su
+    // cuenta y se devuelve lo que sí haya salido.
+    const textPromise = generateText({
+      model: ai(COACH_MODEL),
+      system: coachSystemPrompt(profile as never),
+      prompt:
+        "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +
+        '{"intro": string (1 frase cálida y motivadora, sin presión), "calories": string (rango orientativo, nunca una cifra rígida), "macros": string (orientación de macros en una frase), ' +
+        '"behaviors": [3 hábitos concretos y cortos para hoy], "meals": [4 objetos {"moment": "Desayuno"|"Comida"|"Cena"|"Merienda", "idea": plato sugerido concreto pero flexible, sin gramajes}], "tips": [3 consejos de nutrición prácticos y cortos, estilo "Bebe 2L de agua"]}. ' +
+        dishesLine +
+        "Adapta los platos a sus horarios, restricciones y vida real. Sin markdown, sin explicaciones.",
+    }).then(
+      ({ text }) => text,
+      (error: unknown) => {
+        console.error("generateDailyGuide text", error);
+        return null;
+      },
+    );
+
+    const [text, lookup] = await Promise.all([textPromise, macrosPromise]);
+
+    /** Las cifras del lookup se pegan a cualquier texto, propio o de respaldo. */
+    const withMacros = (base: GeneratedGuide): GeneratedGuide => ({
+      ...base,
+      macroEstimate: lookup?.macroEstimate.kcal ? lookup.macroEstimate : null,
+      mealMacros: lookup?.mealMacros.length ? lookup.mealMacros : null,
+    });
+
+    let parsed: GeneratedGuide | null = null;
+    if (text) {
+      try {
+        parsed = parseJsonLoose(text) as GeneratedGuide;
+      } catch (error) {
+        console.error("generateDailyGuide parse", error);
+      }
     }
+    if (!parsed?.behaviors?.length) return withMacros(fallback);
+
+    return withMacros({
+      ...fallback,
+      intro: String(parsed.intro ?? fallback.intro),
+      calories: String(parsed.calories ?? fallback.calories),
+      macros: String(parsed.macros ?? fallback.macros),
+      behaviors: parsed.behaviors.slice(0, 3).map(String),
+      meals: Array.isArray(parsed.meals)
+        ? parsed.meals
+            .slice(0, 4)
+            .map((m) => ({ moment: String(m?.moment ?? ""), idea: String(m?.idea ?? "") }))
+            .filter((m) => m.moment && m.idea)
+        : fallback.meals,
+      tips:
+        Array.isArray(parsed.tips) && parsed.tips.length
+          ? parsed.tips.slice(0, 4).map(String)
+          : fallback.tips,
+    });
   });
