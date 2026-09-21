@@ -465,6 +465,49 @@ export function reconcileHabits(
   return { habits: next, changed };
 }
 
+/**
+ * Igualdad estructural entre dos listas de comidas del registro del día.
+ *
+ * `daily_logs.habits` es una única columna JSON con dos escritores de
+ * estrategias distintas: `patchTodayHabits` (relee la fila justo antes de
+ * escribir) y el guardado de la reconciliación de Hoy, que manda la lista
+ * entera que tenía en memoria. Antes de reescribir la columna con lo segundo
+ * hay que comprobar que la fila sigue siendo la que se reconcilió; si no, un
+ * cambio de plato hecho a la vez (que escribe `status`/`done`/`confirmedIdea`)
+ * se perdía debajo de una lista construida desde la caché vieja.
+ *
+ * Misma función que en la web (src/lib/plan-shared.ts).
+ *
+ * Compara el JSON tal y como vuelve de Postgres, donde una clave puesta a
+ * `undefined` sencillamente no existe: `{done:false}` y
+ * `{done:false, status:undefined}` son la misma comida.
+ */
+export function sameHabits(
+  a: readonly MealHabit[] | null | undefined,
+  b: readonly MealHabit[] | null | undefined,
+): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  return left.length === right.length && left.every((h, i) => sameJson(h, right[i]));
+}
+
+/** Igualdad estructural sobre valores JSON — ver `sameHabits`. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => sameJson(v, b[i]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = new Set(Object.keys(left).concat(Object.keys(right)));
+  for (const key of keys) {
+    if (!sameJson(left[key], right[key])) return false;
+  }
+  return true;
+}
+
 export type MealChange = {
   date: string;
   slot: MealSlot;

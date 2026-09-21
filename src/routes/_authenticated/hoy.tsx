@@ -41,6 +41,7 @@ import {
   fetchProfile,
   impulsoFrom,
   monthISO,
+  patchTodayHabits,
   saveProfile,
   todayISO,
   updateTodayLog,
@@ -72,6 +73,7 @@ import {
   offListNote,
   planForDate,
   reconcileHabits,
+  sameHabits,
   suggestedDish,
   type HouseholdPinContext,
   type MealChange,
@@ -597,13 +599,39 @@ function Hoy() {
   // Se pinta siempre lo reconciliado, aunque el guardado de abajo falle.
   const reconciled = reconcileHabits(today?.habits, todayMeals);
   const habits = reconciled.habits;
+  // Las comidas TAL Y COMO están guardadas, que es contra lo que se reconcilió.
+  // React Query reusa el objeto si la fila vuelve igual, así que su identidad
+  // sirve de disparador: cambia solo cuando el registro cambia de verdad.
+  const storedHabits = today?.habits;
+  // El plan y el registro del día se invalidan juntos tras un cambio de plato,
+  // pero no vuelven a la vez.
+  const settled = !todayQ.isFetching && !planQ.isFetching;
   useEffect(() => {
     // Solo se guarda si de verdad cambia algo (si no, se escribiría en bucle),
     // y solo el día de hoy: un día pasado es un hecho, no una preferencia.
     if (!today || !reconciled.changed) return;
-    save.mutate({ habits: reconciled.habits });
+    // Y solo con las dos consultas asentadas: la reconciliación compara
+    // `confirmedIdea` contra el plato que el plan tiene AHORA, así que con una
+    // a medio refrescar daría por caducada una confirmación que sí vale (y la
+    // borraría, que es justo lo que se está arreglando aquí).
+    if (!settled) return;
+    // `habits` es una única columna JSON y este camino manda la lista entera
+    // derivada de la caché, así que se escribe solo si la fila sigue siendo la
+    // que se reconcilió: si entre medias la ha tocado otro camino
+    // (`patchTodayHabits` de un cambio de plato, el lote del picoteo, la app
+    // móvil), se abandona en vez de pisarlo. Lo reconciliado se pinta igual, y
+    // el siguiente render lo reintenta ya con datos frescos.
+    void patchTodayHabits((stored) => (sameHabits(stored, storedHabits) ? reconciled.habits : null))
+      .then((next) => {
+        if (!next) return;
+        qc.invalidateQueries({ queryKey: ["today"] });
+        qc.invalidateQueries({ queryKey: ["logs"] });
+      })
+      // Sin aviso: es una reparación de fondo, no una acción de la persona, y
+      // lo reconciliado ya se está pintando aunque el guardado falle.
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today?.id, reconciled.changed]);
+  }, [today?.id, storedHabits, reconciled.changed, settled]);
   const doneCount = habits.filter((h) => h.done).length;
   // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
   // "comí distinto"), no el menú completo del día: así deshacer una comida

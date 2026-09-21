@@ -40,6 +40,7 @@ import {
   mirrorPinned,
   monthParts,
   reconcileHabits,
+  sameHabits,
   suggestedDish,
   parseMealSlotsLegacy,
   mergeFuturePlan,
@@ -1682,6 +1683,83 @@ describe("reconcileHabits", () => {
     ];
     const { habits } = reconcileHabits(stored, meals(["Cena", "Revuelto"]));
     expect(habits[0]).toBe(stored[0]);
+  });
+});
+
+describe("sameHabits", () => {
+  it("dos lecturas iguales de la misma fila son la misma fila", () => {
+    const stored = [
+      { label: "Comida", done: true, status: "distinto" as const, confirmedIdea: "Pizza" },
+      { label: "Cena", done: false, plannedIdea: "Crema" },
+    ];
+    expect(
+      sameHabits(
+        stored,
+        stored.map((h) => ({ ...h })),
+      ),
+    ).toBe(true);
+  });
+
+  it("una clave a undefined es lo mismo que no tenerla (así vuelve de Postgres)", () => {
+    // `use-meal-swap` limpia el ajuste anterior mandando `undefined`, y jsonb
+    // guarda la fila sin esas claves: no es un cambio de nadie.
+    expect(
+      sameHabits(
+        [{ label: "Cena", done: false }],
+        [{ label: "Cena", done: false, status: undefined, adjustmentChanges: undefined }],
+      ),
+    ).toBe(true);
+  });
+
+  it("detecta el registro que ha escrito un cambio de plato por detrás", () => {
+    // Es el caso que hacía perder la comida: la reconciliación había leído la
+    // fila sin `status`, y `setPlanMeal` + `patchTodayHabits` la dejaron con
+    // "comí otra cosa" antes de que la reconciliación escribiera.
+    const before = [{ label: "Comida", done: false, plannedIdea: "Lentejas" }];
+    const after = [
+      {
+        label: "Comida",
+        done: true,
+        status: "distinto" as const,
+        plannedIdea: "Lentejas",
+        confirmedIdea: "Pizza",
+      },
+    ];
+    expect(sameHabits(before, after)).toBe(false);
+  });
+
+  it("detecta una comida añadida, quitada o reordenada", () => {
+    const cena = { label: "Cena", done: false };
+    const comida = { label: "Comida", done: false };
+    expect(sameHabits([cena], [cena, comida])).toBe(false);
+    expect(sameHabits([cena, comida], [cena])).toBe(false);
+    expect(sameHabits([cena, comida], [comida, cena])).toBe(false);
+  });
+
+  it("compara también lo anidado (el ajuste que arrastra una comida)", () => {
+    const withChange = (after: string) => [
+      {
+        label: "Cena",
+        done: true,
+        adjustmentChanges: [
+          {
+            date: "2026-09-21",
+            slot: "cena" as const,
+            slotLabel: "Cena",
+            before: "Crema",
+            after,
+          },
+        ],
+      },
+    ];
+    expect(sameHabits(withChange("Pollo"), withChange("Pollo"))).toBe(true);
+    expect(sameHabits(withChange("Pollo"), withChange("Merluza"))).toBe(false);
+  });
+
+  it("una lista vacía y una ausente son lo mismo", () => {
+    expect(sameHabits(undefined, [])).toBe(true);
+    expect(sameHabits(null, undefined)).toBe(true);
+    expect(sameHabits(undefined, [{ label: "Cena", done: false }])).toBe(false);
   });
 });
 

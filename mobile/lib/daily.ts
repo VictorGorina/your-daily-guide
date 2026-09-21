@@ -262,11 +262,13 @@ export async function fetchTodayLog(): Promise<DailyLog | null> {
  * Cambia las comidas del registro de hoy releyéndolas de la base de datos justo
  * antes de escribir, en vez de mandar un array que el cliente tenía en memoria.
  * `habits` es una única columna JSON, así que cada guardado reescribe la lista
- * entera y dos operaciones lentas solapadas se pisaban entre sí. Misma función
- * que en la web (src/lib/daily.ts).
+ * entera y dos operaciones lentas solapadas se pisaban entre sí. `update`
+ * devuelve las comidas nuevas, o `null` para no escribir nada (lo usa el
+ * guardado de la reconciliación de Hoy cuando la fila ya no es la que
+ * reconcilió). Misma función que en la web (src/lib/daily.ts).
  */
 export async function patchTodayHabits(
-  update: (habits: MealHabit[]) => MealHabit[],
+  update: (habits: MealHabit[]) => MealHabit[] | null,
 ): Promise<MealHabit[] | null> {
   const { data, error } = await supabase
     .from("daily_logs")
@@ -276,6 +278,7 @@ export async function patchTodayHabits(
   if (error) throw error;
   if (!data) return null;
   const next = update(((data as { habits?: MealHabit[] }).habits ?? []) as MealHabit[]);
+  if (!next) return null;
   await updateTodayLog({ habits: next });
   return next;
 }

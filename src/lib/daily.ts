@@ -430,10 +430,13 @@ export async function fetchTodayLog(): Promise<DailyLog | null> {
  * primera y se perdiera el plato tachado. Releer aquí reduce la ventana de una
  * decena de segundos a un ida y vuelta.
  *
- * `update` recibe las comidas tal y como están guardadas y devuelve las nuevas.
+ * `update` recibe las comidas tal y como están guardadas y devuelve las nuevas,
+ * o `null` para no escribir nada. Ese `null` es lo que deja al guardado de la
+ * reconciliación de Hoy abandonar la escritura cuando la fila ya no es la que
+ * reconcilió, en vez de pisar lo que haya escrito otro camino.
  */
 export async function patchTodayHabits(
-  update: (habits: MealHabit[]) => MealHabit[],
+  update: (habits: MealHabit[]) => MealHabit[] | null,
 ): Promise<MealHabit[] | null> {
   const { data, error } = await supabase
     .from("daily_logs")
@@ -443,6 +446,7 @@ export async function patchTodayHabits(
   if (error) throw error;
   if (!data) return null;
   const next = update(((data as { habits?: MealHabit[] }).habits ?? []) as MealHabit[]);
+  if (!next) return null;
   await updateTodayLog({ habits: next });
   return next;
 }
