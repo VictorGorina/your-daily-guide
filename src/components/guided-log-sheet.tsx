@@ -14,6 +14,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { EXERCISE_ACTIVITIES as ACTIVITIES, EXERCISE_INTENSITY as INTENSITY } from "@/lib/exercise";
 
 type Mode = "actividad" | "exceso";
@@ -114,6 +115,12 @@ export function GuidedLogSheet({
       const desc = what.trim();
       if (desc.length < 3) {
         setError("Cuéntame en pocas palabras qué ha pasado.");
+        return;
+      }
+      // Esto se le manda al coach tal cual y acaba en `motivo`: mismo listón
+      // que un plato escrito a mano.
+      if (!isCleanFood(desc)) {
+        setError(BLOCKED_FOOD_MESSAGE);
         return;
       }
       let extra: number | null = null;

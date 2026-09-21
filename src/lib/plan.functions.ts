@@ -10,6 +10,7 @@ import {
   currencySymbol,
   PLAN_MODEL,
 } from "@/lib/ai-provider.server";
+import { assertCleanFood, BLOCKED_FOOD_MESSAGE } from "@/lib/content-guard";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import {
   describeServings,
@@ -923,6 +924,7 @@ export const setPantryExtra = createServerFn({ method: "POST" })
       .trim()
       .slice(0, 80);
     if (!name) throw new ValidationError("Falta el ingrediente");
+    assertCleanFood(name);
     const qty = String(input?.qty ?? "")
       .trim()
       .slice(0, 40);
@@ -2118,6 +2120,9 @@ async function resolveDish(
         "Corrige solo la ortografía de ese nombre de plato (acentos/tildes, mayúscula inicial, " +
         "erratas), sin cambiar el plato en sí ni añadir nada. Si ya está bien escrito, devuélvelo " +
         "igual.\n" +
+        "Dime también si eso es comida de verdad: cualquier plato, alimento o bebida vale, por " +
+        "raro, casero o poco saludable que sea. Solo NO es comida si es una broma, un insulto o " +
+        "algo que no se come.\n" +
         (names
           ? `Ingredientes disponibles (comprados y los que dice tener en casa): ${names}\n` +
             "Además, ¿qué ingredientes necesarios para ese plato NO están disponibles? " +
@@ -2125,13 +2130,22 @@ async function resolveDish(
             "Cuenta como cubierto todo ingrediente equivalente aunque el nombre no sea idéntico " +
             "(p. ej. 'pechuga de pollo' lo cubre 'pollo'; 'tomate cherry' lo cubre 'tomate').\n"
           : "") +
-        `Devuelve solo JSON: {"plato": "nombre del plato con la ortografía corregida"${
+        `Devuelve solo JSON: {"comida": true|false, "plato": "nombre del plato con la ortografía corregida"${
           names
             ? ', "fuera": [ingredientes que faltan, en minúsculas, máx. 5; lista vacía si no falta ninguno]'
             : ""
         }}`,
     });
-    const parsed = (parseJsonLoose(text) ?? {}) as { plato?: unknown; fuera?: unknown };
+    const parsed = (parseJsonLoose(text) ?? {}) as {
+      plato?: unknown;
+      fuera?: unknown;
+      comida?: unknown;
+    };
+    // Segunda red, después de `assertCleanFood`: la lista corta lo evidente sin
+    // gastar nada, y esto coge lo que una lista nunca cogerá (otros idiomas,
+    // eufemismos, "un plato de heces"). Solo con un `false` explícito: si el
+    // campo no llega, se deja pasar, como todo lo demás de esta función.
+    if (parsed.comida === false) throw new ValidationError(BLOCKED_FOOD_MESSAGE);
     const corrected = typeof parsed.plato === "string" ? parsed.plato.trim() : "";
     const off = (Array.isArray(parsed.fuera) ? parsed.fuera : [])
       .map((n) => String(n).trim().toLowerCase())
@@ -2139,6 +2153,9 @@ async function resolveDish(
       .slice(0, 5);
     return { dish: corrected && corrected.length <= 200 ? corrected : dish, off };
   } catch (error) {
+    // "Esto no es comida" es una decisión, no un fallo del modelo: tiene que
+    // salir fuera en vez de caer en el respaldo de "guárdalo tal cual".
+    if (error instanceof ValidationError) throw error;
     console.error("resolveDish", error);
     return { dish, off: [] };
   }
@@ -2165,6 +2182,9 @@ export const setPlanMeal = createServerFn({ method: "POST" })
         .trim()
         .slice(0, 200);
       if (!dish) throw new ValidationError("Falta el plato nuevo");
+      // Frontera de verdad: cubre a la vez la web, la app móvil (vía
+      // `/api/v1/plan/meal`) y la herramienta `cambiar_plato` del coach.
+      assertCleanFood(dish);
       const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
       if (input.date < today) {
         throw new ValidationError(
@@ -2336,6 +2356,9 @@ export const setChildMeal = createServerFn({ method: "POST" })
       const dish = String(input?.dish ?? "")
         .trim()
         .slice(0, 200);
+      // Vacío es legítimo aquí (quita el plato aparte y el niño vuelve a lo
+      // compartido); lo que no vale es que tenga contenido y sea una broma.
+      if (dish) assertCleanFood(dish);
       const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
       if (input.date < today) {
         throw new ValidationError(

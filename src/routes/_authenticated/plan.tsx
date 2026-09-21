@@ -43,6 +43,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import {
   fetchLogs,
   fetchLogsForMonth,
@@ -1014,9 +1015,17 @@ function PantryExtrasCard({
   };
 }) {
   const [name, setName] = useState("");
+  // Esta tarjeta no enseña el error de la mutación, así que sin este aviso un
+  // ingrediente rechazado por el servidor desaparecía sin decir nada.
+  const [error, setError] = useState<string | null>(null);
   const add = () => {
     const trimmed = name.trim();
     if (!trimmed || pantry.isPending) return;
+    if (!isCleanFood(trimmed)) {
+      setError(BLOCKED_FOOD_MESSAGE);
+      return;
+    }
+    setError(null);
     pantry.mutate({ name: trimmed });
     setName("");
   };
@@ -1033,7 +1042,10 @@ function PantryExtrasCard({
       <div className="mt-2.5 flex gap-1.5">
         <input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (error) setError(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") add();
           }}
@@ -1049,6 +1061,7 @@ function PantryExtrasCard({
           <Plus className="h-4 w-4" />
         </button>
       </div>
+      {error ? <p className="mt-2 text-[11.5px] text-destructive">{error}</p> : null}
       {extras.length ? (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {extras.map((e) => (

@@ -1,3 +1,4 @@
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
 import { X } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
@@ -11,6 +12,8 @@ import { Sheet } from "./ui/sheet";
 /** Respuesta de `POST /api/v1/snacks/estimate` (ver `estimateSnack` en la web). */
 type SnackEstimate = {
   resolved: boolean;
+  /** Lo descrito no es comida: se rechaza, no se ofrece ponerlo a mano. */
+  notFood: boolean;
   macros: MacroEstimate | null;
   lowConfidence: boolean;
   ingredients: { name: string; grams: number }[];
@@ -168,10 +171,20 @@ export function SnackSheet({
       setError("Cuéntame qué has picado.");
       return;
     }
+    if (!isCleanFood(text.trim())) {
+      setError(BLOCKED_FOOD_MESSAGE);
+      return;
+    }
     setBusy("estimate");
     setError(null);
     try {
       const res = await apiPost<SnackEstimate>("snacks/estimate", { text: text.trim() });
+      // No es comida: aquí NO se ofrece ponerlo a mano (ese respaldo era la
+      // forma de colar una broma saltándose el cálculo).
+      if (res.notFood) {
+        setError(BLOCKED_FOOD_MESSAGE);
+        return;
+      }
       setEstimate(res);
       // Sin cifra fiable se pide a mano en vez de inventarla.
       setKcalInput(res.resolved ? null : "");

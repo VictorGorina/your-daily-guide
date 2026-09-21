@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertCleanFood } from "@/lib/content-guard";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import type { MacroEstimate } from "@/lib/guide.functions";
 import { compensationNeed } from "@/lib/nutrition/compensation";
@@ -145,6 +146,9 @@ const cleanText = (raw: unknown) => {
     .replace(/\s+/g, " ")
     .trim();
   if (text.length < SNACK_TEXT_MIN) throw new ValidationError("Cuéntame qué has picado.");
+  // Un solo sitio para las dos operaciones: `estimateSnack` y `logSnack` pasan
+  // las dos por aquí, así que no se puede saltar el cálculo y guardar a mano.
+  assertCleanFood(text);
   return text.slice(0, SNACK_TEXT_MAX);
 };
 
@@ -155,6 +159,12 @@ const cleanText = (raw: unknown) => {
 export type SnackEstimate = {
   /** Hay cifra en la que confiar. Si no, la hoja pide las kcal a mano. */
   resolved: boolean;
+  /**
+   * Lo descrito no es comida. Distinto de `resolved: false`: ahí la hoja ofrece
+   * poner las kcal a mano, y ese respaldo era justo la forma de colar una broma
+   * saltándose el cálculo. Con esto la hoja rechaza en vez de ofrecerlo.
+   */
+  notFood: boolean;
   macros: MacroEstimate | null;
   /** Parte de lo descrito no se reconoció: conviene revisar la cifra. */
   lowConfidence: boolean;
@@ -189,9 +199,12 @@ export const estimateSnack = createServerFn({ method: "POST" })
     });
     // Un refresco sin azúcar da 0 kcal de verdad: lo que decide es si se
     // entendió lo descrito, no que la cifra sea positiva.
-    const resolved = b.source === "model" && b.ingredients.length > 0 && b.quality >= MIN_QUALITY;
+    const notFood = !b.isFood;
+    const resolved =
+      !notFood && b.source === "model" && b.ingredients.length > 0 && b.quality >= MIN_QUALITY;
     return {
       resolved,
+      notFood,
       macros: resolved ? b.perServing : null,
       lowConfidence: resolved && b.quality < SURE_QUALITY,
       ingredients: b.ingredients.map((i) => ({ name: i.name, grams: i.grams })),

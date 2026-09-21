@@ -1,9 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { convertToModelMessages, streamText, tool, type UIMessage } from "ai";
+import {
+  convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  streamText,
+  tool,
+  type UIMessage,
+} from "ai";
 import { z } from "zod";
 
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
 import { supabaseFromRequest, unauthorized } from "@/lib/api-auth.server";
+import { offTopicMessage, offTopicReason } from "@/lib/coach-scope";
 import { describeSharedSlots } from "@/lib/household-shared";
 import { householdContext, type HouseholdContext } from "@/lib/household.server";
 import { addDays, weekdayName } from "@/lib/plan-shared";
@@ -135,6 +143,39 @@ const actionTools = {
   }),
 } as const;
 
+/** El texto del último mensaje de la persona, que es sobre el que se decide. */
+function lastUserText(messages: UIMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message?.role !== "user") continue;
+    return (message.parts ?? [])
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join(" ")
+      .trim();
+  }
+  return "";
+}
+
+/**
+ * Contesta el mensaje fijo de "solo me dedico a la alimentación" como un turno
+ * normal del asistente, sin pasar por el modelo. Va como stream de UI-message
+ * (y no como un error HTTP) para que el chat lo pinte igual que cualquier otra
+ * respuesta: quien lo lee no tiene por qué saber que aquí no ha habido IA.
+ */
+function offTopicResponse(messages: UIMessage[], locale: string | null | undefined): Response {
+  const text = offTopicMessage(locale);
+  const stream = createUIMessageStream<UIMessage>({
+    originalMessages: messages,
+    execute: ({ writer }) => {
+      const id = crypto.randomUUID();
+      writer.write({ type: "text-start", id });
+      writer.write({ type: "text-delta", id, delta: text });
+      writer.write({ type: "text-end", id });
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
@@ -157,6 +198,17 @@ export const Route = createFileRoute("/api/chat")({
         };
         if (!Array.isArray(body.messages)) {
           return new Response("Faltan mensajes", { status: 400 });
+        }
+
+        // Fuera de alcance: se corta ANTES de la clave, de la cuota y del
+        // modelo, así que un intento no cuesta ni cupo ni dinero. La regla de
+        // verdad sobre qué es tema del coach vive en `coachSystemPrompt`; esto
+        // solo adelanta el caso más común (ver `coach-scope.ts`).
+        const locale = (body.profile as { locale?: string | null } | null)?.locale ?? null;
+        const offTopic = offTopicReason(lastUserText(body.messages));
+        if (offTopic) {
+          console.warn("chat off-topic", { userId, reason: offTopic });
+          return offTopicResponse(body.messages, locale);
         }
         const key = process.env.OPENROUTER_API_KEY;
         if (!key) return new Response("Falta OPENROUTER_API_KEY", { status: 500 });

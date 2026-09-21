@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertCleanFood } from "@/lib/content-guard";
 import {
   cleanHomeSchedule,
   cleanSharedSlots,
@@ -11,6 +12,14 @@ import {
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { ValidationError } from "@/lib/validation-error";
 import type { MealStatus } from "@/lib/daily";
+
+/** El "comí otra cosa" que se propaga a la mesa: opcional, pero si viene tiene que ser comida. */
+function cleanSharedActual(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  assertCleanFood(value);
+  return value;
+}
 
 /**
  * Guarda la configuración única de comidas compartidas del hogar
@@ -100,7 +109,8 @@ export const propagateLogToFamily = createServerFn({ method: "POST" })
         date: input.date,
         habitLabel: input.habitLabel.trim(),
         status: input.status as MealStatus,
-        actual: input.actual?.trim() || undefined,
+        // Lo que de verdad comió se propaga al resto del hogar: lo ven otros.
+        actual: cleanSharedActual(input.actual),
         today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : undefined,
       };
     },

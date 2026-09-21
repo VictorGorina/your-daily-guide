@@ -1,3 +1,4 @@
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
@@ -39,6 +40,10 @@ export function MealSwapSheet({
     const desc = what.trim();
     if (desc.length < 2) {
       setError("Escribe qué has comido.");
+      return;
+    }
+    if (!isCleanFood(desc)) {
+      setError(BLOCKED_FOOD_MESSAGE);
       return;
     }
     onSwap(desc);

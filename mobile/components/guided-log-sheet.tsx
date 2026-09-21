@@ -1,3 +1,4 @@
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
 import { X } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -99,6 +100,10 @@ export function GuidedLogSheet({
       const desc = what.trim();
       if (desc.length < 3) {
         setError("Cuéntame en pocas palabras qué ha pasado.");
+        return;
+      }
+      if (!isCleanFood(desc)) {
+        setError(BLOCKED_FOOD_MESSAGE);
         return;
       }
       let extra: number | null = null;

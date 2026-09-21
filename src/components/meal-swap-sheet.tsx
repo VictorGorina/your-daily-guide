@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { DictateButton } from "@/components/dictate-button";
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -51,6 +52,13 @@ export function MealSwapSheet({
     const desc = what.trim();
     if (desc.length < 2) {
       setError("Escribe qué has comido.");
+      return;
+    }
+    // Aviso inmediato, sin esperar al servidor. El rechazo de verdad lo hace el
+    // `.validator()` de `setPlanMeal`, que es por donde pasan web, móvil y el
+    // coach; esto solo evita la ida y vuelta.
+    if (!isCleanFood(desc)) {
+      setError(BLOCKED_FOOD_MESSAGE);
       return;
     }
     onSwap(desc);

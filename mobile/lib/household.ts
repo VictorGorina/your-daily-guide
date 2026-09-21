@@ -1,3 +1,4 @@
+import { BLOCKED_NAME_MESSAGE, isCleanFood } from "./content-guard";
 import { apiPost } from "./api";
 import {
   cleanFeedingStage,
@@ -16,6 +17,16 @@ import { supabase } from "./supabase";
  * sincronización del plan compartido, porque toca el plan del otro miembro con la
  * clave de servicio. Copia, no código compartido (ver AGENTS.md).
  */
+
+/**
+ * Nombres de la mesa y de los peques: los ve todo el hogar, así que no valen de
+ * broma. Copia del guard de la web (`src/lib/household.ts`): avisa, pero no es
+ * una frontera — esto escribe directo a Supabase, sin server function de por
+ * medio.
+ */
+function assertCleanName(name: string | undefined): void {
+  if (name && !isCleanFood(name)) throw new Error(BLOCKED_NAME_MESSAGE);
+}
 
 export type HouseholdGoalType = "comportamiento" | "presupuesto";
 
@@ -241,6 +252,7 @@ export async function addAdultSlot(
   householdId: string,
   slot: { display_name: string; uses_app: boolean; portion?: number },
 ) {
+  assertCleanName(slot.display_name);
   const { error } = await supabase.from("household_members").insert({
     household_id: householdId,
     user_id: null,
@@ -257,6 +269,7 @@ export async function updateMember(
   id: string,
   patch: Partial<Pick<HouseholdMember, "display_name" | "uses_app" | "portion">>,
 ) {
+  assertCleanName(patch.display_name);
   const { error } = await supabase
     .from("household_members")
     .update(patch as never)
@@ -333,6 +346,7 @@ export async function addChild(
   householdId: string,
   child: Omit<HouseholdChild, "id" | "home_schedule">,
 ) {
+  assertCleanName(child.name);
   const { error } = await supabase
     .from("household_children")
     .insert({ household_id: householdId, ...child } as never);
@@ -341,6 +355,7 @@ export async function addChild(
 
 /** Edita a un peque: nombre, edad, alergias, o su ración/apetito. */
 export async function updateChild(id: string, patch: Partial<Omit<HouseholdChild, "id">>) {
+  assertCleanName(patch.name);
   const { error } = await supabase
     .from("household_children")
     .update(patch as never)

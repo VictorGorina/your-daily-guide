@@ -15,6 +15,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { MacroEstimate } from "@/lib/guide.functions";
 import { scaleSnackMacros, SNACK_KCAL_MAX, SNACK_TEXT_MIN, type DaySnacks } from "@/lib/snacks";
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { estimateSnack, logSnack, type SnackEstimate } from "@/lib/snacks.functions";
 
 /** Atajos: la etiqueta corta del chip y la frase que rellena, con cantidad. */
@@ -144,10 +145,21 @@ export function SnackSheet({
       setError("Cuéntame qué has picado.");
       return;
     }
+    if (!isCleanFood(text.trim())) {
+      setError(BLOCKED_FOOD_MESSAGE);
+      return;
+    }
     setBusy("estimate");
     setError(null);
     try {
       const res = await estimateFn({ data: { text: text.trim() } });
+      // Que no sea comida no es "no he podido calcularlo": ahí NO se ofrece
+      // ponerlo a mano, porque ese respaldo era la forma de colar una broma
+      // saltándose el cálculo.
+      if (res.notFood) {
+        setError(BLOCKED_FOOD_MESSAGE);
+        return;
+      }
       setEstimate(res);
       // Sin cifra fiable se pide a mano en vez de inventarla.
       setKcalInput(res.resolved ? null : "");

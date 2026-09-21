@@ -37,6 +37,13 @@ export type DishBreakdown = {
   price: number;
   /** 0-1: proporción de gramos identificada con confianza alta. */
   quality: number;
+  /**
+   * ¿Esto es comida? `false` SOLO cuando el modelo lo dice explícitamente (una
+   * broma, algo que no se come). Se deja en `true` ante cualquier duda o fallo:
+   * negarle a alguien apuntar lo que ha comido es peor que colar una broma, que
+   * además ya filtra `content-guard` antes de llegar aquí.
+   */
+  isFood: boolean;
   source: "model" | "unresolved";
 };
 
@@ -48,6 +55,7 @@ const empty = (dish: string, servings: number): DishBreakdown => ({
   perServing: { ...ZERO },
   price: 0,
   quality: 0,
+  isFood: true,
   source: "unresolved",
 });
 
@@ -178,8 +186,11 @@ export async function decomposeDishes(
         `Descompón cada plato en sus ingredientes, con la cantidad en GRAMOS para ${servings} ` +
         `ración(es) EN TOTAL. Platos:\n${pending.map((d, i) => `${i + 1}. ${d}`).join("\n")}\n\n` +
         'Devuelve SOLO JSON: {"platos": [{"plato": string (igual que te lo doy), ' +
-        '"coccion": string, "ingredientes": [{"key": string|null, "name": string, ' +
-        '"gramos": number, "wasRaw": boolean}]}]}\n' +
+        '"comida": boolean, "coccion": string, "ingredientes": [{"key": string|null, ' +
+        '"name": string, "gramos": number, "wasRaw": boolean}]}]}\n' +
+        '- "comida": true para cualquier plato, alimento o bebida, por raro, casero o poco ' +
+        "saludable que sea. false SOLO si es una broma, un insulto o algo que no se come; en ese " +
+        "caso deja la lista de ingredientes vacía.\n" +
         `- "key": una de esta lista SOLO si encaja de verdad; si no, null:\n${FOOD_KEYS.join(", ")}\n` +
         '- "name": ingrediente en español, singular, sin marca (p. ej. "pechuga de pollo")\n' +
         `- "gramos": gramos TOTALES para las ${servings} raciones, tal como se come ` +
@@ -194,10 +205,17 @@ export async function decomposeDishes(
     const parsed = parseJsonLoose(text) as { platos?: unknown };
     const rows = Array.isArray(parsed?.platos) ? parsed.platos : [];
     const byNorm = new Map<string, ResolvedIngredient[]>();
+    const notFood = new Set<string>();
     for (const row of rows) {
-      const r = (row ?? {}) as { plato?: unknown; coccion?: unknown; ingredientes?: unknown };
+      const r = (row ?? {}) as {
+        plato?: unknown;
+        coccion?: unknown;
+        ingredientes?: unknown;
+        comida?: unknown;
+      };
       const label = String(r.plato ?? "").trim();
       if (!label) continue;
+      if (r.comida === false) notFood.add(normName(label));
       const rawList = Array.isArray(r.ingredientes) ? r.ingredientes : [];
       const ingredients = rawList
         .slice(0, 30)
@@ -219,7 +237,9 @@ export async function decomposeDishes(
     for (const dish of pending) {
       const ingredients = byNorm.get(normName(dish)) ?? [];
       if (!ingredients.length) {
-        out.set(dish, empty(dish, servings));
+        // Un "esto no es comida" llega sin ingredientes: se distingue de un
+        // plato que el modelo simplemente no supo descomponer.
+        out.set(dish, { ...empty(dish, servings), isFood: !notFood.has(normName(dish)) });
         continue;
       }
       const macros = macrosOf(ingredients);
@@ -231,6 +251,7 @@ export async function decomposeDishes(
         perServing: perServingOf(macros, servings),
         price: priceOf(ingredients),
         quality: resolutionQuality(ingredients),
+        isFood: !notFood.has(normName(dish)),
         source: "model",
       };
       memo.set(memoKey(dish, servings), breakdown);

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { BLOCKED_NAME_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { currentUserId } from "@/lib/auth-headers";
 import { cleanSharedSlots, type SharedSlots } from "@/lib/household-shared";
 import { resolveDeviceTimeZone, zonedTodayISO } from "@/lib/zoned-date";
@@ -332,6 +333,10 @@ export async function fetchProfile(): Promise<Profile | null> {
 export async function saveProfile(patch: Partial<Profile>) {
   const userId = await currentUserId();
   if (!userId) throw new Error("Sin sesión");
+  // El nombre sale en el saludo de todas las pantallas y en el prompt del coach.
+  if (patch.display_name && !isCleanFood(patch.display_name)) {
+    throw new Error(BLOCKED_NAME_MESSAGE);
+  }
   // `meal_slots` (slots elegidos para el plan, issue 04) manda sobre el texto
   // libre `meals_to_plan` cuando los dos están presentes. Si un cambio toca
   // solo el texto —lo hacen el coach (`actualizar_perfil`) y la pantalla "Mis

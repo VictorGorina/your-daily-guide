@@ -313,3 +313,84 @@ nombra cuántas comidas quedan por registrar. Mismo tono, aplicado también en e
 (`NightlyReviewSheet`) y en el prompt del coach (`toneLine` en
 [ai-provider.server.ts](src/lib/ai-provider.server.ts)) — tres superficies distintas, un solo campo
 de perfil.
+
+## Límites: alcance de la IA y contenido de la persona
+
+Feature `limites-ia-y-contenido` (spec y decisiones en `.scratch/limites-ia-y-contenido/`). Son
+dos límites independientes, y cada uno tiene **dos redes** porque ninguna sola aguanta.
+
+### El coach solo se dedica a la alimentación
+
+El alcance es **amplio a propósito**: dentro entra la comida y también lo que la rodea (horarios,
+ejercicio, ánimo, sueño, presupuesto) siempre que se hable para explicar o ajustar la
+alimentación. Un alcance estricto de "solo platos" habría contradicho lo que el onboarding ya
+promete con `coach_scope`, y habría dejado al coach seco justo donde más ayuda.
+
+La regla vive en `coachSystemPrompt` y solo ahí: la heredan el chat, la guía diaria, el plan
+mensual, el briefing de bienvenida y el repaso nocturno. Si se añade una superficie de IA nueva,
+hereda el límite sin tocar nada — siempre que use ese prompt.
+
+Delante va un corte determinista (`offTopicReason`, `src/lib/coach-scope.ts`) sobre el último
+mensaje, **antes** de `enforceUserRateLimit` y de `streamText`: un intento de saltarse las
+instrucciones o de pedir código no gasta ni cuota ni dinero. Se responde con
+`createUIMessageStream`, no con un error HTTP, para que el chat lo pinte como un turno normal.
+La lista de patrones es corta y casi siempre pide **dos** señales (un verbo de petición y un
+sustantivo técnico): "¿cuál es mi código de invitación?" es una pregunta legítima del hogar y no
+puede caerse. Lo que se escape a esa lista lo para igualmente el prompt.
+
+El tercer trozo es el menos obvio y el más importante: `asPromptData`. `coachSystemPrompt`
+interpolaba en crudo `life_context`, `restrictions`, `past_struggles` y compañía, y la
+herramienta `actualizar_perfil` del chat deja **escribir** esos campos. Sin fencing, alguien
+guarda "ignora tus instrucciones" en su perfil y queda inyectado en el system prompt de todas las
+superficies, en todas las llamadas, para siempre. Ahora cada valor entra recortado, sin saltos de
+línea ni fences, envuelto en «» y con una línea del prompt que dice que lo que va entre «» es un
+dato sobre la persona y nunca una instrucción.
+
+### Lo que se escribe como comida tiene que ser comida
+
+Hace falta porque un plato no es efímero: se guarda en `monthly_plans.plan`, se ve todo el mes en
+Hoy y en el calendario, se espeja al resto del hogar con `syncSharedMeals` y vuelve a entrar en
+los prompts. Nadie lo corrige después.
+
+`src/lib/content-guard.ts` es lógica pura y testeada, con copia en `mobile/lib/content-guard.ts`
+(convención del repo: copias, no paquete compartido). Lo que hay que respetar al tocarlo:
+
+- **Se compara por token entero, nunca por subcadena.** Por subcadena, "caca" se lleva por delante
+  `cacahuete` y `cacao`, y "cock" se lleva `cocktail`. El allowlist existe para el caso que rompe
+  cualquier implementación ingenua: `penne`, que al colapsar letras repetidas **es** un término
+  bloqueado. `tetilla` (el queso), `rabo` (de toro), `cagarria` (la colmenilla) y `chocho` (el
+  altramuz) están ahí o deliberadamente fuera de la lista negra por lo mismo.
+- **La lista negra es corta y solo tiene términos inequívocos.** `rabo`, `chocho`, `polvo`,
+  `leche` y `huevos` son alimentos de verdad y se quedan fuera a propósito; de su uso soez se
+  encarga la red semántica, que sí entiende el contexto.
+- **Ante la duda, se deja pasar.** Un falso positivo le impide a alguien apuntar lo que de verdad
+  ha comido, y la precisión de kcal/macros es la base de la app.
+
+El enforcement va en los `.validator()` — `setPlanMeal`, `setChildMeal`, `setPantryExtra`, el
+`cleanText` compartido por `estimateSnack`/`logSnack`, y el `actual` de `propagateLogToFamily`,
+que lo ven los demás del hogar. Por `apiPost`, eso cubre la web, la app móvil y las herramientas
+`cambiar_plato`/`cambiar_plato_nino` del coach con un solo trozo de código. El chequeo del cliente
+es solo para no esperar a la ida y vuelta.
+
+La segunda red no cuesta llamadas nuevas. `resolveDish` ya gastaba una llamada por cada plato
+escrito a mano (ortografía + qué falta de la compra); ahora esa misma llamada devuelve también
+`"comida": true|false`, y `decomposeDishes` devuelve `isFood` por plato. Solo un `false`
+explícito rechaza: si el campo no llega o el modelo falla, se deja pasar, igual que ya hacía la
+corrección ortográfica. Ojo con un detalle fácil de romper: en `resolveDish` ese rechazo es un
+`ValidationError` que hay que **re-lanzar** desde el `catch`, o el respaldo "guárdalo tal cual" se
+lo come.
+
+Caso aparte, el del picoteo: `estimateSnack` devolvía `resolved: false` para algo que no entendía
+y la hoja ofrecía **poner las kcal a mano**. Ese respaldo era justo la forma de colar una broma
+saltándose el cálculo, así que `SnackEstimate` tiene ahora un `notFood` distinto de `resolved`, y
+con él la hoja rechaza en vez de ofrecer el modo manual.
+
+### Nombres: aviso, no frontera
+
+`assertCleanName` (en `src/lib/household.ts` y su copia móvil, más `saveProfile` en `daily.ts`)
+cubre el nombre de un miembro de la mesa, el de un peque y `profiles.display_name` — los ve todo
+el hogar. Pero esas escrituras van **del navegador directo a Supabase**, sin server function de
+por medio, así que ahí no hay ningún validador donde enganchar: el guard avisa y se puede
+esquivar con una llamada REST. Cerrarlo de verdad pide un trigger en Postgres o mover esas
+escrituras a server functions (ticket `01-trigger-nombres.md`). El deporte no necesita nada:
+`EXERCISE_ACTIVITIES` es una lista cerrada.

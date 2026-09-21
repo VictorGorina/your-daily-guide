@@ -1,4 +1,5 @@
 import { currentUserId } from "@/lib/auth-headers";
+import { BLOCKED_NAME_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { supabase } from "@/integrations/supabase/client";
 import {
   cleanFeedingStage,
@@ -8,6 +9,20 @@ import {
   type HomeSchedule,
   type SharedSlots,
 } from "@/lib/household-shared";
+
+/**
+ * Nombres de la mesa y de los peques: los ve todo el hogar, así que no valen de
+ * broma. Va aquí y no en cada pantalla porque estas funciones son el único sitio
+ * por el que pasan todas las altas y ediciones.
+ *
+ * Ojo: esto escribe del navegador directo a Supabase, sin server function de por
+ * medio, así que este guard avisa pero NO es una frontera — quien quiera puede
+ * saltárselo llamando a la API. Cerrarlo de verdad pide un trigger en Postgres
+ * (ver la sección de límites en AGENTS.md).
+ */
+function assertCleanName(name: string | undefined): void {
+  if (name && !isCleanFood(name)) throw new Error(BLOCKED_NAME_MESSAGE);
+}
 
 export type HouseholdGoalType = "comportamiento" | "presupuesto";
 
@@ -229,6 +244,7 @@ export async function addAdultSlot(
   householdId: string,
   slot: { display_name: string; uses_app: boolean; portion?: number },
 ) {
+  assertCleanName(slot.display_name);
   const { error } = await supabase.from("household_members").insert({
     household_id: householdId,
     user_id: null,
@@ -245,6 +261,7 @@ export async function updateMember(
   id: string,
   patch: Partial<Pick<HouseholdMember, "display_name" | "uses_app" | "portion">>,
 ) {
+  assertCleanName(patch.display_name);
   const { error } = await supabase
     .from("household_members")
     .update(patch as never)
@@ -309,6 +326,7 @@ export async function addChild(
   householdId: string,
   child: Omit<HouseholdChild, "id" | "home_schedule">,
 ) {
+  assertCleanName(child.name);
   const { error } = await supabase
     .from("household_children")
     .insert({ household_id: householdId, ...child } as never);
@@ -316,6 +334,7 @@ export async function addChild(
 }
 
 export async function updateChild(id: string, patch: Partial<Omit<HouseholdChild, "id">>) {
+  assertCleanName(patch.name);
   const { error } = await supabase
     .from("household_children")
     .update(patch as never)

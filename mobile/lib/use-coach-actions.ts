@@ -1,3 +1,4 @@
+import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "./content-guard";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
@@ -61,6 +62,9 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       if (toolName === "anadir_habito") {
         const label = String(input.label ?? "").trim();
         if (!label) return "Falta el nombre del hábito";
+        // El hábito solo lo escribe el coach, pero su texto sale de lo que le
+        // dicte la persona y se queda en `daily_logs.habits`.
+        if (!isCleanFood(label)) return BLOCKED_FOOD_MESSAGE;
         await updateTodayLog({ habits: [...habits, { label, done: false }] });
         return `Hábito añadido: ${label}`;
       }
