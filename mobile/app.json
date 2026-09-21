@@ -16,7 +16,9 @@
       "bundleIdentifier": "com.victorgorina.dailyguide",
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSpeechRecognitionUsageDescription": "Peppers transcribe lo que dices para el dictado por voz.",
+        "NSMicrophoneUsageDescription": "Peppers usa el micrófono para el dictado por voz."
       },
       "entitlements": {
         "com.apple.security.application-groups": ["group.com.victorgorina.dailyguide"]
@@ -55,6 +57,27 @@
       ],
       "expo-localization"
     ],
-    "scheme": "dailyguide"
+    "scheme": "dailyguide",
+    "extra": {
+      "router": {},
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "bundleIdentifier": "com.victorgorina.dailyguide.widget",
+                  "targetName": "DailyGuideWidget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": ["group.com.victorgorina.dailyguide"]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "f489050e-adb6-4c82-a685-d29a52f21dc8"
+      }
+    }
   }
 }
