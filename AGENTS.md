@@ -160,13 +160,16 @@ Botón "Añadir picoteo" justo encima de "Registrar deporte", en web y móvil. S
 - **Columna propia `daily_logs.snacks`** (`DaySnacks` en `src/lib/snacks.ts`, copia en móvil), no
   dentro de `habits`: `reconcileHabits` reconstruye `habits` desde el plan en cada carga y lo
   borraría, y así un picoteo no cuenta en el semáforo. Solo la escriben `logSnack`/`removeSnack`/
-  `settleSnacks` en servidor, con escritura optimista sobre `updated_at` (se relee y reintenta si se
+  `settleDay` en servidor, con escritura optimista sobre `updated_at` (se relee y reintenta si se
   cruza otra escritura de la fila). Suma en la barra de macros de Hoy y en `DayDetailBody`
   (sección "Picoteo").
-- **Compensación decidida en código.** `compensatedKcal` es un libro de cuentas: lo pendiente es
-  `Σ kcal − compensatedKcal`. Tras 10 s de calma (`snack-settle.ts`, misma forma que
-  `plan-recalc.ts`: pendiente persistido, flush al ocultar, relanzado al abrir Hoy) el cliente llama
-  a `POST /api/v1/snacks/settle` solo con `{today}`; el servidor relee y decide con
+- **Compensación decidida en código, y con el día entero** (ver `balance-del-dia` más abajo; esta
+  sección describe la mecánica, que sigue igual, pero la decisión ya NO es solo del picoteo).
+  `compensatedKcal` es un libro de cuentas: lo pendiente es `Σ kcal − compensatedKcal`. Tras 10 s de
+  calma (`day-settle.ts`, misma forma que `plan-recalc.ts`: pendiente persistido, flush al ocultar,
+  relanzado al abrir Hoy) el cliente llama a `POST /api/v1/day/settle` solo con `{today}`; el
+  servidor relee, **suma el picoteo con los cambios de plato y el deporte** (`dayBalance`) y decide
+  con
   `compensationNeed` (`src/lib/nutrition/compensation.ts`, la tabla aprobada de
   `hoy-semanas-editables`: perder +200/−400, mantener ±200, ganar +400/−200; embarazo o lactancia
   nunca recorta). Si toca, **reserva** el pendiente antes de llamar a la IA (dos asentamientos a la
@@ -180,12 +183,48 @@ Botón "Añadir picoteo" justo encima de "Registrar deporte", en web y móvil. S
   genuino) — `compensationNeed({ reversing: true })` compara con el mismo umbral que hizo falta para
   aplicar la compensación (`+200`/`+400`), para que sumar y quitar el mismo picoteo sea simétrico.
   Los motivos para no reajustar (`no-days`, `shared-only`, `no-meals`, `no-plan`, `pregnancy`) se
-  enseñan en la tarjeta (`snackOutcomeNote`).
+  enseñan en la tarjeta "Balance de hoy" (`dayOutcomeNote`), una sola vez para el día.
 
 El asentamiento no cambia nunca la compra, hoy ni el pasado. `composeDayForUser` conserva el array
 `kids` si el conjunto no cambia, para que congelar las compartidas no reescriba días pasados solo
-por reordenarlo. "Registrar deporte" y el registro guiado del chat siguen yendo por el coach
-(`ajustar_plan_mensual`).
+por reordenarlo. El registro guiado del chat sigue yendo por el coach (`ajustar_plan_mensual`).
+
+## Balance del día (`balance-del-dia`)
+
+Un solo asentamiento por ráfaga en vez de tres, y una tarjeta en Hoy que enseña el efecto. Spec y
+decisiones en `.scratch/balance-del-dia/spec.md`; el porqué largo, con los dos fallos que arregla,
+está en la cabecera de `src/lib/day-balance.ts`.
+
+En corto: cambiar un plato, picotear y hacer deporte tenían cada uno su libro de cuentas, su
+debounce de 10 s, su llamada a `compensationNeed` y su llamada a `reflowMeals` — los tres sobre la
+MISMA ventana de 6 días, sin hablarse. Por separado cada función era correcta; el fallo era el
+átomo. **La energía se suma en el cuerpo, no por origen.** Picotear +250 y quemar −300 (un día a
+−50, o sea nada) lanzaba dos recolocaciones opuestas; un cambio de +120 con un picoteo de +110
+(+230, por encima del umbral) no movía nada. Ahora `settleDay` suma el día (`dayBalance`), decide
+una vez y llama una vez.
+
+Cosas que un cambio suele romper sin querer:
+
+- **No devuelvas la decisión a cada origen.** Los tres libros (`habits[].swapKcalDelta`,
+  `snacks.compensatedKcal`, `exercise.compensatedKcal`) se quedan porque son la procedencia — el
+  desglose que la tarjeta enseña — y porque garantizan no compensar dos veces. Pero quien decide es
+  `settleDay` con la suma.
+- **`net` (lo que se enseña) y `pending` (lo que decide) son distintos** en cuanto algo ya se
+  compensó, igual que `snackTotals` frente a `pendingSnackKcal`. Y un plato deshecho deja un
+  `swapKcalDelta` contrario que cuenta para decidir pero NO para enseñar (`changedMealsKcal` filtra
+  por `status === "distinto"`): si contara, deshacer un plato de +300 enseñaría "−300".
+- **El resultado es del día, no del origen.** Vive una sola vez en `daily_logs.adjustment`. No
+  vuelvas a escribirlo en `snacks.adjustment`, `exercise.adjustment` ni
+  `habits[].adjustmentChanges` — esos tres se siguen LEYENDO para días anteriores a la feature
+  (`dayMovedChanges`), pero ya no se escriben. El badge "i" por comida se quitó porque mentía: el
+  servidor escribía la misma lista en todas las comidas del lote.
+- **La cadencia es corta a propósito.** Se descartó un cierre nocturno, que sería más exacto, porque
+  la persona tiene que ver el efecto mientras sigue en la app. Varias pasadas en un día no se pisan
+  porque `mergeDayAdjustment` las acumula.
+- **La columna `adjustment` puede no existir todavía** (migración de panel): `readDayRow` detecta el
+  42703 una vez y sigue sin ella. Se compensa igual; solo no se puede enseñar lo movido.
+- `/api/v1/snacks/settle` y `/api/v1/exercise/settle` se conservan como alias de `day/settle` para
+  las builds móviles ya instaladas.
 
 **Editar el picoteo de un día pasado (2026-09-19) es solo corregir el historial.** La sección
 "Picoteo" de `DayDetailBody` (calendario de Plan y tira de Hoy) deja de ser de solo lectura: una X
@@ -193,6 +232,7 @@ por entrada y un botón "Añadir picoteo" abren el mismo `SnackSheet` con la fec
 (`logSnack`/`removeSnack` ya aceptaban cualquier fecha; el cambio es de UI). A propósito **no**
 llama a `settleSnacks`: el asentamiento recoloca días posteriores a HOY, y un día pasado no tiene
 ninguno que tenga sentido tocar — igual que corregir una comida con `updateLogByDate` no mueve kcal.
+(El asentamiento se llama ahora `settleDay`; el criterio no cambia.)
 `SnackSheet` gana un prop `pastDay` que cambia el copy para no prometer un reajuste que no llega.
 
 ## Familia — hogar compartido

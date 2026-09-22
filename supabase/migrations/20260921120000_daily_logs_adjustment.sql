@@ -1,0 +1,14 @@
+-- Ajuste del día (feature `balance-del-dia`): qué platos de los próximos días
+-- se movieron para absorber el desvío de hoy, y por qué motivo no se movió
+-- nada si no se movió. Forma: ver `DayAdjustmentRecord` en src/lib/day-balance.ts.
+--
+-- Antes esto vivía TRIPLICADO: una copia en `daily_logs.snacks.adjustment`,
+-- otra en `daily_logs.exercise.adjustment` y otra por comida en
+-- `daily_logs.habits[].adjustmentChanges`. Las tres describían el mismo
+-- reajuste y cada una se lo atribuía a un origen distinto, cuando el desvío que
+-- lo provoca es el del día entero. Aquí hay una sola.
+--
+-- No hacen falta policies nuevas: la fila ya la cubren "insert recent own log"
+-- (20260906120000) y "update own logs" (20260815130000). Las copias antiguas se
+-- quedan donde están y se siguen leyendo: un día ya cerrado no se reescribe.
+ALTER TABLE public.daily_logs ADD COLUMN IF NOT EXISTS adjustment jsonb;

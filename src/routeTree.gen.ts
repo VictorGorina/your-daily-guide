@@ -31,6 +31,7 @@ import { Route as ApiV1GuideRouteImport } from './routes/api/v1/guide'
 import { Route as ApiV1AccountDeleteRouteImport } from './routes/api/v1/account/delete'
 import { Route as ApiV1AuthConfirmRouteImport } from './routes/api/v1/auth/confirm'
 import { Route as ApiV1AuthResetRouteImport } from './routes/api/v1/auth/reset'
+import { Route as ApiV1DaySettleRouteImport } from './routes/api/v1/day/settle'
 import { Route as ApiV1ExerciseLogRouteImport } from './routes/api/v1/exercise/log'
 import { Route as ApiV1ExerciseRemoveRouteImport } from './routes/api/v1/exercise/remove'
 import { Route as ApiV1ExerciseSettleRouteImport } from './routes/api/v1/exercise/settle'
@@ -169,6 +170,11 @@ const ApiV1AuthConfirmRoute = ApiV1AuthConfirmRouteImport.update({
 const ApiV1AuthResetRoute = ApiV1AuthResetRouteImport.update({
   id: '/api/v1/auth/reset',
   path: '/api/v1/auth/reset',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1DaySettleRoute = ApiV1DaySettleRouteImport.update({
+  id: '/api/v1/day/settle',
+  path: '/api/v1/day/settle',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1ExerciseLogRoute = ApiV1ExerciseLogRouteImport.update({
@@ -348,6 +354,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/day/settle': typeof ApiV1DaySettleRoute
   '/api/v1/exercise/log': typeof ApiV1ExerciseLogRoute
   '/api/v1/exercise/remove': typeof ApiV1ExerciseRemoveRoute
   '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
@@ -401,6 +408,7 @@ export interface FileRoutesByTo {
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/day/settle': typeof ApiV1DaySettleRoute
   '/api/v1/exercise/log': typeof ApiV1ExerciseLogRoute
   '/api/v1/exercise/remove': typeof ApiV1ExerciseRemoveRoute
   '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
@@ -456,6 +464,7 @@ export interface FileRoutesById {
   '/api/v1/account/delete': typeof ApiV1AccountDeleteRoute
   '/api/v1/auth/confirm': typeof ApiV1AuthConfirmRoute
   '/api/v1/auth/reset': typeof ApiV1AuthResetRoute
+  '/api/v1/day/settle': typeof ApiV1DaySettleRoute
   '/api/v1/exercise/log': typeof ApiV1ExerciseLogRoute
   '/api/v1/exercise/remove': typeof ApiV1ExerciseRemoveRoute
   '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
@@ -511,6 +520,7 @@ export interface FileRouteTypes {
     | '/api/v1/account/delete'
     | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
+    | '/api/v1/day/settle'
     | '/api/v1/exercise/log'
     | '/api/v1/exercise/remove'
     | '/api/v1/exercise/settle'
@@ -564,6 +574,7 @@ export interface FileRouteTypes {
     | '/api/v1/account/delete'
     | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
+    | '/api/v1/day/settle'
     | '/api/v1/exercise/log'
     | '/api/v1/exercise/remove'
     | '/api/v1/exercise/settle'
@@ -618,6 +629,7 @@ export interface FileRouteTypes {
     | '/api/v1/account/delete'
     | '/api/v1/auth/confirm'
     | '/api/v1/auth/reset'
+    | '/api/v1/day/settle'
     | '/api/v1/exercise/log'
     | '/api/v1/exercise/remove'
     | '/api/v1/exercise/settle'
@@ -665,6 +677,7 @@ export interface RootRouteChildren {
   ApiV1AccountDeleteRoute: typeof ApiV1AccountDeleteRoute
   ApiV1AuthConfirmRoute: typeof ApiV1AuthConfirmRoute
   ApiV1AuthResetRoute: typeof ApiV1AuthResetRoute
+  ApiV1DaySettleRoute: typeof ApiV1DaySettleRoute
   ApiV1ExerciseLogRoute: typeof ApiV1ExerciseLogRoute
   ApiV1ExerciseRemoveRoute: typeof ApiV1ExerciseRemoveRoute
   ApiV1ExerciseSettleRoute: typeof ApiV1ExerciseSettleRoute
@@ -851,6 +864,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/auth/reset'
       fullPath: '/api/v1/auth/reset'
       preLoaderRoute: typeof ApiV1AuthResetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/day/settle': {
+      id: '/api/v1/day/settle'
+      path: '/api/v1/day/settle'
+      fullPath: '/api/v1/day/settle'
+      preLoaderRoute: typeof ApiV1DaySettleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/exercise/log': {
@@ -1106,6 +1126,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1AccountDeleteRoute: ApiV1AccountDeleteRoute,
   ApiV1AuthConfirmRoute: ApiV1AuthConfirmRoute,
   ApiV1AuthResetRoute: ApiV1AuthResetRoute,
+  ApiV1DaySettleRoute: ApiV1DaySettleRoute,
   ApiV1ExerciseLogRoute: ApiV1ExerciseLogRoute,
   ApiV1ExerciseRemoveRoute: ApiV1ExerciseRemoveRoute,
   ApiV1ExerciseSettleRoute: ApiV1ExerciseSettleRoute,

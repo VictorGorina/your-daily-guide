@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { AdjustmentInfoSheet } from "@/components/adjustment-info-sheet";
 import { BottomNav } from "@/components/bottom-nav";
 import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
+import { DayBalanceCard } from "@/components/day-balance-card";
 import { DayDetailBody, type DayDetailHousehold } from "@/components/day-detail-sheet";
 import { DishRecipe } from "@/components/dish-recipe";
 import { ExerciseCard } from "@/components/exercise-card";
@@ -81,10 +82,10 @@ import {
   type MonthlyPlan,
 } from "@/lib/plan-shared";
 import { fillChildMeals, generateMonthlyPlan } from "@/lib/plan.functions";
-import { scheduleExerciseSettle, useExerciseSettle } from "@/lib/exercise-settle";
+import { cleanDayAdjustment, dayBalance } from "@/lib/day-balance";
+import { scheduleDaySettle, useDaySettle } from "@/lib/day-settle";
 import { cleanDayExercise } from "@/lib/exercise";
 import { removeExercise as removeExerciseFn } from "@/lib/exercise.functions";
-import { scheduleSnackSettle, useSnackSettle } from "@/lib/snack-settle";
 import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
 import { useMealSwap } from "@/lib/use-meal-swap";
@@ -210,18 +211,17 @@ function Hoy() {
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
-  const [exerciseInfoOpen, setExerciseInfoOpen] = useState(false);
   const [removingExercise, setRemovingExercise] = useState<string | null>(null);
   const [snackOpen, setSnackOpen] = useState(false);
-  const [snackInfoOpen, setSnackInfoOpen] = useState(false);
   const [removingSnack, setRemovingSnack] = useState<string | null>(null);
+  /** Hoja con TODO lo que el día ha movido en los próximos días. */
+  const [balanceInfoOpen, setBalanceInfoOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
   const autoPlanTriedRef = useRef(false);
   const [autoPlanThrottled, setAutoPlanThrottled] = useState(false);
   // ---- Cambio de plato directo (sin pasar por el chat del coach) ----
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
-  const [infoIndex, setInfoIndex] = useState<number | null>(null);
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -649,19 +649,23 @@ function Hoy() {
   // gasto, no algo que se coma.
   const exercise = cleanDayExercise(today?.exercise);
 
-  // El reajuste de días futuros por el deporte va en un lote aparte (10 s de
-  // calma), igual que el picoteo pero reponiendo energía en vez de quitarla.
-  const removeExerciseCall = useServerFn(removeExerciseFn);
-  const exerciseSettle = useExerciseSettle(today0, () => {
+  // Picoteo, deporte y cambios de plato comparten UN solo asentamiento por
+  // ráfaga (`day-settle.ts`): el desvío que decide si se recolocan los próximos
+  // días es el del día entero, no el de cada origen por su cuenta. Ver
+  // `day-balance.ts`.
+  const daySettle = useDaySettle(today0, () => {
     qc.invalidateQueries({ queryKey: ["today"] });
     qc.invalidateQueries({ queryKey: ["logs"] });
     qc.invalidateQueries({ queryKey: ["plan"] });
   });
-  const afterExerciseChange = () => {
+  const afterDayChange = () => {
     qc.invalidateQueries({ queryKey: ["today"] });
     qc.invalidateQueries({ queryKey: ["logs"] });
-    scheduleExerciseSettle(today0);
+    scheduleDaySettle(today0);
   };
+
+  const removeExerciseCall = useServerFn(removeExerciseFn);
+  const afterExerciseChange = afterDayChange;
   const removeExercise = async (id: string) => {
     setRemovingExercise(id);
     try {
@@ -674,19 +678,8 @@ function Hoy() {
     }
   };
 
-  // El reajuste de días futuros por el picoteo va en un lote aparte (10 s de
-  // calma); al terminar puede haber cambiado el plan y el registro del día.
   const removeSnackCall = useServerFn(removeSnackFn);
-  const snackSettle = useSnackSettle(today0, () => {
-    qc.invalidateQueries({ queryKey: ["today"] });
-    qc.invalidateQueries({ queryKey: ["logs"] });
-    qc.invalidateQueries({ queryKey: ["plan"] });
-  });
-  const afterSnackChange = () => {
-    qc.invalidateQueries({ queryKey: ["today"] });
-    qc.invalidateQueries({ queryKey: ["logs"] });
-    scheduleSnackSettle(today0);
-  };
+  const afterSnackChange = afterDayChange;
   const removeSnack = async (id: string) => {
     setRemovingSnack(id);
     try {
@@ -754,11 +747,16 @@ function Hoy() {
     });
   };
 
-  // Datos para el swap sheet y el info sheet
+  // Datos para el swap sheet
   const swapMeal =
     swapIndex != null ? todayMeals.find((m) => m.moment === habits[swapIndex]?.label) : undefined;
-  const infoHabit = infoIndex != null ? habits[infoIndex] : undefined;
-  const infoChanges: MealChange[] = infoHabit?.adjustmentChanges ?? [];
+
+  // El desvío del día, sumando los tres orígenes, y lo que ya ha movido. Es lo
+  // que pinta `DayBalanceCard` — el desglose sale de datos que ya estaban, no
+  // de estado nuevo (ver `day-balance.ts`).
+  const balance = dayBalance(habits, snacks, exercise);
+  const adjustmentRecord = cleanDayAdjustment(today?.adjustment);
+  const balanceChanges: MealChange[] = adjustmentRecord?.adjustment?.changes ?? [];
 
   // La "siguiente comida" es la primera, en orden cronológico, que aún no
   // tiene un estado explícito. Importante: se filtra por `status`, no por
@@ -968,11 +966,13 @@ function Hoy() {
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {/* Badge "i" / spinner de ajuste: el spinner sale mientras
-                          esta comida espera al lote (los cambios seguidos se
-                          agrupan en un solo reajuste), y el badge cuando ya hay
-                          resultado. Es por comida, no global: cambiar una no
-                          bloquea las demás. */}
+                      {/* Spinner mientras esta comida espera al lote del día.
+                          Es por comida, no global: cambiar una no bloquea las
+                          demás. El RESULTADO del ajuste ya no se enseña aquí —
+                          lo movido lo decide el día entero, así que atribuirlo
+                          a una comida era mentira: el servidor escribía la
+                          misma lista en todas las del lote. Vive en
+                          `DayBalanceCard`. */}
                       {mealSwap.isAdjusting(h.label) ? (
                         <span
                           className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10"
@@ -980,16 +980,6 @@ function Hoy() {
                         >
                           <Loader2 className="h-[14px] w-[14px] animate-spin text-primary" />
                         </span>
-                      ) : h.adjustmentChanges ? (
-                        <button
-                          type="button"
-                          title="Ver ajuste del plan"
-                          aria-label={`${h.label}: ver ajuste del plan`}
-                          onClick={() => setInfoIndex(i)}
-                          className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10 text-primary transition-transform active:scale-95"
-                        >
-                          <Info className="h-[14px] w-[14px]" />
-                        </button>
                       ) : null}
 
                       {h.status == null ? (
@@ -1115,25 +1105,19 @@ function Hoy() {
         )}
       </section>
 
-      {/* Picoteo de hoy: lo apuntado y qué ha pasado con el plan. */}
+      {/* Picoteo de hoy: solo lo apuntado. El efecto sobre el plan lo cuenta
+          `DayBalanceCard`, una vez y para el día entero. */}
       <SnackCard
         snacks={snacks}
-        settling={snackSettle.pending || snackSettle.running}
-        failed={snackSettle.failed}
         removingId={removingSnack}
         onRemove={(id) => void removeSnack(id)}
-        onShowAdjustment={() => setSnackInfoOpen(true)}
       />
 
-      {/* Deporte de hoy: mismo formato que el picoteo, lo apuntado y qué ha
-          pasado con el plan. */}
+      {/* Deporte de hoy: mismo formato que el picoteo. */}
       <ExerciseCard
         exercise={exercise}
-        settling={exerciseSettle.pending || exerciseSettle.running}
-        failed={exerciseSettle.failed}
         removingId={removingExercise}
         onRemove={(id) => void removeExercise(id)}
-        onShowAdjustment={() => setExerciseInfoOpen(true)}
       />
 
       {/* Añadir picoteo: justo encima de "Registrar deporte", como en móvil. */}
@@ -1156,6 +1140,17 @@ function Hoy() {
         <Activity className="h-4 w-4" aria-hidden />
         Registrar deporte
       </button>
+
+      {/* Balance del día: la suma de los tres orígenes y lo que ha movido en
+          los próximos días. Va DEBAJO de los dos botones que la alimentan, así
+          que se lee como el resumen de todo lo de arriba. */}
+      <DayBalanceCard
+        balance={balance}
+        record={adjustmentRecord}
+        settling={daySettle.pending || daySettle.running}
+        failed={daySettle.failed}
+        onShowAdjustment={() => setBalanceInfoOpen(true)}
+      />
 
       <section className="animate-rise mt-6">
         <WeekPager
@@ -1234,20 +1229,12 @@ function Hoy() {
         }}
       />
 
-      {/* Info del ajuste del plan tras un swap: lista antes → después. */}
+      {/* Todo lo que el día ha movido en los próximos días: antes → después. */}
       <AdjustmentInfoSheet
-        open={infoIndex != null}
-        onOpenChange={(v) => {
-          if (!v) setInfoIndex(null);
-        }}
-        changes={infoChanges}
-        kcalDelta={infoHabit?.adjustmentKcal ?? null}
-        dish={
-          infoIndex != null
-            ? (todayMeals.find((m) => m.moment === habits[infoIndex]?.label)?.idea ??
-              "lo que comiste")
-            : "lo que comiste"
-        }
+        open={balanceInfoOpen}
+        onOpenChange={setBalanceInfoOpen}
+        changes={balanceChanges}
+        kcalDelta={balance.net}
       />
 
       <SnackSheet
@@ -1257,30 +1244,11 @@ function Hoy() {
         onSaved={afterSnackChange}
       />
 
-      {/* Qué ha movido el picoteo en los próximos días. */}
-      <AdjustmentInfoSheet
-        open={snackInfoOpen}
-        onOpenChange={setSnackInfoOpen}
-        changes={snacks?.adjustment?.changes ?? []}
-        kcalDelta={snacks?.adjustment?.kcal ?? null}
-        dish="tu picoteo de hoy"
-      />
-
       <ExerciseSheet
         open={activityOpen}
         onOpenChange={setActivityOpen}
         today={today0}
         onSaved={afterExerciseChange}
-      />
-
-      {/* Qué ha repuesto el deporte en los próximos días. */}
-      <AdjustmentInfoSheet
-        open={exerciseInfoOpen}
-        onOpenChange={setExerciseInfoOpen}
-        changes={exercise?.adjustment?.changes ?? []}
-        kcalDelta={exercise?.adjustment?.kcal ?? null}
-        dish="tu deporte de hoy"
-        verb="hacer"
       />
 
       <NightlyReviewSheet

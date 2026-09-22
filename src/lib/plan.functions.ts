@@ -1573,7 +1573,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   });
 
 // ---------------------------------------------------------------------------
-// compensateDishChanges — núcleo de compensación de un cambio de plato
+// Compensación de un cambio de plato de un día FUTURO
 // ---------------------------------------------------------------------------
 
 /**
@@ -1639,18 +1639,6 @@ async function patchHabits(
   throw new Error("No hemos podido guardar el cambio de plato. Inténtalo de nuevo.");
 }
 
-/** "Cena: has comido X en vez de Y" para las comidas de este lote. */
-function dishChangeNote(
-  changes: readonly { label: string; dish: string; plannedDish: string }[],
-): string {
-  const lines = changes.map(
-    (c) => `${c.label}: ha comido "${c.dish}" en vez de "${c.plannedDish || "(plato del plan)"}"`,
-  );
-  return `Cambios de hoy — ${lines.join("; ")}. Recoloca los días futuros para compensar.`;
-}
-
-const DISH_CHANGE_MAX = 10;
-
 /** `goal` que pide `compensationNeed`, a partir del perfil — mismo criterio que
  * usa el prompt del coach (peso objetivo si existe, si no el legacy `goal_type`). */
 function resolveCompensationGoal(profile: Record<string, unknown>) {
@@ -1663,170 +1651,6 @@ function resolveCompensationGoal(profile: Record<string, unknown>) {
       ? normalizeGoalType(String(profile.goal_type))
       : null;
 }
-
-/**
- * Decide EN CÓDIGO (memoria `manual-dish-change-compensation`: "el modelo
- * nunca decide si compensar") si un cambio de plato de Hoy pide recolocar
- * días futuros, y en ese caso lo hace. Lo llama `use-meal-swap.ts` tras cada
- * lote de cambios, en vez de `adjustMonthlyPlan` (que sigue sirviendo tal
- * cual al ajuste explícito que pide el coach — `ajustar_plan_mensual` nunca
- * debe quedar silenciado por un umbral de código).
- *
- * El desvío de CADA comida cambiada se guarda en `MealHabit.swapKcalDelta`
- * (columna `habits`, ya JSON sin esquema fijo — ver ticket 08 de
- * `hoy-semanas-editables`) y lo pendiente de todo el día (no solo de este
- * lote) lo decide `pendingSwapKcal`: dos cambios pequeños en lotes separados
- * se suman hasta pasar el umbral de `compensationNeed` aunque ninguno lo
- * cruce por separado. Sin plato de por medio que compense (una fruta por
- * otra) no se gasta ninguna llamada a la IA.
- */
-export const compensateDishChanges = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator(
-    (input: {
-      today?: string;
-      changes: {
-        label: string;
-        slot: string;
-        dish: string;
-        plannedDish?: string;
-        kcalDelta: number;
-      }[];
-    }) => {
-      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
-      const changes = (Array.isArray(input?.changes) ? input.changes : [])
-        .slice(0, DISH_CHANGE_MAX)
-        .map((c) => ({
-          label: String(c?.label ?? "").slice(0, 60),
-          slot: String(c?.slot ?? "").slice(0, 20),
-          dish: String(c?.dish ?? "").slice(0, 200),
-          plannedDish: String(c?.plannedDish ?? "").slice(0, 200),
-          kcalDelta: Number.isFinite(Number(c?.kcalDelta)) ? Math.round(Number(c.kcalDelta)) : 0,
-        }))
-        .filter((c) => c.label);
-      if (!changes.length) throw new ValidationError("No hay cambios que compensar");
-      return { today, changes };
-    },
-  )
-  .handler(
-    async ({
-      data,
-      context,
-    }): Promise<{
-      adjusted: boolean;
-      reason?: string;
-      changes?: MealChange[];
-      summary?: string;
-      kcalDelta?: number;
-    }> => {
-      const supabase = context.supabase as never as SupabaseClient<never, never, never>;
-      const { userId } = context;
-      const { today, changes } = data;
-      const month = today.slice(0, 7);
-
-      // 1. Funde el desvío de este lote en `habits` (sobrescribe el de la
-      // misma comida si ya la habían cambiado antes hoy).
-      const merged = await patchHabits(supabase, userId, today, (habits) => {
-        const byLabel = new Map(changes.map((c) => [c.label, c]));
-        return habits.map((h) => {
-          const c = byLabel.get(h.label);
-          return c ? { ...h, swapKcalDelta: c.kcalDelta, swapCompensated: false } : h;
-        });
-      });
-      if (!merged) return { adjusted: false, reason: "no-plan" };
-
-      // 2. Lo pendiente de TODO el día, no solo de este lote.
-      const pending = pendingSwapKcal(merged);
-      if (!pending) return { adjusted: false, reason: "nothing" };
-
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error("Falta la clave de IA");
-
-      const { data: profileRow } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
-      const profile = (profileRow ?? {}) as Record<string, unknown>;
-      const goal = resolveCompensationGoal(profile);
-
-      const decision = compensationNeed({
-        deltaKcal: pending,
-        deltaProtein: null,
-        goal,
-        pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
-      });
-      if (!decision.compensate) return { adjusted: false, reason: decision.reason };
-
-      const { householdContext } = await import("@/lib/household.server");
-      const home = await householdContext(supabase, userId);
-      const window = compensationWindow({
-        today,
-        sharedSlots: home.sharedSlots,
-        selectedSlots: effectiveMealSlots(
-          profile as { meal_slots?: unknown; meals_to_plan?: string | null },
-        ),
-        soloAdult: home.members.length <= 1,
-      });
-      if (window.reason) return { adjusted: false, reason: window.reason };
-
-      const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
-      await enforceUserRateLimit(userId, "plan-adjust");
-
-      // 3. Reserva: relee y marca compensadas todas las filas aún
-      // pendientes ANTES de llamar a la IA, para que un asentamiento
-      // simultáneo no compense lo mismo dos veces.
-      let reservedLabels: string[] = [];
-      const reserved = await patchHabits(supabase, userId, today, (habits) => {
-        reservedLabels = habits
-          .filter((h) => h.swapKcalDelta != null && !h.swapCompensated)
-          .map((h) => h.label);
-        return habits.map((h) =>
-          reservedLabels.includes(h.label) ? { ...h, swapCompensated: true } : h,
-        );
-      });
-      if (!reserved || !reservedLabels.length) return { adjusted: false, reason: "nothing" };
-
-      try {
-        const { plan, before, summary } = await reflowMeals({
-          supabase,
-          userId,
-          key,
-          month,
-          today,
-          note: dishChangeNote(changes),
-          kcalDelta: decision.kcalDelta,
-          window: window.dates,
-          soloOnly: true,
-        });
-        const futureChanges = diffFutureMeals(before, plan, today);
-        // Un desvío que pide compensar pero no mueve ningún plato no está
-        // compensado de verdad: se trata como intento fallido (se devuelve
-        // la reserva abajo) y el siguiente lote lo reintentará.
-        if (!futureChanges.length) throw new Error("El reajuste no ha cambiado ningún plato");
-        await patchHabits(supabase, userId, today, (habits) =>
-          habits.map((h) =>
-            reservedLabels.includes(h.label)
-              ? {
-                  ...h,
-                  adjustmentChanges: futureChanges,
-                  adjustmentSummary: summary,
-                  adjustmentKcal: decision.kcalDelta,
-                }
-              : h,
-          ),
-        );
-        return { adjusted: true, changes: futureChanges, summary, kcalDelta: decision.kcalDelta };
-      } catch (error) {
-        await patchHabits(supabase, userId, today, (habits) =>
-          habits.map((h) =>
-            reservedLabels.includes(h.label) ? { ...h, swapCompensated: false } : h,
-          ),
-        ).catch((releaseError) => console.error("compensateDishChanges: release", releaseError));
-        throw error;
-      }
-    },
-  );
 
 /**
  * Compensación de un cambio de plato de un día FUTURO (ticket 10 de

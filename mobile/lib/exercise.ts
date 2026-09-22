@@ -161,23 +161,3 @@ export function withoutExercise(exercise: DayExercise | null | undefined, id: st
   const base = exercise ?? EMPTY_EXERCISE;
   return { ...base, entries: base.entries.filter((e) => e.id !== id) };
 }
-
-/** Frase para Hoy cuando el último asentamiento no ha movido el plan por un
- * motivo que conviene explicar. `null` si no hay nada que decir (por debajo
- * del umbral el deporte solo suma: no hace falta avisar). */
-export function exerciseOutcomeNote(outcome: ExerciseOutcome | null | undefined): string | null {
-  switch (outcome) {
-    case "no-days":
-      return "No quedan días este mes para reponerlo.";
-    case "shared-only":
-      return "Tus comidas de estos días son de la casa: no las cambio por tu deporte.";
-    case "no-meals":
-      return "No planificas comidas ni cenas en las que reponerlo.";
-    case "no-plan":
-      return "Aún no tienes plan este mes: queda apuntado.";
-    case "pregnancy":
-      return "Queda apuntado. Con embarazo o lactancia no recorto los próximos días.";
-    default:
-      return null;
-  }
-}

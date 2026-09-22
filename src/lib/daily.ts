@@ -300,6 +300,13 @@ export type DailyLog = {
   snacks?: import("@/lib/snacks").DaySnacks | null;
   /** Deporte del día. Ver `DayExercise` y `cleanDayExercise`. */
   exercise?: import("@/lib/exercise").DayExercise | null;
+  /**
+   * Qué movió en los próximos días el desvío de ESTE día, y por qué no se movió
+   * nada si no se movió (`balance-del-dia`). Uno por día, no uno por origen:
+   * ver `DayAdjustmentRecord` en day-balance.ts. Opcional porque la columna es
+   * posterior a los registros ya guardados.
+   */
+  adjustment?: import("@/lib/day-balance").DayAdjustmentRecord | null;
 };
 
 export type ChatMessage = {

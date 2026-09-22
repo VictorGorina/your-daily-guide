@@ -10,44 +10,47 @@ const weekdayShort = (date: string) => {
 };
 
 /**
- * Qué cambió en el plan futuro tras un cambio de plato. Se abre desde el badge
- * "i" de la comida en Hoy. Copia nativa de `src/components/adjustment-info-sheet.tsx`.
+ * Todo lo que el día ha movido en los próximos días. Se abre desde "Balance de
+ * hoy" (`day-balance-card.tsx`), que ya enseña los dos primeros platos en
+ * línea: esto es el resto.
+ *
+ * Antes había tres instancias de esta hoja —una por el cambio de plato, otra
+ * por el picoteo y otra por el deporte—, cada una afirmando que el reajuste era
+ * suyo. Como el desvío que lo provoca es el del día entero, las tres enseñaban
+ * lo mismo con tres atribuciones distintas (`balance-del-dia`). Por eso ya no
+ * recibe ni `dish` ni `verb`: el sujeto es el día. Copia nativa de
+ * `src/components/adjustment-info-sheet.tsx`.
  */
 export function AdjustmentInfoSheet({
   open,
   onOpenChange,
   changes,
-  dish,
   kcalDelta,
-  verb = "comer",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   changes: MealChange[];
-  dish: string;
-  /** Desvío estimado del día frente a lo que preveía el plan, si se pudo calcular. */
+  /** Desvío del día frente a lo que preveía el plan. */
   kcalDelta?: number | null;
-  /** "Tras {verb} {dish}...": otros orígenes del desvío (p.ej. el deporte) no son algo que se come. */
-  verb?: string;
 }) {
-  // Redondeo en decenas: es una estimación de la IA, no una cifra exacta.
   const rounded =
-    typeof kcalDelta === "number" && Math.abs(kcalDelta) >= 50
-      ? `${kcalDelta > 0 ? "+" : "−"}${Math.round(Math.abs(kcalDelta) / 10) * 10} kcal`
+    typeof kcalDelta === "number" && kcalDelta !== 0
+      ? `${kcalDelta > 0 ? "+" : "−"}${Math.abs(kcalDelta)} kcal`
       : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="Ajuste del plan">
       <View className="gap-3 px-4 pb-8">
         <Text className="text-sm text-muted-foreground">
-          Tras {verb} <Text className="font-medium text-foreground">{dish}</Text>
           {rounded ? (
             <Text>
-              , hoy llevas <Text className="font-medium text-foreground">{rounded}</Text> frente a
-              lo que preveía el plan
+              Hoy llevas <Text className="font-medium text-foreground">{rounded}</Text> frente a lo
+              que preveía el plan
             </Text>
-          ) : null}
-          {changes.length ? ". Se han recolocado estos platos futuros:" : "."}
+          ) : (
+            <Text>Tu día frente a lo que preveía el plan</Text>
+          )}
+          {changes.length ? ". Se han recolocado estos platos:" : "."}
         </Text>
 
         {changes.length === 0 ? (

@@ -13,11 +13,11 @@ import {
   type MonthlyPlanRow,
   type Profile,
 } from "@/lib/daily";
+import { settleDay } from "@/lib/day-settle.functions";
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { perMealKcalDeltas } from "@/lib/macros";
 import {
   adjustMonthlyPlan,
-  compensateDishChanges,
   compensateFutureDishChange,
   goalImpact,
   setChildMeal,
@@ -48,7 +48,11 @@ export function useCoachActions(
   const changeMeal = useServerFn(setPlanMeal);
   const changeChildMeal = useServerFn(setChildMeal);
   const checkGoal = useServerFn(goalImpact);
-  const compensate = useServerFn(compensateDishChanges);
+  // Un cambio de plato de HOY pedido al coach va por el MISMO asentamiento que
+  // el de la pestaña Hoy: la decisión de recolocar es del día entero, no de ese
+  // plato (ver `day-balance.ts`). Si esto volviera a `compensateDishChanges`,
+  // esta puerta decidiría por origen otra vez.
+  const compensate = useServerFn(settleDay);
   const compensateFuture = useServerFn(compensateFutureDishChange);
   const date = todayISO();
 
@@ -185,7 +189,7 @@ export function useCoachActions(
                     ],
                   },
                 });
-                if (result.adjusted) {
+                if (result.outcome === "adjusted") {
                   adjustedNote = ` He ajustado ${result.changes?.length ?? 0} comida(s) de los próximos días para compensarlo.`;
                 }
               } catch (err) {

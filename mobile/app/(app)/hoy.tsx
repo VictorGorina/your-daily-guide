@@ -24,6 +24,7 @@ import { BottomNav } from "../../components/bottom-nav";
 import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { DayDetailBody, type DayDetailHousehold } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
+import { DayBalanceCard } from "../../components/day-balance-card";
 import { ExerciseCard } from "../../components/exercise-card";
 import { ExerciseSheet } from "../../components/exercise-sheet";
 import { DishCategoryIcon } from "../../components/food-category-bg";
@@ -82,9 +83,9 @@ import {
   type ShoppingList,
 } from "../../lib/plan-shared";
 import { quoteOfTheDay } from "../../lib/quotes";
-import { scheduleExerciseSettle, useExerciseSettle } from "../../lib/exercise-settle";
+import { cleanDayAdjustment, dayBalance } from "../../lib/day-balance";
+import { scheduleDaySettle, useDaySettle } from "../../lib/day-settle";
 import { cleanDayExercise } from "../../lib/exercise";
-import { scheduleSnackSettle, useSnackSettle } from "../../lib/snack-settle";
 import { cleanDaySnacks, snackTotals } from "../../lib/snacks";
 import { useMealSwap } from "../../lib/use-meal-swap";
 import { addDaysISO, monthsOfWeek, weekDates, weekStartOf } from "../../lib/week-nav";
@@ -186,12 +187,11 @@ export default function Hoy() {
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
-  const [infoIndex, setInfoIndex] = useState<number | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
-  const [exerciseInfoOpen, setExerciseInfoOpen] = useState(false);
+  /** Hoja con TODO lo que el día ha movido en los próximos días. */
+  const [balanceInfoOpen, setBalanceInfoOpen] = useState(false);
   const [removingExercise, setRemovingExercise] = useState<string | null>(null);
   const [snackOpen, setSnackOpen] = useState(false);
-  const [snackInfoOpen, setSnackInfoOpen] = useState(false);
   const [removingSnack, setRemovingSnack] = useState<string | null>(null);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
@@ -593,18 +593,22 @@ export default function Hoy() {
   const exercise = cleanDayExercise(today?.exercise);
   const quote = quoteOfTheDay();
 
-  // El reajuste de días futuros por el deporte va en un lote aparte (10 s de
-  // calma), igual que el picoteo pero reponiendo energía en vez de quitarla.
-  const exerciseSettle = useExerciseSettle(today0, () => {
+  // Picoteo, deporte y cambios de plato comparten UN solo asentamiento por
+  // ráfaga (`day-settle.ts`): el desvío que decide si se recolocan los próximos
+  // días es el del día entero, no el de cada origen por su cuenta. Ver
+  // `day-balance.ts`.
+  const daySettle = useDaySettle(today0, () => {
     qc.invalidateQueries({ queryKey: ["today"] });
     qc.invalidateQueries({ queryKey: ["logs"] });
     qc.invalidateQueries({ queryKey: ["plan"] });
   });
-  const afterExerciseChange = () => {
+  const afterDayChange = () => {
     qc.invalidateQueries({ queryKey: ["today"] });
     qc.invalidateQueries({ queryKey: ["logs"] });
-    scheduleExerciseSettle(today0);
+    scheduleDaySettle(today0);
   };
+
+  const afterExerciseChange = afterDayChange;
   const removeExercise = async (id: string) => {
     setRemovingExercise(id);
     try {
@@ -617,18 +621,7 @@ export default function Hoy() {
     }
   };
 
-  // El reajuste de días futuros por el picoteo va en un lote aparte (10 s de
-  // calma); al terminar puede haber cambiado el plan y el registro del día.
-  const snackSettle = useSnackSettle(today0, () => {
-    qc.invalidateQueries({ queryKey: ["today"] });
-    qc.invalidateQueries({ queryKey: ["logs"] });
-    qc.invalidateQueries({ queryKey: ["plan"] });
-  });
-  const afterSnackChange = () => {
-    qc.invalidateQueries({ queryKey: ["today"] });
-    qc.invalidateQueries({ queryKey: ["logs"] });
-    scheduleSnackSettle(today0);
-  };
+  const afterSnackChange = afterDayChange;
   const removeSnack = async (id: string) => {
     setRemovingSnack(id);
     try {
@@ -684,10 +677,16 @@ export default function Hoy() {
     });
   };
 
-  // Datos para el sheet de cambio y el de información del ajuste.
+  // Datos para el sheet de cambio.
   const swapMeal =
     swapIndex != null ? todayMeals.find((m) => m.moment === habits[swapIndex]?.label) : undefined;
-  const infoHabit = infoIndex != null ? habits[infoIndex] : undefined;
+
+  // El desvío del día, sumando los tres orígenes, y lo que ya ha movido. Es lo
+  // que pinta `DayBalanceCard` — el desglose sale de datos que ya estaban, no
+  // de estado nuevo (ver `day-balance.ts`).
+  const balance = dayBalance(habits, snacks, exercise);
+  const adjustmentRecord = cleanDayAdjustment(today?.adjustment);
+  const balanceChanges = adjustmentRecord?.adjustment?.changes ?? [];
 
   const pending = habits
     .map((h, i) => ({ h, i }))
@@ -901,21 +900,17 @@ export default function Hoy() {
 
                       {/* Acciones */}
                       <View className="flex-row items-center gap-1.5">
-                        {/* Spinner mientras esta comida espera al lote (los
-                            cambios seguidos se agrupan en un solo reajuste) y
-                            badge "i" cuando ya hay resultado. Es por comida, no
-                            global: cambiar una no bloquea las demás. */}
+                        {/* Spinner mientras esta comida espera al lote del
+                            día. Es por comida, no global: cambiar una no
+                            bloquea las demás. El RESULTADO del ajuste ya no se
+                            enseña aquí — lo movido lo decide el día entero, así
+                            que atribuirlo a una comida era mentira: el servidor
+                            escribía la misma lista en todas las del lote. Vive
+                            en `DayBalanceCard`. */}
                         {mealSwap.isAdjusting(h.label) ? (
                           <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary/10">
                             <ActivityIndicator size="small" color="#ff8a3d" />
                           </View>
-                        ) : h.adjustmentChanges ? (
-                          <Pressable
-                            onPress={() => setInfoIndex(i)}
-                            className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary/10 active:opacity-80"
-                          >
-                            <Info size={14} color="#ff8a3d" />
-                          </Pressable>
                         ) : null}
                         {isPending ? (
                           <>
@@ -1034,21 +1029,15 @@ export default function Hoy() {
         {/* ── Picoteo de hoy: lo apuntado y qué ha pasado con el plan ── */}
         <SnackCard
           snacks={snacks}
-          settling={snackSettle.pending || snackSettle.running}
-          failed={snackSettle.failed}
           removingId={removingSnack}
           onRemove={(id) => void removeSnack(id)}
-          onShowAdjustment={() => setSnackInfoOpen(true)}
         />
 
         {/* ── Deporte de hoy: mismo formato que el picoteo ── */}
         <ExerciseCard
           exercise={exercise}
-          settling={exerciseSettle.pending || exerciseSettle.running}
-          failed={exerciseSettle.failed}
           removingId={removingExercise}
           onRemove={(id) => void removeExercise(id)}
-          onShowAdjustment={() => setExerciseInfoOpen(true)}
         />
 
         {/* ── Añadir picoteo: justo encima de "Registrar deporte" ── */}
@@ -1068,6 +1057,17 @@ export default function Hoy() {
           <Activity size={16} color="#3e3d39" />
           <Text className="font-body-semibold text-sm text-foreground">Registrar deporte</Text>
         </Pressable>
+
+        {/* ── Balance del día: la suma de los tres orígenes y lo que ha movido
+             en los próximos días. Va DEBAJO de los dos botones que la
+             alimentan, así que se lee como el resumen de todo lo de arriba. ── */}
+        <DayBalanceCard
+          balance={balance}
+          record={adjustmentRecord}
+          settling={daySettle.pending || daySettle.running}
+          failed={daySettle.failed}
+          onShowAdjustment={() => setBalanceInfoOpen(true)}
+        />
 
         {/* ── Tira de la semana ── */}
         <View className="mt-6">
@@ -1162,20 +1162,12 @@ export default function Hoy() {
         }}
       />
 
-      {/* Info del ajuste del plan tras un cambio: lista antes → después. */}
+      {/* Todo lo que el día ha movido en los próximos días: antes → después. */}
       <AdjustmentInfoSheet
-        open={infoIndex != null}
-        onOpenChange={(v) => {
-          if (!v) setInfoIndex(null);
-        }}
-        changes={infoHabit?.adjustmentChanges ?? []}
-        kcalDelta={infoHabit?.adjustmentKcal ?? null}
-        dish={
-          infoIndex != null
-            ? (todayMeals.find((m) => m.moment === habits[infoIndex]?.label)?.idea ??
-              "lo que comiste")
-            : "lo que comiste"
-        }
+        open={balanceInfoOpen}
+        onOpenChange={setBalanceInfoOpen}
+        changes={balanceChanges}
+        kcalDelta={balance.net}
       />
 
       <SnackSheet
@@ -1185,30 +1177,11 @@ export default function Hoy() {
         onSaved={afterSnackChange}
       />
 
-      {/* Qué ha movido el picoteo en los próximos días. */}
-      <AdjustmentInfoSheet
-        open={snackInfoOpen}
-        onOpenChange={setSnackInfoOpen}
-        changes={snacks?.adjustment?.changes ?? []}
-        kcalDelta={snacks?.adjustment?.kcal ?? null}
-        dish="tu picoteo de hoy"
-      />
-
       <ExerciseSheet
         open={activityOpen}
         onOpenChange={setActivityOpen}
         today={today0}
         onSaved={afterExerciseChange}
-      />
-
-      {/* Qué ha repuesto el deporte en los próximos días. */}
-      <AdjustmentInfoSheet
-        open={exerciseInfoOpen}
-        onOpenChange={setExerciseInfoOpen}
-        changes={exercise?.adjustment?.changes ?? []}
-        kcalDelta={exercise?.adjustment?.kcal ?? null}
-        dish="tu deporte de hoy"
-        verb="hacer"
       />
 
       <NightlyReviewSheet

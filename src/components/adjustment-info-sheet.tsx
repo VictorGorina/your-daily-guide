@@ -14,32 +14,31 @@ const weekdayShort = (date: string) => {
 };
 
 /**
- * Bottom sheet que muestra qué cambió en el plan futuro tras un swap de plato.
- * Se abre al tocar el badge "i" del plato modificado en Hoy.
+ * Bottom sheet con TODO lo que el día ha movido en los próximos días. Se abre
+ * desde "Balance de hoy" (`day-balance-card.tsx`), que ya enseña los dos
+ * primeros platos en línea: esto es el resto.
+ *
+ * Antes había tres instancias de esta hoja —una por el cambio de plato, otra
+ * por el picoteo y otra por el deporte—, cada una afirmando que el reajuste era
+ * suyo. Como el desvío que lo provoca es el del día entero, las tres enseñaban
+ * lo mismo con tres atribuciones distintas (feature `balance-del-dia`). Por eso
+ * ya no recibe ni `dish` ni `verb`: el sujeto es el día.
  */
 export function AdjustmentInfoSheet({
   open,
   onOpenChange,
   changes,
-  dish,
   kcalDelta,
-  verb = "comer",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   changes: MealChange[];
-  /** El plato que comió la persona (para el título). */
-  dish: string;
-  /** Desvío estimado frente a lo que preveía el plan, si se pudo calcular. */
+  /** Desvío del día frente a lo que preveía el plan. */
   kcalDelta?: number | null;
-  /** "Tras {verb} {dish}...": otros orígenes del desvío (p.ej. el deporte) no son algo que se come. */
-  verb?: string;
 }) {
-  // Redondeo a la baja en decenas: es una estimación de la IA, y darla al kcal
-  // exacto sugeriría una precisión que no tiene.
-  const rounded =
-    typeof kcalDelta === "number" && Math.abs(kcalDelta) >= 50
-      ? `${kcalDelta > 0 ? "+" : "−"}${Math.round(Math.abs(kcalDelta) / 10) * 10} kcal`
+  const signed =
+    typeof kcalDelta === "number" && kcalDelta !== 0
+      ? `${kcalDelta > 0 ? "+" : "−"}${Math.abs(kcalDelta)} kcal`
       : null;
 
   return (
@@ -50,25 +49,22 @@ export function AdjustmentInfoSheet({
             Ajuste del plan
           </SheetTitle>
           <SheetDescription>
-            Tras {verb} <span className="font-medium text-foreground">{dish}</span>
-            {/* La cifra es del día entero, no de este plato: los cambios
-                seguidos se ajustan en un solo lote y el desvío se suma. */}
-            {rounded ? (
+            {signed ? (
               <>
-                , hoy llevas <span className="font-medium text-foreground">{rounded}</span> frente a
-                lo que preveía el plan
+                Hoy llevas <span className="font-medium text-foreground">{signed}</span> frente a lo
+                que preveía el plan
               </>
-            ) : null}
-            {changes.length ? ". Se han recolocado estos platos futuros:" : "."}
+            ) : (
+              "Tu día frente a lo que preveía el plan"
+            )}
+            {changes.length ? ". Se han recolocado estos platos:" : "."}
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-3 px-4 pb-8">
           {changes.length === 0 ? (
-            // Sin cifra no se puede afirmar que el plan siga equilibrado: solo
-            // sabemos que el coach no ha movido nada. Con cifra, se dice.
             <p className="text-sm text-muted-foreground">
-              {rounded
+              {signed
                 ? `El coach no ha movido ningún plato futuro: considera que ${
                     (kcalDelta ?? 0) > 0 ? "el exceso" : "la diferencia"
                   } se absorbe con lo que ya tienes planificado.`

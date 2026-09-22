@@ -3,11 +3,8 @@ import { describe, expect, it } from "bun:test";
 import type { MealChange } from "./plan-shared";
 import {
   cleanDaySnacks,
-  mergeAdjustment,
   pendingSnackKcal,
   scaleSnackMacros,
-  snackNote,
-  snackOutcomeNote,
   snackTotals,
   withSnack,
   withoutSnack,
@@ -153,83 +150,5 @@ describe("scaleSnackMacros", () => {
     expect(
       scaleSnackMacros({ kcal: 0, protein_g: 3, carbs_g: 0, fat_g: 0, fiber_g: 0 }, 50).protein_g,
     ).toBe(0);
-  });
-});
-
-describe("snackNote", () => {
-  it("cuenta el picoteo con sus kcal y el sentido del ajuste", () => {
-    const entries = [entry("a", 175)];
-    expect(snackNote(entries, 175)).toContain("picoteo a (~175 kcal)");
-    expect(snackNote(entries, 175)).toContain("compensarlo");
-    expect(snackNote([], -300)).toContain("Devuelve energía");
-  });
-});
-
-describe("mergeAdjustment", () => {
-  const change = (
-    date: string,
-    slot: "comida" | "cena",
-    before: string,
-    after: string,
-  ): MealChange => ({
-    date,
-    slot,
-    slotLabel: slot === "comida" ? "Comida" : "Cena",
-    before,
-    after,
-  });
-
-  it("sin reajuste previo devuelve el nuevo", () => {
-    const next = { changes: [change("2026-09-18", "cena", "A", "B")], summary: "x", kcal: 300 };
-    expect(mergeAdjustment(null, next)).toEqual(next);
-  });
-
-  it("acumula kcal y conserva el plato de antes del primer reajuste", () => {
-    const prev = {
-      changes: [change("2026-09-18", "cena", "Pasta", "Crema de verduras")],
-      summary: "primero",
-      kcal: 300,
-    };
-    const next = {
-      changes: [
-        change("2026-09-18", "cena", "Crema de verduras", "Ensalada"),
-        change("2026-09-17", "comida", "Arroz", "Lentejas"),
-      ],
-      summary: "segundo",
-      kcal: 250,
-    };
-    expect(mergeAdjustment(prev, next)).toEqual({
-      changes: [
-        change("2026-09-17", "comida", "Arroz", "Lentejas"),
-        change("2026-09-18", "cena", "Pasta", "Ensalada"),
-      ],
-      summary: "segundo",
-      kcal: 550,
-    });
-  });
-
-  it("quita la comida que vuelve a quedar como estaba", () => {
-    const prev = {
-      changes: [change("2026-09-18", "cena", "Pasta", "Crema")],
-      summary: "a",
-      kcal: 400,
-    };
-    const next = {
-      changes: [change("2026-09-18", "cena", "Crema", "Pasta")],
-      summary: "b",
-      kcal: -400,
-    };
-    expect(mergeAdjustment(prev, next)).toEqual({ changes: [], summary: "b", kcal: 0 });
-  });
-});
-
-describe("snackOutcomeNote", () => {
-  it("explica solo los motivos que la persona necesita saber", () => {
-    expect(snackOutcomeNote("below-threshold")).toBeNull();
-    expect(snackOutcomeNote("adjusted")).toBeNull();
-    expect(snackOutcomeNote(null)).toBeNull();
-    for (const outcome of ["no-days", "shared-only", "no-meals", "no-plan", "pregnancy"] as const) {
-      expect(snackOutcomeNote(outcome)).toBeTruthy();
-    }
   });
 });

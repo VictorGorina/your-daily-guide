@@ -17,8 +17,6 @@ import {
   EXERCISE_MINUTES_MAX,
   EXERCISE_MINUTES_MIN,
   estimateExerciseKcal,
-  exerciseNote,
-  mergeExerciseAdjustment,
   pendingExerciseKcal,
   withExercise,
   withoutExercise,
@@ -41,10 +39,11 @@ import { zonedTodayISO } from "@/lib/zoned-date";
  *   que ya corrió en el servidor). Escribe SOLO la columna
  *   `daily_logs.exercise` de hoy, así que no choca con las escrituras de
  *   `habits` del cliente.
- * - `settleExercise` decide en código (`compensationNeed`) si el déficit aún
- *   no compensado pide reponer energía en días futuros, y en ese caso llama a
- *   `reflowMeals` con un `kcalDelta` negativo (el mismo camino que ya
- *   contempla el picoteo al deshacer una compensación).
+ *
+ * El deporte ya NO se compensa por su cuenta: lo hace `settleDay`
+ * (`day-settle.functions.ts`) con el desvío del día entero, porque decidir por
+ * origen lanzaba dos recolocaciones opuestas cuando el deporte y el picoteo se
+ * anulaban — ver `day-balance.ts`. Aquí solo queda el registro.
  *
  * Cada operación tiene su ruta espejo en `src/routes/api/v1/exercise/`.
  */
@@ -193,157 +192,4 @@ export const removeExercise = createServerFn({ method: "POST" })
       (current) => withoutExercise(current, data.id),
     );
     return { exercise };
-  });
-
-// ---------------------------------------------------------------------------
-// settleExercise — la compensación
-// ---------------------------------------------------------------------------
-
-export type SettleExerciseResult = {
-  /** `nothing`: no había nada pendiente. */
-  outcome: ExerciseOutcome | "nothing";
-  /** kcal pendientes que se analizaron (con signo). */
-  kcal: number;
-  changes?: MealChange[];
-  summary?: string;
-};
-
-/** Dirección del objetivo, con el mismo criterio que `reflowMeals`. */
-function goalOf(p: Record<string, unknown>): string | null {
-  if (p.target_weight_kg != null) {
-    const target = Number(p.target_weight_kg);
-    const current = Number(p.current_weight_kg ?? p.start_weight_kg ?? target);
-    return deriveGoalType(current, target);
-  }
-  return p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
-}
-
-export const settleExercise = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((input?: { today?: string }) => ({ today: todayOf(input?.today) }))
-  .handler(async ({ data, context }): Promise<SettleExerciseResult> => {
-    const supabase = context.supabase as never as Client;
-    const { userId } = context;
-    const { today } = data;
-    const month = today.slice(0, 7);
-
-    const recordOutcome = (outcome: ExerciseOutcome) =>
-      patchExercise(supabase, userId, today, (current) => ({
-        ...(current ?? { entries: [], compensatedKcal: 0 }),
-        lastOutcome: outcome,
-      }));
-
-    const first = await readExerciseRow(supabase, userId, today);
-    const firstPending = pendingExerciseKcal(first?.exercise);
-    if (!first?.exercise || firstPending === 0) return { outcome: "nothing", kcal: 0 };
-
-    const [{ data: profileRow }, { data: planRow }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select(
-          "target_weight_kg, current_weight_kg, start_weight_kg, goal_type, pregnancy_status, meal_slots, meals_to_plan",
-        )
-        .eq("id", userId)
-        .maybeSingle(),
-      supabase
-        .from("monthly_plans")
-        .select("id")
-        .eq("month", month)
-        .eq("user_id", userId)
-        .maybeSingle(),
-    ]);
-    const profile = (profileRow ?? {}) as Record<string, unknown>;
-
-    const decision = compensationNeed({
-      deltaKcal: firstPending,
-      goal: goalOf(profile),
-      pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
-      // Deshace una compensación ya aplicada (se borra deporte que ya había
-      // repuesto energía en días futuros): hay que retirar esa energía de más,
-      // no es un exceso nuevo. Mismo criterio que el picoteo, con el signo
-      // invertido porque aquí `compensatedKcal` es negativo cuando hay algo
-      // compensado.
-      reversing: first.exercise.compensatedKcal < 0 && firstPending > 0,
-    });
-    if (!decision.compensate) {
-      await recordOutcome(decision.reason);
-      return { outcome: decision.reason, kcal: firstPending };
-    }
-    if (!planRow) {
-      await recordOutcome("no-plan");
-      return { outcome: "no-plan", kcal: firstPending };
-    }
-
-    const { householdContext } = await import("@/lib/household.server");
-    const home = await householdContext(supabase as never, userId);
-    const window = compensationWindow({
-      today,
-      sharedSlots: home.sharedSlots,
-      selectedSlots: effectiveMealSlots(
-        profile as { meal_slots?: unknown; meals_to_plan?: string | null },
-      ),
-      soloAdult: home.members.length <= 1,
-    });
-    if (window.reason) {
-      await recordOutcome(window.reason);
-      return { outcome: window.reason, kcal: firstPending };
-    }
-
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
-    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
-    await enforceUserRateLimit(userId, "plan-adjust");
-
-    // Reserva: se apunta como compensado ANTES de llamar a la IA, releyendo lo
-    // último, para que otro asentamiento a la vez no compense lo mismo.
-    let reserved = 0;
-    let entries: ExerciseEntry[] = [];
-    await patchExercise(supabase, userId, today, (current) => {
-      const base = current ?? { entries: [], compensatedKcal: 0 };
-      reserved = pendingExerciseKcal(base);
-      entries = base.entries;
-      return { ...base, compensatedKcal: base.compensatedKcal + reserved };
-    });
-    if (reserved === 0) return { outcome: "nothing", kcal: 0 };
-
-    try {
-      const { reflowMeals } = await import("@/lib/plan.functions");
-      const { plan, before, summary } = await reflowMeals({
-        supabase,
-        userId,
-        key,
-        month,
-        today,
-        note: exerciseNote(entries, reserved),
-        kcalDelta: reserved,
-        window: window.dates,
-        soloOnly: true,
-      });
-      const changes = diffFutureMeals(before, plan, today);
-      // Un desvío por encima del umbral que no mueve ningún plato no está
-      // compensado: si se diera por bueno, el déficit se perdería en silencio.
-      // Se trata como un intento fallido (se devuelve la reserva abajo) y el
-      // cliente lo reintenta más tarde.
-      if (!changes.length) throw new Error("El reajuste no ha cambiado ningún plato");
-      await patchExercise(supabase, userId, today, (current) => {
-        const base = current ?? { entries: [], compensatedKcal: reserved };
-        return {
-          ...base,
-          adjustment: mergeExerciseAdjustment(base.adjustment, {
-            changes,
-            summary,
-            kcal: reserved,
-          }),
-          lastOutcome: "adjusted",
-        };
-      });
-      return { outcome: "adjusted", kcal: reserved, changes, summary };
-    } catch (error) {
-      // Se devuelve la reserva: lo pendiente se volverá a intentar.
-      await patchExercise(supabase, userId, today, (current) => {
-        const base = current ?? { entries: [], compensatedKcal: reserved };
-        return { ...base, compensatedKcal: base.compensatedKcal - reserved };
-      }).catch((releaseError) => console.error("settleExercise: release", releaseError));
-      throw error;
-    }
   });

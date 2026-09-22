@@ -12,6 +12,8 @@ import {
   type MealStatus,
   type Profile,
 } from "../lib/daily";
+import { dayMovedChanges } from "../lib/day-balance";
+import { cleanDayExercise } from "../lib/exercise";
 import { isSharedSlot, type SharedSlots } from "../lib/household-shared";
 import { addMacros, sumDoneMacros, ZERO_MACROS } from "../lib/macros";
 import {
@@ -247,10 +249,19 @@ export function DayDetailBody({
 
   // Picoteo del día (`picoteo-hoy`): editable (añadir/quitar) igual que hoy,
   // pero sin disparar el asentamiento — ese ajusta días posteriores a HOY, no
-  // a un día que ya pasó (ver `resumeSnackSettle` en lib/snack-settle.ts).
+  // a un día que ya pasó (ver `resume` en lib/day-settle.ts).
   const snacks = cleanDaySnacks(log?.snacks);
   const snackEntries = snacks?.entries ?? [];
-  const movedBySnacks = snacks?.adjustment?.changes.length ?? 0;
+  // Lo que el desvío de ESTE día movió en los siguientes. Es del día entero,
+  // no del picoteo: antes esta línea vivía dentro del bloque de picoteo y solo
+  // contaba lo suyo, con lo que un día movido por el deporte o por un cambio de
+  // plato no enseñaba nada (`balance-del-dia`).
+  const moved = dayMovedChanges({
+    adjustment: log?.adjustment,
+    habits,
+    snacks,
+    exercise: cleanDayExercise(log?.exercise),
+  }).length;
 
   if (!habits.length && !snackEntries.length && beforeStart) {
     return (
@@ -485,12 +496,6 @@ export function DayDetailBody({
               ) : null}
             </View>
           ))}
-          {movedBySnacks ? (
-            <Text className="pt-0.5 text-[11px] text-muted-foreground">
-              Se {movedBySnacks === 1 ? "ajustó 1 comida" : `ajustaron ${movedBySnacks} comidas`} de
-              los días siguientes para compensarlo.
-            </Text>
-          ) : null}
           {!beforeStart ? (
             <Pressable
               onPress={() => setSnackSheetOpen(true)}
@@ -501,6 +506,13 @@ export function DayDetailBody({
             </Pressable>
           ) : null}
         </View>
+      ) : null}
+
+      {moved ? (
+        <Text className="text-[11px] text-muted-foreground">
+          Lo de este día ajustó {moved === 1 ? "1 comida" : `${moved} comidas`} de los días
+          siguientes.
+        </Text>
       ) : null}
 
       <SnackSheet

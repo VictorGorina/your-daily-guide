@@ -135,8 +135,12 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
             const deltas = perMealKcalDeltas([{ label, prevKcal }], freshGuide.mealMacros);
             if (deltas.length) {
               try {
-                const result = await apiPost<{ adjusted: boolean; changes?: MealChange[] }>(
-                  "plan/compensate",
+                // Un cambio de plato de HOY pedido al coach va por el MISMO
+                // asentamiento que el de la pestaña Hoy: la decisión de
+                // recolocar es del día entero, no de ese plato (ver
+                // `day-balance.ts`).
+                const result = await apiPost<{ outcome: string; changes?: MealChange[] }>(
+                  "day/settle",
                   {
                     today: date,
                     changes: [
@@ -150,7 +154,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
                     ],
                   },
                 );
-                if (result.adjusted) {
+                if (result.outcome === "adjusted") {
                   adjustedNote = ` He ajustado ${result.changes?.length ?? 0} comida(s) de los próximos días para compensarlo.`;
                 }
               } catch (err) {

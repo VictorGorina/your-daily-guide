@@ -419,10 +419,22 @@ export function suggestedDish(habit: MealHabit, currentIdea: string): string | n
   return suggested && suggested !== currentIdea ? suggested : null;
 }
 
-// `pendingSwapKcal` (web: src/lib/plan-shared.ts) no se porta aquí: la decide
-// siempre el servidor dentro de `compensateDishChanges`, igual que
-// `compensationNeed`/`compensationWindow` — el cliente móvil solo avisa de
-// qué ha cambiado, nunca suma kcal por su cuenta.
+/**
+ * Desvío de los cambios de plato que todavía no se han mandado a compensar.
+ *
+ * Quién DECIDE con esta cifra sigue siendo el servidor (`compensationNeed` y
+ * `compensationWindow` no se portan aquí). Se porta porque `dayBalance` la
+ * necesita para saber si la tarjeta "Balance de hoy" tiene algo que enseñar —
+ * leer, no decidir. Copia de `src/lib/plan-shared.ts`.
+ */
+export function pendingSwapKcal(habits: readonly MealHabit[]): number {
+  let total = 0;
+  for (const h of habits) {
+    if (h.swapCompensated || h.swapKcalDelta == null) continue;
+    total += h.swapKcalDelta;
+  }
+  return Math.round(total);
+}
 
 /**
  * Casa el registro del día con las comidas que el plan tiene HOY para esta

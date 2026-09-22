@@ -14,12 +14,10 @@ import {
 } from "@/lib/plan-shared";
 import {
   cleanDaySnacks,
-  mergeAdjustment,
   pendingSnackKcal,
   SNACK_KCAL_MAX,
   SNACK_TEXT_MAX,
   SNACK_TEXT_MIN,
-  snackNote,
   withSnack,
   withoutSnack,
   type DaySnacks,
@@ -37,10 +35,11 @@ import { zonedTodayISO } from "@/lib/zoned-date";
  *   guardar.
  * - `logSnack` / `removeSnack` escriben SOLO la columna `daily_logs.snacks` de
  *   hoy, así que no chocan con las escrituras de `habits` del cliente.
- * - `settleSnacks` decide en código (`compensationNeed`) si el picoteo aún no
- *   compensado pide recolocar días futuros, y en ese caso llama a
- *   `reflowMeals`. El cliente solo avisa de que hay algo que asentar; lo que
- *   hay pendiente lo dice la base de datos.
+ * El picoteo ya NO se compensa por su cuenta: lo hace `settleDay`
+ * (`day-settle.functions.ts`) con el desvío del día entero, porque decidir por
+ * origen producía dos recolocaciones opuestas cuando el deporte y el picoteo
+ * se anulaban — ver `day-balance.ts`. Aquí solo quedan la estimación y el
+ * registro.
  *
  * Cada operación tiene su ruta espejo en `src/routes/api/v1/snacks/`.
  */
@@ -255,151 +254,4 @@ export const removeSnack = createServerFn({ method: "POST" })
       (current) => withoutSnack(current, data.id),
     );
     return { snacks };
-  });
-
-// ---------------------------------------------------------------------------
-// settleSnacks — la compensación
-// ---------------------------------------------------------------------------
-
-export type SettleSnacksResult = {
-  /** `nothing`: no había nada pendiente. */
-  outcome: SnackOutcome | "nothing";
-  /** kcal pendientes que se analizaron (con signo). */
-  kcal: number;
-  changes?: MealChange[];
-  summary?: string;
-};
-
-/** Dirección del objetivo, con el mismo criterio que `reflowMeals`. */
-function goalOf(p: Record<string, unknown>): string | null {
-  if (p.target_weight_kg != null) {
-    const target = Number(p.target_weight_kg);
-    const current = Number(p.current_weight_kg ?? p.start_weight_kg ?? target);
-    return deriveGoalType(current, target);
-  }
-  return p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
-}
-
-export const settleSnacks = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((input?: { today?: string }) => ({ today: todayOf(input?.today) }))
-  .handler(async ({ data, context }): Promise<SettleSnacksResult> => {
-    const supabase = context.supabase as never as Client;
-    const { userId } = context;
-    const { today } = data;
-    const month = today.slice(0, 7);
-
-    const recordOutcome = (outcome: SnackOutcome) =>
-      patchSnacks(supabase, userId, today, (current) => ({
-        ...(current ?? { entries: [], compensatedKcal: 0 }),
-        lastOutcome: outcome,
-      }));
-
-    const first = await readSnackRow(supabase, userId, today);
-    const firstPending = pendingSnackKcal(first?.snacks);
-    if (!first?.snacks || firstPending === 0) return { outcome: "nothing", kcal: 0 };
-
-    const [{ data: profileRow }, { data: planRow }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select(
-          "target_weight_kg, current_weight_kg, start_weight_kg, goal_type, pregnancy_status, meal_slots, meals_to_plan",
-        )
-        .eq("id", userId)
-        .maybeSingle(),
-      supabase
-        .from("monthly_plans")
-        .select("id")
-        .eq("month", month)
-        .eq("user_id", userId)
-        .maybeSingle(),
-    ]);
-    const profile = (profileRow ?? {}) as Record<string, unknown>;
-
-    const decision = compensationNeed({
-      deltaKcal: firstPending,
-      goal: goalOf(profile),
-      pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
-      // Pendiente negativo con algo ya compensado: se ha borrado o reducido
-      // picoteo que ya había recolocado días futuros. No es un déficit nuevo
-      // que convenga dejar pasar, es deshacer un ajuste que ya no aplica.
-      reversing: first.snacks.compensatedKcal > 0 && firstPending < 0,
-    });
-    if (!decision.compensate) {
-      await recordOutcome(decision.reason);
-      return { outcome: decision.reason, kcal: firstPending };
-    }
-    if (!planRow) {
-      await recordOutcome("no-plan");
-      return { outcome: "no-plan", kcal: firstPending };
-    }
-
-    const { householdContext } = await import("@/lib/household.server");
-    const home = await householdContext(supabase as never, userId);
-    const window = compensationWindow({
-      today,
-      sharedSlots: home.sharedSlots,
-      selectedSlots: effectiveMealSlots(
-        profile as { meal_slots?: unknown; meals_to_plan?: string | null },
-      ),
-      soloAdult: home.members.length <= 1,
-    });
-    if (window.reason) {
-      await recordOutcome(window.reason);
-      return { outcome: window.reason, kcal: firstPending };
-    }
-
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
-    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
-    await enforceUserRateLimit(userId, "plan-adjust");
-
-    // Reserva: se apunta como compensado ANTES de llamar a la IA, releyendo lo
-    // último, para que otro asentamiento a la vez no compense lo mismo.
-    let reserved = 0;
-    let entries: SnackEntry[] = [];
-    await patchSnacks(supabase, userId, today, (current) => {
-      const base = current ?? { entries: [], compensatedKcal: 0 };
-      reserved = pendingSnackKcal(base);
-      entries = base.entries;
-      return { ...base, compensatedKcal: base.compensatedKcal + reserved };
-    });
-    if (reserved === 0) return { outcome: "nothing", kcal: 0 };
-
-    try {
-      const { reflowMeals } = await import("@/lib/plan.functions");
-      const { plan, before, summary } = await reflowMeals({
-        supabase,
-        userId,
-        key,
-        month,
-        today,
-        note: snackNote(entries, reserved),
-        kcalDelta: reserved,
-        window: window.dates,
-        soloOnly: true,
-      });
-      const changes = diffFutureMeals(before, plan, today);
-      // Un desvío por encima del umbral que no mueve ningún plato no está
-      // compensado: si se diera por bueno, el exceso se perdería en silencio.
-      // Se trata como un intento fallido (se devuelve la reserva abajo) y el
-      // cliente lo reintenta más tarde.
-      if (!changes.length) throw new Error("El reajuste no ha cambiado ningún plato");
-      await patchSnacks(supabase, userId, today, (current) => {
-        const base = current ?? { entries: [], compensatedKcal: reserved };
-        return {
-          ...base,
-          adjustment: mergeAdjustment(base.adjustment, { changes, summary, kcal: reserved }),
-          lastOutcome: "adjusted",
-        };
-      });
-      return { outcome: "adjusted", kcal: reserved, changes, summary };
-    } catch (error) {
-      // Se devuelve la reserva: lo pendiente se volverá a intentar.
-      await patchSnacks(supabase, userId, today, (current) => {
-        const base = current ?? { entries: [], compensatedKcal: reserved };
-        return { ...base, compensatedKcal: base.compensatedKcal - reserved };
-      }).catch((releaseError) => console.error("settleSnacks: release", releaseError));
-      throw error;
-    }
   });
