@@ -1,9 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  ABORTED_CALL_OUTPUT_TOKENS,
+  abortedCallCostUsd,
   callCostUsd,
   COACH_MODEL_USD_PER_MTOK,
   decideSpendCap,
+  DISH_MODEL_USD_PER_MTOK,
   PLAN_MODEL_USD_PER_MTOK,
   spendCapBlocks,
   utcDayISO,
@@ -81,6 +84,24 @@ describe("callCostUsd", () => {
       "algun-modelo-nuevo-sin-precio",
     );
     expect(unknown).toBe(knownExpensive);
+  });
+});
+
+describe("abortedCallCostUsd", () => {
+  it("cuenta la salida supuesta al precio del modelo de la llamada", () => {
+    expect(abortedCallCostUsd("openai/gpt-5")).toBeCloseTo(
+      (ABORTED_CALL_OUTPUT_TOKENS * DISH_MODEL_USD_PER_MTOK.output) / 1e6,
+      12,
+    );
+  });
+
+  it("no se queda por debajo de lo que cuesta de verdad un lote de platos", () => {
+    // La llamada más cara medida el 2026-09-24: 4 platos, 0,043 $.
+    expect(abortedCallCostUsd("openai/gpt-5")).toBeGreaterThan(0.043);
+  });
+
+  it("un modelo sin precio conocido tampoco sale gratis", () => {
+    expect(abortedCallCostUsd("algun-modelo-nuevo-sin-precio")).toBeGreaterThan(0);
   });
 });
 

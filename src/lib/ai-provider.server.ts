@@ -2,7 +2,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { wrapLanguageModel, type LanguageModelMiddleware } from "ai";
 
 import { ageFromDOB } from "@/lib/age";
-import { callCostUsd, type SpendCapScope } from "@/lib/ai-spend";
+import { abortedCallCostUsd, callCostUsd, type SpendCapScope } from "@/lib/ai-spend";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import { showsNutritionNumbers } from "@/lib/macros";
 import { energyTargets } from "@/lib/nutrition/energy";
@@ -106,12 +106,23 @@ function aiSpendMiddleware(
   const spend = () => import("@/lib/rate-limit.server");
   return {
     specificationVersion: "v4",
-    wrapGenerate: async ({ doGenerate }) => {
+    wrapGenerate: async ({ doGenerate, params }) => {
       const { enforceAiSpendCap, recordAiSpend } = await spend();
       await enforceAiSpendCap(userId, undefined, capScope);
-      const result = await doGenerate();
-      await recordAiSpend(userId, callCostUsd(result, modelId));
-      return result;
+      try {
+        const result = await doGenerate();
+        await recordAiSpend(userId, callCostUsd(result, modelId));
+        return result;
+      } catch (error) {
+        // Cortada por nuestro `abortSignal` (los timeouts de la cadena de
+        // platos): sin streaming, OpenRouter la termina y la cobra igual, solo
+        // que ya no nos dice cuánto. Se apunta una estimación para que no se
+        // escape del tope.
+        if (params.abortSignal?.aborted) {
+          await recordAiSpend(userId, abortedCallCostUsd(modelId));
+        }
+        throw error;
+      }
     },
     wrapStream: async ({ doStream }) => {
       const { enforceAiSpendCap, recordAiSpend } = await spend();

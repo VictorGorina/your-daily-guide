@@ -76,6 +76,21 @@ export function callCostUsd({ usage, providerMetadata }: CallUsage, modelId?: st
   );
 }
 
+/**
+ * Tokens de salida que se apuntan por una llamada sin streaming que cortamos
+ * nosotros con `abortSignal` (los timeouts de `CHAIN_TIMEOUTS` en
+ * `decompose-chain.ts`). OpenRouter solo detiene el modelo al cortar en
+ * streaming: sin él, el modelo termina y se factura la respuesta entera, pero su
+ * `usage` ya no nos llega. El doble de la mayor salida medida de `DISH_MODEL`
+ * (~4.100 tokens para 4 platos, 2026-09-24), porque sobrestimar contra el tope
+ * es mejor que dejar esa llamada fuera.
+ */
+export const ABORTED_CALL_OUTPUT_TOKENS = 8_000;
+
+/** Coste que se apunta por una llamada cortada (ver `ABORTED_CALL_OUTPUT_TOKENS`). */
+export const abortedCallCostUsd = (modelId: string): number =>
+  callCostUsd({ usage: { outputTokens: { total: ABORTED_CALL_OUTPUT_TOKENS } } }, modelId);
+
 /** `YYYY-MM-DD` del día UTC de `now`. */
 export const utcDayISO = (now: Date): string => now.toISOString().slice(0, 10);
 
