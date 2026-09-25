@@ -38,27 +38,37 @@ el comentario del ticket 08.
 de una sola fruta (52-89 kcal para 160) y desayunos de solo yogur (125 para 333). Hombre y
 "ganar": el eval quedó corriendo al cerrar, sin cifras.
 
+## Cierre del día y piezas (2026-09-25, tercera sesión) — commit `03353af`, CI verde
+
+- `closeDay` (`src/lib/nutrition/day-close.ts`, = `alignSoloMeals` del 08): lo que una comida no
+  alcanza lo absorben las demás propias del día; una compartida cuenta con el objetivo PROPIO
+  (`ResolvedServing.goal`). Se cierra siempre con los platos planeados (`plannedIdea` → `planned`
+  en `guideMeals`). Detalle en el comentario del ticket 08.
+- Piezas (`unidad`) del plan en unidades enteras, las más cercanas al objetivo (decisión del
+  usuario). Aguacate y fruta desecada escalan como E (`DENSE_PRODUCE_KCAL`).
+- `eval:plan-lite` (antes de los dos arreglos de la línea anterior): **18/21 días a ±5 %**, 20/21 a
+  ±15 %. Hombre que mantiene y el que gana: 14/14. Mujer que pierde: 4/7; fallan por platos que
+  no llegan ni al máximo (merluza con brócoli · yogur: 272 de 465). Proteína ≥ 90 %: 13/21 (los
+  fallos, de la mujer). Comidas principales de un componente: 6/42.
+
 ## Pendiente
 
-1. **Ticket 10 propiamente dicho**: `planFit` + UNA ronda de cambio de platos para las comidas
-   que no pueden llegar (sobre todo desayuno y merienda de un componente). El escalado no debe
-   inflar una fruta.
-2. `alignSoloMeals` (08): pasar el residuo de una comida a las demás del día y cerrar el día de
-   cada adulto de un hogar. Cuidado: calcularlo sobre el plato PLANEADO (`plannedIdea`), no sobre
-   el comido, o hoy se compensaría dentro del mismo día.
-3. Verificación en navegador (perfil demo) y simulador iOS de Hoy con las cifras escaladas: el
-   navegador integrado rechazó `localhost` en esta sesión.
-4. Terminar `bun run eval:plan-lite` para el hombre que mantiene y el que gana.
-5. Ticket 12: compensar en código escribiendo `kcalAdjust` sin cambiar platos (el campo ya existe).
-6. Ticket 11: la compra sigue saliendo del modelo, no de las raciones escaladas.
-7. Privacidad del hogar: con dos adultos, las kcal de una comida compartida ≈ objetivo medio, y
-   con el propio se puede aproximar el del otro. Ya pasaba con el factor medio; decidir si importa.
+1. **Ticket 10, `planFit`**: detectar con `closeDay(...).residual` los días que no cierran y UNA
+   ronda de cambio de platos (sobre todo en objetivos bajos). Decidir si se hace al generar (hay
+   que tener las recetas del mes: `getRecipes` en lote) o después, en el precalentado.
+2. Volver a correr `bun run eval:plan-lite` con los arreglos de piezas y aguacate.
+3. Verificación en navegador (perfil demo) y simulador iOS de Hoy con el día cerrado.
+4. Ticket 12: compensar en código escribiendo `kcalAdjust` sin cambiar platos.
+5. Ticket 11: la compra sigue saliendo del modelo, no de las raciones escaladas.
+6. Hogar: búsqueda del multiplicador `m` sobre las compartidas (08 §2.3) solo si un adulto no
+   tiene margen en sus propias. Privacidad: con dos adultos, las kcal de una compartida ≈ objetivo
+   medio (ya pasaba); decidir si importa.
+7. Falta `USDA_FDC_API_KEY` en `.env` y Vercel.
 
 ## Lo que no se hizo
 
 - A/B de modelos del 05 (Flash con y sin razonamiento).
 - Kcal antes de guardar en "comí distinto" (17).
 - Sustituir un plato del plan que no se deja calcular (06): hoy queda "calculando" y se reintenta.
-- Prueba de hogar (media de los adultos) en el navegador y verificación en el simulador iOS.
 - Chistorra y muesli sin fuente fiable; verificar con USDA los `fdcId` de la patata (170026 /
   170438) y del salmón crudo (175167).
