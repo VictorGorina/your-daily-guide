@@ -50,6 +50,22 @@
       "haveAccount": "I already have an account",
       "disclaimer": "A wellbeing guide, not a diet. Calorie figures are rough estimates."
     },
+    "confirm": {
+      "confirming": "Confirming your account…",
+      "confirmed": "Account confirmed!"
+    },
+    "reset": {
+      "checkingLink": "Checking the link…",
+      "title": "Create your new password",
+      "subtitle": "Choose a password with at least 6 characters.",
+      "newPasswordPlaceholder": "New password",
+      "repeatPasswordPlaceholder": "Repeat the password",
+      "saving": "Saving…",
+      "save": "Save password",
+      "done": "Password updated!",
+      "errMismatch": "The two passwords don't match",
+      "errSave": "We couldn't save the password"
+    },
     "back": "Back",
     "tryNoAccount": "Try without an account",
     "titleIn": "Welcome back",
@@ -93,6 +109,11 @@
     "errEmailRateLimit": "We've already sent several emails to that address. Give it a few minutes.",
     "errRateLimit": "Too many tries in a row. Wait a moment and try again.",
     "errSignupDisabled": "New accounts can't be created right now.",
-    "demoOk": "Test profile created"
+    "errSamePassword": "Your new password needs to be different from your current one.",
+    "demoOk": "Test profile created",
+    "oneMoment": "One moment, almost there.",
+    "enteringApp": "Entering Peppers…",
+    "linkErrorTitle": "This link doesn't work anymore",
+    "linkErrorBody": "It may have expired or already been used. Request a new one from the sign-in screen."
   }
 }

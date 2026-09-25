@@ -50,6 +50,22 @@
       "haveAccount": "Ya tengo cuenta",
       "disclaimer": "Guía de bienestar, no una dieta. Las calorías son estimaciones orientativas."
     },
+    "confirm": {
+      "confirming": "Confirmando tu cuenta…",
+      "confirmed": "¡Cuenta confirmada!"
+    },
+    "reset": {
+      "checkingLink": "Comprobando el enlace…",
+      "title": "Crea tu contraseña nueva",
+      "subtitle": "Elige una contraseña de al menos 6 caracteres.",
+      "newPasswordPlaceholder": "Contraseña nueva",
+      "repeatPasswordPlaceholder": "Repite la contraseña",
+      "saving": "Guardando…",
+      "save": "Guardar contraseña",
+      "done": "¡Contraseña actualizada!",
+      "errMismatch": "Las dos contraseñas no coinciden",
+      "errSave": "No hemos podido guardar la contraseña"
+    },
     "back": "Atrás",
     "tryNoAccount": "Probar sin cuenta",
     "titleIn": "Bienvenido de vuelta",
@@ -93,6 +109,11 @@
     "errEmailRateLimit": "Ya hemos enviado varios correos a esa dirección. Espera unos minutos.",
     "errRateLimit": "Demasiados intentos seguidos. Espera un momento y vuelve a probar.",
     "errSignupDisabled": "Ahora mismo no se pueden crear cuentas nuevas.",
-    "demoOk": "Perfil de prueba creado"
+    "errSamePassword": "La contraseña nueva tiene que ser distinta de la actual.",
+    "demoOk": "Perfil de prueba creado",
+    "oneMoment": "Un momento, ya casi está.",
+    "enteringApp": "Entrando en Peppers…",
+    "linkErrorTitle": "Este enlace ya no funciona",
+    "linkErrorBody": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar."
   }
 }
