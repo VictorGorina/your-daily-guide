@@ -1,8 +1,9 @@
 # 01 — Preferencia "ver calorías y macros" (onboarding + Ajustes)
 
-Status: ready
+Status: done en código (2026-09-25); falta aplicar la migración
 Blocked by: —
 Tamaño: M
+Fase: 1
 
 ## Qué
 
@@ -93,3 +94,13 @@ lectura; ningún componente mira el campo directamente.
 - Simulador iOS: onboarding, Ajustes y Hoy.
 
 ## Comments
+
+- 2026-09-25 — **Hecho en código** (web y móvil). Migración en
+  `supabase/migrations/20260925120000_profiles_nutrition_numbers.sql` (con el relleno por
+  `ed_history`; en producción hay 1 cuenta con `activa`), **sin aplicar**: Supabase se migra a mano.
+  Hasta entonces `saveProfile` omite la columna (PGRST204), Ajustes y el onboarding no enseñan el
+  control (`hasProfileColumn`) y el coach mantiene la regla antigua de `ed_history` como
+  salvaguarda. Con `ocultar` también se ocultan las cifras de las tarjetas de picoteo, deporte y
+  balance y la opción de apuntar kcal a mano (el criterio es "ningún número de kcal en Hoy"). Las
+  push no citaban cifras. El `help` de los campos ahora se ve al editar en Ajustes (antes no se
+  pintaba en ninguna app). La pregunta del onboarding sube la versión del borrador a `v3`.

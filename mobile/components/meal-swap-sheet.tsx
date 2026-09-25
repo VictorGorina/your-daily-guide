@@ -5,10 +5,16 @@ import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-nativ
 import { DictateButton } from "./dictate-button";
 import { Sheet } from "./ui/sheet";
 
+/** Lo que responde el cambio: si el texto es vago, la hoja pide concretar. */
+export type MealSwapResult = { ok: true } | { ok: false; vague: boolean; message: string };
+
 /**
  * Mini-sheet de "Comí otra cosa" en Hoy. Pide solo qué ha comido (texto libre)
  * y ofrece saltarse la comida; el cambio se aplica directamente al plan, sin
  * pasar por el chat. Copia nativa de `src/components/meal-swap-sheet.tsx`.
+ *
+ * Si el texto no dice qué se comió ("algo rápido"), la hoja se queda abierta,
+ * pide concretar y ofrece apuntar las kcal a mano (ticket 13, D13).
  */
 export function MealSwapSheet({
   open,
@@ -18,22 +24,47 @@ export function MealSwapSheet({
   onSwap,
   onSkip,
   disabled,
+  showNumbers = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mealLabel: string;
   plannedDish: string;
-  onSwap: (dish: string) => void;
+  onSwap: (dish: string, opts?: { manualKcal?: number }) => Promise<MealSwapResult>;
   onSkip: () => void;
   /** Bloquea solo mientras se guarda ESTA comida. */
   disabled?: boolean;
+  /** `false` con la preferencia de no ver cifras: sin la opción de kcal a mano. */
+  showNumbers?: boolean;
 }) {
   const [what, setWhat] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /** El servidor dijo que el texto es vago: se ofrece apuntar las kcal a mano. */
+  const [vague, setVague] = useState(false);
+  const [kcal, setKcal] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const reset = () => {
     setWhat("");
     setError(null);
+    setVague(false);
+    setKcal("");
+  };
+
+  const send = async (desc: string, manualKcal?: number) => {
+    setBusy(true);
+    try {
+      const result = await onSwap(desc, manualKcal != null ? { manualKcal } : undefined);
+      if (result.ok) {
+        reset();
+        onOpenChange(false);
+        return;
+      }
+      setVague(result.vague);
+      setError(result.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = () => {
@@ -46,10 +77,19 @@ export function MealSwapSheet({
       setError(BLOCKED_FOOD_MESSAGE);
       return;
     }
-    onSwap(desc);
-    reset();
-    onOpenChange(false);
+    void send(desc);
   };
+
+  const submitManual = () => {
+    const value = Number(kcal.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0 || value > 5000) {
+      setError("Escribe las kcal aproximadas, entre 1 y 5000.");
+      return;
+    }
+    void send(what.trim(), Math.round(value));
+  };
+
+  const locked = !!disabled || busy;
 
   return (
     <Sheet
@@ -79,9 +119,10 @@ export function MealSwapSheet({
             onChangeText={(t) => {
               setWhat(t);
               if (error) setError(null);
+              if (vague) setVague(false);
             }}
             multiline
-            editable={!disabled}
+            editable={!locked}
             className="min-h-[64px] rounded-2xl bg-secondary px-3.5 py-3 pr-11 text-sm text-foreground"
           />
           <DictateButton
@@ -90,18 +131,50 @@ export function MealSwapSheet({
           />
         </View>
 
-        {error ? <Text className="text-xs text-destructive">{error}</Text> : null}
+        {error ? (
+          <Text className={`text-xs ${vague ? "text-muted-foreground" : "text-destructive"}`}>
+            {error}
+          </Text>
+        ) : null}
+
+        {vague && showNumbers ? (
+          <View className="gap-2 rounded-2xl bg-surface p-3">
+            <Text className="text-xs text-muted-foreground">
+              ¿Prefieres apuntar las calorías tú? Cuentan tal cual las escribas.
+            </Text>
+            <View className="flex-row gap-2">
+              <TextInput
+                keyboardType="number-pad"
+                placeholder="kcal aproximadas"
+                placeholderTextColor="#a8a096"
+                value={kcal}
+                onChangeText={setKcal}
+                editable={!locked}
+                className="h-11 flex-1 rounded-xl bg-secondary px-3 text-sm text-foreground"
+              />
+              <Pressable
+                onPress={submitManual}
+                disabled={locked || !kcal.trim()}
+                className={`h-11 items-center justify-center rounded-xl bg-secondary px-4 active:opacity-80 ${
+                  locked || !kcal.trim() ? "opacity-60" : ""
+                }`}
+              >
+                <Text className="text-sm font-semibold text-foreground">Apuntar</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         <Pressable
           onPress={submit}
-          disabled={disabled || !what.trim()}
+          disabled={locked || !what.trim()}
           className={`h-12 flex-row items-center justify-center gap-2 rounded-full bg-primary active:opacity-90 ${
-            disabled || !what.trim() ? "opacity-60" : ""
+            locked || !what.trim() ? "opacity-60" : ""
           }`}
         >
-          {disabled ? <ActivityIndicator size="small" color="#fff" /> : null}
+          {locked ? <ActivityIndicator size="small" color="#fff" /> : null}
           <Text className="text-sm font-semibold text-primary-foreground">
-            {disabled ? "Cambiando…" : "Cambiar"}
+            {locked ? "Cambiando…" : "Cambiar"}
           </Text>
         </Pressable>
 
@@ -111,7 +184,7 @@ export function MealSwapSheet({
             reset();
             onOpenChange(false);
           }}
-          disabled={disabled}
+          disabled={locked}
           className="items-center py-1 active:opacity-70"
         >
           <Text className="text-sm font-medium text-muted-foreground">Me lo salté</Text>

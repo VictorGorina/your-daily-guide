@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DictateButton } from "@/components/dictate-button";
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -13,10 +14,18 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 
+/** Lo que responde el cambio: si el texto es vago, la hoja pide concretar. */
+export type MealSwapResult = { ok: true } | { ok: false; vague: boolean; message: string };
+
 /**
  * Mini-sheet que aparece al tocar "Comí otra cosa" en Hoy. Pide solo qué ha
- * comido (texto libre) y ofrece saltarse la comida. Nada de chips, de kcal, ni
- * de navegación al chat: el cambio se aplica directamente al plan.
+ * comido (texto libre) y ofrece saltarse la comida. Nada de chips ni de
+ * navegación al chat: el cambio se aplica directamente al plan.
+ *
+ * Si el texto no dice qué se comió ("algo rápido"), el servidor no se lo
+ * inventa (ticket 13 de `precision-nutricional`, D13): la hoja se queda
+ * abierta, pide concretar con un ejemplo y ofrece apuntar las kcal a mano. Esa
+ * cifra es de la persona, no un promedio.
  */
 export function MealSwapSheet({
   open,
@@ -26,6 +35,7 @@ export function MealSwapSheet({
   onSwap,
   onSkip,
   disabled,
+  showNumbers = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -34,18 +44,45 @@ export function MealSwapSheet({
   /** Plato que tenía el plan para ese momento. */
   plannedDish: string;
   /** Llamado con el texto libre que describe lo que ha comido. */
-  onSwap: (dish: string) => void;
+  onSwap: (dish: string, opts?: { manualKcal?: number }) => Promise<MealSwapResult>;
   /** Llamado al pulsar "Me lo salté". */
   onSkip: () => void;
   /** Bloquea el sheet mientras el swap está en curso. */
   disabled?: boolean;
+  /**
+   * `false` con la preferencia de no ver cifras (ticket 01): ante un texto vago
+   * solo se pide concretar, sin ofrecer apuntar kcal a mano.
+   */
+  showNumbers?: boolean;
 }) {
   const [what, setWhat] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /** El servidor dijo que el texto es vago: se ofrece apuntar las kcal a mano. */
+  const [vague, setVague] = useState(false);
+  const [kcal, setKcal] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const reset = () => {
     setWhat("");
     setError(null);
+    setVague(false);
+    setKcal("");
+  };
+
+  const send = async (desc: string, manualKcal?: number) => {
+    setBusy(true);
+    try {
+      const result = await onSwap(desc, manualKcal != null ? { manualKcal } : undefined);
+      if (result.ok) {
+        reset();
+        onOpenChange(false);
+        return;
+      }
+      setVague(result.vague);
+      setError(result.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = () => {
@@ -61,10 +98,20 @@ export function MealSwapSheet({
       setError(BLOCKED_FOOD_MESSAGE);
       return;
     }
-    onSwap(desc);
-    reset();
-    onOpenChange(false);
+    void send(desc);
   };
+
+  const submitManual = () => {
+    const desc = what.trim();
+    const value = Number(kcal.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0 || value > 5000) {
+      setError("Escribe las kcal aproximadas, entre 1 y 5000.");
+      return;
+    }
+    void send(desc, Math.round(value));
+  };
+
+  const locked = disabled || busy;
 
   return (
     <Sheet
@@ -98,10 +145,11 @@ export function MealSwapSheet({
               onChange={(e) => {
                 setWhat(e.target.value);
                 if (error) setError(null);
+                if (vague) setVague(false);
               }}
               rows={2}
               className="pr-10 text-sm"
-              disabled={disabled}
+              disabled={locked}
               autoFocus
             />
             <DictateButton
@@ -110,10 +158,39 @@ export function MealSwapSheet({
             />
           </div>
 
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          {error ? (
+            <p className={`text-xs ${vague ? "text-muted-foreground" : "text-destructive"}`}>
+              {error}
+            </p>
+          ) : null}
 
-          <Button onClick={submit} disabled={disabled || !what.trim()} className="w-full">
-            {disabled ? (
+          {vague && showNumbers ? (
+            <div className="space-y-2 rounded-2xl bg-surface p-3">
+              <p className="text-xs text-muted-foreground">
+                ¿Prefieres apuntar las calorías tú? Cuentan tal cual las escribas.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  inputMode="numeric"
+                  placeholder="kcal aproximadas"
+                  value={kcal}
+                  onChange={(e) => setKcal(e.target.value)}
+                  disabled={locked}
+                  className="text-sm"
+                />
+                <Button
+                  variant="secondary"
+                  onClick={submitManual}
+                  disabled={locked || !kcal.trim()}
+                >
+                  Apuntar
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <Button onClick={submit} disabled={locked || !what.trim()} className="w-full">
+            {locked ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Cambiando…
@@ -130,7 +207,7 @@ export function MealSwapSheet({
               reset();
               onOpenChange(false);
             }}
-            disabled={disabled}
+            disabled={locked}
             className="w-full text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Me lo salté

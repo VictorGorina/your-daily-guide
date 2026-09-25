@@ -61,6 +61,20 @@ export type Profile = {
   pregnancy_status: string | null;
   menstrual_cycle: string | null;
   ed_history: string | null;
+  /**
+   * ¿Quiere ver kcal, macros y objetivos? (ticket 01, D3). Opcional porque la
+   * columna llega con una migración: mientras no esté aplicada, el perfil no la
+   * trae y todo se enseña como hasta ahora. Se lee SOLO con
+   * `showsNutritionNumbers`.
+   */
+  nutrition_numbers?: "mostrar" | "ocultar" | null;
+  /**
+   * Actividad del día a día SIN deporte (ticket 07): sentado · de_pie · fisico ·
+   * muy_fisico. Opcional por la misma razón que `nutrition_numbers`.
+   */
+  daily_activity?: string | null;
+  /** Rutina de entrenamiento habitual, forma corta ("3 × 45 min · Gimnasio / pesas · Normal"). */
+  training?: string | null;
   alcohol: string | null;
   allergy_severity: string | null;
   disliked_foods: string | null;
@@ -111,7 +125,24 @@ export type MacroEstimate = {
  *  en vez de seguir sumando kcal de un plato que ya no es ese. Lo manda el
  *  servidor desde `MealMacroEstimate` de `src/lib/guide.functions.ts`; faltaba
  *  aquí y Hoy lo leía igualmente. */
-export type MealMacroEstimate = MacroEstimate & { moment: string; idea?: string };
+export type MealMacroEstimate = MacroEstimate & {
+  moment: string;
+  idea?: string;
+  /**
+   * Ticket 13 de `precision-nutricional` (D13): un plato sale de su receta
+   * (`calculado`) o se está calculando (`calculando`, cifras a 0 que NO se
+   * suman ni miden ningún desvío). Nunca un promedio. Una guía guardada antes
+   * de este campo cuenta como calculada. Ver `isMealCalculated`.
+   */
+  status?: "calculado" | "calculando";
+  /** El texto no dice qué se comió: se le pregunta a la persona, no se reintenta. */
+  vague?: boolean;
+  /** La cifra la escribió la persona (texto vago en "comí distinto"): solo kcal. */
+  manual?: boolean;
+};
+
+/** Macros de un plato suelto pedido aparte (`extraDishes`), p. ej. el del plan. */
+export type DishMacros = MacroEstimate & { dish: string; status: "calculado" | "calculando" };
 
 export type DailyGuide = {
   intro: string;
@@ -122,6 +153,8 @@ export type DailyGuide = {
   /** Estimación por plato de hoy, para sumar solo lo ya marcado como comido
    * (ver `MacroBars` en Hoy) en vez de todo el menú del día de golpe. */
   mealMacros?: MealMacroEstimate[] | null;
+  /** Objetivo del día calculado en código (ticket 07); ver `GeneratedGuide.targets`. */
+  targets?: MacroEstimate | null;
   behaviors: string[];
   meals?: { moment: string; idea: string }[];
   tips?: string[];
@@ -193,11 +226,38 @@ export async function saveProfile(patch: Partial<Profile>) {
   // elección explícita gana y este ajuste no se activa.
   const next =
     "meals_to_plan" in patch && !("meal_slots" in patch) ? { ...patch, meal_slots: null } : patch;
-  const { error } = await supabase
-    .from("profiles")
-    .upsert({ id: auth.user.id, ...next } as never, { onConflict: "id" });
+  const upsert = (row: Partial<Profile>) =>
+    supabase.from("profiles").upsert({ id: auth.user.id, ...row } as never, { onConflict: "id" });
+  let { error } = await upsert(next);
+  // Una columna que llega con una migración aún sin aplicar (PGRST204): se
+  // guarda el resto del cambio en vez de fallar entero. La UI ya no enseña esos
+  // campos mientras el perfil no los traiga (`hasProfileColumn`).
+  if (error?.code === "PGRST204") {
+    const rest = Object.fromEntries(
+      Object.entries(next).filter(([k]) => !PENDING_MIGRATION_COLUMNS.includes(k as never)),
+    ) as Partial<Profile>;
+    if (!Object.keys(rest).length) return;
+    ({ error } = await upsert(rest));
+  }
   if (error) throw error;
 }
+
+/**
+ * Columnas de `profiles` que llegan con migraciones de `precision-nutricional`
+ * (tickets 01 y 07). Supabase se migra a mano desde el dashboard, así que el
+ * código puede ir por delante: mientras no estén, no se escriben ni se enseñan.
+ */
+export const PENDING_MIGRATION_COLUMNS = [
+  "nutrition_numbers",
+  "daily_activity",
+  "training",
+] as const;
+
+/** ¿El perfil trae ya esta columna? (`select("*")` solo trae las que existen). */
+export const hasProfileColumn = (
+  profile: object | null | undefined,
+  column: (typeof PENDING_MIGRATION_COLUMNS)[number],
+): boolean => !!profile && column in profile;
 
 export async function fetchLogs(): Promise<DailyLog[]> {
   const { data, error } = await supabase

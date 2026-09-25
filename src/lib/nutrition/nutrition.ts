@@ -37,6 +37,16 @@ export type ResolvedIngredient = {
   food: Food;
   /** `high` = alias/clave exacta o solape fuerte; `low` = solape flojo o genérico. */
   confidence: "high" | "low";
+  /**
+   * Cómo se llegó a la fila cuando NO casó con la tabla (ticket 13 de
+   * `precision-nutricional`): `category` = mediana de su categoría (lo que diga
+   * el modelo que es), `closest` = el alimento más parecido que eligió
+   * `DISAMBIGUATION_MODEL` de una lista cerrada, `generic` = `GENERIC_FOOD`
+   * (sin categoría). Ausente si casó.
+   */
+  fallback?: "category" | "closest" | "generic";
+  /** Categoría que dio el modelo, para buscar el alimento más parecido. */
+  category?: FoodCategory;
 };
 
 // ---------------------------------------------------------------------------
@@ -200,10 +210,88 @@ export const clampGrams = (g: unknown): number => {
 const gramsAsEaten = (grams: number, food: Food, wasRaw: boolean | undefined): number =>
   wasRaw && food.cookedYield ? Math.round(grams * food.cookedYield) : grams;
 
+// ---------------------------------------------------------------------------
+// Ingredientes que no casan: categoría antes que genérico (ticket 13, D13)
+// ---------------------------------------------------------------------------
+
+export const FOOD_CATEGORIES: readonly FoodCategory[] = [
+  "proteina",
+  "verdura",
+  "fruta",
+  "cereal",
+  "legumbre",
+  "lacteo",
+  "grasa",
+  "fruto-seco",
+  "despensa",
+];
+
+/** La categoría que escribe el modelo, con o sin tildes y en plural. `null` si no es ninguna. */
+export function parseFoodCategory(raw: unknown): FoodCategory | null {
+  const norm = normName(String(raw ?? ""))
+    .replace(/\s+/g, "-")
+    .replace(/s$/, "");
+  if (!norm) return null;
+  if (norm === "fruto-seco" || norm === "frutos-seco" || norm === "fruto-secos")
+    return "fruto-seco";
+  if (norm === "cereale") return "cereal";
+  return (FOOD_CATEGORIES as readonly string[]).includes(norm) ? (norm as FoodCategory) : null;
+}
+
+/** Filas de la tabla de una categoría, sin las de 0 kcal (sal, agua): son candidatas. */
+export function foodsOfCategory(category: FoodCategory): Food[] {
+  return FOODS.filter((food) => food.category === category && food.kcal > 0);
+}
+
+const CATEGORY_MEDIAN = new Map<FoodCategory, Food>();
+for (const category of FOOD_CATEGORIES) {
+  const rows = [...foodsOfCategory(category)].sort((a, b) => a.kcal - b.kcal);
+  const median = rows[Math.floor((rows.length - 1) / 2)];
+  if (!median) continue;
+  // La fila mediana por kcal (no la mediana de cada macro por separado, que
+  // daría una combinación que no existe) con una key propia, para que se vea
+  // en cualquier desglose que es una aproximación y no un casado.
+  CATEGORY_MEDIAN.set(category, {
+    ...median,
+    key: `__${category}__`,
+    label: `${median.label} (aproximado)`,
+    aliases: [],
+  });
+}
+
+/** Alimento de referencia de una categoría: su fila mediana por kcal. */
+export const categoryMedianFood = (category: FoodCategory): Food =>
+  CATEGORY_MEDIAN.get(category) ?? GENERIC_FOOD;
+
+/**
+ * Parte de las kcal del plato a partir de la cual un ingrediente sin casar
+ * "pesa": por encima no vale una mediana, se busca el alimento más parecido.
+ */
+export const HEAVY_UNMATCHED_SHARE = 0.05;
+
+/**
+ * Índices de los ingredientes que no casaron con la tabla y aportan al menos
+ * `HEAVY_UNMATCHED_SHARE` de las kcal del plato (con su valor provisional de
+ * mediana). Son los que `resolve-dish.server` manda a desambiguar; el resto
+ * (especias, un chorrito de algo) se queda con la mediana de su categoría.
+ */
+export function heavyUnmatched(ingredients: readonly ResolvedIngredient[]): number[] {
+  const total = macrosOf([...ingredients]).kcal;
+  if (total <= 0) return [];
+  const out: number[] = [];
+  ingredients.forEach((ing, i) => {
+    if (ing.fallback !== "category" && ing.fallback !== "generic") return;
+    const kcal = (ing.food.kcal * ing.grams) / 100;
+    if (kcal / total >= HEAVY_UNMATCHED_SHARE) out.push(i);
+  });
+  return out;
+}
+
 /**
  * Resuelve un ingrediente crudo (lo que devuelve el modelo) contra la tabla:
- * primero por `key` explícita, luego por nombre, y si nada casa cae en
- * `GENERIC_FOOD` con `confidence: "low"` para que la suma siga teniendo sentido.
+ * primero por `key` explícita, luego por nombre. Si nada casa, la mediana de
+ * la categoría que diga el modelo; solo sin categoría cae en `GENERIC_FOOD`.
+ * En los dos casos con `confidence: "low"` y `fallback` para que se sepa.
  */
 export function resolveIngredient(raw: {
   key?: string | null;
@@ -212,6 +300,8 @@ export function resolveIngredient(raw: {
   /** El modelo marca esto cuando el gramaje del plato es el peso ANTES de
    * cocinar (carne o pescado crudos) — ver `gramsAsEaten`. */
   wasRaw?: boolean;
+  /** Categoría que da el modelo (`proteina`, `grasa`…), texto libre. */
+  category?: unknown;
 }): ResolvedIngredient {
   const name = String(raw.name ?? "").trim();
   const grams = clampGrams(raw.grams);
@@ -238,7 +328,24 @@ export function resolveIngredient(raw: {
     };
   }
 
-  return { name: name || "ingrediente", grams, food: GENERIC_FOOD, confidence: "low" };
+  const category = parseFoodCategory(raw.category);
+  if (category) {
+    return {
+      name: name || "ingrediente",
+      grams,
+      food: categoryMedianFood(category),
+      confidence: "low",
+      fallback: "category",
+      category,
+    };
+  }
+  return {
+    name: name || "ingrediente",
+    grams,
+    food: GENERIC_FOOD,
+    confidence: "low",
+    fallback: "generic",
+  };
 }
 
 /** Suma las macros de una lista de ingredientes ya resueltos. */

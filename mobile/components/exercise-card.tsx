@@ -15,10 +15,13 @@ export function ExerciseCard({
   exercise,
   removingId,
   onRemove,
+  showNumbers = true,
 }: {
   exercise: DayExercise | null;
   removingId: string | null;
   onRemove: (id: string) => void;
+  /** `false` con la preferencia de no ver cifras (ticket 01): solo la lista. */
+  showNumbers?: boolean;
 }) {
   const entries = exercise?.entries ?? [];
   if (!entries.length) return null;
@@ -29,7 +32,9 @@ export function ExerciseCard({
     <View className="mt-6 rounded-[20px] bg-surface px-3.5 py-3">
       <View className="flex-row items-baseline justify-between">
         <Text className="font-body-semibold text-[11.5px] text-foreground">Deporte de hoy</Text>
-        <Text className="font-mono text-[10.5px] text-muted-foreground">~{total} kcal</Text>
+        {showNumbers ? (
+          <Text className="font-mono text-[10.5px] text-muted-foreground">~{total} kcal</Text>
+        ) : null}
       </View>
 
       <View className="mt-2 gap-1.5">
@@ -41,7 +46,9 @@ export function ExerciseCard({
             >
               {e.activity} · {e.minutes} min · {e.intensity.toLowerCase()}
             </Text>
-            <Text className="font-mono text-[11px] text-muted-foreground">{-e.kcal} kcal</Text>
+            {showNumbers ? (
+              <Text className="font-mono text-[11px] text-muted-foreground">{-e.kcal} kcal</Text>
+            ) : null}
             <Pressable
               onPress={() => onRemove(e.id)}
               disabled={removingId != null}

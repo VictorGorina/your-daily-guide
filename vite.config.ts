@@ -66,9 +66,13 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
         // guía del día descompone los platos con un modelo razonador
         // (`DISH_MODEL`) y puede tardar bastante más. Cuando se cortaba, el
         // servidor devolvía su texto de respaldo sin macros y la barra de Hoy
-        // se quedaba a cero. 60 s es el máximo del plan Hobby (ver la memoria
-        // `infra-deploy`); no se cobra por el techo sino por lo que tarde.
-        vercel: { functions: { maxDuration: 60 } },
+        // se quedaba a cero. Con Fluid Compute activado en el proyecto, el plan
+        // Hobby admite hasta 300 s; hace falta ese margen para la cadena de
+        // reintentos de `decomposeDishes` (lote → uno a uno → segundo modelo,
+        // ticket 13 de `precision-nutricional`), que se reparte su propio
+        // presupuesto por debajo de este techo. No se cobra por el techo sino
+        // por lo que tarde.
+        vercel: { functions: { maxDuration: 300 } },
       }),
     );
   }

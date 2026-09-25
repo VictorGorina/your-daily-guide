@@ -5,3 +5,9 @@ minimumReleaseAge = 86400
 # Bypasses the 24h guard for specific packages — confirm with the user before
 # adding any. Empty for now.
 minimumReleaseAgeExcludes = []
+
+[test]
+# All tests live under src/. Without this, `bun test` walks the whole repo to
+# find them — including mobile/ios (Pods, builds: >1 GB) — which was ~70% of
+# every local run, even when passing a single file.
+root = "src"

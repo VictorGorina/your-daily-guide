@@ -7,7 +7,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ageFromDOB } from "../../lib/age";
 import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
+import { energyExplanation, energyTargets } from "../../lib/energy";
+import { showsNutritionNumbers } from "../../lib/macros";
 import {
+  isFieldAvailable,
   PROFILE_SECTIONS,
   chipToValue,
   valueToChip,
@@ -66,6 +69,9 @@ export default function Perfil() {
   const qc = useQueryClient();
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const profile = profileQ.data;
+  // Ticket 07: de dónde sale su cifra, a la vista (solo si quiere ver cifras).
+  const showNumbers = showsNutritionNumbers(profile);
+  const energy = energyTargets(profile);
 
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -127,138 +133,159 @@ export default function Perfil() {
           Toca cualquier respuesta para corregirla. No hace falta repetir el onboarding.
         </Text>
 
+        {showNumbers && energy ? (
+          <View className="mt-5 rounded-3xl bg-surface p-4">
+            <Text className="px-1 text-sm font-sans-semibold text-foreground">
+              Tu objetivo diario
+            </Text>
+            <Text className="mt-2 px-1 text-sm text-foreground">{energyExplanation(energy)}</Text>
+            <Text className="mt-2 px-1 text-[11px] leading-4 text-muted-foreground">
+              Es una estimación: entre personas puede variar un ±10 %. Se recalcula sola cuando
+              cambias tu peso, tu día a día, tu rutina o tu objetivo.
+            </Text>
+          </View>
+        ) : null}
+
         {PROFILE_SECTIONS.map((section) => (
           <View key={section.title} className="mt-5 rounded-3xl bg-surface p-4">
             <Text className="px-1 text-sm font-sans-semibold text-foreground">{section.title}</Text>
             <View className="mt-2">
-              {section.fields.map((field, idx) => {
-                const isEditing = editing === String(field.key);
-                const shown = display(field, profile);
-                return (
-                  <View
-                    key={String(field.key)}
-                    className={`py-2 ${idx > 0 ? "border-t border-border" : ""}`}
-                  >
-                    {isEditing ? (
-                      <View className="rounded-2xl bg-primary-soft/40 p-3">
-                        <Text className="text-xs font-sans-medium text-foreground">
-                          {field.label}
-                        </Text>
-                        {field.kind === "chips" ? (
-                          <View className="mt-2 flex-row flex-wrap gap-2">
-                            {field.options?.map((opt) => {
-                              const active = draft === opt;
-                              return (
-                                <Pressable
-                                  key={opt}
-                                  onPress={() => commit(field, opt)}
-                                  className={`rounded-full px-3 py-2 active:opacity-80 ${
-                                    active ? "bg-primary-soft" : "bg-surface"
-                                  }`}
-                                >
-                                  <Text
-                                    className={`text-xs capitalize ${
-                                      active ? "text-primary" : "text-muted-foreground"
+              {section.fields
+                .filter((field) => isFieldAvailable(field, profile))
+                .map((field, idx) => {
+                  const isEditing = editing === String(field.key);
+                  const shown = display(field, profile);
+                  return (
+                    <View
+                      key={String(field.key)}
+                      className={`py-2 ${idx > 0 ? "border-t border-border" : ""}`}
+                    >
+                      {isEditing ? (
+                        <View className="rounded-2xl bg-primary-soft/40 p-3">
+                          <Text className="text-xs font-sans-medium text-foreground">
+                            {field.label}
+                          </Text>
+                          {field.kind === "chips" ? (
+                            <View className="mt-2 flex-row flex-wrap gap-2">
+                              {field.options?.map((opt) => {
+                                const active = draft === opt;
+                                return (
+                                  <Pressable
+                                    key={opt}
+                                    onPress={() => commit(field, opt)}
+                                    className={`rounded-full px-3 py-2 active:opacity-80 ${
+                                      active ? "bg-primary-soft" : "bg-surface"
                                     }`}
                                   >
-                                    {opt}
-                                  </Text>
-                                </Pressable>
-                              );
-                            })}
-                          </View>
-                        ) : field.kind === "long" ? (
-                          <TextInput
-                            autoFocus
-                            multiline
-                            numberOfLines={3}
-                            value={draft}
-                            onChangeText={setDraft}
-                            placeholderTextColor="#a69d8f"
-                            className="mt-2 min-h-24 w-full rounded-2xl bg-surface px-4 py-3 text-sm text-foreground"
-                          />
-                        ) : (
-                          <TextInput
-                            autoFocus
-                            value={draft}
-                            onChangeText={setDraft}
-                            onSubmitEditing={() => commit(field)}
-                            keyboardType={
-                              field.kind === "number"
-                                ? "decimal-pad"
-                                : field.kind === "time" || field.kind === "date"
-                                  ? "numbers-and-punctuation"
-                                  : "default"
-                            }
-                            placeholder={
-                              field.kind === "time"
-                                ? "HH:MM"
-                                : field.kind === "date"
-                                  ? "AAAA-MM-DD"
-                                  : ""
-                            }
-                            placeholderTextColor="#a69d8f"
-                            className={inputClass}
-                          />
-                        )}
+                                    <Text
+                                      className={`text-xs capitalize ${
+                                        active ? "text-primary" : "text-muted-foreground"
+                                      }`}
+                                    >
+                                      {opt}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+                          ) : field.kind === "long" ? (
+                            <TextInput
+                              autoFocus
+                              multiline
+                              numberOfLines={3}
+                              value={draft}
+                              onChangeText={setDraft}
+                              placeholderTextColor="#a69d8f"
+                              className="mt-2 min-h-24 w-full rounded-2xl bg-surface px-4 py-3 text-sm text-foreground"
+                            />
+                          ) : (
+                            <TextInput
+                              autoFocus
+                              value={draft}
+                              onChangeText={setDraft}
+                              onSubmitEditing={() => commit(field)}
+                              keyboardType={
+                                field.kind === "number"
+                                  ? "decimal-pad"
+                                  : field.kind === "time" || field.kind === "date"
+                                    ? "numbers-and-punctuation"
+                                    : "default"
+                              }
+                              placeholder={
+                                field.kind === "time"
+                                  ? "HH:MM"
+                                  : field.kind === "date"
+                                    ? "AAAA-MM-DD"
+                                    : ""
+                              }
+                              placeholderTextColor="#a69d8f"
+                              className={inputClass}
+                            />
+                          )}
 
-                        {error ? (
-                          <View className="mt-2 flex-row items-start gap-1">
-                            <AlertCircle size={12} color="#e2685f" style={{ marginTop: 2 }} />
-                            <Text className="flex-1 text-[11px] text-destructive">{error}</Text>
-                          </View>
-                        ) : null}
+                          {field.help ? (
+                            <Text className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                              {field.help}
+                            </Text>
+                          ) : null}
 
-                        {field.kind !== "chips" ? (
-                          <View className="mt-3 flex-row gap-2">
-                            <Pressable
-                              onPress={() => commit(field)}
-                              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 active:opacity-90"
-                            >
-                              <Check size={14} color="#3e3d39" />
-                              <Text className="text-xs font-sans-semibold text-primary-foreground">
-                                Guardar
-                              </Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => setEditing(null)}
-                              className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 active:opacity-80"
-                            >
-                              <X size={14} color="#83796c" />
-                              <Text className="text-xs font-sans-medium text-muted-foreground">
+                          {error ? (
+                            <View className="mt-2 flex-row items-start gap-1">
+                              <AlertCircle size={12} color="#e2685f" style={{ marginTop: 2 }} />
+                              <Text className="flex-1 text-[11px] text-destructive">{error}</Text>
+                            </View>
+                          ) : null}
+
+                          {field.kind !== "chips" ? (
+                            <View className="mt-3 flex-row gap-2">
+                              <Pressable
+                                onPress={() => commit(field)}
+                                className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 active:opacity-90"
+                              >
+                                <Check size={14} color="#3e3d39" />
+                                <Text className="text-xs font-sans-semibold text-primary-foreground">
+                                  Guardar
+                                </Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() => setEditing(null)}
+                                className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 active:opacity-80"
+                              >
+                                <X size={14} color="#83796c" />
+                                <Text className="text-xs font-sans-medium text-muted-foreground">
+                                  Cancelar
+                                </Text>
+                              </Pressable>
+                            </View>
+                          ) : (
+                            <Pressable onPress={() => setEditing(null)} className="mt-3">
+                              <Text className="text-[11px] font-sans-medium text-muted-foreground">
                                 Cancelar
                               </Text>
                             </Pressable>
-                          </View>
-                        ) : (
-                          <Pressable onPress={() => setEditing(null)} className="mt-3">
-                            <Text className="text-[11px] font-sans-medium text-muted-foreground">
-                              Cancelar
-                            </Text>
-                          </Pressable>
-                        )}
-                      </View>
-                    ) : (
-                      <Pressable
-                        onPress={() => open(field)}
-                        className="flex-row items-start gap-3 rounded-2xl px-1 py-2 active:opacity-70"
-                      >
-                        <View className="min-w-0 flex-1">
-                          <Text className="text-xs text-muted-foreground">{field.label}</Text>
-                          <Text
-                            className={`mt-0.5 text-sm ${
-                              shown ? "text-foreground" : "text-muted-foreground"
-                            }`}
-                          >
-                            {shown ?? "Sin responder — toca para añadir"}
-                          </Text>
+                          )}
                         </View>
-                        <Pencil size={14} color="#83796c" style={{ marginTop: 4 }} />
-                      </Pressable>
-                    )}
-                  </View>
-                );
-              })}
+                      ) : (
+                        <Pressable
+                          onPress={() => open(field)}
+                          className="flex-row items-start gap-3 rounded-2xl px-1 py-2 active:opacity-70"
+                        >
+                          <View className="min-w-0 flex-1">
+                            <Text className="text-xs text-muted-foreground">{field.label}</Text>
+                            <Text
+                              className={`mt-0.5 text-sm ${
+                                shown ? "text-foreground" : "text-muted-foreground"
+                              }`}
+                            >
+                              {shown ?? "Sin responder — toca para añadir"}
+                            </Text>
+                          </View>
+                          <Pencil size={14} color="#83796c" style={{ marginTop: 4 }} />
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                })}
             </View>
           </View>
         ))}

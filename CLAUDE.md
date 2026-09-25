@@ -113,15 +113,48 @@ descompone cada plato real de hoy en `{ingrediente, gramos}` con **una** llamada
 (`decomposeDishes` en `resolve-dish.server.ts`) y suma cada ingrediente contra una tabla de
 composición estática de ~200 alimentos (`foods.data.ts`, valores por 100 g + precio ES
 aproximado) con `matchFood`/`macrosOf` (`nutrition.ts`, puro y testeado). Así el mismo plato da
-el mismo número cada día. Si un plato no se descompone con garantías, ese momento cae a
-`roughMealMacros` (estimación gruesa por tipo de comida), nunca al modelo. `matchFood` casa por
-alias exacto, contención de label o solape de tokens (un solo token solo cuenta si es la
-cabecera del alimento); lo que no casa cae en `GENERIC_FOOD`. La forma de `MacroEstimate` /
-`mealMacros` no cambió, así que Hoy (web y móvil) y `kcalDeltaOf` siguen igual. Banco de pruebas
+el mismo número cada día. `matchFood` casa por alias exacto, contención de label o solape de
+tokens (un solo token solo cuenta si es la cabecera del alimento). Banco de pruebas
 de cobertura: `bun run eval:dishes` (gasta llamadas al modelo, no va en CI).
 `src/lib/nutrition/index.ts` reexporta solo lo puro; `foods.data.ts` no debe entrar en el bundle
 de navegador. Fases 3-5 (lista de la compra y `reflowMeals` sobre el mismo lookup) están
 pendientes en `.scratch/nutricion-determinista/`.
+
+**Todo plato se calcula: nada de promedios** (ticket 13 de `precision-nutricional`, D13; ya no
+existe `roughMealMacros`). Cada `MealMacroEstimate` está `calculado` (sale de su receta, o la
+cifra la apuntó la persona: `manual`) o `calculando` (cifras a 0 que **no** suman, no miden
+ningún desvío y se enseñan como "Calculando…"; el semáforo del día queda gris). Una guía sin
+`status` cuenta como calculada. La cadena de `decomposeDishes` no se rinde a la primera: lote →
+reintento uno a uno → `DISH_FALLBACK_MODEL` (otra familia) → `calculando` con su motivo en el log
+(`decompose-chain.ts`, puro y testeado). Hoy reintenta lo que queda al abrirse, al volver a la app
+y cada 2 min (máx. 5 seguidos) con `macrosOnly` + `reuse` (solo se descompone lo que falta); el
+detalle de un día pasado recalcula al abrirse. Un ingrediente que no casa cae en la mediana de su
+`categoria` (la da el modelo) y, si aporta ≥ 5 % de las kcal, en el alimento más parecido de esa
+categoría que elige `DISAMBIGUATION_MODEL` de una lista cerrada (sin cifras); `GENERIC_FOOD` solo
+queda sin categoría. Un texto vago ("algo rápido") lo detecta `resolveDish` en `setPlanMeal`
+(`VAGUE_DISH_MESSAGE`): la hoja de "comí distinto" pide concretar u ofrece apuntar las kcal a mano
+(`MealHabit.manualKcal`). La **proteína** entra en la decisión de compensar: `perMealDeltas`
+devuelve kcal y proteína, `MealHabit.swapProteinDelta` lleva la misma contabilidad que
+`swapKcalDelta`, y `settleDay` pasa `balance.proteinPending` a `compensationNeed`.
+
+**Objetivo energético — una sola cifra** (ticket 07, `src/lib/nutrition/energy.ts`, puro, copia
+en `mobile/lib/energy.ts`). `energyTargets(perfil)` calcula en código kcal, proteína, grasa,
+fibra, hidratos y el reparto por comida (Mifflin-St Jeor × PAL del día a día + rutina neta de
+`exercise-energy.ts`; ajuste por objetivo con topes; embarazo/lactancia nunca déficit; `null` si
+es menor o faltan datos). Es la única cifra de objetivo: la barra de Hoy mide contra ella, el
+texto de calorías de la guía lo escribe el código (`caloriesText`), el coach la recibe en el
+prompt y la guía guarda una copia (`guide.targets`) para que el semáforo de un día pasado se mida
+contra el objetivo que tenía ese día. Entradas: `profiles.daily_activity` (sin deporte) y
+`profiles.training` (rutina en forma corta, `parseTraining`); mientras un perfil no tenga
+`daily_activity`, se usa `activity_level` normalizado (`normalizeActivity`, que ya incluía el
+deporte) y no se suma rutina.
+
+**Ver cifras es una preferencia** (ticket 01, D3): `profiles.nutrition_numbers` (`mostrar` |
+`ocultar`) se lee SOLO con `showsNutritionNumbers`. Con `ocultar` no hay kcal, macros ni
+objetivos en Hoy, el detalle de día, las tarjetas de picoteo/deporte/balance, `goalImpact` ni el
+coach; los platos se calculan igual. Las columnas nuevas de `profiles` (`nutrition_numbers`,
+`daily_activity`, `training`) llegan con migración manual: hasta aplicarla, `saveProfile` las
+omite (PGRST204) y la UI no las enseña (`hasProfileColumn`, `ProfileField.pendingColumn`).
 
 **Pestaña Hoy — el registro del día se reconcilia al leerlo.** La tira de comidas se pinta desde
 `daily_logs.habits`, que se escribe UNA vez al crear el día y lo crea quien toque el día primero
@@ -318,7 +351,11 @@ escapa ninguna llamada: reintentos y helpers sin bucket (`offShoppingList`) incl
 Mismo `RateLimitError` (su `scope` `day`/`month` cambia el mensaje) y mismo "dejar pasar" con log si
 falla la base de datos. Ojo con `streamText`: un error del middleware no llega a `result.text`
 (rechaza con un genérico), solo a `onError` — por eso `askForJson` lo captura ahí y no reintenta.
-Lógica pura y testeada en [src/lib/ai-spend.ts](src/lib/ai-spend.ts).
+Lógica pura y testeada en [src/lib/ai-spend.ts](src/lib/ai-spend.ts). **Excepción deliberada:**
+la descomposición de platos va con `createAiProvider(key, userId, { capScope: "month" })` y
+`generateDailyGuide` entra con `enforceUserRateLimit(…, "guide", "month")`: el tope DIARIO no las
+corta (el mensual sí), porque dejar un plato sin calcular rompe D13 y cuesta céntimos. Siguen
+sumando al gasto y a las cuotas por hora; el texto de la guía sí respeta el tope diario.
 
 **Límites: alcance de la IA y contenido de la persona** (spec en
 `.scratch/limites-ia-y-contenido/`, explicación larga en AGENTS.md). Dos límites, cada uno con

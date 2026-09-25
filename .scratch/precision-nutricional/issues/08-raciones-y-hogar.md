@@ -1,8 +1,9 @@
 # 08 — Raciones: escalado al objetivo, ración compartida del hogar y comidas propias
 
 Status: ready (D1, D2 y D4 aprobadas)
-Blocked by: 06, 07
+Blocked by: 06, 07, 21
 Tamaño: L
+Fase: 3
 
 ## Qué
 
@@ -48,8 +49,13 @@ fE  = (kP·(Pt − pV) − pP·(K − kV)) / det
 ```
 
 - Grupo P vacío o `|det|` muy pequeño → un solo factor `f = (K − kV) / (kP + kE)`.
-- **Límites** para que el plato siga siendo reconocible: `fP ∈ [0,7; 1,8]`, `fE ∈ [0,5; 1,6]`,
-  `fP / fE ∈ [0,6; 2,0]`. Si uno se activa, se fija y el otro se resuelve **solo para kcal**.
+- **Punto de partida y límites:** los factores se aplican sobre la **ración personal** del ticket 21
+  (receta base × factor `plan`), no sobre la base.
+  - Límites para que el plato siga siendo reconocible: `fP ∈ [0,8; 1,5]`, `fE ∈ [0,7; 1,4]`,
+    `fP / fE ∈ [0,6; 2,0]`.
+  - Si uno se activa, se fija y el otro se resuelve **solo para kcal**.
+  - Lo que no llegue lo arregla la estructura de la comida (23) o `planFit` (10), no un plato
+    desfigurado.
 - **Prioridad:** kcal primero; la proteína que falte queda como residuo.
 
 **Redondeo a medidas de cocina:** aceite a 5 g ("1 cdta"; "1 cda" = 10 g) · carne y pescado a 10 g ·
@@ -131,19 +137,19 @@ Se dispara con el debounce silencioso de `plan-recalc.ts` (memoria `plan-auto-re
 banner de confirmación). Hoy y los días pasados nunca se tocan. **La compra no cambia** con estos
 recálculos; si un ajuste pide algo no comprado, sale como aviso en `PlanDay.extras`, igual que ahora.
 
-### 7. "Comí distinto": tamaño de la ración
+### 7. "Comí distinto" → ticket 17
 
-Tres chips en la hoja de registro: **pequeña / normal / grande** = 0,75 / 1 / 1,3 × **ración base**
-(no escalada: es lo que eligió comer). Campo `habits[].portionSize?: "pequena" | "normal" |
-"grande"`, escrito por `patchTodayHabits`. Web y móvil.
+La cantidad del plato cambiado ya no es "ración base × chip": pasa al ticket 17 (D10). Prioridad:
+lo que diga el texto > la unidad natural > la misma masa que el plato planificado × chip.
 
 ## Consumo en este ticket
 
 - `macrosFromLookup` (guía diaria): `getRecipes` → factores de `PlanDay.portions` de hoy →
   `mealMacros`. Si el día no tiene factores (plan antiguo) → se calculan al vuelo con
   `alignSoloMeals` y no se guardan.
-- `use-meal-swap.ts`: `plannedKcal` sigue congelado en `plannedIdea`; `kcalDeltaOf` no cambia de
-  forma.
+- `use-meal-swap.ts`: `plannedKcal` sigue congelado en `plannedIdea`; el desvío por comida
+  (`resolveDishDeltas` → `perMealDeltas`, ticket 13) se calcula con los mismos factores. La cantidad
+  del plato cambiado la pone el 17.
 
 ## Archivos
 
@@ -154,7 +160,6 @@ Tres chips en la hoja de registro: **pequeña / normal / grande** = 0,75 / 1 / 1
 - `src/lib/household.server.ts` (`syncSharedMeals`)
 - `src/lib/plan.functions.ts` (`reflowMonthlyPlan` `scope: "portions"`), `src/lib/plan-recalc.ts`
 - `src/lib/guide.functions.ts`, `src/lib/macros.ts` (+ `mobile/lib/macros.ts`)
-- Hoja de registro en web y móvil; `src/lib/daily.ts` (tipo de `habits`)
 
 ## Criterios de aceptación
 
@@ -168,6 +173,12 @@ Tres chips en la hoja de registro: **pequeña / normal / grande** = 0,75 / 1 / 1
 - [ ] Test del hogar sin margen: B lo comparte todo → residuo guardado y aviso, sin bucles.
 - [ ] Test de privacidad: la respuesta que recibe A no contiene objetivo, peso ni kcal de B.
 - [ ] Navegador (perfil demo): cambiar el peso cambia los gramos de los días futuros, no los de hoy.
-- [ ] Simulador iOS: Hoy y la hoja de "comí distinto" con los chips de tamaño.
+- [ ] Simulador iOS: Hoy con las macros escaladas.
 
 ## Comments
+
+- 2026-09-24 — Replanificación tras la auditoría: el §7 (chips × ración base) pasa al ticket 17 con
+  otra regla (D10), porque la ración base infraestimaba a quien tiene un objetivo alto. Se corrige
+  la referencia a `kcalDeltaOf`, que ya no existe (`resolveDishDeltas` / `perMealDeltas`).
+
+- 2026-09-24 — Tras confirmar D7-D13: los factores parten de la ración personal del 21, con límites más estrechos; la estructura de la comida (23) cubre lo que el escalado no debe.

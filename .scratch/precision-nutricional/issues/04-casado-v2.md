@@ -3,6 +3,7 @@
 Status: ready
 Blocked by: 03
 Tamaño: M
+Fase: 3
 
 ## Qué
 
@@ -76,3 +77,15 @@ vez de casarlo con su ingrediente principal.
       invertido de tokens, no un bucle sobre toda la tabla).
 
 ## Comments
+
+- 2026-09-24 — Casos para el fixture, sacados de la auditoría (`matchFood` sin modelo):
+  `tortilla francesa` → `wrap` (confianza baja) · `granola`, `muesli`, `cereales de desayuno`,
+  `bacon`, `panceta`, `sobrasada`, `chistorra`, `fabada`, `cocido`, `paella` → genérico ·
+  `leche condensada` → `leche-entera` · `harina de garbanzo` → `garbanzos` (cocidos) ·
+  `lomo embuchado` → `cerdo-lomo` · `copos de maíz` → `avena` · `leche de almendras` y
+  `bebida de soja` → `bebida-avena` (confianza alta). `tortilla francesa`, `fabada`, `cocido` y
+  `paella` deben salir `isDish`. Pasa a la fase 3; el 05 ya no depende de este ticket.
+
+- 2026-09-24 — Con D13: "sin candidatos → `CATEGORY_FALLBACK`" solo si el ingrediente aporta
+  < 5 % de las kcal; si pesa más, va a USDA (22). La desambiguación con Flash-Lite ya la adelanta el
+  13. La tabla `unmatched_ingredients` la sustituye `foods_extra` con su revisión (22).

@@ -13,10 +13,13 @@ export function ExerciseCard({
   exercise,
   removingId,
   onRemove,
+  showNumbers = true,
 }: {
   exercise: DayExercise | null;
   removingId: string | null;
   onRemove: (id: string) => void;
+  /** `false` con la preferencia de no ver cifras (ticket 01): solo la lista. */
+  showNumbers?: boolean;
 }) {
   const entries = exercise?.entries ?? [];
   if (!entries.length) return null;
@@ -29,9 +32,11 @@ export function ExerciseCard({
         <h3 className="text-[11.5px] font-semibold tracking-[0.01em] text-foreground">
           Deporte de hoy
         </h3>
-        <span className="font-num text-[10.5px] tabular-nums text-muted-foreground">
-          ~{total} kcal
-        </span>
+        {showNumbers ? (
+          <span className="font-num text-[10.5px] tabular-nums text-muted-foreground">
+            ~{total} kcal
+          </span>
+        ) : null}
       </div>
 
       <ul className="mt-2 space-y-1.5">
@@ -40,9 +45,11 @@ export function ExerciseCard({
             <span className="line-clamp-2 min-w-0 flex-1 text-[13px] text-foreground">
               {e.activity} · {e.minutes} min · {e.intensity.toLowerCase()}
             </span>
-            <span className="font-num text-[11px] tabular-nums text-muted-foreground">
-              {-e.kcal} kcal
-            </span>
+            {showNumbers ? (
+              <span className="font-num text-[11px] tabular-nums text-muted-foreground">
+                {-e.kcal} kcal
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={() => onRemove(e.id)}

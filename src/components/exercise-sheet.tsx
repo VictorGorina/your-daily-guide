@@ -38,11 +38,14 @@ export function ExerciseSheet({
   onOpenChange,
   today,
   onSaved,
+  showNumbers = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   today: string;
   onSaved: (exercise: DayExercise) => void;
+  /** `false` con la preferencia de no ver cifras (ticket 01). */
+  showNumbers?: boolean;
 }) {
   const logFn = useServerFn(logExercise);
   const [activity, setActivity] = useState(EXERCISE_ACTIVITIES[0]!.label);
@@ -96,8 +99,9 @@ export function ExerciseSheet({
             Registrar deporte
           </SheetTitle>
           <SheetDescription>
-            Apunta tu actividad. Calculo las kcal quemadas y, si hace falta, repongo energía en los
-            próximos días.
+            {showNumbers
+              ? "Apunta tu actividad. Calculo las kcal quemadas y, si hace falta, repongo energía en los próximos días."
+              : "Apunta tu actividad. Si hace falta, repongo energía en los próximos días."}
           </SheetDescription>
         </SheetHeader>
 
@@ -151,7 +155,7 @@ export function ExerciseSheet({
             </div>
           </div>
 
-          {burn != null ? (
+          {showNumbers && burn != null ? (
             <div className="rounded-2xl bg-surface px-4 py-3.5">
               <p className="font-title text-2xl leading-7 text-foreground">
                 ≈ {burn} kcal quemadas

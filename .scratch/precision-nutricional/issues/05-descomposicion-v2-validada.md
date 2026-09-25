@@ -1,155 +1,146 @@
-# 05 — Receta canónica: fuentes independientes, conciliación y validación
+# 05 — Receta canónica validada: una lectura estructurada, gramos crudos y reglas en código
 
-Status: ready
-Blocked by: 04
+Status: ready (replanificado el 2026-09-24, D7 y D8)
+Blocked by: 14
 Tamaño: L
+Fase: 2
 
 ## Qué
 
-Rehacer `decomposeDishes` para que cada plato nuevo dé una **receta canónica** (gramos crudos para 1
-ración base) contrastada con **fuentes independientes**: dos lecturas de Gemini y una receta
-publicada que encuentra Perplexity Sonar con búsqueda web. Un juez de otra familia interviene solo
-si no coinciden. Todo casado con `foods` y pasado por reglas de validación en código antes de darlo
-por bueno.
+`decomposeDishes` pasa a producir una **receta canónica** por plato:
+
+- ingredientes en **gramos crudos** para 1 ración base (AESAN, punto medio);
+- método de cocción y tipo de ración (plato o unidad);
+- todo validado por reglas en código antes de darlo por bueno.
+
+Usa **una** lectura con salida estructurada. La conciliación entre varias fuentes (Sonar y juez) pasa
+al ticket 20, que solo se hace si el eval lo pide.
 
 ## Por qué
 
-Hallazgos H2, H3, H5 y H8, más el estándar "platos perfectamente calculados" del spec. Después de
-arreglar la tabla, los errores grandes que quedan son los gramos (sobre todo el aceite) y los
-ingredientes que faltan. Tres lecturas del **mismo** modelo comparten sus errores; una receta real
-publicada, no.
+- H2, H5, H8 y H18 (lotes que vuelven vacíos sin error).
+- La línea base del 02 muestra que el modelo acierta la composición (densidad 5,2 %) y falla la
+  cantidad. Con el escalado del 08, la cantidad absoluta del modelo deja de importar para los platos
+  planificados: importan las **proporciones**, las omisiones y el aceite. Eso se ataca con reglas en
+  código, no con más opiniones del modelo (D7).
+- La receta en crudo es la que se pesa y la que se compra (D8, invariante 3). Una sola cifra sirve
+  para la receta, las macros y la compra.
 
 ## Diseño
 
-### 1. Tres lecturas en paralelo
+### 1. Una lectura, salida estructurada
 
-| Lectura | Modelo | Qué le pedimos |
-|---|---|---|
-| A | `google/gemini-2.5-flash`, temperatura 0,2 | descomponer el plato para 1 ración base |
-| B | `google/gemini-2.5-flash`, temperatura 0,6 | lo mismo, con otra redacción del prompt (orden de anclas distinto) para decorrelacionar |
-| S | `perplexity/sonar` (búsqueda web) | buscar 2-3 recetas **españolas publicadas con pesos** de ese plato; devolver sus ingredientes en gramos, las raciones de cada receta y las URLs. Normalizamos nosotros a 1 ración |
+- `generateObject` + Zod: adiós a `parseJsonLoose` y a los lotes que vuelven vacíos sin error.
+- **Modelo:** `DISH_MODEL` (hoy `openai/gpt-5`). El A/B compara con `google/gemini-2.5-flash` (con y
+  sin razonamiento) y se queda el más barato que cumpla (memoria `ai-plan-quality-cheap-model`:
+  techo de ~1 €/mes; el ahorro nunca justifica peores cifras).
+- **Esquema por ingrediente:** `{ nombre, key | null, categoria, gramos_crudo, estado: "crudo" |
+  "listo", es_grasa_de_cocinar }`.
+- **Esquema por plato:** `{ comida: boolean, vago: boolean, metodo (enum del 14), tipo_racion: "plato" | "unidad",
+  unidad?: string ("pizza individual"), cantidad_texto?: number (0,5 para "media pizza") }`.
+- Se mantiene la lista `FOOD_KEYS` en el prompt hasta el ticket 04, que hace el casado sin ella.
 
-- A y B por `generateObject` + Zod (Gemini admite salida estructurada en OpenRouter).
-- S no la admite: `generateText` → `parseJsonLoose` → el **mismo** schema Zod. Si no valida o no
-  trae ninguna URL, la lectura S cuenta como ausente.
-- Esquema por ingrediente: `{ nombre, gramos_crudo, estado: "crudo"|"listo", metodo, categoria,
-  es_grasa_de_cocinar }`. S añade `{ raciones_receta, fuentes: string[] }`.
-- **Se quita la lista `FOOD_KEYS` del prompt**: el casado lo hace el código (ticket 04).
-- Llamada a Sonar por OpenRouter con el mismo `createAiProvider`: no hay integración nueva.
+### 2. Ración base = AESAN 2022, punto medio (decisión del 2026-09-24)
 
-### 2. Ración base (en código)
-
-`BASE_RATION` = ración de un adulto de referencia de ~2.000 kcal. Anclas **en crudo** por ración:
-pasta o arroz seco 75 g · legumbre seca 70 g (o 200 g de bote) · carne o pescado crudo 140 g ·
-huevos 2 ud · verdura de guarnición 200 g · patata cruda 200 g · pan 50 g · aceite de guiso o sofrito
-10 g · aceite de aliño 8 g · fruta 150 g · yogur 125 g · frutos secos 25 g.
-
-Las recetas de S se normalizan a 1 ración dividiendo por `raciones_receta`. Si la masa resultante se
-aleja más del 40 % de la mediana de A y B, se reescala S a esa mediana **conservando sus
-proporciones**: de S interesa sobre todo la composición.
+- Anclas en crudo: legumbre seca 60 g · arroz o pasta seca 70 g · carne cruda 110 g · pescado crudo
+  135 g · **1 huevo** (50 g comestible) salvo número explícito · pan 50 g · fruta 150 g (como topping,
+  60 g) · yogur 125 g · leche 200 ml · frutos secos 25 g · verdura de guarnición 150-200 g.
+- El aceite lo pone el código (`OIL_BY_METHOD`, ticket 14).
+- Sustituye a la `BASE_RATION` anterior de este ticket (140 g de carne, 2 huevos, 75 g de pasta),
+  que contradecía la decisión.
+- **Filas crudas:** donde la tabla solo tenga la fila cocinada de un básico (carnes y pescados con
+  `cookedYield`), se añade la cruda con su fuente. La tabla generada v2 (03) lo hace de forma
+  sistemática después.
 
 ### 3. Casado
 
-Cada lectura se casa con `foods` (ticket 04). Lo `ambiguous` va a **una** llamada de desambiguación
-por lote con `google/gemini-2.5-flash-lite` ("elige el número del alimento, o 0"), con 5 candidatos
-por label y estado, **sin cifras**. Lo `isDish` se descompone como sub-plato, a un solo nivel.
+El de ahora (`resolveIngredient` + las filas del 14). Lo que casa con confianza baja cuenta en
+`quality`. El 04 lo mejora (candidatos, ambigüedad, sub-platos).
 
-### 4. Conciliación en código — `reconcile(readings) → { recipe, agreement, needsJudge }` (puro)
-
-Se agrupan los ingredientes por `food.key` (o por categoría si cayeron en respaldo).
-
-- **Presencia:** entra si está en ≥ 2 de las 3 lecturas.
-- **Gramos:** mediana de las lecturas que lo tienen.
-- **Hay desacuerdo** (→ juez) si pasa alguna de estas:
-  - un ingrediente que aporta ≥ 50 kcal está en una sola lectura, o falta en una sola;
-  - la densidad energética (kcal por 100 g) de las lecturas difiere más de un 12 % entre la mayor y
-    la menor;
-  - el reparto de macros (% de kcal de P, C y G) difiere más de 5 puntos en alguno;
-  - las kcal del aceite difieren más de 60 kcal.
-- `agreement` (0-1) se guarda con la receta: sirve para priorizar la revisión manual.
-
-### 5. Juez (solo con desacuerdo) — `openai/gpt-5-mini`
-
-- Recibe el nombre del plato, las 3 lecturas ya casadas (label y gramos), las URLs de S y los
-  motivos del desacuerdo.
-- Devuelve por ingrediente `{ incluir: boolean, gramos, motivo }` por salida estructurada.
-- **Límite duro en código:** los gramos del juez se recortan al rango `[mín, máx]` de las lecturas
-  para ese ingrediente. No puede inventar una cantidad que ninguna fuente dio. Un ingrediente que
-  ninguna lectura tenía no puede entrar.
-- Alternativa en el A/B: `deepseek/deepseek-v3.2` (más barata, sin razonamiento).
-
-### 6. `validateRecipe(recipe, dishName, slot) → { recipe, flags, retryHint? }` (puro)
+### 4. `validateRecipe(recipe, dishName, slot) → { recipe, flags, retryHint? }` (puro)
 
 | Regla | Acción |
 |---|---|
 | **Omisión:** cada alimento nombrado en el título (casado con `foods`) está entre los ingredientes | reintento con pista: "falta el chorizo" |
-| **Rango por ingrediente** (`GRAM_RANGES` por alimento o categoría, por ración base): aceite 3-25 g · carne o pescado crudo 80-220 g · pasta o arroz seco 40-120 g · legumbre seca 40-110 g · sal ≤ 4 g · frutos secos 10-50 g · queso curado 10-60 g | recortar al borde + flag |
-| **Grasa de cocinar:** plancha, salteado, sofrito, horno o guiso sin grasa | añadir aceite por defecto (plancha 5 g, salteado 8 g, guiso 10 g) + flag |
-| **Fritura** | añadir `fatAbsorbedPer100g × gramos / 100` de aceite |
+| **Inventado:** patata o caldo en una crema que no los nombra; fruta entera como topping | recortar a la ancla o quitar + flag |
+| **Rango por ingrediente** (`GRAM_RANGES` por alimento o categoría, por ración base): carne o pescado crudo 80-180 g · pasta o arroz seco 40-100 g · legumbre seca 40-90 g · sal ≤ 4 g · frutos secos 10-40 g · queso curado 10-50 g · huevo 1-3 ud | recortar al borde + flag |
+| **Aceite:** siempre el de `OIL_BY_METHOD` según `metodo` (sustituye al del modelo) | automático |
 | **Masa cruda total** por ración entre 150 y 850 g | reintento con pista |
-| **Banda de kcal por comida** (ración base): desayuno 250-650 · comida 450-1000 · cena 350-900 · merienda 100-450 | reintento; si persiste, `flag: "fuera_de_banda"` |
+| **Banda de kcal por comida** (ración base): desayuno 200-550 · comida 400-900 · cena 300-800 · merienda 80-400 | reintento; si persiste, `flag: "fuera_de_banda"` |
 | **Fuera de casa** ("menú", "restaurante", "bar") | banda +25 %, sin reintento |
 
-El reintento repite **solo las lecturas A y B** con todas las pistas juntas (no se paga otra
-búsqueda) y vuelve a conciliar con la S original. Como mucho un reintento por plato.
+Como mucho un reintento por plato, con todas las pistas juntas.
 
-### 7. Calidad
+### 5. Calidad
 
-- `quality` = kcal de ingredientes con confianza alta ÷ kcal totales (ponderada por kcal).
-- **Umbral de uso: 0,90.** Por debajo, esa comida usa `roughMealMacros` y la receta se marca para
-  revisión.
-- **Sin fuente independiente** (S ausente y sin juez): se guarda con `flag: "una_fuente"` y cuenta
-  como pendiente de revisión, aunque se use.
+- `quality` = kcal de ingredientes con confianza alta ÷ kcal totales (ponderada por kcal, ticket 14).
+- **Umbral de uso: 0,90.** Por debajo, el plato no se da por calculado. El ingrediente que falla se
+  resuelve con el alimento más parecido (13) o con USDA (22), y se vuelve a validar. Nunca se usa con
+  un genérico ni con un promedio (D13).
+- La revisión manual se prioriza por uso (`hits`, ticket 06).
 
-### Tipo resultante
+### 6. Tipo resultante
 
 ```ts
 type CanonicalRecipe = {
   dishKey: string;
   dishLabel: string;
-  ingredients: { foodKey: string; name: string; gramsRaw: number; method: Method;
+  ingredients: { foodKey: string; name: string; gramsRaw: number; state: "crudo" | "listo";
                  confidence: "high" | "low" }[];
-  quality: number;          // 0-1, ponderada por kcal
-  agreement: number;        // 0-1, acuerdo entre lecturas
-  judged: boolean;
-  sources: string[];        // URLs de recetas publicadas (lectura S)
+  method: CookingMethod;       // enum del 14
+  servingKind: "plato" | "unidad";
+  unitLabel?: string;          // "pizza individual"
+  quality: number;             // 0-1, ponderada por kcal
   flags: string[];
+  // Reservado para el ticket 20 (fuentes independientes):
+  agreement?: number; judged?: boolean; sources?: string[];
   pipelineVersion: number;
-  foodsVersion: string;     // hash de foods.data.ts
+  foodsVersion: string;        // hash de foods.data.ts
 };
 ```
 
 ## A/B obligatorio antes de dar el ticket por cerrado
 
-`bun run eval:recipes --sources …` (ticket 02) con tres variantes sobre el golden set:
+`bun run eval:recipes --model …` sobre el mismo golden set con 3 variantes: `openai/gpt-5` (actual),
+`google/gemini-2.5-flash` y Flash con razonamiento bajo. Mismas métricas del spec, más el coste por
+plato, la latencia P50/P90 y las pasadas sin descomponer.
 
-1. `gemini3`: 3 lecturas de Gemini, sin Sonar ni juez.
-2. `gemini2+sonar`: A + B + S, sin juez (con desacuerdo, mediana).
-3. `gemini2+sonar+judge`: el diseño completo (y una pasada con DeepSeek V3.2 como juez).
-
-Se adopta **la variante más barata que cumpla los objetivos** del spec. Resultados (métricas, coste
-por plato, latencia P50/P90) apuntados en Comments. Si ninguna los cumple, se para y se decide con
-los números delante.
+- Se adopta **la más barata que cumpla**: densidad ≤ 6 %, reparto ≤ 3 pts, proteína ≤ 8 %, omisiones
+  ≤ 1 %, sin descomponer ≤ 1 %, sesgo con signo entre −3 % y +3 %.
+- Si ninguna cumple en omisiones, densidad o proteína, se apunta y **se desbloquea el ticket 20**.
+- El segundo modelo de la cadena del 13 (`DISH_FALLBACK_MODEL`) pasa el mismo eval y tiene que
+  cumplir igual.
+- Resultados en Comments y enseñados al usuario.
 
 ## Archivos
 
 - `src/lib/nutrition/resolve-dish.server.ts` (orquesta)
-- `src/lib/nutrition/sources/gemini.server.ts`, `sonar.server.ts`, `judge.server.ts` (nuevos)
-- `src/lib/nutrition/reconcile.ts` + test (puro)
 - `src/lib/nutrition/validate-recipe.ts` + test (puro)
-- `src/lib/ai-provider.server.ts`: constantes `RECIPE_READER_MODEL`, `RECIPE_GROUNDED_MODEL`,
-  `RECIPE_JUDGE_MODEL`, `RECIPE_MATCH_MODEL` (un único sitio para cambiar de modelo)
+- `src/lib/nutrition/foods.data.ts` (filas crudas de los básicos)
+- `src/lib/ai-provider.server.ts` (`DISH_MODEL`, si cambia)
+- `src/lib/plan-eval/recipe-accuracy.ts` (`--model`)
 - Retirar `eval:dishes` en favor de `eval:recipes`.
 
 ## Criterios de aceptación
 
-- [ ] Con la variante elegida: kcal por ración con error medio ≤ 6 % y P90 ≤ 12 %; densidad ≤ 6 %;
-      reparto de macros ≤ 3 puntos; proteína ≤ 8 %; omisiones ≤ 1 %.
-- [ ] El juez nunca da gramos fuera del rango de las lecturas (test).
-- [ ] Ningún plato del golden set sin grasa cuando su método la pide.
-- [ ] Tests puros de `reconcile` (cada disparador de desacuerdo) y de cada regla de `validateRecipe`.
-- [ ] Coste medido por plato nuevo ≤ 0,02 $ y apuntado en Comments.
-- [ ] Una respuesta inválida de Sonar no rompe nada: la lectura cuenta como ausente (test con
-      respuesta falsa).
+- [ ] La variante elegida cumple los objetivos de arriba, o el ticket 20 queda desbloqueado con los
+      números.
+- [ ] Ningún plato del golden set sin grasa cuando su método la pide, ni con aceite distinto del de
+      `OIL_BY_METHOD`.
+- [ ] Tests puros de cada regla de `validateRecipe`.
+- [ ] Una respuesta que no valida con Zod cuenta como plato sin descomponer, con el error registrado
+      (test).
+- [ ] Coste medido por plato nuevo, apuntado en Comments.
 
 ## Comments
+
+- 2026-09-24 — Replanificado tras la auditoría (D7). Las tres lecturas, Sonar y el juez pasan al
+  ticket 20, condicionado al eval. La `BASE_RATION` anterior (140 g de carne, 2 huevos, 75 g de
+  pasta) se sustituye por el punto medio de AESAN que decidió el usuario. El aceite deja de
+  "añadirse si falta" y pasa a ponerlo siempre el código según el método (el error medido es que el
+  modelo pone de más). Ya no depende del 04: se queda con el casado actual más las filas del 14.
+
+- 2026-09-24 — Las bandas de kcal por comida y los `GRAM_RANGES` se estrechan respecto al 05
+  original porque la ración base pasa a ser la de AESAN (más pequeña que la anterior).
+
+- 2026-09-24 — Tras confirmar D7-D13: respaldo sustituido por la cadena del 13 y USDA (22); `categoria` y `vago` en el esquema (D13).

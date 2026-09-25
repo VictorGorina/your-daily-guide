@@ -47,13 +47,15 @@ const weekdayShort = (date: string) => {
 /** "+180" / "−50". Signo tipográfico, no guion. */
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)}`;
 
-function Line({ label, kcal }: { label: string; kcal: number }) {
+function Line({ label, kcal, showNumbers }: { label: string; kcal: number; showNumbers: boolean }) {
   return (
     <div className="flex items-baseline justify-between">
       <span className="text-[12.5px] text-muted-foreground">{label}</span>
-      <span className="font-num text-[11.5px] tabular-nums text-muted-foreground">
-        {signed(kcal)}
-      </span>
+      {showNumbers ? (
+        <span className="font-num text-[11.5px] tabular-nums text-muted-foreground">
+          {signed(kcal)}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -79,6 +81,7 @@ export function DayBalanceCard({
   settling,
   failed,
   onShowAdjustment,
+  showNumbers = true,
 }: {
   balance: DayBalance;
   record: DayAdjustmentRecord | null;
@@ -87,6 +90,12 @@ export function DayBalanceCard({
   /** El último asentamiento falló. */
   failed: boolean;
   onShowAdjustment: () => void;
+  /**
+   * `false` con la preferencia de no ver cifras (ticket 01): la tarjeta sigue
+   * enseñando QUÉ ha movido el día y los platos cambiados (eso es lo que genera
+   * confianza), pero sin ningún número de kcal.
+   */
+  showNumbers?: boolean;
 }) {
   const changes = record?.adjustment?.changes ?? [];
   if (!balance.active && !changes.length) return null;
@@ -108,24 +117,28 @@ export function DayBalanceCard({
         <h3 className="text-[13px] font-semibold tracking-[0.01em] text-foreground">
           Balance de hoy
         </h3>
-        <span className="flex items-baseline gap-1">
-          <span
-            className={`font-num text-[22px] font-semibold tabular-nums ${
-              settled ? "text-success" : "text-foreground"
-            }`}
-          >
-            {signed(balance.net)}
+        {showNumbers ? (
+          <span className="flex items-baseline gap-1">
+            <span
+              className={`font-num text-[22px] font-semibold tabular-nums ${
+                settled ? "text-success" : "text-foreground"
+              }`}
+            >
+              {signed(balance.net)}
+            </span>
+            <span className="font-num text-[10.5px] text-muted-foreground">kcal</span>
           </span>
-          <span className="font-num text-[10.5px] text-muted-foreground">kcal</span>
-        </span>
+        ) : null}
       </div>
 
       {/* El desglose es lo que hace legible la causalidad: sus tres palancas
           sumando a un solo número. Solo se pinta la línea que aporta algo. */}
       <div className="mt-2.5 space-y-1">
-        {meals !== 0 ? <Line label="Comidas cambiadas" kcal={meals} /> : null}
-        {snacks !== 0 ? <Line label="Picoteo" kcal={snacks} /> : null}
-        {exercise !== 0 ? <Line label="Deporte" kcal={exercise} /> : null}
+        {meals !== 0 ? (
+          <Line label="Comidas cambiadas" kcal={meals} showNumbers={showNumbers} />
+        ) : null}
+        {snacks !== 0 ? <Line label="Picoteo" kcal={snacks} showNumbers={showNumbers} /> : null}
+        {exercise !== 0 ? <Line label="Deporte" kcal={exercise} showNumbers={showNumbers} /> : null}
       </div>
 
       {busy ? (

@@ -385,6 +385,13 @@ export type MealHabit = {
    * negativo tras comerse una pizza).
    */
   plannedKcal?: number;
+  /** Proteína (g) del plato del plan, congelada igual que `plannedKcal` (ticket 13). */
+  plannedProtein?: number;
+  /**
+   * kcal que la persona apuntó a mano porque su texto no permitía calcular el
+   * plato ("comí algo rápido", ticket 13). La cifra es suya, no un promedio.
+   */
+  manualKcal?: number;
   /** Qué comió realmente cuando status === "distinto". Se escribe desde el
    * DayDetailSheet al corregir un día pasado — el plan no cambia, pero el
    * historial queda correcto. */
@@ -405,8 +412,19 @@ export type MealHabit = {
    * umbral por separado — ver `pendingSwapKcal`.
    */
   swapKcalDelta?: number;
-  /** Si `swapKcalDelta` ya se mandó a `reflowMeals`. */
+  /**
+   * Desvío de proteína (g) de ESTA comida frente al plan, con la misma
+   * contabilidad que `swapKcalDelta` (ticket 13).
+   */
+  swapProteinDelta?: number;
+  /** Si `swapKcalDelta` (y `swapProteinDelta`) ya se mandaron a `reflowMeals`. */
   swapCompensated?: boolean;
+  /**
+   * Plato que había en el plan cuando se confirmó "comí esto" o "comí otra
+   * cosa" (ver `src/lib/plan-shared.ts`). Aquí se lee sobre todo para casar las
+   * kcal apuntadas a mano con su plato (`guideReuse`).
+   */
+  confirmedIdea?: string;
 };
 
 /**
@@ -432,6 +450,16 @@ export function pendingSwapKcal(habits: readonly MealHabit[]): number {
   for (const h of habits) {
     if (h.swapCompensated || h.swapKcalDelta == null) continue;
     total += h.swapKcalDelta;
+  }
+  return Math.round(total);
+}
+
+/** Igual que `pendingSwapKcal`, para la proteína (g, con signo). */
+export function pendingSwapProtein(habits: readonly MealHabit[]): number {
+  let total = 0;
+  for (const h of habits) {
+    if (h.swapCompensated || h.swapProteinDelta == null) continue;
+    total += h.swapProteinDelta;
   }
   return Math.round(total);
 }

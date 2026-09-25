@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Cookie, Loader2, Users, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { MacroBars } from "@/components/macro-bars";
@@ -19,7 +19,16 @@ import { dayMovedChanges } from "@/lib/day-balance";
 import { cleanDayExercise } from "@/lib/exercise";
 import { isSharedSlot, type SharedSlots } from "@/lib/household-shared";
 import { propagateLogToFamily } from "@/lib/household.functions";
-import { addMacros, sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
+import { generateDailyGuide } from "@/lib/guide.functions";
+import {
+  addMacros,
+  donePendingMeals,
+  mealsToRecalculate,
+  mergeGuide,
+  showsNutritionNumbers,
+  sumDoneMacros,
+  ZERO_MACROS,
+} from "@/lib/macros";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -126,11 +135,39 @@ export function DayDetailBody({
   const [removingSnackId, setRemovingSnackId] = useState<string | null>(null);
   const propagate = useServerFn(propagateLogToFamily);
   const removeSnackCall = useServerFn(removeSnackFn);
+  const makeGuide = useServerFn(generateDailyGuide);
 
   const refreshLogs = () => {
     qc.invalidateQueries({ queryKey: ["logs"] });
     qc.invalidateQueries({ queryKey: ["logs", date.slice(0, 7)] });
   };
+
+  // Un día con platos que se quedaron "calculando" (D13) se recalcula al abrir
+  // su detalle: solo esos platos y sin texto. Una vez por apertura; si vuelve a
+  // fallar, se queda diciendo "por calcular" hasta la siguiente.
+  const recalcTriedRef = useRef("");
+  useEffect(() => {
+    const guide = log?.guide;
+    const pending = mealsToRecalculate(guide?.mealMacros).filter((m) => m.idea);
+    if (!guide || !pending.length || recalcTriedRef.current === date) return;
+    recalcTriedRef.current = date;
+    void makeGuide({
+      data: {
+        meals: pending.map((m) => ({ moment: m.moment, idea: m.idea! })),
+        macrosOnly: true,
+      },
+    })
+      .then(async ({ mealMacros }) => {
+        if (!mealMacros?.length) return;
+        const merged = (guide.mealMacros ?? []).map(
+          (m) => mealMacros.find((f) => f.moment === m.moment && f.idea === m.idea) ?? m,
+        );
+        await updateLogByDate(date, { guide: mergeGuide(guide, { ...guide, mealMacros: merged }) });
+        refreshLogs();
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, log?.guide]);
 
   // Corregir el picoteo de un día pasado solo actualiza su historial: a
   // diferencia de hoy, no se llama a `scheduleSnackSettle` (el asentamiento
@@ -302,6 +339,8 @@ export function DayDetailBody({
     sumDoneMacros(log?.guide?.mealMacros, habits) ?? ZERO_MACROS,
     snackTotals(snacks),
   );
+  // Ticket 01: sin cifras si la persona ha elegido no verlas.
+  const showNumbers = showsNutritionNumbers(profile);
   const hasMacros =
     !!(log?.guide?.macroEstimate || log?.guide?.mealMacros?.length) || snackEntries.length > 0;
 
@@ -481,7 +520,7 @@ export function DayDetailBody({
             <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Picoteo
             </span>
-            {snackEntries.length ? (
+            {snackEntries.length && showNumbers ? (
               <span className="font-num text-[11px] tabular-nums text-muted-foreground">
                 ~{snackTotals(snacks).kcal} kcal
               </span>
@@ -493,9 +532,11 @@ export function DayDetailBody({
               className="flex items-center gap-2 rounded-xl bg-secondary/50 px-3 py-2.5"
             >
               <span className="min-w-0 flex-1 text-sm text-foreground">{e.text}</span>
-              <span className="font-num text-[11px] tabular-nums text-muted-foreground">
-                {e.kcal} kcal
-              </span>
+              {showNumbers ? (
+                <span className="font-num text-[11px] tabular-nums text-muted-foreground">
+                  {e.kcal} kcal
+                </span>
+              ) : null}
               {!beforeStart ? (
                 <button
                   type="button"
@@ -539,25 +580,29 @@ export function DayDetailBody({
         today={date}
         onSaved={refreshLogs}
         pastDay
+        showNumbers={showNumbers}
       />
 
-      <div>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Macros del día
-        </span>
-        {hasMacros ? (
-          <MacroBars
-            estimate={consumed}
-            target={log?.guide?.macroEstimate ?? null}
-            weightKg={profile?.current_weight_kg ?? null}
-            note={`~${consumed.kcal} kcal de lo que comiste ese día`}
-          />
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">
-            No hay estimación de macros para este día.
-          </p>
-        )}
-      </div>
+      {showNumbers ? (
+        <div>
+          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Macros del día
+          </span>
+          {hasMacros ? (
+            <MacroBars
+              estimate={consumed}
+              target={log?.guide?.targets ?? log?.guide?.macroEstimate ?? null}
+              weightKg={profile?.current_weight_kg ?? null}
+              note={`~${consumed.kcal} kcal de lo que comiste ese día`}
+              pending={donePendingMeals(log?.guide?.mealMacros, habits).length}
+            />
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No hay estimación de macros para este día.
+            </p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

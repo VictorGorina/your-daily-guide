@@ -15,6 +15,10 @@ export type OnboardingDraft = {
   medications: string | null;
   activity_level: string | null;
   exercise: string | null;
+  /** Actividad del día a día SIN deporte (ticket 07): sentado · de_pie · fisico · muy_fisico. */
+  daily_activity?: string | null;
+  /** Rutina habitual en su forma corta ("3 × 45 min · Gimnasio / pesas · Normal"). */
+  training?: string | null;
   meals_per_day: number | null;
   diet_pattern: string | null;
   non_negotiable_foods: string | null;

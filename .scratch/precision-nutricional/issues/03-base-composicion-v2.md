@@ -3,6 +3,7 @@
 Status: ready (D5 aprobada: USDA FoodData Central + CIQUAL; BEDCA solo como contraste, sin copiar valores)
 Blocked by: 02
 Tamaño: L
+Fase: 3
 
 ## Qué
 
@@ -96,3 +97,12 @@ la categoría. `GENERIC_FOOD` queda solo para "no sé ni la categoría".
       el spec anterior), sin romper `perishability.test.ts`.
 
 ## Comments
+
+- 2026-09-24 — Replanificación: pasa a la fase 3. Lo urgente de la tabla (filas que faltan, alias,
+  `wrap`/tortilla, salmón y filas con `cookedYield`, calidad por kcal) se adelanta al ticket 14. La
+  duda crudo/cocinado queda resuelta a favor del invariante 3 (D8): gramos crudos en la receta
+  canónica; el 05 añade las filas crudas de los básicos y este ticket lo hace sistemático.
+
+- 2026-09-24 — Con D13, `CATEGORY_FALLBACK` solo vale para ingredientes que aportan < 5 % de las
+  kcal del plato. Uno que pesa más se resuelve con el alimento más parecido (13) o con USDA (22),
+  nunca con una mediana de categoría.

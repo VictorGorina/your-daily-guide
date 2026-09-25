@@ -24,6 +24,7 @@ export function MacroBars({
   target,
   weightKg,
   note,
+  pending = 0,
 }: {
   estimate: MacroEstimate;
   target: MacroEstimate | null;
@@ -31,6 +32,11 @@ export function MacroBars({
   /** Frase bajo la barra. Por defecto, la de Hoy (en curso); el detalle de un
    * día pasado pasa una en pasado. */
   note?: string;
+  /**
+   * Comidas marcadas cuya cifra aún se está calculando (D13): no suman, y se
+   * dice, para que el total no se lea como completo.
+   */
+  pending?: number;
 }) {
   const fallbackTargets = macroTargets(weightKg);
   return (
@@ -60,8 +66,9 @@ export function MacroBars({
         })}
       </div>
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
-        {note ?? `~${estimate.kcal} kcal de lo que llevas comido hoy`}: estimación orientativa, no
-        un conteo nutricional exacto.
+        {note ?? `~${estimate.kcal} kcal de lo que llevas comido hoy`}
+        {pending > 0 ? ` (${pending === 1 ? "1 comida" : `${pending} comidas`} por calcular)` : ""}:
+        estimación orientativa, no un conteo nutricional exacto.
       </p>
     </section>
   );

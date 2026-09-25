@@ -1,6 +1,6 @@
 # Balance del día
 
-Status: implementado (web + móvil), pendiente de aplicar la migración.
+Status: implementado (web + móvil) y en `main` (`e5cee11`). Migración `20260921120000_daily_logs_adjustment` aplicada en producción (comprobado el 2026-09-24).
 
 Un solo asentamiento por día en vez de tres, y una tarjeta en Hoy que enseña el efecto.
 

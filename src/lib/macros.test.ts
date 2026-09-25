@@ -9,8 +9,13 @@ import {
   daySignalOf,
   hasDayRecord,
   macroTargets,
+  donePendingMeals,
+  guideReuse,
+  isMealCalculated,
+  mealsToRecalculate,
   mergeGuide,
-  perMealKcalDeltas,
+  perMealDeltas,
+  showsNutritionNumbers,
   sumDoneMacros,
 } from "./macros";
 
@@ -275,58 +280,146 @@ describe("ZERO_MACROS", () => {
 });
 
 // ---------------------------------------------------------------------------
-// perMealKcalDeltas — el desvío por comida que acumula compensateDishChanges
+// perMealDeltas — el desvío por comida (kcal y proteína) que acumula settleDay
 // ---------------------------------------------------------------------------
 
-describe("perMealKcalDeltas", () => {
-  const macro = (moment: string, kcal: number): MealMacroEstimate => ({
+describe("perMealDeltas", () => {
+  const macro = (
+    moment: string,
+    kcal: number,
+    protein = 0,
+    extra: Partial<MealMacroEstimate> = {},
+  ): MealMacroEstimate => ({
     moment,
     kcal,
-    protein_g: 0,
+    protein_g: protein,
     carbs_g: 0,
     fat_g: 0,
     fiber_g: 0,
+    ...extra,
   });
 
-  it("da una cifra por cada comida cambiada del lote", () => {
-    const deltas = perMealKcalDeltas(
+  it("da una cifra por cada comida cambiada del lote, en kcal y proteína", () => {
+    const { resolved, unresolved } = perMealDeltas(
       [
-        { label: "Comida", prevKcal: 600 },
-        { label: "Cena", prevKcal: 500 },
+        { label: "Comida", prevKcal: 600, prevProtein: 30 },
+        { label: "Cena", prevKcal: 500, prevProtein: 25 },
       ],
-      [macro("Comida", 1100), macro("Cena", 900), macro("Desayuno", 300)],
+      [macro("Comida", 1100, 40), macro("Cena", 900, 20), macro("Desayuno", 300)],
     );
     // El desayuno no se tocó y no aparece.
-    expect(deltas).toEqual([
-      { label: "Comida", kcalDelta: 500 },
-      { label: "Cena", kcalDelta: 400 },
+    expect(resolved).toEqual([
+      { label: "Comida", kcalDelta: 500, proteinDelta: 10 },
+      { label: "Cena", kcalDelta: 400, proteinDelta: -5 },
     ]);
+    expect(unresolved).toEqual([]);
   });
 
   it("da negativo cuando se ha comido menos de lo previsto", () => {
-    expect(perMealKcalDeltas([{ label: "Cena", prevKcal: 800 }], [macro("Cena", 450)])).toEqual([
-      { label: "Cena", kcalDelta: -350 },
+    expect(
+      perMealDeltas([{ label: "Cena", prevKcal: 800 }], [macro("Cena", 450)]).resolved,
+    ).toEqual([{ label: "Cena", kcalDelta: -350, proteinDelta: null }]);
+  });
+
+  it("sin cifra de antes o de después, la comida queda pendiente: nunca un cero", () => {
+    const { resolved, unresolved } = perMealDeltas(
+      [
+        { label: "Cena", prevKcal: null },
+        { label: "Comida", prevKcal: 400 },
+        { label: "Desayuno", prevKcal: 300 },
+      ],
+      [macro("Comida", 700), macro("Cena", 900)],
+    );
+    expect(resolved).toEqual([{ label: "Comida", kcalDelta: 300, proteinDelta: null }]);
+    expect(unresolved).toEqual(["Cena", "Desayuno"]);
+  });
+
+  it("si fallan los dos modelos el plato queda `calculando`: no suma ni genera desvío (D13)", () => {
+    const calculando = macro("Cena", 0, 0, { idea: "Pizza", status: "calculando" });
+    const { resolved, unresolved } = perMealDeltas(
+      [{ label: "Cena", prevKcal: 500, prevProtein: 25 }],
+      [calculando],
+    );
+    expect(resolved).toEqual([]);
+    expect(unresolved).toEqual(["Cena"]);
+    const habits = [{ label: "Cena", done: true, status: "distinto" as const }];
+    expect(sumDoneMacros([calculando], habits)).toEqual(ZERO_MACROS);
+    expect(donePendingMeals([calculando], habits)).toEqual(["Cena"]);
+  });
+
+  it("una cifra manual solo trae kcal: la proteína no se sabe y no decide", () => {
+    const manual = macro("Cena", 700, 0, { idea: "algo rápido", manual: true });
+    expect(
+      perMealDeltas([{ label: "Cena", prevKcal: 500, prevProtein: 30 }], [manual]).resolved,
+    ).toEqual([{ label: "Cena", kcalDelta: 200, proteinDelta: null }]);
+  });
+});
+
+describe("estado calculado / calculando", () => {
+  const meal = (extra: Partial<MealMacroEstimate>): MealMacroEstimate => ({
+    moment: "Comida",
+    idea: "Lentejas",
+    kcal: 400,
+    protein_g: 20,
+    carbs_g: 50,
+    fat_g: 8,
+    fiber_g: 10,
+    ...extra,
+  });
+
+  it("una guía antigua sin `status` cuenta como calculada", () => {
+    expect(isMealCalculated(meal({}))).toBe(true);
+    expect(isMealCalculated(meal({ status: "calculando" }))).toBe(false);
+  });
+
+  it("solo se reintenta lo que está calculando y no es vago", () => {
+    const list = [
+      meal({ moment: "Comida", status: "calculando" }),
+      meal({ moment: "Cena", status: "calculando", vague: true }),
+      meal({ moment: "Desayuno" }),
+    ];
+    expect(mealsToRecalculate(list).map((m) => m.moment)).toEqual(["Comida"]);
+  });
+
+  it("`reuse` manda lo ya calculado y la cifra manual, nunca lo que está calculando", () => {
+    const reuse = guideReuse(
+      [meal({ moment: "Comida" }), meal({ moment: "Cena", status: "calculando" })],
+      [
+        {
+          label: "Cena",
+          done: true,
+          status: "distinto",
+          confirmedIdea: "algo rápido",
+          manualKcal: 650,
+        },
+      ],
+    );
+    expect(reuse.map((m) => [m.moment, m.idea, m.kcal, m.manual ?? false])).toEqual([
+      ["Cena", "algo rápido", 650, true],
+      ["Comida", "Lentejas", 400, false],
     ]);
   });
 
-  it("ignora las comidas sin cifra de antes o de después", () => {
-    expect(
-      perMealKcalDeltas(
-        [
-          { label: "Cena", prevKcal: null },
-          { label: "Comida", prevKcal: 400 },
-        ],
-        [macro("Comida", 700)],
-      ),
-    ).toEqual([{ label: "Comida", kcalDelta: 300 }]);
+  it("un reintento que vuelve calculando no borra la cifra que ya tenía el mismo plato", () => {
+    const prev = { macroEstimate: null, mealMacros: [meal({})] };
+    const merged = mergeGuide(prev, { mealMacros: [meal({ kcal: 0, status: "calculando" })] });
+    expect(merged.mealMacros?.[0].kcal).toBe(400);
+    // Un plato distinto sí sustituye (el de antes ya no describe la comida).
+    const other = mergeGuide(prev, {
+      mealMacros: [meal({ idea: "Pizza", kcal: 0, status: "calculando" })],
+    });
+    expect(other.mealMacros?.[0]).toMatchObject({ idea: "Pizza", status: "calculando" });
   });
 
-  it("devuelve una lista vacía sin nada que comparar", () => {
-    expect(perMealKcalDeltas([{ label: "Cena", prevKcal: null }], [macro("Cena", 900)])).toEqual(
-      [],
-    );
-    expect(perMealKcalDeltas([{ label: "Cena", prevKcal: 500 }], null)).toEqual([]);
-    expect(perMealKcalDeltas([], [macro("Cena", 900)])).toEqual([]);
+  it("el semáforo no juzga un día con comidas marcadas por calcular", () => {
+    const log = {
+      habits: [{ label: "Comida", done: true, status: "plan" as const }],
+      guide: {
+        macroEstimate: { kcal: 2000, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 },
+        mealMacros: [meal({ status: "calculando", kcal: 0 })],
+      },
+    } as never;
+    expect(daySignalOf(log)).toBe("muted");
   });
 });
 
@@ -464,5 +557,25 @@ describe("mergeGuide", () => {
   it("una lista de platos vacía cuenta como «sin cifras»", () => {
     const prev = { macroEstimate: macros(2000), mealMacros: [meal(600)] };
     expect(mergeGuide(prev, { mealMacros: [] }).mealMacros).toEqual([meal(600)]);
+  });
+});
+
+describe("showsNutritionNumbers — la preferencia de ver cifras (ticket 01)", () => {
+  it("solo 'ocultar' esconde las cifras", () => {
+    expect(showsNutritionNumbers({ nutrition_numbers: "ocultar" })).toBe(false);
+    expect(showsNutritionNumbers({ nutrition_numbers: "mostrar" })).toBe(true);
+  });
+
+  it("sin perfil, sin valor o sin la columna todavía, se enseña como hasta ahora", () => {
+    expect(showsNutritionNumbers(null)).toBe(true);
+    expect(showsNutritionNumbers(undefined)).toBe(true);
+    expect(showsNutritionNumbers({})).toBe(true);
+    expect(showsNutritionNumbers({ nutrition_numbers: null })).toBe(true);
+  });
+
+  it("no se deduce de ningún otro dato (D3): ed_history no cuenta", () => {
+    expect(
+      showsNutritionNumbers({ nutrition_numbers: "mostrar", ed_history: "activa" } as never),
+    ).toBe(true);
   });
 });

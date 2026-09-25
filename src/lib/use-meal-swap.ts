@@ -20,10 +20,12 @@ import {
   useDaySettle,
   type DishDelta,
   type PendingDish,
+  type ResolvedDishes,
 } from "@/lib/day-settle";
 import { settleDay } from "@/lib/day-settle.functions";
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { mergeGuide, perMealKcalDeltas } from "@/lib/macros";
+import { guideReuse, isMealCalculated, mergeGuide, perMealDeltas } from "@/lib/macros";
+import { VAGUE_DISH_MESSAGE } from "@/lib/content-guard";
 import { setPlanMeal } from "@/lib/plan.functions";
 import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "@/lib/plan-shared";
 
@@ -53,9 +55,14 @@ let plannedSlots: readonly MealSlot[] = [];
 
 /**
  * Regenera las macros del día con los platos ya cambiados y saca el desvío de
- * cada comida. UNA llamada al modelo por lote, no una por plato.
+ * cada comida. UNA llamada por lote, no una por plato, y solo se descompone lo
+ * que ha cambiado: lo que ya tenía cifra va como `reuse`.
+ *
+ * Solo se mide con las dos cifras calculadas (D13). Si el plato del plan no
+ * tenía cifra congelada, se calcula en la misma llamada (`extraDishes`); si el
+ * plato nuevo sigue "calculando", el cambio vuelve a la cola del día.
  */
-async function resolveDishDeltas(dishes: PendingDish[]): Promise<DishDelta[]> {
+async function resolveDishDeltas(dishes: PendingDish[]): Promise<ResolvedDishes> {
   const today = todayISO();
   const month = today.slice(0, 7);
 
@@ -71,8 +78,18 @@ async function resolveDishDeltas(dishes: PendingDish[]): Promise<DishDelta[]> {
   const meals = mealsForDate(planBefore, today, plannedSlots)
     .filter((m) => m.idea)
     .map((m) => ({ moment: m.moment, idea: m.idea }));
-  const freshGuide = await generateDailyGuide({ data: { meals } });
-  const currentGuide = (await fetchTodayLog())?.guide ?? null;
+  const currentLog = await fetchTodayLog();
+  const currentGuide = currentLog?.guide ?? null;
+  const measured = dishes.filter((d) => d.kcalDeltaOverride == null);
+  // Plato del plan sin cifra: se calcula ahora, con su receta, antes de medir.
+  const needPlanned = measured.filter((d) => d.prevKcal == null && d.plannedDish);
+  const { dishMacros, ...freshGuide } = await generateDailyGuide({
+    data: {
+      meals,
+      reuse: guideReuse(currentGuide?.mealMacros, currentLog?.habits),
+      extraDishes: needPlanned.map((d) => d.plannedDish),
+    },
+  });
   const guide: DailyGuide = {
     // Nunca perder cifras buenas si la regeneración vuelve sin ellas.
     ...mergeGuide(currentGuide, freshGuide),
@@ -82,20 +99,53 @@ async function resolveDishDeltas(dishes: PendingDish[]): Promise<DishDelta[]> {
   };
   await updateTodayLog({ guide });
 
-  const byLabel = new Map(dishes.map((d) => [d.label, d]));
-  const deltas = [
-    ...perMealKcalDeltas(
-      dishes.filter((d) => d.kcalDeltaOverride == null),
-      freshGuide.mealMacros,
-    ),
-    ...dishes
-      .filter((d) => d.kcalDeltaOverride != null)
-      .map((d) => ({ label: d.label, kcalDelta: d.kcalDeltaOverride! })),
-  ];
-  return deltas.map(({ label, kcalDelta }) => {
-    const d = byLabel.get(label)!;
-    return { label, slot: d.slot, dish: d.dish, plannedDish: d.plannedDish, kcalDelta };
+  // Las cifras del plan recién calculadas se congelan en la comida, igual que
+  // si se hubieran capturado al cambiarla.
+  const planned = new Map<string, { kcal: number; protein: number }>();
+  needPlanned.forEach((d, i) => {
+    const m = dishMacros?.[i];
+    if (m?.status === "calculado") planned.set(d.label, { kcal: m.kcal, protein: m.protein_g });
   });
+  if (planned.size) {
+    await patchTodayHabits((habits) =>
+      habits.map((h) => {
+        const p = planned.get(h.label);
+        return p && h.plannedKcal == null
+          ? { ...h, plannedKcal: p.kcal, plannedProtein: p.protein }
+          : h;
+      }),
+    ).catch(() => {});
+  }
+  const withPlanned = measured.map((d) => {
+    const p = planned.get(d.label);
+    return p ? { ...d, prevKcal: p.kcal, prevProtein: p.protein } : d;
+  });
+
+  const { resolved, unresolved } = perMealDeltas(withPlanned, guide.mealMacros);
+  const byLabel = new Map(withPlanned.map((d) => [d.label, d]));
+  const overrides = dishes.filter((d) => d.kcalDeltaOverride != null);
+  const deltas: DishDelta[] = [
+    ...resolved.map(({ label, kcalDelta, proteinDelta }) => {
+      const d = byLabel.get(label)!;
+      return {
+        label,
+        slot: d.slot,
+        dish: d.dish,
+        plannedDish: d.plannedDish,
+        kcalDelta,
+        proteinDelta,
+      };
+    }),
+    ...overrides.map((d) => ({
+      label: d.label,
+      slot: d.slot,
+      dish: d.dish,
+      plannedDish: d.plannedDish,
+      kcalDelta: d.kcalDeltaOverride!,
+      proteinDelta: d.proteinDeltaOverride ?? null,
+    })),
+  ];
+  return { deltas, unresolved: unresolved.map((label) => byLabel.get(label)!).filter(Boolean) };
 }
 
 // ---------------------------------------------------------------------------
@@ -153,8 +203,18 @@ export function useMealSwap(
     () => savingSnapshot,
   );
 
+  /**
+   * Cambia el plato. Devuelve `{ ok: false, vague: true }` si el texto no dice
+   * qué se comió (ticket 13): la hoja se queda abierta y pide concretar u
+   * ofrece apuntar las kcal a mano (`manualKcal`), que salta esa comprobación.
+   */
   const swap = useCallback(
-    async (label: string, slot: MealSlot, dish: string) => {
+    async (
+      label: string,
+      slot: MealSlot,
+      dish: string,
+      opts: { manualKcal?: number } = {},
+    ): Promise<{ ok: true } | { ok: false; vague: boolean; message: string }> => {
       const today = todayISO();
       const log = getLog();
       // Contra qué se compara: la sugerencia original del plan si ya está
@@ -168,10 +228,20 @@ export function useMealSwap(
       // Las kcal contra las que se compara son las del plato del PLAN, y hay que
       // capturarlas en el primer cambio: cuando salte el lote la guía ya se
       // habrá regenerado con el plato nuevo.
-      const prevKcal =
-        habitNow?.plannedKcal ??
-        log?.guide?.mealMacros?.find((m) => m.moment === label)?.kcal ??
-        null;
+      // Solo una cifra CALCULADA vale como referencia (D13): una comida que aún
+      // estaba "calculando" deja `null` y se calcula al asentar.
+      const plannedMacros = log?.guide?.mealMacros?.find(
+        (m) => m.moment === label && isMealCalculated(m),
+      );
+      const prevKcal = habitNow?.plannedKcal ?? plannedMacros?.kcal ?? null;
+      const prevProtein =
+        habitNow?.plannedKcal != null
+          ? (habitNow.plannedProtein ?? null)
+          : (plannedMacros?.protein_g ?? null);
+      const manualKcal =
+        opts.manualKcal != null && Number.isFinite(opts.manualKcal)
+          ? Math.max(0, Math.min(5000, Math.round(opts.manualKcal)))
+          : undefined;
 
       markSaving(label, true);
       let savedDish = dish;
@@ -183,37 +253,48 @@ export function useMealSwap(
         // coincidir con el plato del plan y `reconcileHabits` lo trataría como
         // una confirmación caducada en la siguiente carga.
         const { dish: correctedDish, previousIdea } = await changeMeal({
-          data: { date: today, slot, dish, today },
+          data: { date: today, slot, dish, today, ...(manualKcal != null ? { manual: true } : {}) },
         });
         savedDish = correctedDish;
         await patchTodayHabits((habits) =>
-          habits.map((h) =>
-            h.label !== label
-              ? h
-              : {
-                  ...h,
-                  status: "distinto" as const,
-                  done: true,
-                  confirmedIdea: correctedDish,
-                  // El tachado es la sugerencia ORIGINAL del plan, congelada.
-                  plannedIdea: h.plannedIdea || h.wasIdea || previousIdea || plannedDish,
-                  ...(prevKcal == null ? {} : { plannedKcal: h.plannedKcal ?? prevKcal }),
-                  // El ajuste anterior de esta comida ya no describe la realidad.
-                  adjustmentChanges: undefined,
-                  adjustmentSummary: undefined,
-                  adjustmentKcal: undefined,
-                },
-          ),
+          habits.map((h) => {
+            if (h.label !== label) return h;
+            const { manualKcal: _previousManual, ...rest } = h;
+            return {
+              ...rest,
+              status: "distinto" as const,
+              done: true,
+              confirmedIdea: correctedDish,
+              // El tachado es la sugerencia ORIGINAL del plan, congelada.
+              plannedIdea: h.plannedIdea || h.wasIdea || previousIdea || plannedDish,
+              ...(prevKcal == null
+                ? {}
+                : {
+                    plannedKcal: h.plannedKcal ?? prevKcal,
+                    ...(h.plannedKcal == null && prevProtein != null
+                      ? { plannedProtein: prevProtein }
+                      : {}),
+                  }),
+              ...(manualKcal != null ? { manualKcal } : {}),
+              // El ajuste anterior de esta comida ya no describe la realidad.
+              adjustmentChanges: undefined,
+              adjustmentSummary: undefined,
+              adjustmentKcal: undefined,
+            };
+          }),
         );
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "No hemos podido cambiar el plato");
-        return;
+        // La hoja enseña el error en su sitio (y, si es vago, ofrece las kcal a
+        // mano): sin toast, que lo duplicaría.
+        const message = err instanceof Error ? err.message : "No hemos podido cambiar el plato";
+        return { ok: false, vague: message === VAGUE_DISH_MESSAGE, message };
       } finally {
         markSaving(label, false);
       }
 
       refresh();
-      queueDishChange(today, { label, slot, dish: savedDish, plannedDish, prevKcal });
+      queueDishChange(today, { label, slot, dish: savedDish, plannedDish, prevKcal, prevProtein });
+      return { ok: true };
     },
     [changeMeal, getLog, getPlan, refresh],
   );
@@ -261,6 +342,8 @@ export function useMealSwap(
         // Lo que el cambio movió en los días futuros y hay que devolver. Si
         // seguía en la cola, no se movió nada.
         const compensated = !queued && habit?.swapCompensated ? (habit.swapKcalDelta ?? 0) : 0;
+        const compensatedProtein =
+          !queued && habit?.swapCompensated ? (habit.swapProteinDelta ?? null) : null;
         await changeMeal({ data: { date: today, slot, dish: plannedDish, today, pin: false } });
         const next = await patchTodayHabits((habits) =>
           habits.map((h) =>
@@ -276,11 +359,17 @@ export function useMealSwap(
                   // el plato cambiado — con lo que la comida seguía saliendo
                   // como "editada" (tachado y sin receta) tras deshacer.
                   plannedIdea: plannedDish,
-                  ...(compensated ? { swapKcalDelta: -compensated, swapCompensated: false } : {}),
+                  ...(compensated || compensatedProtein
+                    ? {
+                        swapKcalDelta: -compensated,
+                        ...(compensatedProtein ? { swapProteinDelta: -compensatedProtein } : {}),
+                        swapCompensated: false,
+                      }
+                    : {}),
                 },
           ),
         );
-        if (compensated) {
+        if (compensated || compensatedProtein) {
           queueDishChange(today, {
             label,
             slot,
@@ -288,6 +377,7 @@ export function useMealSwap(
             plannedDish,
             prevKcal: null,
             kcalDeltaOverride: -compensated,
+            proteinDeltaOverride: compensatedProtein ? -compensatedProtein : null,
           });
         }
         refresh();

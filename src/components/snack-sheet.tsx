@@ -82,6 +82,7 @@ export function SnackSheet({
   today,
   onSaved,
   pastDay = false,
+  showNumbers = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -90,6 +91,12 @@ export function SnackSheet({
   /** Se abre desde el detalle de un día pasado (Plan y Hoy): solo corrige el
    * historial de ese día, no dispara el reajuste del plan. Cambia el copy. */
   pastDay?: boolean;
+  /**
+   * `false` con la preferencia de no ver cifras (ticket 01): se calcula igual,
+   * pero no se enseña ninguna cifra ni se piden kcal a mano. Si no se puede
+   * calcular, se pide describirlo mejor.
+   */
+  showNumbers?: boolean;
 }) {
   const estimateFn = useServerFn(estimateSnack);
   const logFn = useServerFn(logSnack);
@@ -215,7 +222,9 @@ export function SnackSheet({
           <SheetDescription>
             {pastDay
               ? "Apunta lo que picaste ese día para completar tu historial."
-              : "Apunta lo que has picado entre horas. Calculo sus kcal y, si hace falta, ajusto los próximos días."}
+              : showNumbers
+                ? "Apunta lo que has picado entre horas. Calculo sus kcal y, si hace falta, ajusto los próximos días."
+                : "Apunta lo que has picado entre horas. Si hace falta, ajusto los próximos días."}
           </SheetDescription>
         </SheetHeader>
 
@@ -286,7 +295,13 @@ export function SnackSheet({
             </Button>
           ) : (
             <div className="space-y-2 rounded-2xl bg-surface px-4 py-3.5">
-              {estimate.resolved && kcalInput == null && estimate.macros ? (
+              {!showNumbers ? (
+                <p className="text-sm text-foreground">
+                  {estimate.resolved
+                    ? "Listo, ya lo tengo calculado."
+                    : "No he podido calcularlo. Descríbelo con algo más de detalle (qué era y cuánto, más o menos)."}
+                </p>
+              ) : estimate.resolved && kcalInput == null && estimate.macros ? (
                 <>
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="font-title text-2xl leading-7 text-foreground">
@@ -341,7 +356,7 @@ export function SnackSheet({
               {ingredientsLine ? (
                 <p className="text-[11px] leading-snug text-muted-foreground">{ingredientsLine}</p>
               ) : null}
-              {estimate.lowConfidence && kcalInput == null ? (
+              {showNumbers && estimate.lowConfidence && kcalInput == null ? (
                 <p className="text-[11px] leading-snug text-primary">
                   No he reconocido todo lo que has escrito: revisa la cifra.
                 </p>

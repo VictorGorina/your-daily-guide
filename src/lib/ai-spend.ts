@@ -28,9 +28,12 @@ export type SpendCapDecision = {
 export const COACH_MODEL_USD_PER_MTOK = { input: 0.3, output: 2.5 } as const;
 export const PLAN_MODEL_USD_PER_MTOK = { input: 1.25, output: 10 } as const;
 export const DISH_MODEL_USD_PER_MTOK = { input: 1.25, output: 10 } as const;
+/** `DISAMBIGUATION_MODEL` (Gemini 2.5 Flash-Lite). */
+export const DISAMBIGUATION_MODEL_USD_PER_MTOK = { input: 0.1, output: 0.4 } as const;
 
 const MODEL_USD_PER_MTOK: Record<string, { input: number; output: number }> = {
   "google/gemini-2.5-flash": COACH_MODEL_USD_PER_MTOK,
+  "google/gemini-2.5-flash-lite": DISAMBIGUATION_MODEL_USD_PER_MTOK,
   "google/gemini-2.5-pro": PLAN_MODEL_USD_PER_MTOK,
   "openai/gpt-5": DISH_MODEL_USD_PER_MTOK,
 };
@@ -129,4 +132,19 @@ export function decideSpendCap(
     };
   }
   return { ...spent, allowed: true };
+}
+
+/**
+ * Qué topes cortan una llamada. `day` (lo normal) = el diario y el mensual.
+ * `month` = solo el mensual: lo usa la descomposición de platos (ticket 13 de
+ * `precision-nutricional`, D13), porque dejar un plato sin calcular rompe la
+ * promesa de que todo plato sale de su receta, cuesta céntimos, y sigue
+ * sumando al gasto y contando en las cuotas por hora.
+ */
+export type SpendCapScope = "day" | "month";
+
+/** ¿Esta decisión corta una llamada hecha con `capScope`? */
+export function spendCapBlocks(decision: SpendCapDecision, capScope: SpendCapScope): boolean {
+  if (decision.allowed) return false;
+  return capScope === "day" || decision.scope === "month";
 }

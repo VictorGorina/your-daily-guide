@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { classifyDish, FOOD_CATEGORIES, foodCategoryAccent } from "./food-categories";
+import {
+  classifyDish,
+  dishAsset,
+  FOOD_CATEGORIES,
+  foodCategoryAccent,
+  ingredientIcon,
+} from "./food-categories";
 
 describe("classifyDish", () => {
   it("clasifica por palabras clave en español", () => {
@@ -28,6 +34,23 @@ describe("classifyDish", () => {
     // el plato lleva atún → pescado; lo que NO debe pasar es que clasifique por
     // un 'pan' incrustado en 'empanada'
     expect(classifyDish("Empanada de atún")).toBe("pescado");
+  });
+
+  it("casa las palabras clave con ñ (el plato pierde la tilde al normalizarse)", () => {
+    // Regresión: se normalizaba el plato ("lasaña" → "lasana") pero no la
+    // palabra clave, así que ninguna con ñ podía casar nunca.
+    expect(classifyDish("Lasaña")).toBe("pasta");
+    expect(classifyDish("Piña")).toBe("fruta");
+    expect(classifyDish("Champiñones salteados")).toBe("verdura");
+    expect(classifyDish("Revuelto de champiñones")).toBe("verdura");
+  });
+});
+
+describe("ingredientIcon", () => {
+  it("casa las palabras clave con ñ", () => {
+    expect(ingredientIcon("Lasaña")).toBe("/food/icon-pasta.svg");
+    expect(ingredientIcon("Champiñones salteados")).toBe("/food/icon-champinon.svg");
+    expect(dishAsset("Lasaña")).toBe("/food/icon-pasta.svg");
   });
 });
 

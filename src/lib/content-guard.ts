@@ -163,6 +163,14 @@ export const isCleanFood = (text: string): boolean => blockedTermIn(text) === nu
 /** Copia de rechazo. Misma frase en las dos plataformas y en los dos caminos. */
 export const BLOCKED_FOOD_MESSAGE = "Eso no es comida. Escribe un plato de verdad.";
 export const BLOCKED_NAME_MESSAGE = "Ese nombre no vale. Escribe uno de verdad.";
+/**
+ * Texto que no dice qué se comió ("algo rápido", "lo de siempre"): no se
+ * inventa un plato ni un promedio, se le pide a la persona que concrete (ticket
+ * 13 de `precision-nutricional`, D13). La hoja de "comí distinto" reconoce este
+ * mensaje exacto para quedarse abierta y ofrecer apuntar las kcal a mano.
+ */
+export const VAGUE_DISH_MESSAGE =
+  "¿Qué comiste? Concreta un poco el plato, por ejemplo «bocadillo de jamón».";
 
 /**
  * Versión para un `.validator()` de server function: lanza `ValidationError`,

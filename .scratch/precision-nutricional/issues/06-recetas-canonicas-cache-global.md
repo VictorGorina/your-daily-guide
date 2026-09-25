@@ -3,6 +3,7 @@
 Status: ready
 Blocked by: 05
 Tamaño: M
+Fase: 2
 
 ## Qué
 
@@ -12,7 +13,7 @@ Hoy (y después todo lo demás) lea de ahí.
 ## Por qué
 
 Hallazgo H6. Es lo que garantiza "mismo plato → mismas cifras" y lo que hace asequible el pipeline
-del ticket 05 (3 muestras + validación) con un modelo barato: se paga una vez por plato, no una vez
+del ticket 05 (lectura estructurada + validación; y las fuentes del 20 si hacen falta): se paga una vez por plato, no una vez
 por persona y día.
 
 ## Diseño
@@ -23,11 +24,14 @@ por persona y día.
 create table dish_recipes (
   dish_key          text primary key,
   dish_label        text not null,
-  ingredients       jsonb not null,      -- [{foodKey, name, gramsRaw, method, confidence}]
+  ingredients       jsonb not null,      -- [{foodKey, name, gramsRaw, state, confidence}]
+  method            text not null,       -- enum de cocción del ticket 14 (decide el aceite)
+  serving_kind      text not null default 'plato',  -- 'plato' | 'unidad' (ticket 17)
+  unit_label        text,                -- "pizza individual"
   quality           numeric not null,
-  agreement         numeric not null,    -- acuerdo entre lecturas (ticket 05)
-  judged            boolean not null default false,
-  sources           text[] not null default '{}',  -- URLs de recetas publicadas (Sonar)
+  agreement         numeric,             -- acuerdo entre lecturas (ticket 20; null con una lectura)
+  judged            boolean not null default false,  -- ticket 20
+  sources           text[] not null default '{}',  -- URLs de recetas publicadas (Sonar, ticket 20)
   flags             text[] not null default '{}',
   pipeline_version  int not null,
   foods_version     text not null,
@@ -60,26 +64,38 @@ riesgo real; "pollo al curry" ≠ "curry de garbanzos" sí debe diferir).
 3. Lo que falte → pipeline del ticket 05 → `upsert … on conflict do nothing` con `supabaseAdmin`.
    Si dos personas piden el mismo plato a la vez, gana la primera y la otra lee la suya igual de
    válida.
-4. Si el pipeline falla, devuelve `null` para ese plato y el llamador usa `roughMealMacros`, como
-   ahora.
+4. Si el pipeline falla (tras toda la cadena del 13), devuelve `null` para ese plato. El llamador lo
+   enseña como "Calculando…" y lo reintenta. Nunca un promedio (D13).
 
 ### Quién lo usa en este ticket
 
-- `generateDailyGuide` → `macrosFromLookup` usa `getRecipes` con la ración base (el escalado llega en
-  el ticket 08).
+- `generateDailyGuide` → `macrosFromLookup` usa `getRecipes` con la ración personal (21; el escalado
+  fino llega en el 08).
 - Se elimina el memo por proceso de `resolve-dish.server.ts`.
 
 ### Precalentamiento
 
-Al guardar un plan (`generateMonthlyPlan`, `reflowMonthlyPlan`, `setPlanMeal`), descomponer los
-platos únicos de los **próximos 7 días** con un presupuesto de tiempo de ~8 s. El resto se calcula
-cuando se lea. Nada queda corriendo después de responder: en serverless no está garantizado.
+**Todos los platos del plan se calculan al generarlo** (D13). Ningún plato planificado llega a Hoy
+sin su receta.
+
+- Al guardar un plan (`generateMonthlyPlan`, `reflowMonthlyPlan`), el cliente pide en trozos
+  (`POST /api/v1/recipes/warm`, ~8 platos por llamada, varias en paralelo) los platos únicos del mes
+  que falten en la caché. La pantalla lo enseña: "Calculando tus platos 24/48".
+- Nada queda corriendo en el servidor después de responder (serverless). Si la app se cierra antes,
+  la pantalla Plan lo retoma al abrirse, con el mismo patrón que `flushPlanRecalc`.
+- Un plato del plan que no se puede calcular tras toda la cadena del 13 (no por una caída, sino
+  porque no se deja descomponer) se sustituye con **una** llamada con la forma `cambios` y se vuelve
+  a calcular.
+- `setPlanMeal` (plato escrito por la persona) calcula el suyo al guardarlo. Si el texto es vago, se
+  pregunta (13).
 
 ### Revisión manual
 
-`bun run recipes:review`: lista las recetas con más `hits` que tengan `quality < 0,95`,
-`agreement < 0,8`, `judged = true` o algún flag (sobre todo `una_fuente`), con sus ingredientes y
-las URLs de `sources`, para revisarlas a mano y marcar `reviewed = true`. Objetivo: las 100 recetas
+`bun run recipes:review`: lista las recetas con más `hits` que tengan `quality < 0,95` o algún flag
+de `validateRecipe` (`fuera_de_banda`, recortes, inventados) y, si existe el ticket 20,
+`agreement < 0,8` o `judged = true`. Enseña sus ingredientes (y las URLs de `sources`) para
+revisarlas a mano y marcar `reviewed = true`. Mientras no haya fuentes independientes, esta
+revisión es la segunda opinión de las recetas más usadas. Objetivo: las 100 recetas
 con más `hits` revisadas en el primer mes. Una receta revisada no se
 vuelve a descomponer aunque cambie `PIPELINE_VERSION`.
 
@@ -94,6 +110,8 @@ vuelve a descomponer aunque cambie `PIPELINE_VERSION`.
 ## Criterios de aceptación
 
 - [ ] El mismo plato para dos personas y en dos días → macros idénticas.
+- [ ] Tras generar un plan, todos sus platos están en la caché. Si la app se cierra a medias, se
+      retoma al reabrir Plan (test del reintento).
 - [ ] Una sesión `authenticated` no puede insertar ni actualizar en `dish_recipes` (probar con la
       anon key y un JWT del perfil demo).
 - [ ] La guía diaria con todos los platos en caché no hace **ninguna** llamada de descomposición.
@@ -102,3 +120,10 @@ vuelve a descomponer aunque cambie `PIPELINE_VERSION`.
 - [ ] Móvil sin cambios: `/api/v1/guide` devuelve la misma forma. Comprobar Hoy en el simulador.
 
 ## Comments
+
+- 2026-09-24 — Replanificación: pasa a la fase 2, detrás del 05 de una sola lectura. Las columnas
+  `agreement`, `judged` y `sources` quedan reservadas para el ticket 20 (fuentes independientes, solo
+  si el eval lo pide). La receta guarda también `method`, `servingKind` y `unitLabel` (05), que usan
+  el 14 (aceite) y el 17 (unidad natural). Con la caché, el 18 mide lo que absorbe el reajuste actual.
+
+- 2026-09-24 — Tras confirmar D7-D13: D13: todos los platos del plan se calculan al generarlo (antes, solo los próximos 7 días).

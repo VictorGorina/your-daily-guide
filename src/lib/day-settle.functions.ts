@@ -72,7 +72,12 @@ type DishChange = {
   dish: string;
   plannedDish: string;
   kcalDelta: number;
+  /** `null` si no se sabe (cifra manual): no decide nada. */
+  proteinDelta: number | null;
 };
+
+/** Lo que manda el cliente: una app móvil anterior al ticket 13 no manda proteína. */
+type DishChangeInput = Omit<DishChange, "proteinDelta"> & { proteinDelta?: number | null };
 
 type DayRow = {
   habits: MealHabit[];
@@ -217,6 +222,8 @@ type Reservation = {
   snackKcal: number;
   exerciseKcal: number;
   total: number;
+  /** Proteína pendiente (g, con signo) que se reservó con las comidas. */
+  protein: number;
 };
 
 export type SettleDayResult = {
@@ -229,7 +236,7 @@ export type SettleDayResult = {
 
 export const settleDay = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input?: { today?: string; changes?: DishChange[] }) => {
+  .validator((input?: { today?: string; changes?: DishChangeInput[] }) => {
     const changes = (Array.isArray(input?.changes) ? input.changes : [])
       .slice(0, DISH_CHANGE_MAX)
       .map((c) => ({
@@ -238,6 +245,10 @@ export const settleDay = createServerFn({ method: "POST" })
         dish: String(c?.dish ?? "").slice(0, 200),
         plannedDish: String(c?.plannedDish ?? "").slice(0, 200),
         kcalDelta: Number.isFinite(Number(c?.kcalDelta)) ? Math.round(Number(c.kcalDelta)) : 0,
+        proteinDelta:
+          c?.proteinDelta != null && Number.isFinite(Number(c.proteinDelta))
+            ? Math.round(Number(c.proteinDelta))
+            : null,
       }))
       .filter((c) => c.label);
     return { today: todayOf(input?.today), changes };
@@ -263,7 +274,14 @@ export const settleDay = createServerFn({ method: "POST" })
           return {
             habits: current.habits.map((h) => {
               const c = byLabel.get(h.label);
-              return c ? { ...h, swapKcalDelta: c.kcalDelta, swapCompensated: false } : h;
+              if (!c) return h;
+              const { swapProteinDelta: _previous, ...rest } = h;
+              return {
+                ...rest,
+                swapKcalDelta: c.kcalDelta,
+                ...(c.proteinDelta != null ? { swapProteinDelta: c.proteinDelta } : {}),
+                swapCompensated: false,
+              };
             }),
           };
         })
@@ -272,7 +290,7 @@ export const settleDay = createServerFn({ method: "POST" })
 
     // 2. El día entero, de una pieza.
     const balance = dayBalance(row.habits, row.snacks, row.exercise);
-    if (!balance.pending) return { outcome: "nothing", kcal: 0 };
+    if (!balance.pending && !balance.proteinPending) return { outcome: "nothing", kcal: 0 };
 
     const [{ data: profileRow }, { data: planRow }] = await Promise.all([
       supabase
@@ -291,13 +309,17 @@ export const settleDay = createServerFn({ method: "POST" })
     ]);
     const profile = (profileRow ?? {}) as Record<string, unknown>;
 
-    // 3. UNA decisión, con el desvío sumado de los tres orígenes.
-    const decision = compensationNeed({
+    // 3. UNA decisión, con el desvío sumado de los tres orígenes: kcal y, desde
+    //    el ticket 13, proteína (una bajada de ≥ 20 g se compensa siempre).
+    const needInput = {
       deltaKcal: balance.pending,
       goal: goalOf(profile),
       pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
       reversing: dayReversing(balance),
-    });
+    };
+    const decision = compensationNeed({ ...needInput, deltaProtein: balance.proteinPending });
+    // ¿Dispara SOLO la proteína? Cambia qué se hace si el modelo no mueve nada.
+    const proteinOnly = decision.compensate && !compensationNeed(needInput).compensate;
     if (!decision.compensate) {
       await recordOutcome(decision.reason);
       return { outcome: decision.reason, kcal: balance.pending };
@@ -330,11 +352,19 @@ export const settleDay = createServerFn({ method: "POST" })
     // 4. Reserva: los tres libros se marcan como compensados ANTES de llamar a
     //    la IA, releyendo lo último, para que un asentamiento simultáneo no
     //    compense lo mismo dos veces.
-    let reservation: Reservation = { labels: [], snackKcal: 0, exerciseKcal: 0, total: 0 };
+    let reservation: Reservation = {
+      labels: [],
+      snackKcal: 0,
+      exerciseKcal: 0,
+      total: 0,
+      protein: 0,
+    };
     const reserved = await patchDay(supabase, userId, today, (current) => {
       const now = dayBalance(current.habits, current.snacks, current.exercise);
       const labels = current.habits
-        .filter((h) => h.swapKcalDelta != null && !h.swapCompensated)
+        .filter(
+          (h) => (h.swapKcalDelta != null || h.swapProteinDelta != null) && !h.swapCompensated,
+        )
         .map((h) => h.label);
       const pendingSnacks = pendingSnackKcal(current.snacks);
       const pendingExercise = pendingExerciseKcal(current.exercise);
@@ -343,6 +373,7 @@ export const settleDay = createServerFn({ method: "POST" })
         snackKcal: pendingSnacks,
         exerciseKcal: pendingExercise,
         total: now.pending,
+        protein: now.proteinPending,
       };
       return {
         habits: current.habits.map((h) =>
@@ -366,7 +397,9 @@ export const settleDay = createServerFn({ method: "POST" })
           : {}),
       };
     });
-    if (!reserved || !reservation.total) return { outcome: "nothing", kcal: 0 };
+    if (!reserved || (!reservation.total && !reservation.protein)) {
+      return { outcome: "nothing", kcal: 0 };
+    }
 
     const release = async () => {
       await patchDay(supabase, userId, today, (current) => ({
@@ -415,12 +448,21 @@ export const settleDay = createServerFn({ method: "POST" })
           exerciseEntries: row.exercise?.entries ?? [],
           pendingKcal: reservation.total,
           reversing: dayReversing(balance),
+          proteinDrop: decision.proteinDelta,
         }),
         kcalDelta: decision.kcalDelta,
         window: window.dates,
         soloOnly: true,
       });
       const futureChanges = diffFutureMeals(before, plan, today);
+      // Solo la proteína disparaba y el modelo no ha movido nada: se devuelve la
+      // reserva (no está compensado) pero SIN lanzar, para que el cliente no lo
+      // reintente cada minuto; el siguiente asentamiento del día lo retoma.
+      if (!futureChanges.length && proteinOnly) {
+        await release();
+        await recordOutcome("below-threshold");
+        return { outcome: "below-threshold", kcal: reservation.total };
+      }
       // Un desvío por encima del umbral que no mueve ningún plato no está
       // compensado: si se diera por bueno, el exceso se perdería en silencio.
       // Se trata como intento fallido (se devuelve la reserva) y el cliente lo

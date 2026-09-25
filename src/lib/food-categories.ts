@@ -478,37 +478,55 @@ function stripAccents(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
+/** What separates whole words in a dish name, so "pan" never matches inside "empanada". */
+const WORD_SEPARATORS = /[\s,;.()/-]+/;
+
+/**
+ * Build a keyword matcher once, at module load. Rules:
+ * - keywords are normalized like the dish itself, or one with ñ ("lasaña")
+ *   could never match the normalized dish ("lasana");
+ * - multi-word keywords match as substrings and are checked first;
+ * - single words match only as a whole word of the dish;
+ * - within each pass, the first keyword in list order wins.
+ * Single words are one Map lookup per word of the dish. Building one RegExp
+ * per keyword on every call cost ~300 regexes for a dish in the last category.
+ */
+function keywordMatcher<T>(groups: [T, string[]][]): (dishName: string) => T | null {
+  const phrases: [string, T][] = [];
+  // rank = position in the list, so the earliest keyword wins whatever the
+  // order of the words in the dish
+  const words = new Map<string, { rank: number; value: T }>();
+  for (const [value, keywords] of groups) {
+    for (const raw of keywords) {
+      const kw = stripAccents(raw);
+      if (kw.includes(" ")) phrases.push([kw, value]);
+      else if (!words.has(kw)) words.set(kw, { rank: words.size, value });
+    }
+  }
+
+  return (dishName) => {
+    const normalized = stripAccents(dishName.toLowerCase().trim());
+    for (const [kw, value] of phrases) {
+      if (normalized.includes(kw)) return value;
+    }
+    let best: { rank: number; value: T } | undefined;
+    for (const word of normalized.split(WORD_SEPARATORS)) {
+      const hit = words.get(word);
+      if (hit && (!best || hit.rank < best.rank)) best = hit;
+    }
+    return best ? best.value : null;
+  };
+}
+
+const matchCategory = keywordMatcher(KEYWORDS);
+
 /**
  * Classify a dish name (in Spanish) into a food category using keyword
  * matching. Multi-word keywords are checked first so "crema de verduras"
  * wins over a hypothetical single-word match on "crema".
  */
 export function classifyDish(dishName: string): FoodCategory {
-  const normalized = stripAccents(dishName.toLowerCase().trim());
-
-  // First pass: multi-word keywords (length > 1 word)
-  for (const [category, keywords] of KEYWORDS) {
-    for (const kw of keywords) {
-      if (kw.includes(" ") && normalized.includes(kw)) {
-        return category;
-      }
-    }
-  }
-
-  // Second pass: single-word keywords — match as whole word boundary
-  for (const [category, keywords] of KEYWORDS) {
-    for (const kw of keywords) {
-      if (!kw.includes(" ")) {
-        // Use word-boundary-style check so "pan" doesn't match inside "empanada"
-        const re = new RegExp(`(?:^|\\s|[,;.()/-])${kw}(?:$|\\s|[,;.()/-])`, "i");
-        if (re.test(normalized)) {
-          return category;
-        }
-      }
-    }
-  }
-
-  return "otro";
+  return matchCategory(dishName) ?? "otro";
 }
 
 // ---------------------------------------------------------------------------
@@ -732,36 +750,18 @@ const INGREDIENT_ICONS: [string[], string][] = [
   [["hierbas", "albahaca", "perejil", "cilantro", "oregano", "romero", "tomillo"], "hierbas"],
 ];
 
+const matchIngredientIcon = keywordMatcher(
+  INGREDIENT_ICONS.map(([keywords, icon]): [string, string[]] => [icon, keywords]),
+);
+
 /**
  * Find the most specific ingredient SVG icon for a dish name.
  * Returns the path `/food/icon-{name}.svg` of the first matching ingredient,
  * or `null` if nothing matches at ingredient level.
  */
 export function ingredientIcon(dishName: string): string | null {
-  const normalized = stripAccents(dishName.toLowerCase().trim());
-
-  // Multi-word keywords first (across all entries)
-  for (const [keywords, icon] of INGREDIENT_ICONS) {
-    for (const kw of keywords) {
-      if (kw.includes(" ") && normalized.includes(kw)) {
-        return `/food/icon-${icon}.svg`;
-      }
-    }
-  }
-
-  // Single-word keywords — whole-word match
-  for (const [keywords, icon] of INGREDIENT_ICONS) {
-    for (const kw of keywords) {
-      if (!kw.includes(" ")) {
-        const re = new RegExp(`(?:^|\\s|[,;.()/-])${kw}(?:$|\\s|[,;.()/-])`, "i");
-        if (re.test(normalized)) {
-          return `/food/icon-${icon}.svg`;
-        }
-      }
-    }
-  }
-
-  return null;
+  const icon = matchIngredientIcon(dishName);
+  return icon ? `/food/icon-${icon}.svg` : null;
 }
 
 /**

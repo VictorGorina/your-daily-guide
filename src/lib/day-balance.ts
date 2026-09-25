@@ -1,5 +1,10 @@
 import { exerciseTotals, pendingExerciseKcal, type DayExercise } from "@/lib/exercise";
-import { pendingSwapKcal, type MealChange, type MealHabit } from "@/lib/plan-shared";
+import {
+  pendingSwapKcal,
+  pendingSwapProtein,
+  type MealChange,
+  type MealHabit,
+} from "@/lib/plan-shared";
 import { pendingSnackKcal, snackTotals, type DaySnacks } from "@/lib/snacks";
 
 /**
@@ -54,6 +59,13 @@ export type DayBalance = {
   pending: number;
   /** Lo ya absorbido por los días futuros, con signo. */
   compensated: number;
+  /**
+   * Desvío de proteína (g) aún sin mandar, con signo (ticket 13): lo que las
+   * comidas cambiadas quitan o añaden frente al plan. El picoteo, que es comida
+   * de verdad, suma su proteína contra esa bajada; el deporte no suma nada.
+   * Solo decide cuando baja (`COMPENSATION_PROTEIN_DROP_G`).
+   */
+  proteinPending: number;
   /** ¿Hay algo que contar? Si no, la tarjeta de Hoy no se pinta. */
   active: boolean;
 };
@@ -106,11 +118,17 @@ export function dayBalance(
     compensatedMealsKcal(list) + (snacks?.compensatedKcal ?? 0) + (exercise?.compensatedKcal ?? 0),
   );
   const net = sources.meals + sources.snacks + sources.exercise;
+  // El picoteo solo cuenta contra una bajada pendiente: su proteína nunca
+  // dispara nada por sí sola (subir proteína no se compensa).
+  const swapProtein = pendingSwapProtein(list);
+  const proteinPending =
+    swapProtein < 0 ? Math.min(0, swapProtein + Math.round(snackTotals(snacks).protein_g)) : 0;
   return {
     sources,
     net,
     pending,
     compensated,
+    proteinPending,
     // Lo que hace que la tarjeta valga la pena es que haya algo QUE ENSEÑAR: una
     // línea de desglose, o algo por asentar (para poder decir "ajustando…").
     // `compensated` a solas no cuenta: un día que ya compensó algo y luego se
@@ -118,7 +136,12 @@ export function dayBalance(
     // "Balance de hoy · 0 kcal" sin ninguna línea debajo — un cero mudo que no
     // informa de nada. (El componente la pinta igualmente si hay platos movidos
     // que enseñar, aunque el día haya vuelto a cero.)
-    active: sources.meals !== 0 || sources.snacks !== 0 || sources.exercise !== 0 || pending !== 0,
+    active:
+      sources.meals !== 0 ||
+      sources.snacks !== 0 ||
+      sources.exercise !== 0 ||
+      pending !== 0 ||
+      proteinPending !== 0,
   };
 }
 
@@ -246,6 +269,8 @@ export function dayNote(opts: {
   }[];
   pendingKcal: number;
   reversing: boolean;
+  /** Bajada de proteína (g, negativa) que hay que reponer, si es lo que dispara. */
+  proteinDrop?: number | null;
 }): string {
   const parts: string[] = [];
   if (opts.changedMeals.length) {
@@ -269,16 +294,25 @@ export function dayNote(opts: {
   }
 
   const what = parts.length ? `Hoy ${parts.join(", y ")}.` : "Hoy se ha desviado del plan.";
+  // Hasta el ticket 12 la proteína la repone el modelo: se le dice en la nota.
+  const protein =
+    opts.proteinDrop != null && opts.proteinDrop < 0
+      ? ` Además ha comido unos ${-Math.round(opts.proteinDrop)} g menos de proteína de lo previsto: ` +
+        "refuerza la proteína de las comidas de los días siguientes (legumbre, huevo, pescado, carne " +
+        "magra o lácteos) sin subir la energía."
+      : "";
   if (opts.reversing) {
     return `${what} Se ha deshecho parte de lo que ya se había compensado: ${
       opts.pendingKcal > 0
         ? "retira de los días siguientes la energía de más que se les había puesto."
         : "devuelve a los días siguientes la energía que se les había quitado."
-    }`;
+    }${protein}`;
   }
+  // Solo la proteína dispara: la energía está dentro del margen.
+  if (protein && Math.abs(opts.pendingKcal) < 200) return `${what}${protein}`;
   return opts.pendingKcal >= 0
-    ? `${what} Recoloca los días siguientes para compensar el exceso.`
-    : `${what} Repón ese déficit en los días siguientes.`;
+    ? `${what} Recoloca los días siguientes para compensar el exceso.${protein}`
+    : `${what} Repón ese déficit en los días siguientes.${protein}`;
 }
 
 /**

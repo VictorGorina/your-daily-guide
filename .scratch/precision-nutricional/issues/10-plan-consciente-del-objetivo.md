@@ -1,8 +1,9 @@
 # 10 — Plan que encaja con el objetivo de cada adulto
 
 Status: ready (D2 y D4 aprobadas)
-Blocked by: 07, 08
+Blocked by: 08, 15, 23
 Tamaño: L
+Fase: 3
 Absorbe: la parte de salida por schema de `.scratch/nutricion-determinista/issues/04-reflow-y-schema.md`
 
 ## Qué
@@ -21,15 +22,8 @@ sus comidas propias no tienen margen. El plan tiene que proponer platos que **se
 
 ### Prompt
 
-- Planificador o persona sola: "Kcal orientativas por comida: desayuno ~430, comida ~600, cena ~485,
-  merienda ~210. Elige platos que a una ración normal ronden esas cifras; las cantidades exactas las
-  pone el sistema." En un hogar, para las comidas compartidas se da la media de los adultos (sin
-  nombres ni cifras individuales).
-- Se mantiene "sin gramajes en los platos": los gramos los pone el código.
-- Las cifras del prompt no se enseñan a la persona; la preferencia `nutrition_numbers` no afecta a
-  cómo se calcula el plan.
-- **Salida por schema** (`generateObject` + Zod) en vez de `askForJson` con 3 reintentos. El JSON del
-  plan es largo: medir latencia y tokens de salida antes de retirar el camino actual.
+Lo pone el ticket 23: kcal y proteína por comida, estructura de la comida (plato · acompañamiento ·
+postre) y salida por schema. Este ticket comprueba en código lo que sale y lo corrige.
 
 ### Comprobación en código — `planFit(plan, household, targets, recipes)` (puro)
 
@@ -57,6 +51,18 @@ sus comidas propias no tienen margen. El plan tiene que proponer platos que **se
 - Se vuelve a pasar `planFit` y se recalculan los factores. Lo que siga sin encajar se acepta con su
   residuo: nunca bucles.
 
+### Estructura de la comida
+
+La pide el 23. `planFit` comprueba además que la comida y la cena lleven ≥ 25-30 g de proteína
+cuando el objetivo de proteína es ≥ 1,6 g/kg, y que ninguna comida principal sea de un solo
+componente.
+
+### Necesidades especiales (ticket 15)
+
+El prompt recibe las reglas activas de la persona, sin nombrar la condición: "proteína moderada",
+"carbohidratos repartidos y con fibra", "proteína vegetal en comida y cena". `planFit` las
+comprueba igual que el objetivo.
+
 ## Archivos
 
 - `src/lib/plan.functions.ts` (`generatePlanBody`, `generateMonthlyPlan`)
@@ -66,9 +72,11 @@ sus comidas propias no tienen margen. El plan tiene que proponer platos que **se
 
 ## Criterios de aceptación
 
-- [ ] `bun run eval:plan` con 3 perfiles solos (~1.600, ~2.200 y ~2.900 kcal) y 2 hogares (dos
-      adultos de 1.700 + 2.500 kcal; dos adultos + un niño `mesa`): ≥ 90 % de los días de cada
-      adulto a ±5 % de su objetivo; proteína ≥ 90 %.
+- [ ] `bun run eval:plan` con las tipologías del spec ("Qué significa personalizado"): mujer que
+      pierde (~1.310), hombre que mantiene (~2.450), joven que gana entrenando (~3.440),
+      embarazada, vegana, diabetes tipo 2, enfermedad renal, y 2 hogares (dos adultos de 1.700 +
+      2.500 kcal; dos adultos + un niño `mesa`). ≥ 90 % de los días de cada adulto a ±5 % de su
+      objetivo; proteína ≥ 90 % (salvo la marca `renal`, que no puede pasar de su tope).
 - [ ] En los hogares, la ración compartida es igual para todos los adultos en el 100 % de las
       comidas compartidas.
 - [ ] Como mucho una ronda de corrección por generación (contada en el log).
@@ -78,3 +86,9 @@ sus comidas propias no tienen margen. El plan tiene que proponer platos que **se
 - [ ] Simulador iOS: el plan se ve igual.
 
 ## Comments
+
+- 2026-09-24 — Replanificación tras la auditoría: se añaden la estructura de comida por rango de
+  kcal (el escalado solo no llega a los objetivos altos), la proteína por comida principal, las
+  reglas del 15 y las tipologías de usuario como perfiles del eval.
+
+- 2026-09-24 — Tras confirmar D7-D13: la parte de prompt (kcal por comida, estructura, schema) pasa al 23; aquí queda `planFit` y la corrección.

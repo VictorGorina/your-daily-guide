@@ -11,6 +11,7 @@ import {
   type DayBalance,
 } from "./day-balance";
 import type { DayExercise, ExerciseEntry } from "./exercise";
+import { compensationNeed } from "./nutrition/compensation";
 import type { MealChange, MealHabit } from "./plan-shared";
 import type { DaySnacks, SnackEntry } from "./snacks";
 
@@ -295,5 +296,85 @@ describe("balanceNote", () => {
 
   it("sin nada que explicar tras un ajuste no dice nada", () => {
     expect(balanceNote(withSources(0, 300, 0), "adjusted")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Proteína en la decisión (ticket 13 de `precision-nutricional`)
+// ---------------------------------------------------------------------------
+
+describe("proteína del día", () => {
+  it("lentejas → pasta con tomate (−22 g de P, +40 kcal) compensa por proteína con cualquier objetivo", () => {
+    const habits = [
+      habit("Comida", {
+        status: "distinto",
+        swapKcalDelta: 40,
+        swapProteinDelta: -22,
+        swapCompensated: false,
+      }),
+    ];
+    const balance = dayBalance(habits, null, null);
+    expect(balance.pending).toBe(40);
+    expect(balance.proteinPending).toBe(-22);
+    for (const goal of ["perder", "mantener", "ganar", null]) {
+      const decision = compensationNeed({
+        deltaKcal: balance.pending,
+        deltaProtein: balance.proteinPending,
+        goal,
+      });
+      expect(decision).toMatchObject({ compensate: true, proteinDelta: -22 });
+      // Sin la proteína (como antes del ticket 13), no se movía nada.
+      expect(compensationNeed({ deltaKcal: balance.pending, goal }).compensate).toBe(false);
+    }
+  });
+
+  it("el picoteo repone proteína contra una bajada; el deporte no suma nada", () => {
+    const habits = [
+      habit("Comida", { status: "distinto", swapKcalDelta: 0, swapProteinDelta: -25 }),
+    ];
+    const withSnack: DaySnacks = {
+      entries: [
+        {
+          id: "s1",
+          text: "yogur griego",
+          at: "2026-09-21T11:00:00.000Z",
+          kcal: 120,
+          protein_g: 10,
+          carbs_g: 5,
+          fat_g: 6,
+          fiber_g: 0,
+          source: "lookup",
+        },
+      ],
+      compensatedKcal: 0,
+    } as DaySnacks;
+    expect(dayBalance(habits, withSnack, null).proteinPending).toBe(-15);
+  });
+
+  it("subir proteína no decide nada, y lo ya compensado no cuenta", () => {
+    expect(
+      dayBalance([habit("Cena", { status: "distinto", swapProteinDelta: 30 })], null, null)
+        .proteinPending,
+    ).toBe(0);
+    expect(
+      dayBalance(
+        [habit("Cena", { status: "distinto", swapProteinDelta: -30, swapCompensated: true })],
+        null,
+        null,
+      ).proteinPending,
+    ).toBe(0);
+  });
+
+  it("la nota del día pide reponer proteína cuando es lo que dispara", () => {
+    const note = dayNote({
+      changedMeals: [{ label: "Comida", dish: "Pasta con tomate", plannedDish: "Lentejas" }],
+      snackEntries: [],
+      exerciseEntries: [],
+      pendingKcal: 40,
+      reversing: false,
+      proteinDrop: -22,
+    });
+    expect(note).toContain("22 g menos de proteína");
+    expect(note).not.toContain("compensar el exceso");
   });
 });

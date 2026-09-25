@@ -10,7 +10,8 @@ import {
   currencySymbol,
   PLAN_MODEL,
 } from "@/lib/ai-provider.server";
-import { assertCleanFood, BLOCKED_FOOD_MESSAGE } from "@/lib/content-guard";
+import { assertCleanFood, BLOCKED_FOOD_MESSAGE, VAGUE_DISH_MESSAGE } from "@/lib/content-guard";
+import { showsNutritionNumbers } from "@/lib/macros";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import {
   describeServings,
@@ -1711,12 +1712,12 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
       await enforceUserRateLimit(userId, "plan-adjust");
 
-      const { decomposeDishes } = await import("@/lib/nutrition/resolve-dish.server");
+      const { decomposeDishes, isCalculated } = await import("@/lib/nutrition/resolve-dish.server");
       const breakdowns = await decomposeDishes([plannedDish, dish], { apiKey: key, userId });
       const from = breakdowns.get(plannedDish.trim());
       const to = breakdowns.get(dish.trim());
-      const usable = (b: typeof from) => !!b && b.source === "model" && b.quality >= 0.4;
-      if (!usable(from) || !usable(to)) return { adjusted: false, reason: "no-macros" };
+      // Solo con las dos cifras calculadas (D13): sin una, no se compensa a ciegas.
+      if (!isCalculated(from) || !isCalculated(to)) return { adjusted: false, reason: "no-macros" };
 
       const { data: profileRow } = await supabase
         .from("profiles")
@@ -1926,6 +1927,12 @@ async function resolveDish(
   dish: string,
   shopping: ShoppingList,
   pantryExtras: PantryExtra[] = [],
+  /**
+   * ¿Se rechaza un texto vago ("algo rápido")? Sí en un cambio pedido por la
+   * persona; no al deshacer (se restaura el plato del plan) ni cuando apunta
+   * las kcal a mano, que es justo la salida que se le ofrece (ticket 13).
+   */
+  rejectVague = false,
 ): Promise<{ dish: string; off: string[] }> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { dish, off: [] };
@@ -1947,6 +1954,9 @@ async function resolveDish(
         "Dime también si eso es comida de verdad: cualquier plato, alimento o bebida vale, por " +
         "raro, casero o poco saludable que sea. Solo NO es comida si es una broma, un insulto o " +
         "algo que no se come.\n" +
+        'Y si es vago: true SOLO si el texto no permite saber qué se comió ("algo rápido", ' +
+        '"lo de siempre", "lo que había en la oficina", "cualquier cosa"). Un plato genérico pero ' +
+        'reconocible ("un bocadillo", "ensalada", "pasta") NO es vago.\n' +
         (names
           ? `Ingredientes disponibles (comprados y los que dice tener en casa): ${names}\n` +
             "Además, ¿qué ingredientes necesarios para ese plato NO están disponibles? " +
@@ -1954,7 +1964,7 @@ async function resolveDish(
             "Cuenta como cubierto todo ingrediente equivalente aunque el nombre no sea idéntico " +
             "(p. ej. 'pechuga de pollo' lo cubre 'pollo'; 'tomate cherry' lo cubre 'tomate').\n"
           : "") +
-        `Devuelve solo JSON: {"comida": true|false, "plato": "nombre del plato con la ortografía corregida"${
+        `Devuelve solo JSON: {"comida": true|false, "vago": true|false, "plato": "nombre del plato con la ortografía corregida"${
           names
             ? ', "fuera": [ingredientes que faltan, en minúsculas, máx. 5; lista vacía si no falta ninguno]'
             : ""
@@ -1964,12 +1974,17 @@ async function resolveDish(
       plato?: unknown;
       fuera?: unknown;
       comida?: unknown;
+      vago?: unknown;
     };
     // Segunda red, después de `assertCleanFood`: la lista corta lo evidente sin
     // gastar nada, y esto coge lo que una lista nunca cogerá (otros idiomas,
     // eufemismos, "un plato de heces"). Solo con un `false` explícito: si el
     // campo no llega, se deja pasar, como todo lo demás de esta función.
     if (parsed.comida === false) throw new ValidationError(BLOCKED_FOOD_MESSAGE);
+    // Texto que no dice qué se comió: no se guarda un plato que luego no se
+    // puede calcular, se le pide a la persona que concrete (D13). Igual que con
+    // "comida", solo con un `true` explícito.
+    if (rejectVague && parsed.vago === true) throw new ValidationError(VAGUE_DISH_MESSAGE);
     const corrected = typeof parsed.plato === "string" ? parsed.plato.trim() : "";
     const off = (Array.isArray(parsed.fuera) ? parsed.fuera : [])
       .map((n) => String(n).trim().toLowerCase())
@@ -1997,7 +2012,15 @@ async function resolveDish(
 export const setPlanMeal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
-    (input: { date: string; slot: string; dish: string; today?: string; pin?: boolean }) => {
+    (input: {
+      date: string;
+      slot: string;
+      dish: string;
+      today?: string;
+      pin?: boolean;
+      /** La persona apunta las kcal a mano: se acepta un texto vago (ticket 13). */
+      manual?: boolean;
+    }) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date ?? ""))
         throw new ValidationError("Fecha no válida");
       if (!MEAL_SLOTS.includes(input?.slot as MealSlot))
@@ -2018,7 +2041,14 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       // Un plato pedido a mano queda fijado por defecto; `pin: false` solo lo
       // manda "Deshacer", para devolver el día al estado exacto de antes.
       const pin = input?.pin !== false;
-      return { date: input.date, slot: input.slot as MealSlot, dish, today, pin };
+      return {
+        date: input.date,
+        slot: input.slot as MealSlot,
+        dish,
+        today,
+        pin,
+        manual: input?.manual === true,
+      };
     },
   )
   .handler(
@@ -2060,7 +2090,13 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       const pantryExtras = cleanPantryExtras(
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
       );
-      const { dish, off } = await resolveDish(context.userId, data.dish, shopping, pantryExtras);
+      const { dish, off } = await resolveDish(
+        context.userId,
+        data.dish,
+        shopping,
+        pantryExtras,
+        data.pin && !data.manual,
+      );
       const previousPinned = isPinned(current.weeks[at.weekIndex]?.days[at.dayIndex], data.slot);
 
       const next = withPlanMeal(current, data.date, data.slot, dish, { off, pin: data.pin });
@@ -2552,6 +2588,11 @@ export const goalImpact = createServerFn({ method: "POST" })
             `Lo que cuenta la persona: ${data.note}\n\n` +
             "Estima en kcal el impacto de lo que cuenta (exceso o déficit) y calcula cómo afecta a su objetivo de peso y a su fecha objetivo (7700 kcal ≈ 1 kg). " +
             "Después ofrécele dos caminos: 1) mantener el ritmo y adelantar la fecha objetivo, o 2) ser algo más laxo y mantener la fecha. Sin culpar, sin dramatizar, con números orientativos y frases cortas. " +
+            // Ticket 01: con "ocultar", el cálculo se hace igual pero el texto
+            // que lee la persona no lleva ninguna cifra de energía.
+            (showsNutritionNumbers(profile as never)
+              ? ""
+              : "IMPORTANTE: esta persona NO quiere ver cifras de calorías ni de macros: el campo text no puede llevar ninguna cifra de kcal ni de gramos; habla de fechas y de sensaciones. ") +
             'Devuelve solo JSON: {"kcal_delta": number (positivo = exceso, negativo = déficit), "text": string (máx. 6 líneas, sin markdown, hablándole de tú y terminando con una pregunta para que elija), "suggested_target_date": string "YYYY-MM-DD" o null (sólo si acortar el plazo es realista)}',
         },
         (parsed) => {

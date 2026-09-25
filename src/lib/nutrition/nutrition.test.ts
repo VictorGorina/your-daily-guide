@@ -2,9 +2,12 @@ import { describe, expect, it } from "bun:test";
 
 import { FOODS, GENERIC_FOOD } from "./foods.data";
 import {
+  categoryMedianFood,
   clampGrams,
+  heavyUnmatched,
   macrosOf,
   matchFood,
+  parseFoodCategory,
   priceOf,
   resolutionQuality,
   resolveIngredient,
@@ -195,5 +198,56 @@ describe("resolutionQuality", () => {
 
   it("es 0 sin gramos", () => {
     expect(resolutionQuality([])).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ingredientes sin casar: categoría antes que genérico (ticket 13, D13)
+// ---------------------------------------------------------------------------
+
+describe("ingrediente que no casa con la tabla", () => {
+  it("la manteca de cerdo de la auditoría deja de valer 130 kcal/100 g: casa con una grasa", () => {
+    const ing = resolveIngredient({ name: "manteca de cerdo", grams: 30, category: "grasa" });
+    expect(ing.food.key).not.toBe(GENERIC_FOOD.key);
+    expect(ing.food.category).toBe("grasa");
+    expect(ing.food.kcal).toBeGreaterThanOrEqual(700);
+    expect(ing).toMatchObject({ confidence: "low", fallback: "category", category: "grasa" });
+  });
+
+  it("sin categoría sigue cayendo en el genérico, marcado", () => {
+    const ing = resolveIngredient({ name: "ingrediente inexistente xyz", grams: 5 });
+    expect(ing.food).toBe(GENERIC_FOOD);
+    expect(ing.fallback).toBe("generic");
+  });
+
+  it("un ingrediente que casa no lleva marca de respaldo aunque traiga categoría", () => {
+    const ing = resolveIngredient({ name: "lentejas", grams: 180, category: "legumbre" });
+    expect(ing.food.key).toBe("lentejas");
+    expect(ing.fallback).toBeUndefined();
+  });
+
+  it("entiende la categoría con tildes, plural o espacios", () => {
+    expect(parseFoodCategory("Proteína")).toBe("proteina");
+    expect(parseFoodCategory("lácteos")).toBe("lacteo");
+    expect(parseFoodCategory("frutos secos")).toBe("fruto-seco");
+    expect(parseFoodCategory("cereales")).toBe("cereal");
+    expect(parseFoodCategory("verduras")).toBe("verdura");
+    expect(parseFoodCategory("bebida")).toBeNull();
+    expect(parseFoodCategory(null)).toBeNull();
+  });
+
+  it("la mediana de una categoría es una fila real de esa categoría, con key propia", () => {
+    const grasa = categoryMedianFood("grasa");
+    expect(grasa.key).toBe("__grasa__");
+    expect(FOODS.some((f) => f.category === "grasa" && f.kcal === grasa.kcal)).toBe(true);
+  });
+
+  it("solo pesa lo que aporta ≥ 5 % de las kcal del plato", () => {
+    const ingredients = [
+      resolveIngredient({ key: "pasta", name: "pasta", grams: 180 }),
+      resolveIngredient({ name: "manteca de cerdo", grams: 30, category: "grasa" }),
+      resolveIngredient({ name: "hierba rara", grams: 1, category: "verdura" }),
+    ];
+    expect(heavyUnmatched(ingredients)).toEqual([1]);
   });
 });

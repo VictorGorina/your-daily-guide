@@ -16,6 +16,8 @@ export default tseslint.config(
       ".wrangler",
       "mobile",
       "src/routeTree.gen.ts",
+      // Worktrees de Claude Code: copias completas del repo que no son código de la app.
+      ".claude",
     ],
   },
   {

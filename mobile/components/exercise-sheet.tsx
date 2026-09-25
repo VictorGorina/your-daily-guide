@@ -39,11 +39,14 @@ export function ExerciseSheet({
   onOpenChange,
   today,
   onSaved,
+  showNumbers = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   today: string;
   onSaved: (exercise: DayExercise) => void;
+  /** `false` con la preferencia de no ver cifras (ticket 01). */
+  showNumbers?: boolean;
 }) {
   const [activity, setActivity] = useState(EXERCISE_ACTIVITIES[0]!.label);
   const [minutes, setMinutes] = useState("30");
@@ -95,7 +98,11 @@ export function ExerciseSheet({
         if (!v) reset();
       }}
       title="Registrar deporte"
-      description="Apunta tu actividad. Calculo las kcal quemadas y, si hace falta, repongo energía en los próximos días."
+      description={
+        showNumbers
+          ? "Apunta tu actividad. Calculo las kcal quemadas y, si hace falta, repongo energía en los próximos días."
+          : "Apunta tu actividad. Si hace falta, repongo energía en los próximos días."
+      }
     >
       <View className="gap-5 px-4 pb-8 pt-2">
         <View className="gap-2">
@@ -143,7 +150,7 @@ export function ExerciseSheet({
           </View>
         </View>
 
-        {burn != null ? (
+        {showNumbers && burn != null ? (
           <View className="rounded-2xl bg-surface px-4 py-3.5">
             <Text className="font-heading text-foreground" style={{ fontSize: 24, lineHeight: 28 }}>
               ≈ {burn} kcal quemadas

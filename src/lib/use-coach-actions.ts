@@ -13,9 +13,10 @@ import {
   type MonthlyPlanRow,
   type Profile,
 } from "@/lib/daily";
+import { queueDishChange } from "@/lib/day-settle";
 import { settleDay } from "@/lib/day-settle.functions";
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { perMealKcalDeltas } from "@/lib/macros";
+import { guideReuse, isMealCalculated, mergeGuide, perMealDeltas } from "@/lib/macros";
 import {
   adjustMonthlyPlan,
   compensateFutureDishChange,
@@ -23,8 +24,12 @@ import {
   setChildMeal,
   setPlanMeal,
 } from "@/lib/plan.functions";
-import { mealsForDate, type MonthlyPlan } from "@/lib/plan-shared";
-import { CHAT_EDITABLE_PROFILE_FIELDS, PROFILE_FIELD_LABELS } from "@/lib/profile-fields";
+import { mealsForDate, type MealSlot, type MonthlyPlan } from "@/lib/plan-shared";
+import {
+  CHAT_EDITABLE_PROFILE_FIELDS,
+  chipToValue,
+  PROFILE_FIELD_LABELS,
+} from "@/lib/profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
 
@@ -102,8 +107,9 @@ export function useCoachActions(
         return `Hábito quitado: ${label}`;
       }
       if (toolName === "regenerar_guia") {
-        const guide = await makeGuide({ data: undefined } as never);
-        await updateTodayLog({ guide });
+        const { dishMacros: _none, ...fresh } = await makeGuide({ data: undefined } as never);
+        // Sin platos no trae cifras: nunca deja el día con menos de las que tenía.
+        await updateTodayLog({ guide: mergeGuide(getLog()?.guide, fresh) });
         return "Guía de hoy regenerada";
       }
       if (toolName === "cambiar_plato") {
@@ -141,7 +147,10 @@ export function useCoachActions(
                 : { moment: m.moment, idea: m.idea },
             )
             .filter((m) => m.idea);
-          const freshGuide = await makeGuide({ data: { meals } });
+          const logNow = getLog();
+          const { dishMacros: _unused, ...freshGuide } = await makeGuide({
+            data: { meals, reuse: guideReuse(logNow?.guide?.mealMacros, logNow?.habits) },
+          });
           // El objetivo de la barra de macros (`macroEstimate`) se fija la
           // primera vez que hay guía del día, a partir del plan original — un
           // cambio de plato después de eso (como este) tiene que poder quedar
@@ -151,7 +160,7 @@ export function useCoachActions(
           // objetivo fijo.
           const currentGuide = getLog()?.guide ?? null;
           const guide: DailyGuide = {
-            ...freshGuide,
+            ...mergeGuide(currentGuide, freshGuide),
             macroEstimate: currentGuide?.macroEstimate ?? freshGuide.macroEstimate,
           };
           // Guarda qué había antes en ese momento, solo la primera vez que se
@@ -168,11 +177,34 @@ export function useCoachActions(
           await updateTodayLog({ guide, habits: nextHabits });
 
           if (previousIdea && previousIdea !== dish) {
-            const prevKcal =
-              habits.find((h) => h.label === label)?.plannedKcal ??
-              currentGuide?.mealMacros?.find((m) => m.moment === label)?.kcal ??
-              null;
-            const deltas = perMealKcalDeltas([{ label, prevKcal }], freshGuide.mealMacros);
+            const habit = habits.find((h) => h.label === label);
+            // Solo una cifra calculada vale como referencia (D13).
+            const plannedMacros = currentGuide?.mealMacros?.find(
+              (m) => m.moment === label && isMealCalculated(m),
+            );
+            const prevKcal = habit?.plannedKcal ?? plannedMacros?.kcal ?? null;
+            const prevProtein =
+              habit?.plannedKcal != null
+                ? (habit.plannedProtein ?? null)
+                : (plannedMacros?.protein_g ?? null);
+            const { resolved } = perMealDeltas(
+              [{ label, prevKcal, prevProtein }],
+              freshGuide.mealMacros,
+            );
+            const deltas = resolved;
+            if (!deltas.length) {
+              // El plato nuevo (o el del plan) aún está "calculando": el cambio
+              // entra en la cola del día y se asienta cuando tenga cifra, en vez
+              // de perderse.
+              queueDishChange(date, {
+                label,
+                slot: slot as MealSlot,
+                dish,
+                plannedDish: previousIdea,
+                prevKcal,
+                prevProtein,
+              });
+            }
             if (deltas.length) {
               try {
                 const result = await compensate({
@@ -185,6 +217,7 @@ export function useCoachActions(
                         dish,
                         plannedDish: previousIdea,
                         kcalDelta: deltas[0].kcalDelta,
+                        proteinDelta: deltas[0].proteinDelta,
                       },
                     ],
                   },
@@ -294,6 +327,14 @@ export function useCoachActions(
           } else if (field.kind === "date") {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) continue;
             (patch as Record<string, unknown>)[field.key] = raw;
+          } else if (field.kind === "chips" && field.valueMap) {
+            // El modelo puede mandar la etiqueta ("No, prefiero no verlas") o el
+            // valor guardado ("ocultar"): se acepta cualquiera de los dos, y
+            // nada más.
+            const text = String(raw).trim();
+            const value = chipToValue(field, text);
+            if (!Object.values(field.valueMap).includes(value)) continue;
+            (patch as Record<string, unknown>)[field.key] = value;
           } else {
             (patch as Record<string, unknown>)[field.key] = String(raw).trim();
           }

@@ -60,7 +60,17 @@ const actualizarPerfilShape = Object.fromEntries(
     (f.kind === "number" ? z.number() : z.string())
       .nullable()
       .optional()
-      .describe(f.help ? `${f.label} (${f.help})` : f.label),
+      .describe(
+        [
+          f.label,
+          f.help ? `(${f.help})` : "",
+          f.options?.length
+            ? `Valores válidos: ${(f.valueMap ? Object.values(f.valueMap) : f.options).join(", ")}.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      ),
   ]),
 ) as Record<string, z.ZodTypeAny>;
 

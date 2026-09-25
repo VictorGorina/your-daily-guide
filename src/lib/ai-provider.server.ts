@@ -2,8 +2,10 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { wrapLanguageModel, type LanguageModelMiddleware } from "ai";
 
 import { ageFromDOB } from "@/lib/age";
-import { callCostUsd } from "@/lib/ai-spend";
+import { callCostUsd, type SpendCapScope } from "@/lib/ai-spend";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { showsNutritionNumbers } from "@/lib/macros";
+import { energyTargets } from "@/lib/nutrition/energy";
 
 /** Modelo usado por el coach vía OpenRouter: Gemini 2.5 Flash da un buen
  * equilibrio coste/calidad para chat conversacional en español, y es el que
@@ -43,20 +45,47 @@ export const PLAN_MODEL = "google/gemini-2.5-pro";
 export const DISH_MODEL = "openai/gpt-5";
 
 /**
+ * Segundo modelo de la cadena de `decomposeDishes` (ticket 13 de
+ * `precision-nutricional`, D13): los platos que `DISH_MODEL` devuelve vacíos
+ * dos veces (en lote y uno a uno) se le piden a este. Es de OTRA familia a
+ * propósito: un fallo de OpenAI (proveedor caído, JSON cortado) no se repite en
+ * Google. Si `DISH_MODEL` pasa a ser de Google, este tiene que pasar a OpenAI.
+ */
+export const DISH_FALLBACK_MODEL = "google/gemini-2.5-flash";
+
+/**
+ * Modelo barato para elegir, de una lista cerrada, el alimento de la tabla más
+ * parecido a un ingrediente que no casa (ticket 13). Solo elige un número de
+ * la lista: nunca escribe una cifra. ~$0.10 / $0.40 por millón de tokens (si
+ * cambia, `DISAMBIGUATION_MODEL_USD_PER_MTOK` en `ai-spend.ts`).
+ */
+export const DISAMBIGUATION_MODEL = "google/gemini-2.5-flash-lite";
+
+/**
  * Modelos de OpenRouter que cuentan su gasto contra el tope de la persona.
  *
  * `userId` es obligatorio a propósito: toda llamada a la IA tiene que decir a
  * quién se le apunta, y así una llamada nueva no puede quedarse fuera del tope
  * por olvido. Solo va `null` fuera de una petición de alguien (el eval).
  */
-export function createAiProvider(apiKey: string, userId: string | null) {
+export function createAiProvider(
+  apiKey: string,
+  userId: string | null,
+  /**
+   * `capScope: "month"` deja pasar el tope DIARIO (el mensual no). Solo para la
+   * descomposición de platos: ver `SpendCapScope` y "Tope de gasto en IA" en
+   * CLAUDE.md. La llamada sigue sumando al gasto.
+   */
+  opts: { capScope?: SpendCapScope } = {},
+) {
   const openrouter = createOpenRouter({ apiKey });
+  const capScope = opts.capScope ?? "day";
   return (modelId: string) => {
     // Sin `usage.include`, OpenRouter no manda `usage.cost` y solo quedaría
     // estimarlo con los tokens.
     const model = openrouter.chat(modelId, { usage: { include: true } });
     return userId
-      ? wrapLanguageModel({ model, middleware: aiSpendMiddleware(userId, modelId) })
+      ? wrapLanguageModel({ model, middleware: aiSpendMiddleware(userId, modelId, capScope) })
       : model;
   };
 }
@@ -69,20 +98,24 @@ export function createAiProvider(apiKey: string, userId: string | null) {
  * `rate-limit.server` se carga dentro: arrastra el cliente de servicio, y este
  * módulo lo importan arriba del todo archivos que también van al navegador.
  */
-function aiSpendMiddleware(userId: string, modelId: string): LanguageModelMiddleware {
+function aiSpendMiddleware(
+  userId: string,
+  modelId: string,
+  capScope: SpendCapScope,
+): LanguageModelMiddleware {
   const spend = () => import("@/lib/rate-limit.server");
   return {
     specificationVersion: "v4",
     wrapGenerate: async ({ doGenerate }) => {
       const { enforceAiSpendCap, recordAiSpend } = await spend();
-      await enforceAiSpendCap(userId);
+      await enforceAiSpendCap(userId, undefined, capScope);
       const result = await doGenerate();
       await recordAiSpend(userId, callCostUsd(result, modelId));
       return result;
     },
     wrapStream: async ({ doStream }) => {
       const { enforceAiSpendCap, recordAiSpend } = await spend();
-      await enforceAiSpendCap(userId);
+      await enforceAiSpendCap(userId, undefined, capScope);
       const { stream, ...rest } = await doStream();
       return {
         ...rest,
@@ -146,6 +179,7 @@ type CoachProfile = {
   pregnancy_status?: string | null;
   menstrual_cycle?: string | null;
   ed_history?: string | null;
+  nutrition_numbers?: string | null;
   alcohol?: string | null;
   smoking?: string | null;
   allergy_severity?: string | null;
@@ -264,8 +298,22 @@ export function coachSystemPrompt(
   // prompt como "system" — chat, plan mensual y guía diaria incluidos.
   const edFlag = p.ed_history === "activa" || p.ed_history === "pasada";
   const edLine = edFlag
-    ? `- Relación con la comida: ${p.ed_history === "activa" ? "ahora mismo tiene" : "ha tenido en el pasado"} una relación difícil con la comida (atracones, restricción severa o purgas). OBLIGATORIO por esto: nunca des cifras exactas de calorías o macros, nunca hables de "déficit", "exceso" o "compensar" una comida; habla de bienestar, variedad y disfrute, no de números. Si hace falta, sugiere con mucha delicadeza apoyo profesional especializado.`
+    ? `- Relación con la comida: ${p.ed_history === "activa" ? "ahora mismo tiene" : "ha tenido en el pasado"} una relación difícil con la comida (atracones, restricción severa o purgas). OBLIGATORIO por esto: nunca hables de "déficit", "exceso" o "compensar" una comida; habla de bienestar, variedad y disfrute. Si hace falta, sugiere con mucha delicadeza apoyo profesional especializado.`
     : "";
+
+  // Ver cifras es una preferencia explícita (ticket 01 de
+  // `precision-nutricional`, D3), no algo que se deduzca de `ed_history`. Solo
+  // mientras la columna no exista (migración sin aplicar) se mantiene lo de
+  // antes: sin cifras para quien tiene una relación difícil con la comida.
+  const hideNumbers = "nutrition_numbers" in p ? !showsNutritionNumbers(p) : edFlag;
+  // Un solo objetivo en toda la app (ticket 07): el que calcula el código. Con
+  // él en el prompt, el chat no se inventa otra cifra que contradiga a Hoy.
+  const energy = hideNumbers ? null : energyTargets(p as never);
+  const numbersLine = hideNumbers
+    ? "- No quiere ver cifras: OBLIGATORIO nunca des calorías, gramos de macros, porcentajes ni objetivos numéricos, ni aunque los tengas delante; habla de platos, raciones y sensaciones. Las cantidades de una receta sí valen (hacen falta para cocinar)."
+    : energy
+      ? `- Objetivo orientativo de la app: ~${energy.kcal} kcal y ${energy.protein_g} g de proteína al día (lo calcula la app con sus datos; si das una cifra, que sea esta, nunca otra).`
+      : "";
 
   const cycleLine = p.menstrual_cycle
     ? `- Ciclo menstrual: ${asPromptData(p.menstrual_cycle)}. Tenlo en cuenta con delicadeza si viene a cuento (energía, antojos, hinchazón), sin sacarlo tú por iniciativa propia salvo que encaje de forma natural.`
@@ -312,6 +360,7 @@ export function coachSystemPrompt(
     pregnancyLine,
     cycleLine,
     edLine,
+    numbersLine,
     `- Patrón de alimentación: ${asPromptData(p.diet_pattern) || "omnívoro sin especificar"}. Respétalo siempre — nunca propongas carne a alguien vegetariano o vegano, ni nada con gluten a alguien que lo evita.`,
     `- Restricciones/alergias: ${asPromptData(p.restrictions) || "ninguna"}${p.allergy_severity ? ` (gravedad: ${asPromptData(p.allergy_severity)})` : ""}`,
     p.disliked_foods

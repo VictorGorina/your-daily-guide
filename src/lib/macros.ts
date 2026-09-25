@@ -25,6 +25,66 @@ export const ZERO_MACROS: MacroEstimate = {
  *
  * La usan tanto la pestaña Hoy como el detalle de un día pasado en Plan.
  */
+/**
+ * ¿Esta cifra sale de la receta del plato (o la escribió la persona)? Una
+ * comida `calculando` no tiene cifras todavía (D13, ticket 13 de
+ * `precision-nutricional`): no se suma, no mide ningún desvío y se enseña como
+ * "Calculando…". Una guía guardada antes del campo `status` cuenta como
+ * calculada.
+ */
+export const isMealCalculated = (m: MealMacroEstimate | null | undefined): boolean =>
+  !!m && m.status !== "calculando";
+
+/**
+ * Comidas que hay que volver a intentar calcular: `calculando` y no vagas (un
+ * texto vago no se arregla reintentando, se le pregunta a la persona).
+ */
+export function mealsToRecalculate(
+  mealMacros: readonly MealMacroEstimate[] | null | undefined,
+): MealMacroEstimate[] {
+  return (mealMacros ?? []).filter((m) => m.status === "calculando" && !m.vague);
+}
+
+/**
+ * Lo que el cliente le manda a `generateDailyGuide` como `reuse`: las comidas
+ * que ya tienen cifra para ese mismo plato, para no volver a descomponerlas.
+ * Incluye las kcal que la persona apuntó a mano en "comí distinto" (texto vago,
+ * `MealHabit.manualKcal`): esa cifra es suya y manda sobre cualquier cálculo.
+ */
+export function guideReuse(
+  mealMacros: readonly MealMacroEstimate[] | null | undefined,
+  habits: DailyLog["habits"] | null | undefined,
+): MealMacroEstimate[] {
+  const manual = (habits ?? [])
+    .filter((h) => h.status === "distinto" && h.manualKcal != null && !!h.confirmedIdea)
+    .map((h): MealMacroEstimate => ({
+      moment: h.label,
+      idea: h.confirmedIdea!,
+      ...ZERO_MACROS,
+      kcal: Math.round(h.manualKcal!),
+      status: "calculado",
+      manual: true,
+    }));
+  const manualMoments = new Set(manual.map((m) => m.moment));
+  const calculated = (mealMacros ?? []).filter(
+    (m) => !!m.idea && isMealCalculated(m) && !manualMoments.has(m.moment),
+  );
+  return [...manual, ...calculated];
+}
+
+/** ¿Qué comidas ya marcadas como comidas siguen por calcular? Para "1 comida por calcular". */
+export function donePendingMeals(
+  mealMacros: readonly MealMacroEstimate[] | null | undefined,
+  habits: DailyLog["habits"],
+): string[] {
+  const doneLabels = new Set(
+    habits.filter((h) => h.status === "plan" || h.status === "distinto").map((h) => h.label),
+  );
+  return (mealMacros ?? [])
+    .filter((m) => doneLabels.has(m.moment) && !isMealCalculated(m))
+    .map((m) => m.moment);
+}
+
 export function sumDoneMacros(
   mealMacros: MealMacroEstimate[] | null | undefined,
   habits: DailyLog["habits"],
@@ -35,7 +95,8 @@ export function sumDoneMacros(
   );
   const totals: MacroEstimate = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 };
   for (const m of mealMacros) {
-    if (!doneLabels.has(m.moment)) continue;
+    // Lo que aún no se ha calculado no cuenta: ni un cero ni un promedio.
+    if (!doneLabels.has(m.moment) || !isMealCalculated(m)) continue;
     totals.kcal += m.kcal;
     totals.protein_g += m.protein_g;
     totals.carbs_g += m.carbs_g;
@@ -56,32 +117,51 @@ export function addMacros(a: MacroEstimate, b: MacroEstimate): MacroEstimate {
   };
 }
 
+/** Desvío de una comida cambiada frente al plato del plan. */
+export type MealDelta = {
+  label: string;
+  kcalDelta: number;
+  /** `null` cuando no se sabe (cifra manual, que solo trae kcal, o plan sin proteína). */
+  proteinDelta: number | null;
+};
+
 /**
- * Desvío en kcal de cada comida cambiada frente a lo que preveía el plan: lo
- * que estima la guía nueva menos lo que estimaba la guía de antes de tocarla,
- * UNA cifra por comida (no ya sumadas).
+ * Desvío de cada comida cambiada frente a lo que preveía el plan: lo que estima
+ * la guía nueva menos lo que estimaba el plato del plan, UNA cifra por comida
+ * (no ya sumadas), en kcal y en proteína.
  *
  * Es lo que convierte "he comido pizza y cerveza" en algo que el servidor
- * puede acumular día a día (`compensateDishChanges`, que guarda cada cifra en
- * `MealHabit.swapKcalDelta` y decide con `pendingSwapKcal` si hace falta
- * recolocar el plan): dos cambios pequeños por separado deben poder sumar
- * hasta pasar el umbral aunque cada lote solo vea el suyo.
+ * puede acumular día a día (`settleDay`, que guarda cada cifra en
+ * `MealHabit.swapKcalDelta`/`swapProteinDelta`): dos cambios pequeños por
+ * separado deben poder sumar hasta pasar el umbral aunque cada lote solo vea
+ * el suyo. La proteína entra en la decisión (ticket 13): cambiar unas lentejas
+ * por pasta con tomate apenas mueve las kcal pero quita ~20 g de proteína.
  *
- * Omite las comidas sin las dos cifras — sin dato es mejor no inventarse un
- * cero, que se leería como "no ha pasado nada".
+ * Solo se mide con las DOS cifras calculadas (D13). Una comida cuyo plato nuevo
+ * aún está "calculando", o cuyo plato del plan no tiene cifra, va a
+ * `unresolved`: el cambio se queda en la cola del día hasta que la tenga.
+ * Inventarse un cero se leería como "no ha pasado nada".
  */
-export function perMealKcalDeltas(
-  changes: readonly { label: string; prevKcal: number | null }[],
+export function perMealDeltas(
+  changes: readonly { label: string; prevKcal: number | null; prevProtein?: number | null }[],
   mealMacros: MealMacroEstimate[] | null | undefined,
-): { label: string; kcalDelta: number }[] {
-  const out: { label: string; kcalDelta: number }[] = [];
+): { resolved: MealDelta[]; unresolved: string[] } {
+  const resolved: MealDelta[] = [];
+  const unresolved: string[] = [];
   for (const change of changes) {
-    if (change.prevKcal == null) continue;
-    const now = mealMacros?.find((m) => m.moment === change.label)?.kcal;
-    if (typeof now !== "number") continue;
-    out.push({ label: change.label, kcalDelta: Math.round(now - change.prevKcal) });
+    const now = mealMacros?.find((m) => m.moment === change.label);
+    if (change.prevKcal == null || !now || !isMealCalculated(now)) {
+      unresolved.push(change.label);
+      continue;
+    }
+    const proteinKnown = !now.manual && change.prevProtein != null;
+    resolved.push({
+      label: change.label,
+      kcalDelta: Math.round(now.kcal - change.prevKcal),
+      proteinDelta: proteinKnown ? Math.round(now.protein_g - change.prevProtein!) : null,
+    });
   }
-  return out;
+  return { resolved, unresolved };
 }
 
 /**
@@ -156,7 +236,14 @@ export function hasDayRecord(log: DailyLog | null | undefined): boolean {
 
 /** Semáforo de un día a partir de su registro completo (ver `daySignal`). */
 export function daySignalOf(log: DailyLog | null | undefined): DaySignal {
-  return daySignal(consumedMacrosOf(log).kcal, log?.guide?.macroEstimate?.kcal, hasDayRecord(log));
+  const logged = hasDayRecord(log);
+  // Un día con comidas marcadas que aún están "calculando" no se juzga hasta
+  // que estén todas (D13): gris, como un día sin cifras.
+  if (logged && donePendingMeals(log?.guide?.mealMacros, log?.habits ?? []).length) return "muted";
+  // El objetivo es el que tenía ESE día (copia en la guía, ticket 07); los días
+  // anteriores a esa copia caen a la suma de lo planificado, como antes.
+  const target = log?.guide?.targets?.kcal ?? log?.guide?.macroEstimate?.kcal;
+  return daySignal(consumedMacrosOf(log).kcal, target, logged);
 }
 
 /** Lo único que a esta capa le importa de una guía: sus cifras. */
@@ -181,9 +268,34 @@ export function mergeGuide<T extends GuideNumbers>(
   prev: GuideNumbers | null | undefined,
   fresh: T,
 ): T {
+  // Por comida: una que vuelve "calculando" no borra la cifra que ya tenía el
+  // MISMO plato (un reintento que falla no puede dejar el día peor).
+  const mealMacros = fresh.mealMacros?.length
+    ? fresh.mealMacros.map((m) => {
+        if (isMealCalculated(m)) return m;
+        const before = prev?.mealMacros?.find(
+          (p) => p.moment === m.moment && !!p.idea && p.idea === m.idea && isMealCalculated(p),
+        );
+        return before ?? m;
+      })
+    : (prev?.mealMacros ?? null);
   return {
     ...fresh,
     macroEstimate: fresh.macroEstimate ?? prev?.macroEstimate ?? null,
-    mealMacros: fresh.mealMacros?.length ? fresh.mealMacros : (prev?.mealMacros ?? null),
+    mealMacros,
   } as T;
+}
+
+/**
+ * ¿Esta persona quiere ver kcal, macros y objetivos? (ticket 01 de
+ * `precision-nutricional`, decisión D3). Es el ÚNICO punto de lectura de
+ * `profiles.nutrition_numbers`: ningún componente mira el campo directamente.
+ * `true` salvo con "ocultar" — también sin perfil o sin la columna todavía, que
+ * es lo que todo el mundo veía hasta ahora. Con "ocultar" los platos se siguen
+ * calculando y escalando igual; solo cambia lo que se enseña.
+ */
+export function showsNutritionNumbers(
+  profile: { nutrition_numbers?: string | null } | null | undefined,
+): boolean {
+  return profile?.nutrition_numbers !== "ocultar";
 }

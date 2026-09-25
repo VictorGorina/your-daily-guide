@@ -38,6 +38,7 @@ import {
   addMessage,
   deriveGoalType,
   fetchProfile,
+  hasProfileColumn,
   monthISO,
   saveProfile,
   todayISO,
@@ -304,6 +305,22 @@ const LIVES_WITH_Q: Question = {
   followUp: { test: (t) => /\bpareja\b/i.test(t), question: PARTNER_APP_Q },
 };
 
+/**
+ * Ticket 01 de `precision-nutricional` (D3): ver cifras es una preferencia que
+ * elige la persona. Solo se pregunta cuando la columna existe
+ * (`hasProfileColumn`). Copia de la web.
+ */
+const NUMBERS_CHIP_TO_VALUE: Record<string, "mostrar" | "ocultar"> = {
+  "Sí, enséñamelas": "mostrar",
+  "No, prefiero no verlas": "ocultar",
+};
+
+const NUMBERS_Q: Question = {
+  q: "¿Quieres ver calorías y macros en la app?",
+  hint: "Los platos se calculan igual en los dos casos. Puedes cambiarlo cuando quieras en Ajustes.",
+  chips: Object.keys(NUMBERS_CHIP_TO_VALUE),
+};
+
 const BUDGET_Q: Question = {
   q: "¿Cuánto tiempo tienes para cocinar al día y cuánto te quieres gastar en comida al mes?",
   hint: "Ej.: 20 min al día y unos 250 € al mes",
@@ -429,6 +446,7 @@ const SCREENS: Screen[] = [
         q: "Si tu objetivo es de peso, ¿cuánto y en qué plazo te gustaría lograrlo? Sin presión, solo para orientarnos.",
         hint: "Ej.: 5 kg antes de junio (o 'no aplica')",
       },
+      NUMBERS_Q,
       {
         q: "¿Qué es lo que más te ha costado mantener en intentos anteriores? Y de paso: ¿has probado antes a contar calorías o macros, o con otras dietas? ¿Te ayudó o te obsesionó?",
         hint: "Saberlo me ayuda a no repetir lo que no te funciona",
@@ -510,7 +528,11 @@ type FlatNode = {
   lastOfScreen: boolean;
 };
 
-const buildFlat = (answers: Record<string, string>): FlatNode[] => {
+/**
+ * `numbersQuestion`: ¿se pregunta por ver cifras? (solo si la columna existe).
+ * Omitirla no mueve las claves de las demás: `qi` sale del array completo.
+ */
+const buildFlat = (answers: Record<string, string>, numbersQuestion = false): FlatNode[] => {
   const out: FlatNode[] = [];
 
   const pushChain = (q: Question, key: string, si: number, screen: Screen, isFollowUp: boolean) => {
@@ -530,7 +552,10 @@ const buildFlat = (answers: Record<string, string>): FlatNode[] => {
   };
 
   SCREENS.forEach((screen, si) => {
-    screen.questions.forEach((baseQ, qi) => pushChain(baseQ, `${si}-${qi}`, si, screen, false));
+    screen.questions.forEach((baseQ, qi) => {
+      if (baseQ === NUMBERS_Q && !numbersQuestion) return;
+      pushChain(baseQ, `${si}-${qi}`, si, screen, false);
+    });
   });
 
   for (let i = 0; i < out.length; i++) {
@@ -543,7 +568,9 @@ const buildFlat = (answers: Record<string, string>): FlatNode[] => {
 // v2: el recorte de preguntas (issue 06) desplaza las claves posicionales `si-qi`,
 // así que un borrador guardado con el guion anterior restauraría respuestas en la
 // pregunta equivocada. Subir la versión descarta esos borradores a medias.
-const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v2";
+// v3: la pregunta de ver cifras (ticket 01 de `precision-nutricional`) entra en
+// "Hacia dónde vamos" y desplaza las de detrás.
+const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v3";
 
 type Panel = "chat" | "index" | "resumen" | "saved";
 
@@ -593,7 +620,8 @@ export default function Onboarding() {
 
   const scrollRef = useRef<ScrollView | null>(null);
 
-  const flat = useMemo(() => buildFlat(answers), [answers]);
+  const numbersQuestion = hasProfileColumn(profileQ.data, "nutrition_numbers");
+  const flat = useMemo(() => buildFlat(answers, numbersQuestion), [answers, numbersQuestion]);
   const curIndex = flat.findIndex((n) => n.key === curKey);
   const cur = curIndex >= 0 ? flat[curIndex]! : flat[0]!;
 
@@ -690,7 +718,7 @@ export default function Onboarding() {
   };
 
   const advanceFrom = (key: string, nextAnswers: Record<string, string>) => {
-    const nextFlat = buildFlat(nextAnswers);
+    const nextFlat = buildFlat(nextAnswers, numbersQuestion);
     const idx = nextFlat.findIndex((n) => n.key === key);
     const node = nextFlat[idx];
     setError(null);
@@ -794,7 +822,7 @@ export default function Onboarding() {
   // --- Guardado -------------------------------------------------------------
 
   const transcriptFromAnswers = (map: Record<string, string>) =>
-    buildFlat(map)
+    buildFlat(map, numbersQuestion)
       .map((n) => {
         if (map[n.key] !== undefined) return `Coach: ${displayQ(n).q}\nPersona: ${map[n.key]}`;
         if (n.q.optional) return `Coach: ${displayQ(n).q}\nPersona: Nada que destacar`;
@@ -840,13 +868,20 @@ export default function Onboarding() {
     const d = { ...draft, ...extra };
     // La clave en `answers` es posicional ("2-5"), así que se busca el nodo
     // por identidad del objeto Question en vez de asumir una posición fija.
-    const mealsKey = buildFlat(answers).find((n) => n.q === MEALS_TO_PLAN_Q)?.key;
+    const flatNow = buildFlat(answers, numbersQuestion);
+    const mealsKey = flatNow.find((n) => n.q === MEALS_TO_PLAN_Q)?.key;
     const meal_slots = mealSlotsFromRawAnswer(mealsKey ? answers[mealsKey] : undefined);
+    // Del chip al valor, sin pasar por la IA (mismo motivo que `meal_slots`).
+    const numbersKey = flatNow.find((n) => n.q === NUMBERS_Q)?.key;
+    const nutrition_numbers = numbersKey
+      ? NUMBERS_CHIP_TO_VALUE[answers[numbersKey]?.trim() ?? ""]
+      : undefined;
     try {
       const existing = await fetchProfile();
       await saveProfile({
         app_started_on: existing?.app_started_on ?? todayISO(),
         meal_slots,
+        ...(nutrition_numbers ? { nutrition_numbers } : {}),
         timezone: resolveDeviceTimeZone(),
         display_name: d.display_name,
         age: d.age,
@@ -859,6 +894,9 @@ export default function Onboarding() {
         medications: d.medications,
         activity_level: d.activity_level ?? "activo ligero",
         exercise: d.exercise,
+        // Ticket 07: día a día y rutina por separado (se ignoran sin la migración).
+        ...(d.daily_activity ? { daily_activity: d.daily_activity } : {}),
+        ...(d.training ? { training: d.training } : {}),
         meals_per_day: d.meals_per_day,
         diet_pattern: d.diet_pattern,
         non_negotiable_foods: d.non_negotiable_foods,

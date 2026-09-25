@@ -3,6 +3,7 @@
 Status: ready (D4 aprobada)
 Blocked by: 06, 08, 10
 Tamaño: L
+Fase: 3
 Absorbe: `.scratch/nutricion-determinista/issues/03-compra-derivada.md`
 
 ## Qué

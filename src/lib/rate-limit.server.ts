@@ -1,9 +1,11 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   decideSpendCap,
+  spendCapBlocks,
   utcMonthStartISO,
   type AiSpendCaps,
   type SpendCapDecision,
+  type SpendCapScope,
 } from "@/lib/ai-spend";
 import { RateLimitError } from "@/lib/rate-limit-error";
 
@@ -139,9 +141,13 @@ async function spendCapDecision(userId: string): Promise<SpendCapDecision | null
  * `resolveDish` al cambiar un plato). `action` va genérica porque ahí no se
  * sabe qué operación la pidió.
  */
-export async function enforceAiSpendCap(userId: string, action = "usar el coach"): Promise<void> {
+export async function enforceAiSpendCap(
+  userId: string,
+  action = "usar el coach",
+  capScope: SpendCapScope = "day",
+): Promise<void> {
   const decision = await spendCapDecision(userId);
-  if (decision && !decision.allowed) {
+  if (decision && !decision.allowed && spendCapBlocks(decision, capScope)) {
     throw new RateLimitError(decision.retryAfterSeconds, action, decision.scope);
   }
 }
@@ -178,14 +184,19 @@ export async function recordAiSpend(userId: string, costUsd: number): Promise<vo
  * `requireSupabaseAuth`, nunca del cuerpo de la petición: si lo eligiera quien
  * llama, podría gastarle la cuota a otra persona.
  */
-export async function enforceUserRateLimit(userId: string, bucket: RateLimitBucket): Promise<void> {
+export async function enforceUserRateLimit(
+  userId: string,
+  bucket: RateLimitBucket,
+  /** `month` solo para lo que no debe cortar el tope diario (ver `SpendCapScope`). */
+  capScope: SpendCapScope = "day",
+): Promise<void> {
   const { action } = RATE_LIMITS[bucket];
   const [spend, { allowed, retryAfterSeconds }] = await Promise.all([
     spendCapDecision(userId),
     consume(`user:${userId}`, bucket),
   ]);
   // El de gasto primero: su espera es la más larga, y la que de verdad manda.
-  if (spend && !spend.allowed)
+  if (spend && !spend.allowed && spendCapBlocks(spend, capScope))
     throw new RateLimitError(spend.retryAfterSeconds, action, spend.scope);
   if (!allowed) throw new RateLimitError(retryAfterSeconds, action);
 }

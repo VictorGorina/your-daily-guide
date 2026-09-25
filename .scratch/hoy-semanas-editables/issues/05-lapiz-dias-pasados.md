@@ -1,6 +1,6 @@
 # 05 — Días pasados: lápiz visible y reglas de "editable"
 
-Status: ready
+Status: ready, a medias (2026-09-24): un día pasado de la tira ya se corrige tocando una comida (`DayPanel` en `hoy.tsx`, `day-detail-sheet.tsx` en Plan), pero falta el lápiz visible y explicar por qué un día no es editable.
 Blocked by: 03, 04
 Tamaño: S
 

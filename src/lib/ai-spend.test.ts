@@ -5,6 +5,7 @@ import {
   COACH_MODEL_USD_PER_MTOK,
   decideSpendCap,
   PLAN_MODEL_USD_PER_MTOK,
+  spendCapBlocks,
   utcDayISO,
   utcMonthStartISO,
 } from "./ai-spend";
@@ -193,5 +194,24 @@ describe("decideSpendCap", () => {
       now,
     );
     expect(decision.allowed).toBe(true);
+  });
+});
+
+describe("spendCapBlocks — la descomposición de platos no la corta el tope diario (D13)", () => {
+  const now = new Date("2026-09-15T18:00:00Z");
+  const overDay = decideSpendCap([{ day: "2026-09-15", cost_usd: 0.3 }], caps, now);
+  const overMonth = decideSpendCap([{ day: "2026-09-02", cost_usd: 3 }], caps, now);
+  const ok = decideSpendCap([], caps, now);
+
+  it("con el alcance normal, cortan los dos topes", () => {
+    expect(spendCapBlocks(overDay, "day")).toBe(true);
+    expect(spendCapBlocks(overMonth, "day")).toBe(true);
+    expect(spendCapBlocks(ok, "day")).toBe(false);
+  });
+
+  it("con `month`, el tope diario deja pasar y el mensual sigue cortando", () => {
+    expect(spendCapBlocks(overDay, "month")).toBe(false);
+    expect(spendCapBlocks(overMonth, "month")).toBe(true);
+    expect(spendCapBlocks(ok, "month")).toBe(false);
   });
 });

@@ -3,6 +3,7 @@
 Status: ready (D1 aprobada)
 Blocked by: 06, 08
 Tamaño: M
+Fase: 3
 
 ## Qué
 
@@ -20,7 +21,7 @@ que ser exactamente los que se usan en los cálculos.
 
 - `dishRecipe(dish, month, date?, slot?)`:
   1. `getRecipes([dish])` → factores de `PlanDay.portions[slot]` de esa fecha. Sin fecha o sin
-     factores → `alignSoloMeals` al vuelo; sin objetivo → ración base.
+     factores → `alignSoloMeals` al vuelo; sin objetivo → ración personal por sexo (21).
   2. Texto por ingrediente: `"75 g de lentejas secas (unos 180 g cocidas)"`, `"1 cda de aceite de
      oliva (10 g)"`, `"2 huevos"`.
   3. Prompt al modelo: la lista cerrada + "redacta 3-5 pasos; no añadas ingredientes salvo sal, agua
@@ -63,3 +64,5 @@ type DishRecipe = {
 - [ ] Simulador iOS: receta con gramos y bloque "Para la mesa".
 
 ## Comments
+
+- 2026-09-24 — Tras confirmar D7-D13: sin objetivo, ración personal por sexo (21).

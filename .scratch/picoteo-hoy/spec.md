@@ -1,6 +1,6 @@
 # Spec — Hoy: añadir picoteo
 
-Status: implementado y verificado en simulador iOS y navegador (2026-09-16), sin commit todavía
+Status: implementado y verificado en simulador iOS y navegador (2026-09-16). En `main` (`d33bb7e`; arreglos posteriores `670f855`, `9c884e3`, `8de5582`).
 Feature slug: `picoteo-hoy`
 Relacionada con: `.scratch/hoy-semanas-editables/` (adelanta la regla pura del ticket 08).
 

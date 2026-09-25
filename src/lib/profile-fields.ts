@@ -23,6 +23,11 @@ export type ProfileField = {
   min?: number;
   max?: number;
   unit?: string;
+  /**
+   * La columna llega con una migración de `precision-nutricional`: mientras el
+   * perfil no la traiga, el campo no se enseña (ver `hasProfileColumn`).
+   */
+  pendingColumn?: boolean;
 };
 
 export type ProfileSection = { title: string; fields: ProfileField[] };
@@ -79,6 +84,32 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
         label: "Nivel de actividad",
         kind: "chips",
         options: ["sedentario", "ligero", "moderado", "alto"],
+      },
+      {
+        key: "daily_activity",
+        label: "Tu día a día (sin contar el deporte)",
+        kind: "chips",
+        options: [
+          "Sentado (oficina, estudiar)",
+          "De pie (tienda, docencia, casa con niños)",
+          "Físico (hostelería, reparto)",
+          "Muy físico (obra, campo, almacén)",
+        ],
+        valueMap: {
+          "Sentado (oficina, estudiar)": "sentado",
+          "De pie (tienda, docencia, casa con niños)": "de_pie",
+          "Físico (hostelería, reparto)": "fisico",
+          "Muy físico (obra, campo, almacén)": "muy_fisico",
+        },
+        help: "Con esto y tu rutina calculo tu gasto de energía de cada día.",
+        pendingColumn: true,
+      },
+      {
+        key: "training",
+        label: "Tu rutina de entrenamiento",
+        kind: "text",
+        help: "sesiones por semana × minutos · actividad · intensidad. Ej.: 3 × 45 min · gimnasio · normal (o «ninguna»)",
+        pendingColumn: true,
       },
       { key: "exercise", label: "Ejercicio que haces", kind: "long" },
       {
@@ -179,6 +210,18 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
         kind: "chips",
         options: ["comida", "comida y hábitos"],
       },
+      {
+        key: "nutrition_numbers",
+        label: "Ver calorías y macros",
+        kind: "chips",
+        options: ["Sí, enséñamelas", "No, prefiero no verlas"],
+        valueMap: { "Sí, enséñamelas": "mostrar", "No, prefiero no verlas": "ocultar" },
+        help:
+          "Puedes cambiarlo cuando quieras. Si eliges «No», la app no te enseña calorías, " +
+          "macros ni objetivos en ninguna pantalla, ni el coach te habla de cifras. Tus platos " +
+          "se siguen calculando igual y las recetas mantienen sus cantidades.",
+        pendingColumn: true,
+      },
       { key: "morning_time", label: "Resumen de la mañana", kind: "time" },
       { key: "evening_time", label: "Repaso de la noche", kind: "time" },
     ],
@@ -215,4 +258,9 @@ export function valueToChip(field: ProfileField, stored: string): string {
   if (!field.valueMap) return stored;
   const entry = Object.entries(field.valueMap).find(([, v]) => v === stored);
   return entry ? entry[0] : stored;
+}
+
+/** ¿Se enseña este campo con este perfil? Oculta los de una columna aún sin migrar. */
+export function isFieldAvailable(field: ProfileField, profile: object | null | undefined): boolean {
+  return !field.pendingColumn || (!!profile && field.key in profile);
 }

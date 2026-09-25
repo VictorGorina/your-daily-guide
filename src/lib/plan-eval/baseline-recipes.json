@@ -1,0 +1,630 @@
+{
+  "ranAt": "2026-09-24T18:09:03.439Z",
+  "model": "openai/gpt-5",
+  "passes": 3,
+  "summary": {
+    "dishes": 75,
+    "kcalMeanAbsPct": 23.2,
+    "kcalP90AbsPct": 44.5,
+    "kcalBiasPct": 21.5,
+    "densityMeanAbsPct": 5.2,
+    "proteinMeanAbsPct": 23.3,
+    "carbsMeanAbsPct": 26.4,
+    "fatMeanAbsPct": 23.1,
+    "splitMeanPts": 5.3,
+    "omittedPct": 9.2,
+    "inventedPerDish": 0.3,
+    "oilMeanAbsG": 2,
+    "meanCvPct": 3.9
+  },
+  "tableSummary": {
+    "references": 17,
+    "matchedRightPct": 64.7,
+    "missingRows": 5,
+    "kcalMeanAbsPct": 25.3,
+    "proteinMeanAbsPct": 47.6,
+    "fatMeanAbsPct": 37.7
+  },
+  "dishes": [
+    {
+      "dish": "Manzana",
+      "kcalRef": 78,
+      "kcalOut": 78,
+      "kcalErrPct": 0,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Puñado de frutos secos",
+      "kcalRef": 150,
+      "kcalOut": 180,
+      "kcalErrPct": 20,
+      "cvPct": 0,
+      "reason": "frutos-secos-mix +20 % en gramos"
+    },
+    {
+      "dish": "Yogur natural",
+      "kcalRef": 76,
+      "kcalOut": 76,
+      "kcalErrPct": 0,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Tostada integral con tomate y aceite",
+      "kcalRef": 175,
+      "kcalOut": 250,
+      "kcalErrPct": 42.8,
+      "cvPct": 0.7,
+      "reason": "aceite +5 g · pan-integral +20 % en gramos"
+    },
+    {
+      "dish": "Tostada integral con aguacate y tomate",
+      "kcalRef": 211,
+      "kcalOut": 287,
+      "kcalErrPct": 36,
+      "cvPct": 8.1,
+      "reason": "inventa aceite · pan-integral +20 % en gramos"
+    },
+    {
+      "dish": "Gachas de avena con fruta y frutos secos",
+      "kcalRef": 385,
+      "kcalOut": 472,
+      "kcalErrPct": 22.5,
+      "cvPct": 5.6,
+      "reason": "omite frutos-secos-mix · inventa nuez, almendra"
+    },
+    {
+      "dish": "Lentejas estofadas con verduras",
+      "kcalRef": 338,
+      "kcalOut": 402,
+      "kcalErrPct": 18.7,
+      "cvPct": 2.6,
+      "reason": "omite caldo"
+    },
+    {
+      "dish": "Arroz integral con pollo y verduras",
+      "kcalRef": 534,
+      "kcalOut": 530,
+      "kcalErrPct": -0.7,
+      "cvPct": 2.5,
+      "reason": "arroz-integral -34 % en gramos"
+    },
+    {
+      "dish": "Pasta integral con tomate y atún",
+      "kcalRef": 510,
+      "kcalOut": 471,
+      "kcalErrPct": -7.6,
+      "cvPct": 3.4,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Tortilla de patatas y cebolla",
+      "kcalRef": 398,
+      "kcalOut": 555,
+      "kcalErrPct": 39.4,
+      "cvPct": 1.7,
+      "reason": "aceite +11 g · patata +24 % en gramos"
+    },
+    {
+      "dish": "Crema de calabacín y zanahoria",
+      "kcalRef": 126,
+      "kcalOut": 182,
+      "kcalErrPct": 44.4,
+      "cvPct": 21.7,
+      "reason": "inventa caldo"
+    },
+    {
+      "dish": "Pechuga de pollo a la plancha con ensalada",
+      "kcalRef": 254,
+      "kcalOut": 365,
+      "kcalErrPct": 43.3,
+      "cvPct": 16.9,
+      "reason": "aceite +5 g · pechuga-pollo +45 % en gramos"
+    },
+    {
+      "dish": "Tostada integral con huevo revuelto",
+      "kcalRef": 222,
+      "kcalOut": 350,
+      "kcalErrPct": 58.1,
+      "cvPct": 6,
+      "reason": "pan-integral +20 % en gramos"
+    },
+    {
+      "dish": "Tostada integral con tomate y huevo revuelto",
+      "kcalRef": 229,
+      "kcalOut": 376,
+      "kcalErrPct": 64.3,
+      "cvPct": 3.4,
+      "reason": "aceite +5 g · pan-integral +20 % en gramos"
+    },
+    {
+      "dish": "Yogur con avena y fruta",
+      "kcalRef": 242,
+      "kcalOut": 326,
+      "kcalErrPct": 34.6,
+      "cvPct": 8.1,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Yogur con manzana troceada",
+      "kcalRef": 115,
+      "kcalOut": 154,
+      "kcalErrPct": 33.8,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Café con bebida de avena y tostada integral con aguacate",
+      "kcalRef": 271,
+      "kcalOut": 340,
+      "kcalErrPct": 25.4,
+      "cvPct": 3.2,
+      "reason": "pan-integral +20 % en gramos"
+    },
+    {
+      "dish": "Tostada integral con aguacate y huevo",
+      "kcalRef": 275,
+      "kcalOut": 382,
+      "kcalErrPct": 39,
+      "cvPct": 2.1,
+      "reason": "inventa aceite · aceite +5 g · pan-integral +20 % en gramos"
+    },
+    {
+      "dish": "Yogur natural con naranja",
+      "kcalRef": 142,
+      "kcalOut": 147,
+      "kcalErrPct": 3.3,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Tostada integral con hummus y tomate",
+      "kcalRef": 202,
+      "kcalOut": 248,
+      "kcalErrPct": 22.8,
+      "cvPct": 0,
+      "reason": "pan-integral +20 % en gramos"
+    },
+    {
+      "dish": "Tortilla francesa de dos huevos con pan",
+      "kcalRef": 302,
+      "kcalOut": 368,
+      "kcalErrPct": 21.7,
+      "cvPct": 1.9,
+      "reason": "huevo +15 % en gramos"
+    },
+    {
+      "dish": "Café con leche y bocadillo pequeño de jamón serrano",
+      "kcalRef": 288,
+      "kcalOut": 346,
+      "kcalErrPct": 20.1,
+      "cvPct": 8.9,
+      "reason": "pan-blanco +17 % en gramos · densidad -16 %"
+    },
+    {
+      "dish": "Porridge de avena con leche, manzana y canela",
+      "kcalRef": 281,
+      "kcalOut": 357,
+      "kcalErrPct": 27,
+      "cvPct": 0,
+      "reason": "avena +25 % en gramos"
+    },
+    {
+      "dish": "Batido de plátano, leche y crema de cacahuete",
+      "kcalRef": 287,
+      "kcalOut": 313,
+      "kcalErrPct": 9.1,
+      "cvPct": 8.4,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Plátano",
+      "kcalRef": 107,
+      "kcalOut": 134,
+      "kcalErrPct": 25,
+      "cvPct": 0,
+      "reason": "platano +25 % en gramos"
+    },
+    {
+      "dish": "Naranja",
+      "kcalRef": 66,
+      "kcalOut": 71,
+      "kcalErrPct": 7.1,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Manzana con un puñado de nueces",
+      "kcalRef": 242,
+      "kcalOut": 274,
+      "kcalErrPct": 13.5,
+      "cvPct": 0,
+      "reason": "nuez +20 % en gramos"
+    },
+    {
+      "dish": "Puñado de almendras",
+      "kcalRef": 145,
+      "kcalOut": 174,
+      "kcalErrPct": 20,
+      "cvPct": 0,
+      "reason": "almendra +20 % en gramos"
+    },
+    {
+      "dish": "Yogur natural con manzana",
+      "kcalRef": 115,
+      "kcalOut": 154,
+      "kcalErrPct": 33.8,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Yogur natural con plátano",
+      "kcalRef": 130,
+      "kcalOut": 210,
+      "kcalErrPct": 61.8,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Yogur sin lactosa",
+      "kcalRef": 76,
+      "kcalOut": 76,
+      "kcalErrPct": 0,
+      "cvPct": 0,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Garbanzos con espinacas",
+      "kcalRef": 400,
+      "kcalOut": 428,
+      "kcalErrPct": 7,
+      "cvPct": 2.3,
+      "reason": "omite pan-blanco · garbanzos +35 % en gramos"
+    },
+    {
+      "dish": "Pasta integral con tomate y verduras",
+      "kcalRef": 413,
+      "kcalOut": 452,
+      "kcalErrPct": 9.3,
+      "cvPct": 0.6,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Garbanzos con espinacas y huevo",
+      "kcalRef": 472,
+      "kcalOut": 518,
+      "kcalErrPct": 9.9,
+      "cvPct": 0,
+      "reason": "omite pan-blanco · garbanzos +35 % en gramos"
+    },
+    {
+      "dish": "Lentejas guisadas con zanahoria y patata",
+      "kcalRef": 381,
+      "kcalOut": 487,
+      "kcalErrPct": 27.7,
+      "cvPct": 3,
+      "reason": "omite caldo"
+    },
+    {
+      "dish": "Arroz integral con verduras salteadas",
+      "kcalRef": 400,
+      "kcalOut": 354,
+      "kcalErrPct": -11.6,
+      "cvPct": 3.8,
+      "reason": "arroz-integral -34 % en gramos · densidad -19 %"
+    },
+    {
+      "dish": "Macarrones con tomate y atún",
+      "kcalRef": 497,
+      "kcalOut": 484,
+      "kcalErrPct": -2.8,
+      "cvPct": 1.7,
+      "reason": "aceite -5 g"
+    },
+    {
+      "dish": "Pasta integral con salsa de tomate y tofu",
+      "kcalRef": 488,
+      "kcalOut": 501,
+      "kcalErrPct": 2.8,
+      "cvPct": 1.3,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Garbanzos guisados con verduras",
+      "kcalRef": 349,
+      "kcalOut": 553,
+      "kcalErrPct": 58.7,
+      "cvPct": 8.7,
+      "reason": "omite caldo · inventa patata · garbanzos +35 % en gramos"
+    },
+    {
+      "dish": "Lentejas guisadas con arroz integral",
+      "kcalRef": 346,
+      "kcalOut": 510,
+      "kcalErrPct": 47.1,
+      "cvPct": 10.6,
+      "reason": "omite caldo"
+    },
+    {
+      "dish": "Curry de garbanzos y verduras con arroz integral",
+      "kcalRef": 667,
+      "kcalOut": 776,
+      "kcalErrPct": 16.4,
+      "cvPct": 0.7,
+      "reason": "aceite +5 g · leche-coco -40 % en gramos"
+    },
+    {
+      "dish": "Arroz con pollo y pimiento",
+      "kcalRef": 564,
+      "kcalOut": 529,
+      "kcalErrPct": -6.1,
+      "cvPct": 5.8,
+      "reason": "omite arroz-blanco, muslo-pollo · inventa arroz-integral, pechuga-pollo · arroz-blanco -23 % en gramos"
+    },
+    {
+      "dish": "Arroz integral con verduras y atún",
+      "kcalRef": 498,
+      "kcalOut": 409,
+      "kcalErrPct": -17.8,
+      "cvPct": 6.3,
+      "reason": "arroz-integral -34 % en gramos"
+    },
+    {
+      "dish": "Garbanzos con pimiento y cebolla",
+      "kcalRef": 356,
+      "kcalOut": 463,
+      "kcalErrPct": 29.9,
+      "cvPct": 3.2,
+      "reason": "garbanzos +35 % en gramos"
+    },
+    {
+      "dish": "Pasta integral con tomate y espinacas",
+      "kcalRef": 405,
+      "kcalOut": 445,
+      "kcalErrPct": 9.8,
+      "cvPct": 1.9,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Pollo al curry con arroz integral",
+      "kcalRef": 533,
+      "kcalOut": 653,
+      "kcalErrPct": 22.6,
+      "cvPct": 5.2,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Ensalada de garbanzos, tomate y atún",
+      "kcalRef": 410,
+      "kcalOut": 510,
+      "kcalErrPct": 24.5,
+      "cvPct": 1.4,
+      "reason": "garbanzos +35 % en gramos"
+    },
+    {
+      "dish": "Paella de pollo y verduras",
+      "kcalRef": 614,
+      "kcalOut": 625,
+      "kcalErrPct": 1.7,
+      "cvPct": 4.8,
+      "reason": "omite arroz-blanco, coliflor, muslo-pollo · inventa arroz-integral, pechuga-pollo · arroz-blanco -23 % en gramos"
+    },
+    {
+      "dish": "Arroz integral con verduras y huevo",
+      "kcalRef": 458,
+      "kcalOut": 388,
+      "kcalErrPct": -15.2,
+      "cvPct": 1.3,
+      "reason": "arroz-integral -34 % en gramos"
+    },
+    {
+      "dish": "Patatas guisadas con merluza y verduras",
+      "kcalRef": 380,
+      "kcalOut": 496,
+      "kcalErrPct": 30.5,
+      "cvPct": 4,
+      "reason": "patata +28 % en gramos"
+    },
+    {
+      "dish": "Pollo al horno con boniato y verduras",
+      "kcalRef": 458,
+      "kcalOut": 586,
+      "kcalErrPct": 28,
+      "cvPct": 8.9,
+      "reason": "muslo-pollo +48 % en gramos"
+    },
+    {
+      "dish": "Ensalada de lentejas con tomate y cebolla",
+      "kcalRef": 337,
+      "kcalOut": 338,
+      "kcalErrPct": 0.3,
+      "cvPct": 0.6,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Pollo al horno con patatas y pimiento",
+      "kcalRef": 453,
+      "kcalOut": 559,
+      "kcalErrPct": 23.4,
+      "cvPct": 9.2,
+      "reason": "omite muslo-pollo · inventa pechuga-pollo · muslo-pollo +46 % en gramos"
+    },
+    {
+      "dish": "Tortilla de calabacín y cebolla",
+      "kcalRef": 277,
+      "kcalOut": 312,
+      "kcalErrPct": 12.7,
+      "cvPct": 1.2,
+      "reason": "huevo +20 % en gramos"
+    },
+    {
+      "dish": "Tortilla de espinacas y cebolla",
+      "kcalRef": 257,
+      "kcalOut": 310,
+      "kcalErrPct": 20.8,
+      "cvPct": 0.7,
+      "reason": "huevo +20 % en gramos"
+    },
+    {
+      "dish": "Revuelto de calabacín y huevo",
+      "kcalRef": 239,
+      "kcalOut": 285,
+      "kcalErrPct": 19.1,
+      "cvPct": 2.7,
+      "reason": "huevo +20 % en gramos"
+    },
+    {
+      "dish": "Sopa de verduras con huevo cocido",
+      "kcalRef": 231,
+      "kcalOut": 277,
+      "kcalErrPct": 19.8,
+      "cvPct": 4.6,
+      "reason": "omite patata"
+    },
+    {
+      "dish": "Pechuga de pollo a la plancha con espinacas salteadas",
+      "kcalRef": 263,
+      "kcalOut": 292,
+      "kcalErrPct": 10.8,
+      "cvPct": 0,
+      "reason": "pechuga-pollo +19 % en gramos"
+    },
+    {
+      "dish": "Pimientos rellenos de arroz y verduras",
+      "kcalRef": 295,
+      "kcalOut": 398,
+      "kcalErrPct": 35,
+      "cvPct": 3.8,
+      "reason": "aceite +6 g"
+    },
+    {
+      "dish": "Crema de calabacín con picatostes de pan integral",
+      "kcalRef": 188,
+      "kcalOut": 309,
+      "kcalErrPct": 64.6,
+      "cvPct": 3.8,
+      "reason": "inventa patata, caldo"
+    },
+    {
+      "dish": "Merluza al horno con patatas y pimiento",
+      "kcalRef": 350,
+      "kcalOut": 414,
+      "kcalErrPct": 18.4,
+      "cvPct": 1.9,
+      "reason": "patata +33 % en gramos"
+    },
+    {
+      "dish": "Pizza casera con base de pan integral, tomate y verduras",
+      "kcalRef": 387,
+      "kcalOut": 453,
+      "kcalErrPct": 17.1,
+      "cvPct": 1,
+      "reason": "omite mozzarella · pan-integral +50 % en gramos · densidad -22 %"
+    },
+    {
+      "dish": "Pinchos de pollo y verduras a la plancha",
+      "kcalRef": 249,
+      "kcalOut": 300,
+      "kcalErrPct": 20.5,
+      "cvPct": 3,
+      "reason": "pechuga-pollo +19 % en gramos"
+    },
+    {
+      "dish": "Revuelto de espinacas y champiñones",
+      "kcalRef": 263,
+      "kcalOut": 299,
+      "kcalErrPct": 13.5,
+      "cvPct": 7.4,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Tofu salteado con brócoli y salsa de soja",
+      "kcalRef": 267,
+      "kcalOut": 261,
+      "kcalErrPct": -2.2,
+      "cvPct": 0,
+      "reason": "tofu +20 % en gramos"
+    },
+    {
+      "dish": "Salmón al horno con brócoli",
+      "kcalRef": 355,
+      "kcalOut": 383,
+      "kcalErrPct": 7.9,
+      "cvPct": 7.1,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Sardinas con pimiento asado",
+      "kcalRef": 352,
+      "kcalOut": 375,
+      "kcalErrPct": 6.4,
+      "cvPct": 8.3,
+      "reason": "error repartido, sin una causa dominante"
+    },
+    {
+      "dish": "Pisto con huevo escalfado",
+      "kcalRef": 252,
+      "kcalOut": 332,
+      "kcalErrPct": 32.1,
+      "cvPct": 5.8,
+      "reason": "aceite +23 % en gramos"
+    },
+    {
+      "dish": "Muslos de pollo al horno con patatas y cebolla",
+      "kcalRef": 444,
+      "kcalOut": 705,
+      "kcalErrPct": 58.8,
+      "cvPct": 4.7,
+      "reason": "muslo-pollo +117 % en gramos"
+    },
+    {
+      "dish": "Ensalada de tomate, cebolla y atún",
+      "kcalRef": 205,
+      "kcalOut": 258,
+      "kcalErrPct": 25.8,
+      "cvPct": 2,
+      "reason": "omite atun-lata · inventa atun-lata-aceite · aceite -25 % en gramos"
+    },
+    {
+      "dish": "Pizza margarita y una caña",
+      "kcalRef": 768,
+      "kcalOut": 944,
+      "kcalErrPct": 23,
+      "cvPct": 8.8,
+      "reason": "masa-pizza +37 % en gramos"
+    },
+    {
+      "dish": "Menú del día: ensalada mixta, filete con patatas fritas, pan y fruta",
+      "kcalRef": 940,
+      "kcalOut": 1058,
+      "kcalErrPct": 12.6,
+      "cvPct": 0.2,
+      "reason": "omite naranja, patata-frita · inventa manzana, patata · aceite +15 g · patata-frita +20 % en gramos"
+    },
+    {
+      "dish": "Hamburguesa con patatas",
+      "kcalRef": 762,
+      "kcalOut": 1004,
+      "kcalErrPct": 31.7,
+      "cvPct": 6.9,
+      "reason": "omite patata-frita · inventa patata · aceite +22 g"
+    },
+    {
+      "dish": "Bocadillo de tortilla",
+      "kcalRef": 492,
+      "kcalOut": 698,
+      "kcalErrPct": 41.9,
+      "cvPct": 19.6,
+      "reason": "omite patata · aceite +10 g"
+    },
+    {
+      "dish": "Tapas: patatas bravas y croquetas",
+      "kcalRef": 607,
+      "kcalOut": 878,
+      "kcalErrPct": 44.5,
+      "cvPct": 6.7,
+      "reason": "omite patata-frita · inventa patata, mayonesa · aceite +13 g · patata-frita +20 % en gramos"
+    }
+  ]
+}

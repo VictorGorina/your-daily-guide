@@ -27,11 +27,13 @@ const weekdayShort = (date: string) => {
 /** "+180" / "−50". Signo tipográfico, no guion. */
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)}`;
 
-function Line({ label, kcal }: { label: string; kcal: number }) {
+function Line({ label, kcal, showNumbers }: { label: string; kcal: number; showNumbers: boolean }) {
   return (
     <View className="flex-row items-baseline justify-between">
       <Text className="font-body text-[12.5px] text-muted-foreground">{label}</Text>
-      <Text className="font-mono text-[11.5px] text-muted-foreground">{signed(kcal)}</Text>
+      {showNumbers ? (
+        <Text className="font-mono text-[11.5px] text-muted-foreground">{signed(kcal)}</Text>
+      ) : null}
     </View>
   );
 }
@@ -59,6 +61,7 @@ export function DayBalanceCard({
   settling,
   failed,
   onShowAdjustment,
+  showNumbers = true,
 }: {
   balance: DayBalance;
   record: DayAdjustmentRecord | null;
@@ -67,6 +70,8 @@ export function DayBalanceCard({
   /** El último asentamiento falló. */
   failed: boolean;
   onShowAdjustment: () => void;
+  /** `false` con la preferencia de no ver cifras (ticket 01): sin números de kcal. */
+  showNumbers?: boolean;
 }) {
   const changes = record?.adjustment?.changes ?? [];
   if (!balance.active && !changes.length) return null;
@@ -86,20 +91,26 @@ export function DayBalanceCard({
     <View className="mt-6 rounded-[20px] bg-surface px-3.5 py-3.5">
       <View className="flex-row items-baseline justify-between">
         <Text className="font-body-semibold text-[13px] text-foreground">Balance de hoy</Text>
-        <View className="flex-row items-baseline gap-1">
-          <Text className={`font-mono text-[22px] ${settled ? "text-success" : "text-foreground"}`}>
-            {signed(balance.net)}
-          </Text>
-          <Text className="font-mono text-[10.5px] text-muted-foreground">kcal</Text>
-        </View>
+        {showNumbers ? (
+          <View className="flex-row items-baseline gap-1">
+            <Text
+              className={`font-mono text-[22px] ${settled ? "text-success" : "text-foreground"}`}
+            >
+              {signed(balance.net)}
+            </Text>
+            <Text className="font-mono text-[10.5px] text-muted-foreground">kcal</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* El desglose es lo que hace legible la causalidad: sus tres palancas
           sumando a un solo número. Solo se pinta la línea que aporta algo. */}
       <View className="mt-2.5 gap-1">
-        {meals !== 0 ? <Line label="Comidas cambiadas" kcal={meals} /> : null}
-        {snacks !== 0 ? <Line label="Picoteo" kcal={snacks} /> : null}
-        {exercise !== 0 ? <Line label="Deporte" kcal={exercise} /> : null}
+        {meals !== 0 ? (
+          <Line label="Comidas cambiadas" kcal={meals} showNumbers={showNumbers} />
+        ) : null}
+        {snacks !== 0 ? <Line label="Picoteo" kcal={snacks} showNumbers={showNumbers} /> : null}
+        {exercise !== 0 ? <Line label="Deporte" kcal={exercise} showNumbers={showNumbers} /> : null}
       </View>
 
       {busy ? (

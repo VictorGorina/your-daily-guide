@@ -3,6 +3,8 @@ import { generateText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, createAiProvider } from "@/lib/ai-provider.server";
+import { DAILY_ACTIVITIES, type DailyActivity } from "@/lib/nutrition/energy";
+import { formatTraining, parseTraining } from "@/lib/nutrition/exercise-energy";
 
 export type OnboardingDraft = {
   display_name: string | null;
@@ -15,6 +17,10 @@ export type OnboardingDraft = {
   medications: string | null;
   activity_level: string | null;
   exercise: string | null;
+  /** Actividad del día a día SIN deporte (ticket 07). */
+  daily_activity: DailyActivity | null;
+  /** Rutina habitual en su forma corta (`formatTraining`), o null si no se dijo. */
+  training: string | null;
   meals_per_day: number | null;
   diet_pattern: string | null;
   non_negotiable_foods: string | null;
@@ -56,6 +62,21 @@ const num = (v: unknown) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
 };
+/** Solo un valor exacto de `DAILY_ACTIVITIES`: nada que haya que adivinar. */
+const normalizeDailyActivity = (v: unknown): DailyActivity | null =>
+  (DAILY_ACTIVITIES as string[]).includes(String(v)) ? (v as DailyActivity) : null;
+
+/** La rutina que devuelve el modelo, en la forma corta que se guarda. */
+const trainingText = (v: unknown): string | null => {
+  if (v === "ninguna") return "Ninguna";
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const routine = parseTraining(
+    `${Number(o.sesiones_semana)} × ${Number(o.minutos)} min · ${String(o.actividad ?? "")} · ${String(o.intensidad ?? "")}`,
+  );
+  return routine ? formatTraining(routine) : null;
+};
+
 const str = (v: unknown) => {
   const s = typeof v === "string" ? v.trim() : "";
   return s && s.toLowerCase() !== "null" ? s : null;
@@ -92,6 +113,10 @@ export const parseOnboarding = createServerFn({ method: "POST" })
         '{"display_name": string|null, "age": number|null, "date_of_birth": "YYYY-MM-DD"|null, "sex": "hombre"|"mujer"|"otro"|null, "height_cm": number|null, "current_weight_kg": number|null, ' +
         '"medical_conditions": string|null, "medications": string|null, ' +
         '"activity_level": "sedentario"|"ligero"|"activo"|"muy activo"|null, "exercise": string (tipo y frecuencia)|null, ' +
+        // Ticket 07: el día a día y el deporte, por separado (antes iban
+        // mezclados en `activity_level`).
+        '"daily_activity": "sentado"|"de_pie"|"fisico"|"muy_fisico"|null (SOLO su trabajo o día a día, SIN contar el deporte: sentado = oficina o estudiar; de_pie = tienda, docencia, casa con niños; fisico = hostelería, reparto; muy_fisico = obra, campo, almacén), ' +
+        '"training": {"sesiones_semana": number, "minutos": number, "actividad": "Correr"|"Caminar"|"Bici"|"Gimnasio / pesas"|"Natación"|"Otra", "intensidad": "Suave"|"Normal"|"Fuerte"}|"ninguna"|null (su rutina de deporte habitual; si hace varias, la principal con sus sesiones totales), ' +
         '"meals_per_day": number|null, ' +
         '"diet_pattern": string (omnívoro, vegetariano, vegano, sin gluten...)|null, "non_negotiable_foods": string|null, ' +
         '"food_relationship": string|null, ' +
@@ -138,6 +163,8 @@ export const parseOnboarding = createServerFn({ method: "POST" })
       medications: str(p.medications),
       activity_level: str(p.activity_level),
       exercise: str(p.exercise),
+      daily_activity: normalizeDailyActivity(p.daily_activity),
+      training: trainingText(p.training),
       meals_per_day: num(p.meals_per_day),
       diet_pattern: str(p.diet_pattern),
       non_negotiable_foods: str(p.non_negotiable_foods),

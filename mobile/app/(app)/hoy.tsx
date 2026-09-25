@@ -15,7 +15,15 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -43,6 +51,7 @@ import {
   fetchMonthlyPlan,
   fetchProfile,
   impulsoFrom,
+  fetchTodayLog,
   monthISO,
   patchTodayHabits,
   saveProfile,
@@ -54,7 +63,17 @@ import {
   type MealStatus,
   type Profile,
 } from "../../lib/daily";
-import { addMacros, mergeGuide, sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
+import {
+  addMacros,
+  donePendingMeals,
+  guideReuse,
+  mealsToRecalculate,
+  mergeGuide,
+  showsNutritionNumbers,
+  sumDoneMacros,
+  ZERO_MACROS,
+} from "../../lib/macros";
+import { caloriesText, energyTargets, targetsAsMacros } from "../../lib/energy";
 import { fetchHousehold } from "../../lib/household";
 import {
   EMPTY_SCHEDULE,
@@ -160,6 +179,15 @@ let lastAutoGuideAttempt = 0;
 let lastAutoGuideFailed = false;
 /** Por qué se pidió la guía la última vez (ver `guideNeed`). */
 let lastAutoGuideKey = "";
+// Platos que quedaron "calculando" (ticket 13 de `precision-nutricional`, D13):
+// se reintentan al abrir Hoy, al volver a la app y cada 2 minutos mientras está
+// abierta, como mucho 5 veces seguidas; después, en el siguiente arranque (el
+// contador vive en el módulo). Cada intento solo descompone lo que falta
+// (`macrosOnly` + `reuse`). Mismo criterio que la web.
+const CALC_RETRY_MS = 120_000;
+const CALC_MAX_ATTEMPTS = 5;
+let calcAttempts = 0;
+let lastCalcAttempt = 0;
 
 /** ms desde el último intento (de cualquier apertura de la app), o null si no hay uno registrado. */
 async function msSinceLastAutoPlanAttempt(month: string): Promise<number | null> {
@@ -426,6 +454,13 @@ export default function Hoy() {
   });
 
   const profile = profileQ.data;
+  // Ticket 01: la persona decide si ve cifras. Se calculan igual; solo cambia
+  // lo que se enseña.
+  const showNumbers = showsNutritionNumbers(profile);
+  // Ticket 07: el objetivo del día sale del perfil, en código, y es la única
+  // cifra de objetivo en pantalla (barra, texto de la guía y semáforo).
+  const energy = useMemo(() => energyTargets(profile), [profile]);
+  const dayTarget = energy ? targetsAsMacros(energy) : null;
   const today = todayQ.data;
 
   useEffect(() => {
@@ -458,16 +493,30 @@ export default function Hoy() {
 
   const guide = today?.guide ?? null;
 
-  const requestGuide = async ({ silent = false }: { silent?: boolean } = {}) => {
+  const requestGuide = async ({
+    silent = false,
+    macrosOnly = false,
+  }: { silent?: boolean; macrosOnly?: boolean } = {}) => {
     setGenerating(true);
     try {
-      const g = await apiPost<DailyGuide>("guide", {
-        meals: todayMeals.filter((m) => m.idea).map((m) => ({ moment: m.moment, idea: m.idea })),
-      });
+      const { dishMacros: _none, ...g } = await apiPost<DailyGuide & { dishMacros?: unknown }>(
+        "guide",
+        {
+          meals: todayMeals.filter((m) => m.idea).map((m) => ({ moment: m.moment, idea: m.idea })),
+          // Lo que ya tiene cifra no se vuelve a descomponer.
+          reuse: guideReuse(today?.guide?.mealMacros, today?.habits),
+          macrosOnly,
+        },
+      );
+      // Solo cifras: el texto de la guía se queda como estaba.
+      const fresh: DailyGuide =
+        macrosOnly && today?.guide
+          ? { ...today.guide, macroEstimate: g.macroEstimate, mealMacros: g.mealMacros }
+          : g;
       // Si la generación vuelve con el texto de respaldo y sin cifras, se
       // conservan las que ya tuviera el día: regenerar nunca debe dejar la
       // barra de macros peor de como estaba (ver `mergeGuide`).
-      await updateTodayLog({ guide: mergeGuide(today?.guide, g) });
+      await updateTodayLog({ guide: mergeGuide(today?.guide, fresh) });
       lastAutoGuideFailed = false;
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
@@ -502,11 +551,48 @@ export default function Hoy() {
       const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
       return !!cached?.idea && cached.idea !== m.idea;
     });
-    return stale.length ? `platos:${stale.map((m) => `${m.moment}=${m.idea}`).join("|")}` : "";
+    if (stale.length) return `platos:${stale.map((m) => `${m.moment}=${m.idea}`).join("|")}`;
+    // Platos que siguen "calculando" (D13): se reintentan, con su propia pauta.
+    const pending = mealsToRecalculate(g.mealMacros).filter((mm) =>
+      dishes.some((m) => m.moment === mm.moment && m.idea === mm.idea),
+    );
+    return pending.length ? `por-calcular:${pending.map((m) => m.moment).join("|")}` : "";
   })();
+
+  // Reloj del reintento de "calculando": cada 2 minutos mientras quede algo, y
+  // al volver a la app. Solo cambia un contador; decide el efecto de abajo.
+  const recalculating = guideNeed.startsWith("por-calcular");
+  const [calcTick, setCalcTick] = useState(0);
+  const calcForceRef = useRef(true); // al abrir Hoy se intenta ya
+  useEffect(() => {
+    if (!recalculating) {
+      calcAttempts = 0;
+      return;
+    }
+    const id = setInterval(() => setCalcTick((t) => t + 1), CALC_RETRY_MS);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      calcForceRef.current = true;
+      setCalcTick((t) => t + 1);
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [recalculating]);
 
   useEffect(() => {
     if (!guideNeed || generating) return;
+    if (guideNeed.startsWith("por-calcular")) {
+      if (calcAttempts >= CALC_MAX_ATTEMPTS) return;
+      const due = Date.now() - lastCalcAttempt >= CALC_RETRY_MS;
+      if (!due && !calcForceRef.current) return;
+      calcForceRef.current = false;
+      calcAttempts += 1;
+      lastCalcAttempt = Date.now();
+      void requestGuide({ silent: true, macrosOnly: true });
+      return;
+    }
     const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
     // El tope de un intento por minuto es para no repetir EL MISMO intento (el
     // bucle de alertas de 2026-09-01). Un motivo nuevo — cambió un plato de
@@ -516,7 +602,7 @@ export default function Hoy() {
     lastAutoGuideAttempt = Date.now();
     void requestGuide({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guideNeed, generating]);
+  }, [guideNeed, generating, calcTick]);
 
   useEffect(() => {
     if (nightlyAutoOpenedRef.current || !profile?.evening_time || !today) return;
@@ -591,6 +677,28 @@ export default function Hoy() {
   // El deporte del día (`daily_logs.exercise`) no suma a las macros: es un
   // gasto, no algo que se coma.
   const exercise = cleanDayExercise(today?.exercise);
+
+  // Los planes ya generados se hicieron antes de que existiera el objetivo
+  // (ticket 07): si el plan de hoy suma muy por debajo, se dice.
+  const planShortOfTarget =
+    !!dayTarget && !!guide?.macroEstimate && guide.macroEstimate.kcal < dayTarget.kcal * 0.85;
+
+  // La copia del objetivo en la guía de hoy se mantiene al día: es la que usa
+  // el semáforo de este día cuando ya sea pasado. Se relee la fila antes de
+  // escribir para no pisar una regeneración recién guardada. Igual que la web.
+  useEffect(() => {
+    if (!today?.guide || !dayTarget || generating) return;
+    if (today.guide.targets?.kcal === dayTarget.kcal) return;
+    void fetchTodayLog()
+      .then((fresh) => {
+        if (!fresh?.guide || fresh.guide.targets?.kcal === dayTarget.kcal) return;
+        return updateTodayLog({ guide: { ...fresh.guide, targets: dayTarget } }).then(() =>
+          qc.invalidateQueries({ queryKey: ["today"] }),
+        );
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today?.id, today?.guide?.targets?.kcal, dayTarget?.kcal, generating]);
   const quote = quoteOfTheDay();
 
   // Picoteo, deporte y cambios de plato comparten UN solo asentamiento por
@@ -730,11 +838,20 @@ export default function Hoy() {
         </View>
 
         {/* ── Barras de macros ── */}
-        <MacroBars
-          estimate={doneMacros}
-          target={guide?.macroEstimate ?? null}
-          weightKg={profile?.current_weight_kg ?? null}
-        />
+        {showNumbers ? (
+          <MacroBars
+            estimate={doneMacros}
+            target={dayTarget ?? guide?.macroEstimate ?? null}
+            weightKg={profile?.current_weight_kg ?? null}
+            pending={donePendingMeals(guide?.mealMacros, habits).length}
+          />
+        ) : null}
+        {showNumbers && planShortOfTarget ? (
+          <Text className="font-body mt-1.5 text-[10.5px] text-muted-foreground">
+            Tu plan de este mes se preparó antes de calcular tu objetivo: por eso sus platos suman
+            menos de lo que necesitas.
+          </Text>
+        ) : null}
 
         {/* ── Guía del coach: solo el rango de calorías del día, sin el resto
             (intro, macros en texto, platos sugeridos, consejos) — se quería
@@ -748,7 +865,7 @@ export default function Hoy() {
             {generating || (!guide && todayQ.isLoading)
               ? "Preparando tu guía del día..."
               : guide
-                ? `Guía del coach · ${guide.calories}`
+                ? `Guía del coach · ${caloriesText(energy, showNumbers)}`
                 : "Guía del coach"}
           </Text>
           {!guide && !generating && !todayQ.isLoading ? (
@@ -829,6 +946,16 @@ export default function Hoy() {
                   !!wasIdea && dishChangeIsMine(mealKeyForPin, homeCtxFor(todayWeekday));
                 const note = offListNote(planned?.off);
                 const shared = sharedWith(h.label);
+                // D13: un plato sin cifra se dice, no se rellena con un promedio.
+                const mealNumbers = guide?.mealMacros?.find(
+                  (m) => m.moment === h.label && m.idea === dish,
+                );
+                // Sin cifras a la vista, "Calculando…" no dice nada; el aviso de
+                // texto vago sí (le pide concretar).
+                const calculating =
+                  !!planned?.idea &&
+                  mealNumbers?.status === "calculando" &&
+                  (showNumbers || !!mealNumbers.vague);
 
                 return (
                   <View
@@ -892,6 +1019,18 @@ export default function Hoy() {
                           >
                             {wasIdea}
                           </Text>
+                        ) : null}
+                        {calculating ? (
+                          <View className="mt-1 flex-row items-center gap-1">
+                            {mealNumbers?.vague ? null : (
+                              <ActivityIndicator size="small" color="#83796c" />
+                            )}
+                            <Text className="font-body text-[11px] text-muted-foreground">
+                              {mealNumbers?.vague
+                                ? "Concreta qué comiste para poder calcularlo"
+                                : "Calculando…"}
+                            </Text>
+                          </View>
                         ) : null}
                         <Text className="font-mono-medium mt-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">
                           {catInfo.label}
@@ -1028,6 +1167,7 @@ export default function Hoy() {
 
         {/* ── Picoteo de hoy: lo apuntado y qué ha pasado con el plan ── */}
         <SnackCard
+          showNumbers={showNumbers}
           snacks={snacks}
           removingId={removingSnack}
           onRemove={(id) => void removeSnack(id)}
@@ -1035,6 +1175,7 @@ export default function Hoy() {
 
         {/* ── Deporte de hoy: mismo formato que el picoteo ── */}
         <ExerciseCard
+          showNumbers={showNumbers}
           exercise={exercise}
           removingId={removingExercise}
           onRemove={(id) => void removeExercise(id)}
@@ -1062,6 +1203,7 @@ export default function Hoy() {
              en los próximos días. Va DEBAJO de los dos botones que la
              alimentan, así que se lee como el resumen de todo lo de arriba. ── */}
         <DayBalanceCard
+          showNumbers={showNumbers}
           balance={balance}
           record={adjustmentRecord}
           settling={daySettle.pending || daySettle.running}
@@ -1144,6 +1286,7 @@ export default function Hoy() {
           instante (plan/meal, sin IA) y el reajuste de los días futuros va en un
           lote en segundo plano. Antes esto mandaba al chat del coach. */}
       <MealSwapSheet
+        showNumbers={showNumbers}
         open={swapIndex != null}
         onOpenChange={(v) => {
           if (!v) setSwapIndex(null);
@@ -1151,10 +1294,11 @@ export default function Hoy() {
         mealLabel={swapMeal?.moment ?? ""}
         plannedDish={swapMeal?.idea ?? ""}
         disabled={mealSwap.isSaving(swapMeal?.moment ?? "")}
-        onSwap={(dish) => {
-          if (!swapMeal) return;
-          void mealSwap.swap(swapMeal.moment, swapMeal.slot, dish);
-          setSwapIndex(null);
+        onSwap={async (dish, opts) => {
+          if (!swapMeal) return { ok: true };
+          // La hoja espera a que el plato quede guardado: si el texto es vago,
+          // se queda abierta pidiendo concretar (ticket 13).
+          return mealSwap.swap(swapMeal.moment, swapMeal.slot, dish, opts);
         }}
         onSkip={() => {
           if (swapIndex != null) setMealStatus(swapIndex, "salteo");
@@ -1167,10 +1311,11 @@ export default function Hoy() {
         open={balanceInfoOpen}
         onOpenChange={setBalanceInfoOpen}
         changes={balanceChanges}
-        kcalDelta={balance.net}
+        kcalDelta={showNumbers ? balance.net : null}
       />
 
       <SnackSheet
+        showNumbers={showNumbers}
         open={snackOpen}
         onOpenChange={setSnackOpen}
         today={today0}
@@ -1178,6 +1323,7 @@ export default function Hoy() {
       />
 
       <ExerciseSheet
+        showNumbers={showNumbers}
         open={activityOpen}
         onOpenChange={setActivityOpen}
         today={today0}

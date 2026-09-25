@@ -49,6 +49,8 @@ export type PendingDish = {
   plannedDish: string;
   /** kcal que la guía estimaba para ese momento ANTES del cambio. */
   prevKcal: number | null;
+  /** Proteína (g) del plato del plan, igual que `prevKcal` (ticket 13). */
+  prevProtein?: number | null;
   /**
    * Desvío ya decidido, en vez de deducirlo de las macros de antes y de
    * después. Lo usa "Deshacer": al volver al plato del plan hay que DEVOLVER la
@@ -57,6 +59,8 @@ export type PendingDish = {
    * cero y dejaría el plan movido para siempre).
    */
   kcalDeltaOverride?: number;
+  /** Lo mismo para la proteína que el cambio original movió (g, con signo). */
+  proteinDeltaOverride?: number | null;
 };
 
 /** Lo que se le manda al servidor por cada plato cambiado. */
@@ -66,7 +70,16 @@ export type DishDelta = {
   dish: string;
   plannedDish: string;
   kcalDelta: number;
+  /** `null` si no se sabe (cifra manual). */
+  proteinDelta: number | null;
 };
+
+/**
+ * Resultado de convertir la cola en desvíos. Un plato cuya cifra aún está
+ * "calculando" (D13) no se puede medir: vuelve a la cola (`unresolved`) y se
+ * asienta cuando la tenga, en vez de perderse o medirse contra un cero.
+ */
+export type ResolvedDishes = { deltas: DishDelta[]; unresolved: PendingDish[] };
 
 export type DaySettleDeps = {
   /**
@@ -75,7 +88,7 @@ export type DaySettleDeps = {
    * de guías y de planes) y no aquí: este módulo solo sabe de cuándo disparar.
    * Solo se llama si de verdad hay platos encolados.
    */
-  resolveDishDeltas: (dishes: PendingDish[]) => Promise<DishDelta[]>;
+  resolveDishDeltas: (dishes: PendingDish[]) => Promise<ResolvedDishes>;
   settle: (opts: { data: { today: string; changes: DishDelta[] } }) => Promise<SettleDayResult>;
   onDone: (result: SettleDayResult | null) => void;
 };
@@ -172,6 +185,7 @@ async function run(): Promise<void> {
 
   const today = pendingDate;
   const dishes = [...pendingDishes.values()];
+  const pendingPlainBefore = pendingPlain;
   const { resolveDishDeltas, settle, onDone } = deps;
   running = true;
   failed = false;
@@ -182,8 +196,19 @@ async function run(): Promise<void> {
 
   let result: SettleDayResult | null = null;
   try {
-    const changes = dishes.length ? await resolveDishDeltas(dishes) : [];
-    result = await settle({ data: { today, changes } });
+    const { deltas: changes, unresolved } = dishes.length
+      ? await resolveDishDeltas(dishes)
+      : { deltas: [], unresolved: [] };
+    // Lo que aún no tiene cifra vuelve a la cola y se reintenta más tarde; lo
+    // demás se asienta ya. Un cambio nuevo de la misma comida manda.
+    if (unresolved.length) {
+      for (const d of unresolved) if (!pendingDishes.has(d.label)) pendingDishes.set(d.label, d);
+      persist();
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(startRun, RETRY_MS);
+    }
+    if (changes.length || !unresolved.length || pendingPlainBefore)
+      result = await settle({ data: { today, changes } });
   } catch (err) {
     // Lo que no se pudo mandar vuelve a la cola. Los platos también: su desvío
     // lo escribe el servidor al asentar, así que si la llamada falló ese apunte

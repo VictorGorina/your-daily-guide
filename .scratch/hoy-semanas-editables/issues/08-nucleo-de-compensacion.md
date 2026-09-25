@@ -1,6 +1,6 @@
 # 08 — Núcleo de compensación para todo cambio de plato
 
-Status: ready
+Status: hecho (núcleo). `compensationNeed` vive en `src/lib/nutrition/compensation.ts`, y desde `e5cee11` todo cambio de plato se asienta por `settleDay` junto con picoteo y deporte (ver `.scratch/balance-del-dia/`). Su uso desde la tira de días futuros va con el ticket 07, que sigue abierto.
 Blocked by: 02, 06, 07
 Tamaño: M
 Se despliega junto con: 07
