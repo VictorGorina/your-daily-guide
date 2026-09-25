@@ -46,14 +46,14 @@ describe("toTableBasis", () => {
     expect(arroz.grams).toBeGreaterThan(150);
   });
 
-  it("convierte carne en crudo igual que el pipeline con wasRaw", () => {
+  it("convierte carne en crudo igual que el pipeline con estado crudo", () => {
     const ref = toTableBasis(recipe([{ foodKey: "pechuga-pollo", grams: 120 }]));
     const pipeline = fromResolved([
       resolveIngredient({
         key: "pechuga-pollo",
         name: "pechuga de pollo",
         grams: 120,
-        wasRaw: true,
+        state: "crudo",
       }),
     ]);
     const a = accuracyOf(ref, pipeline);
@@ -98,9 +98,9 @@ describe("validateGolden", () => {
     ).toEqual([]);
   });
 
-  it("rechaza pesar en crudo una fila que solo existe cocida", () => {
+  it("rechaza pesar en crudo una fila cocida e indica su fila en seco (quinoa)", () => {
     const [problem] = validateGolden(recipe([{ foodKey: "quinoa", grams: 70 }]));
-    expect(problem).toMatch(/solo existe cocido/);
+    expect(problem).toMatch(/quinoa-cruda/);
   });
 
   it("indica la fila en seco cuando existe", () => {
@@ -183,8 +183,8 @@ describe("tableErrorOf", () => {
 
   it("sin fila que case, mide el genérico que sumaría producción y avisa de la fila que falta", () => {
     const e = tableErrorOf({
-      name: "fuet",
-      expectedKey: "fuet",
+      name: "salsa marciana",
+      expectedKey: "salsa-marciana",
       per100: { kcal: 438, protein_g: 27, carbs_g: 3.2, fat_g: 36 },
       source: "prueba",
       reviewedBy: null,

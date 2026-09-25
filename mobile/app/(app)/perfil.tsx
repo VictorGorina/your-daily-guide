@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ageFromDOB } from "../../lib/age";
 import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
 import { energyExplanation, energyTargets } from "../../lib/energy";
+import { portionExplanation, portionFactors } from "../../lib/portion";
 import { showsNutritionNumbers } from "../../lib/macros";
 import {
   isFieldAvailable,
@@ -139,6 +140,9 @@ export default function Perfil() {
               Tu objetivo diario
             </Text>
             <Text className="mt-2 px-1 text-sm text-foreground">{energyExplanation(energy)}</Text>
+            <Text className="mt-1 px-1 text-sm text-foreground">
+              {portionExplanation(portionFactors(energy, profile))}
+            </Text>
             <Text className="mt-2 px-1 text-[11px] leading-4 text-muted-foreground">
               Es una estimación: entre personas puede variar un ±10 %. Se recalcula sola cuando
               cambias tu peso, tu día a día, tu rutina o tu objetivo.

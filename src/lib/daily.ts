@@ -118,6 +118,8 @@ export type DailyGuide = {
   mealMacros?: import("@/lib/guide.functions").MealMacroEstimate[] | null;
   /** Objetivo del día calculado en código (ticket 07); ver `GeneratedGuide.targets`. */
   targets?: import("@/lib/guide.functions").MacroEstimate | null;
+  /** Ración personal con la que se calcularon los platos (ticket 21). */
+  portionFactor?: number;
   behaviors: string[];
   meals?: { moment: string; idea: string }[];
   tips?: string[];

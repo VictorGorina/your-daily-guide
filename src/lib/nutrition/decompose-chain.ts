@@ -17,13 +17,30 @@
 import { normName } from "@/lib/plan-shared";
 
 export type DecomposeFailure =
-  "sin-clave" | "json-invalido" | "sin-respuesta" | "tiempo" | "tope-gasto" | "error-modelo";
+  | "sin-clave"
+  | "json-invalido"
+  | "sin-respuesta"
+  | "tiempo"
+  | "tope-gasto"
+  | "error-modelo"
+  /** Descompuesto, pero con ingredientes sin identificar que pesan (ticket 05 §5). */
+  | "calidad-baja";
 
-/** Lo que devuelve el modelo por plato, sin resolver todavía contra la tabla. */
+/**
+ * Lo que devuelve el modelo por plato, sin resolver todavía contra la tabla
+ * (esquema del ticket 05: `resolve-dish.server.ts`). Los campos de clasificación
+ * van sin tipar aquí: los lee y sanea quien resuelve la receta.
+ */
 export type RawDish = {
   comida: boolean;
   vago: boolean;
-  coccion: unknown;
+  /** Uno o dos métodos de cocción (enum de `cooking.ts`). */
+  metodos?: unknown;
+  /** "plato" | "unidad" (ticket 17: una pizza pesa lo que pesa). */
+  tipo_racion?: unknown;
+  unidad?: unknown;
+  /** Cuánto dice el texto respecto a una ración ("media pizza" = 0,5). */
+  cantidad_texto?: unknown;
   ingredientes: Record<string, unknown>[];
 };
 
@@ -40,6 +57,11 @@ export function failureOf(error: unknown): DecomposeFailure {
   const name = (error as { name?: string } | null)?.name ?? "";
   if (name === "RateLimitError") return "tope-gasto";
   if (name === "TimeoutError" || name === "AbortError") return "tiempo";
+  // Salida estructurada que no valida contra el esquema (ticket 05): cuenta como
+  // JSON inválido, no como un fallo del modelo, para que se vea en el log.
+  if (/NoObjectGenerated|NoOutputGenerated|TypeValidation|JSONParse/.test(name)) {
+    return "json-invalido";
+  }
   return "error-modelo";
 }
 
@@ -60,23 +82,35 @@ export function parseDecomposition(
   parse: (text: string) => unknown,
 ): Map<string, RawDish> {
   if (!text?.trim()) throw new DecomposeError("sin-respuesta");
-  let parsed: { platos?: unknown };
+  let parsed: unknown;
   try {
-    parsed = parse(text) as { platos?: unknown };
+    parsed = parse(text);
   } catch {
     throw new DecomposeError("json-invalido");
   }
-  if (!Array.isArray(parsed?.platos)) throw new DecomposeError("json-invalido");
+  return rawDishesOf(parsed);
+}
+
+/**
+ * La respuesta ya como objeto (la salida estructurada del ticket 05, o un JSON
+ * leído a mano) → un `RawDish` por plato, indexado por `normName(plato)`.
+ */
+export function rawDishesOf(parsed: unknown): Map<string, RawDish> {
+  const platos = (parsed as { platos?: unknown } | null)?.platos;
+  if (!Array.isArray(platos)) throw new DecomposeError("json-invalido");
 
   const out = new Map<string, RawDish>();
-  for (const row of parsed.platos) {
+  for (const row of platos) {
     const r = (row ?? {}) as Record<string, unknown>;
     const label = normName(String(r.plato ?? ""));
     if (!label) continue;
     out.set(label, {
       comida: r.comida !== false,
       vago: r.vago === true,
-      coccion: r.coccion,
+      metodos: r.metodos ?? r.coccion,
+      tipo_racion: r.tipo_racion,
+      unidad: r.unidad,
+      cantidad_texto: r.cantidad_texto,
       ingredientes: (Array.isArray(r.ingredientes) ? r.ingredientes : [])
         .slice(0, 30)
         .map((raw) => (raw ?? {}) as Record<string, unknown>),

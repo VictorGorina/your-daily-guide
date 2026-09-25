@@ -124,11 +124,11 @@ export const GOLDEN_EXTERNAL: GoldenExternal[] = [
   },
   {
     name: "pechuga de pavo loncheada",
-    expectedKey: "jamon-cocido",
+    expectedKey: "pechuga-pavo-loncheada",
     per100: { kcal: 88, protein_g: 16, carbs_g: 1.5, fat_g: 1 },
     source: off("en:turkey-breasts", 30, ["8480000057105", "8480000602435", "8410320249478"]),
     reviewedBy: null,
-    notes: "Hoy casa por alias con `jamon-cocido` (110 kcal); una fila propia sería más exacta.",
+    notes: "Casaba por alias con `jamon-cocido` (110 kcal, +25 %); fila propia desde el ticket 14.",
   },
   {
     name: "bacon",

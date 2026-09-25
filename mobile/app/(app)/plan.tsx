@@ -45,6 +45,12 @@ import { PlanUpdatedBanner } from "../../components/plan-updated-banner";
 import { Dialog } from "../../components/ui/dialog";
 import { apiPost } from "../../lib/api";
 import {
+  planDishesToWarm,
+  useRecipeWarmProgress,
+  warmPlanRecipes,
+  type WarmResult,
+} from "../../lib/recipe-warm";
+import {
   fetchLogs,
   fetchLogsForMonth,
   fetchMonthConstraints,
@@ -460,6 +466,17 @@ export default function Plan() {
     if (!isSoloPlanner) void flushPlanRecalc(month);
   }, [month, isSoloPlanner]);
 
+  // Todos los platos del plan, calculados al generarlo o cambiarlo (ticket 06,
+  // D13): ninguno llega a Hoy "Calculando…". Solo lo que falte en la caché; si
+  // la app se cerró a medias, se retoma aquí.
+  const warmProgress = useRecipeWarmProgress();
+  useEffect(() => {
+    if (!plan || !actionable) return;
+    void warmPlanRecipes(planDishesToWarm(plan, month, today), (dishes) =>
+      apiPost<WarmResult>("recipes/warm", { dishes }),
+    );
+  }, [plan, actionable, month, today]);
+
   const goToMonth = (target: string) => {
     if (target < bounds.earliest || target > bounds.latest) return;
     setSelectedMonth(target);
@@ -630,6 +647,12 @@ export default function Plan() {
             </Pressable>
           ) : null}
         </View>
+
+        {warmProgress.running ? (
+          <Text className="mt-2 text-center text-xs text-muted-foreground">
+            Calculando tus platos {warmProgress.done}/{warmProgress.total}…
+          </Text>
+        ) : null}
 
         {showCreateTakeover && needsConstraints ? (
           <MonthConstraintsGate

@@ -1,6 +1,6 @@
 # 22 — Ingredientes desconocidos: composición de USDA, nunca un genérico
 
-Status: ready
+Status: implementado (2026-09-25, sin desplegar); falta la clave y la migración
 Blocked by: 14
 Tamaño: M
 Fase: 2
@@ -58,3 +58,8 @@ parecido" (13) o un genérico. Se guarda para toda la app y a partir de ahí es 
 - [ ] La clave de USDA no aparece en el bundle del navegador.
 
 ## Comments
+
+- 2026-09-25 — **Implementado**: `usda.ts` (puro, testeado con la API simulada), `usda.server.ts`,
+  migración `20260925150000_foods_extra.sql`, `bun run foods:review`. Pendiente: `USDA_FDC_API_KEY`
+  (clave gratuita de api.data.gov; sin ella no se busca) en `.env` y Vercel, y aplicar la
+  migración.

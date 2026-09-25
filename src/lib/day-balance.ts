@@ -169,7 +169,66 @@ export type DayAdjustment = {
   summary: string;
   /** Desvío que se absorbió, acumulado en el día. */
   kcal: number;
+  /**
+   * kcal que los platos cambiados mueven DE VERDAD, medidas con sus recetas
+   * (ticket 18), con el signo del desvío que compensan: +300 = han quitado 300
+   * kcal a los próximos días para compensar un exceso. Ausente si no se pudo
+   * medir (algún plato aún sin calcular) o en un ajuste anterior al ticket.
+   */
+  absorbedKcal?: number;
+  /** Se insistió con los números y aun así se quedó corto: "el resto no lo persigo". */
+  partial?: boolean;
 };
+
+/** Por debajo de esta parte del desvío, el reajuste se da por corto e insiste una vez. */
+export const ABSORB_MIN_SHARE = 0.5;
+
+/**
+ * Cuánto compensan de verdad unos cambios de plato (ticket 18): −Σ(después −
+ * antes), con las kcal que da `kcalOf` (la receta a la ración del plan). Con el
+ * signo del desvío: un exceso se compensa quitando energía, así que
+ * compensar +400 es que los platos nuevos sumen 400 menos. `null` si algún plato
+ * no tiene cifra: sin medir, no se afirma nada.
+ */
+export function absorbedKcal(
+  changes: readonly Pick<MealChange, "before" | "after">[],
+  kcalOf: (dish: string) => number | null,
+): number | null {
+  let total = 0;
+  for (const c of changes) {
+    const before = kcalOf(c.before);
+    const after = kcalOf(c.after);
+    if (before == null || after == null) return null;
+    total += after - before;
+  }
+  return Math.round(-total);
+}
+
+/** ¿Se queda corto? Solo con el mismo signo y menos de la mitad del desvío. */
+export function absorbsTooLittle(absorbed: number, pendingKcal: number): boolean {
+  if (!pendingKcal) return false;
+  return absorbed * Math.sign(pendingKcal) < ABSORB_MIN_SHARE * Math.abs(pendingKcal);
+}
+
+/**
+ * Lo que la tarjeta dice que se ha movido (ticket 18: lo que se enseña es lo que
+ * el código midió). `null` si no hay medida.
+ */
+export function absorbedNote(
+  adjustment: Pick<DayAdjustment, "absorbedKcal" | "partial" | "kcal"> | null | undefined,
+  showNumbers: boolean,
+): string | null {
+  const absorbed = adjustment?.absorbedKcal;
+  if (absorbed == null) return null;
+  if (adjustment?.partial) return "He ajustado una parte; el resto no lo persigo.";
+  if (showNumbers) {
+    const n = Math.abs(Math.round(absorbed / 10) * 10).toLocaleString("es-ES");
+    return `He movido unas ${n} kcal de tus próximos días.`;
+  }
+  return (adjustment?.kcal ?? absorbed) >= 0
+    ? "He aligerado un poco tus próximas comidas."
+    : "He reforzado un poco tus próximas comidas.";
+}
 
 export type DayOutcome =
   | "adjusted"
@@ -213,6 +272,10 @@ export function cleanDayAdjustment(raw: unknown): DayAdjustmentRecord | null {
           changes: (Array.isArray(adj.changes) ? adj.changes : []) as MealChange[],
           summary: String(adj.summary ?? ""),
           kcal: Math.round(num(adj.kcal)),
+          ...(adj.absorbedKcal != null && Number.isFinite(Number(adj.absorbedKcal))
+            ? { absorbedKcal: Math.round(Number(adj.absorbedKcal)) }
+            : {}),
+          ...(adj.partial === true ? { partial: true } : {}),
         }
       : null;
   const lastOutcome = OUTCOMES.includes(o.lastOutcome as DayOutcome)
@@ -250,7 +313,17 @@ export function mergeDayAdjustment(
     .sort((a, b) =>
       a.date === b.date ? a.slot.localeCompare(b.slot) : a.date.localeCompare(b.date),
     );
-  return { changes, summary: next.summary || prev.summary, kcal: prev.kcal + next.kcal };
+  const absorbed =
+    prev.absorbedKcal != null && next.absorbedKcal != null
+      ? prev.absorbedKcal + next.absorbedKcal
+      : (next.absorbedKcal ?? undefined);
+  return {
+    changes,
+    summary: next.summary || prev.summary,
+    kcal: prev.kcal + next.kcal,
+    ...(absorbed != null ? { absorbedKcal: absorbed } : {}),
+    ...(next.partial ? { partial: true } : {}),
+  };
 }
 
 /**
@@ -346,10 +419,15 @@ export function dayOutcomeNote(outcome: DayOutcome | null | undefined): string |
 export function balanceNote(
   balance: DayBalance,
   outcome: DayOutcome | null | undefined,
+  opts: { onlyRoutineExercise?: boolean } = {},
 ): string | null {
   const explained = dayOutcomeNote(outcome);
   if (explained) return explained;
   if (outcome !== "below-threshold" && outcome !== "nothing") return null;
+  // El deporte de hoy fue solo de su rutina: ya iba en el objetivo (D9, ticket 16).
+  if (opts.onlyRoutineExercise && balance.sources.exercise === 0) {
+    return "Tu rutina ya va en tu plan. Lo demás lo absorbe el plan tal cual.";
+  }
 
   const { meals, snacks, exercise } = balance.sources;
   const positives = (meals > 0 ? meals : 0) + snacks;

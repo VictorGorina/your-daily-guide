@@ -1,7 +1,12 @@
 import { Check } from "lucide-react-native";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
-import { balanceNote, type DayAdjustmentRecord, type DayBalance } from "../lib/day-balance";
+import {
+  absorbedNote,
+  balanceNote,
+  type DayAdjustmentRecord,
+  type DayBalance,
+} from "../lib/day-balance";
 import type { MealChange } from "../lib/plan-shared";
 
 /**
@@ -62,8 +67,11 @@ export function DayBalanceCard({
   failed,
   onShowAdjustment,
   showNumbers = true,
+  onlyRoutineExercise = false,
 }: {
   balance: DayBalance;
+  /** El deporte de hoy fue solo de su rutina: ya iba en el objetivo (ticket 16). */
+  onlyRoutineExercise?: boolean;
   record: DayAdjustmentRecord | null;
   /** Hay un asentamiento pendiente o en vuelo. */
   settling: boolean;
@@ -85,7 +93,7 @@ export function DayBalanceCard({
   // Un día que se anula solo (deporte contra picoteo) no es cero de verdad: el
   // verde dice "esto está cuadrado", que es la lectura correcta.
   const settled = !busy && !failed && Math.abs(balance.net) < 100 && (snacks > 0 || meals !== 0);
-  const note = busy ? null : balanceNote(balance, record?.lastOutcome);
+  const note = busy ? null : balanceNote(balance, record?.lastOutcome, { onlyRoutineExercise });
 
   return (
     <View className="mt-6 rounded-[20px] bg-surface px-3.5 py-3.5">
@@ -129,6 +137,11 @@ export function DayBalanceCard({
             </Text>{" "}
             de los próximos días para absorberlo.
           </Text>
+          {absorbedNote(record?.adjustment, showNumbers) ? (
+            <Text className="mt-1 font-body text-[12px] text-muted-foreground">
+              {absorbedNote(record?.adjustment, showNumbers)}
+            </Text>
+          ) : null}
           <View className="mt-2 gap-1.5">
             {changes.slice(0, INLINE_CHANGES).map((c) => (
               <ChangeChip key={`${c.date}-${c.slot}`} change={c} />

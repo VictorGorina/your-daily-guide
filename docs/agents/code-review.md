@@ -52,10 +52,12 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
       salchicha real lleva casi la mitad de proteína, y resolvía con confianza alta y kcal
       plausible, así que ni la calidad de resolución ni el rango del eval lo habrían pillado —
       solo lo delata contrastar el alimento en sí.
-- [ ] Al correr `bun run eval:dishes`, mira también la sección "Keys con más variedad de nombres
-      detrás" del informe (y `broadAliasKeys` en `baseline.json`): una `key` a la que caen muchos
-      nombres de ingrediente distintos es candidata a partirse, aunque el resto del eval salga
-      limpio.
+- [ ] Cualquier cambio que toque kcal, gramos o la receta (tabla, anclas, `OIL_BY_METHOD`,
+      `validateRecipe`, el prompt de `decomposeDishes`) se demuestra con `bun run eval:recipes`
+      sobre el mismo golden set y se compara con la línea base antes de darlo por bueno (memoria
+      `macro-accuracy-foundation`). Ahorrar dinero nunca justifica peores cifras.
+- [ ] Una fila nueva de la tabla lleva su fuente trazable en comentario (fdcId de USDA o mediana de
+      Open Food Facts), y si tiene `cookedYield`, su `basis`.
 
 ## Invariantes del plan y la compra
 

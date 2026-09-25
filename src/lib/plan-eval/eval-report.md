@@ -1,30 +1,30 @@
-# Eval de exactitud — 2026-09-24 17:39 UTC
+# Eval de exactitud — 2026-09-25 11:47 UTC
 
 ## Tabla de composición frente a referencias externas (17)
 
-Casado a la fila correcta: 64.7 % · filas que faltan: 5 · kcal/100 g, error medio: 25.3 % · proteína: 47.6 % · grasa: 37.7 %
+Casado a la fila correcta: 100 % · filas que faltan: 0 · kcal/100 g, error medio: 8.7 % · proteína: 9.2 % · grasa: 15.5 %
 
 _Si no casa con ninguna fila, se mide el genérico de 130 kcal que sumaría producción._
 
-| Nombre                        | Fila que suma hoy                         | kcal  | Proteína | Grasa  |
-| ----------------------------- | ----------------------------------------- | ----- | -------- | ------ |
-| fuet                          | ⚠ genérico (debería ser salchichon)       | -70 % | -78 %    | -86 %  |
-| bacon                         | ⚠ genérico (falta fila `bacon`)           | -55 % | -60 %    | -80 %  |
-| salmorejo                     | salmorejo                                 | +47 % | +18 %    | +41 %  |
-| morcilla                      | morcilla                                  | +46 % | +86 %    | +111 % |
-| tortilla de patatas           | ⚠ patata (falta fila `tortilla-patatas`)  | -44 % | -62 %    | -99 %  |
-| pizza margarita               | ⚠ genérico (falta fila `pizza`)           | -40 % | -32 %    | -17 %  |
-| hummus                        | hummus                                    | -36 % | +19 %    | -55 %  |
-| bebida de soja                | ⚠ bebida-avena (falta fila `bebida-soja`) | +32 % | -46 %    | -4 %   |
-| pechuga de pavo loncheada     | jamon-cocido                              | +25 % | +13 %    | +50 %  |
-| croquetas de jamón            | ⚠ jamon-serrano (falta fila `croqueta`)   | +24 % | +370 %   | +46 %  |
-| pan de pita                   | pan-blanco                                | +8 %  | +7 %     | +42 %  |
-| vino tinto                    | vino-cocinar                              | -2 %  | +1 %     | +0 %   |
-| salmón a la plancha           | salmon                                    | +1 %  | -10 %    | +5 %   |
-| cerveza                       | cerveza                                   | +0 %  | +1 %     | +0 %   |
-| pechuga de pollo a la plancha | pechuga-pollo                             | +0 %  | +0 %     | +1 %   |
-| bacalao al horno              | bacalao                                   | +0 %  | +1 %     | +3 %   |
-| arroz blanco cocido           | arroz-blanco                              | +0 %  | +6 %     | +2 %   |
+| Nombre                        | Fila que suma hoy      | kcal  | Proteína | Grasa  |
+| ----------------------------- | ---------------------- | ----- | -------- | ------ |
+| salmorejo                     | salmorejo              | +47 % | +18 %    | +41 %  |
+| morcilla                      | morcilla               | +46 % | +86 %    | +111 % |
+| hummus                        | hummus                 | -36 % | +19 %    | -55 %  |
+| pan de pita                   | pan-blanco             | +8 %  | +7 %     | +42 %  |
+| fuet                          | salchichon             | -4 %  | -4 %     | -3 %   |
+| vino tinto                    | vino-cocinar           | -2 %  | +1 %     | +0 %   |
+| croquetas de jamón            | croqueta               | +2 %  | +3 %     | +2 %   |
+| salmón a la plancha           | salmon                 | +1 %  | -10 %    | +5 %   |
+| tortilla de patatas           | tortilla-patatas       | +1 %  | +0 %     | +0 %   |
+| pizza margarita               | pizza                  | +0 %  | +0 %     | +0 %   |
+| cerveza                       | cerveza                | +0 %  | +1 %     | +0 %   |
+| pechuga de pollo a la plancha | pechuga-pollo          | +0 %  | +0 %     | +1 %   |
+| bacalao al horno              | bacalao                | +0 %  | +1 %     | +3 %   |
+| arroz blanco cocido           | arroz-blanco           | +0 %  | +6 %     | +2 %   |
+| pechuga de pavo loncheada     | pechuga-pavo-loncheada | +0 %  | +0 %     | +0 %   |
+| bacon                         | bacon                  | +0 %  | +0 %     | +0 %   |
+| bebida de soja                | bebida-soja            | +0 %  | +0 %     | +0 %   |
 
 ## Descomposición frente a recetas de referencia
 
@@ -34,53 +34,65 @@ Modelo: `openai/gpt-5` · 75 platos (0 revisados a mano) · 3 pasada(s) por plat
 
 | Métrica                                        | Medido  | Objetivo |     |
 | ---------------------------------------------- | ------- | -------- | --- |
-| kcal por ración, error medio                   | 23.2%   | ≤ 6%     | ✗   |
-| kcal por ración, P90                           | 44.5%   | ≤ 12%    | ✗   |
-| kcal por 100 g, error medio                    | 5.2%    | ≤ 6%     | ✓   |
-| reparto de macros                              | 5.3 pts | ≤ 3 pts  | ✗   |
-| proteína por ración, error medio               | 23.3%   | ≤ 8%     | ✗   |
-| ingredientes principales omitidos              | 9.2%    | ≤ 1%     | ✗   |
-| mismo plato → mismas cifras (CV entre pasadas) | 3.9%    | ≤ 0%     | ✗   |
+| kcal por ración, error medio                   | 10.8%   | ≤ 6%     | ✗   |
+| kcal por ración, P90                           | 25%     | ≤ 12%    | ✗   |
+| kcal por 100 g, error medio                    | 12.6%   | ≤ 6%     | ✗   |
+| reparto de macros                              | 4.7 pts | ≤ 3 pts  | ✗   |
+| proteína por ración, error medio               | 10.4%   | ≤ 8%     | ✗   |
+| ingredientes principales omitidos              | 8.7%    | ≤ 1%     | ✗   |
+| mismo plato → mismas cifras (CV entre pasadas) | 3.8%    | ≤ 0%     | ✗   |
 
-Sesgo de kcal (con signo): +21.5 % · carbohidratos: 26.4 % · grasa: 23.1 % · aceite: ±2 g · inventados por plato: 0.3 · pasadas sin descomponer (fuera de las métricas): 24/225
-Latencia: 591.4 s por pasada completa (lotes de 8).
+Sesgo de kcal (con signo): +6.6 % · carbohidratos: 14 % · grasa: 17.8 % · aceite: ±1.7 g · inventados por plato: 0.4 · pasadas sin descomponer (fuera de las métricas): 1/225
+Latencia: 1064.0 s por pasada completa (lotes de 8).
+
+### Frente a la línea base (2026-09-24, `openai/gpt-5`)
+
+| Métrica                                        | Base    | Ahora   |
+| ---------------------------------------------- | ------- | ------- |
+| kcal por ración, error medio                   | 23.2%   | 10.8%   |
+| kcal por ración, P90                           | 44.5%   | 25%     |
+| kcal por 100 g, error medio                    | 5.2%    | 12.6%   |
+| reparto de macros                              | 5.3 pts | 4.7 pts |
+| proteína por ración, error medio               | 23.3%   | 10.4%   |
+| ingredientes principales omitidos              | 9.2%    | 8.7%    |
+| mismo plato → mismas cifras (CV entre pasadas) | 3.9%    | 3.8%    |
 
 ### Los 15 platos con más error de kcal
 
-| Plato                                               | Ref. | Salida | Error | CV   | Motivo                                                                                      |
-| --------------------------------------------------- | ---- | ------ | ----- | ---- | ------------------------------------------------------------------------------------------- |
-| Crema de calabacín con picatostes de pan integral · | 188  | 309    | +65 % | 4 %  | inventa patata, caldo                                                                       |
-| Tostada integral con tomate y huevo revuelto ·      | 229  | 376    | +64 % | 3 %  | aceite +5 g · pan-integral +20 % en gramos                                                  |
-| Yogur natural con plátano ·                         | 130  | 210    | +62 % | 0 %  | error repartido, sin una causa dominante                                                    |
-| Muslos de pollo al horno con patatas y cebolla ·    | 444  | 705    | +59 % | 5 %  | muslo-pollo +117 % en gramos                                                                |
-| Garbanzos guisados con verduras ·                   | 349  | 553    | +59 % | 9 %  | omite caldo · inventa patata · garbanzos +35 % en gramos                                    |
-| Tostada integral con huevo revuelto ·               | 222  | 350    | +58 % | 6 %  | pan-integral +20 % en gramos                                                                |
-| Lentejas guisadas con arroz integral ·              | 346  | 510    | +47 % | 11 % | omite caldo                                                                                 |
-| Tapas: patatas bravas y croquetas ·                 | 607  | 878    | +44 % | 7 %  | omite patata-frita · inventa patata, mayonesa · aceite +13 g · patata-frita +20 % en gramos |
-| Crema de calabacín y zanahoria ·                    | 126  | 182    | +44 % | 22 % | inventa caldo                                                                               |
-| Pechuga de pollo a la plancha con ensalada ·        | 254  | 365    | +43 % | 17 % | aceite +5 g · pechuga-pollo +45 % en gramos                                                 |
-| Tostada integral con tomate y aceite ·              | 175  | 250    | +43 % | 1 %  | aceite +5 g · pan-integral +20 % en gramos                                                  |
-| Bocadillo de tortilla ·                             | 492  | 698    | +42 % | 20 % | omite patata · aceite +10 g                                                                 |
-| Tortilla de patatas y cebolla ·                     | 398  | 555    | +39 % | 2 %  | aceite +11 g · patata +24 % en gramos                                                       |
-| Tostada integral con aguacate y huevo ·             | 275  | 382    | +39 % | 2 %  | inventa aceite · aceite +5 g · pan-integral +20 % en gramos                                 |
-| Tostada integral con aguacate y tomate ·            | 211  | 287    | +36 % | 8 %  | inventa aceite · pan-integral +20 % en gramos                                               |
+| Plato                                                                  | Ref. | Salida | Error | CV   | Motivo                                                                                   |
+| ---------------------------------------------------------------------- | ---- | ------ | ----- | ---- | ---------------------------------------------------------------------------------------- |
+| Pimientos rellenos de arroz y verduras ·                               | 295  | 438    | +49 % | 7 %  | arroz-blanco +40 % en gramos                                                             |
+| Crema de calabacín y zanahoria ·                                       | 126  | 186    | +47 % | 6 %  | aceite +25 % en gramos · densidad -22 %                                                  |
+| Pollo al curry con arroz integral ·                                    | 533  | 764    | +43 % | 6 %  | arroz-integral +40 % en gramos                                                           |
+| Gachas de avena con fruta y frutos secos ·                             | 385  | 500    | +30 % | 11 % | inventa aceite · avena +17 % en gramos · densidad +22 %                                  |
+| Tostada integral con aguacate y tomate ·                               | 211  | 271    | +29 % | 0 %  | inventa aceite · aceite +5 g · densidad +16 %                                            |
+| Yogur natural con naranja ·                                            | 142  | 104    | -26 % | 0 %  | error repartido, sin una causa dominante                                                 |
+| Tostada integral con aguacate y huevo ·                                | 275  | 344    | +25 % | 4 %  | inventa aceite · aceite +6 g                                                             |
+| Plátano ·                                                              | 107  | 134    | +25 % | 0 %  | platano +25 % en gramos                                                                  |
+| Crema de calabacín con picatostes de pan integral ·                    | 188  | 234    | +25 % | 1 %  | densidad -28 %                                                                           |
+| Patatas guisadas con merluza y verduras ·                              | 363  | 450    | +24 % | 1 %  | error repartido, sin una causa dominante                                                 |
+| Bocadillo de tortilla ·                                                | 484  | 598    | +24 % | 9 %  | aceite +6 g · pan-blanco -17 % en gramos                                                 |
+| Tapas: patatas bravas y croquetas ·                                    | 607  | 468    | -23 % | 9 %  | omite patata-frita · inventa patata, croqueta · densidad -28 %                           |
+| Tostada integral con tomate y huevo revuelto ·                         | 229  | 277    | +21 % | 0 %  | aceite +5 g                                                                              |
+| Lentejas guisadas con arroz integral ·                                 | 346  | 417    | +20 % | 9 %  | lentejas -30 % en gramos · densidad -29 %                                                |
+| Menú del día: ensalada mixta, filete con patatas fritas, pan y fruta · | 940  | 748    | -20 % | 5 %  | omite patata-frita, naranja · inventa atun-lata-aceite, patata, manzana · densidad -17 % |
 
 _· = receta de referencia aún sin revisar a mano._
 
 #### Dónde están las kcal (1.ª pasada; gramos ref. → salida, kcal de diferencia)
 
-- **Crema de calabacín con picatostes de pan integral**: patata 0→60 g (+52) · pan-integral 20→30 g (+25) · caldo 0→250 g (+15) · calabacin 170→250 g (+14) · aceite 11→10 g (-9) · cebolla 30→50 g (+8)
-- **Tostada integral con tomate y huevo revuelto**: huevo 50→100 g (+72) · aceite 3→7 g (+35) · pan-integral 50→60 g (+25) · tomate 40→70 g (+5)
-- **Yogur natural con plátano**: platano 60→150 g (+80)
-- **Muslos de pollo al horno con patatas y cebolla**: muslo-pollo 86→172 g (+180) · patata 175→200 g (+22) · aceite 10→12 g (+18) · cebolla 60→80 g (+8)
-- **Garbanzos guisados con verduras**: garbanzos 133→180 g (+77) · tomate-triturado 0→100 g (+32) · aceite 8→10 g (+18) · zanahoria 40→80 g (+16) · calabacin 0→80 g (+14) · caldo 150→0 g (-9)
-- **Tostada integral con huevo revuelto**: huevo 50→100 g (+72) · pan-integral 50→60 g (+25) · aceite 3→5 g (+18)
-- **Lentejas guisadas con arroz integral**: arroz-integral 66→120 g (+60) · tomate-triturado 0→80 g (+26) · zanahoria 30→60 g (+12) · caldo 150→0 g (-9) · aceite 7→8 g (+9) · cebolla 20→40 g (+8)
-- **Tapas: patatas bravas y croquetas**: aceite 15→25 g (+88) · patata-frita 150→180 g (+57) · tomate-frito 20→50 g (+25) · pan-rallado 8→12 g (+14) · jamon-serrano 8→12 g (+10) · huevo 6→12 g (+9)
-- **Crema de calabacín y zanahoria**: aceite 8→10 g (+18) · zanahoria 60→100 g (+16) · calabacin 110→200 g (+15) · cebolla 30→60 g (+12) · caldo 0→200 g (+12)
-- **Pechuga de pollo a la plancha con ensalada**: aceite 10→20 g (+88) · pechuga-pollo 83→130 g (+78) · pepino 0→40 g (+6)
-- **Tostada integral con tomate y aceite**: aceite 5→10 g (+44) · pan-integral 50→60 g (+25) · tomate 40→80 g (+7)
-- **Bocadillo de tortilla**: aceite 8→25 g (+150) · huevo 51→110 g (+84) · patata 86→150 g (+56)
-- **Tortilla de patatas y cebolla**: aceite 14→25 g (+97) · patata 150→200 g (+44) · huevo 90→100 g (+14) · cebolla 38→60 g (+9)
-- **Tostada integral con aguacate y huevo**: aceite 0→5 g (+44) · aguacate 50→70 g (+32) · pan-integral 50→60 g (+25) · huevo 50→60 g (+14)
-- **Tostada integral con aguacate y tomate**: aguacate 50→70 g (+32) · pan-integral 50→60 g (+25)
+- **Pimientos rellenos de arroz y verduras**: arroz-blanco 138→194 g (+72) · aceite 4→8 g (+35) · tomate-triturado 0→100 g (+32) · tomate 80→0 g (-14) · calabacin 0→80 g (+14) · pimiento 150→200 g (+13)
+- **Crema de calabacín y zanahoria**: calabacin 110→250 g (+24) · aceite 8→10 g (+18) · zanahoria 60→100 g (+16) · cebolla 30→0 g (-12)
+- **Pollo al curry con arroz integral**: leche-coco 50→120 g (+138) · arroz-integral 164→229 g (+73) · tomate-triturado 50→120 g (+22) · aceite 8→10 g (+18) · cebolla 50→80 g (+12) · especias 3→0 g (-7)
+- **Gachas de avena con fruta y frutos secos**: aceite 0→10 g (+88) · frutos-secos-mix 15→25 g (+60) · avena 40→50 g (+38)
+- **Tostada integral con aguacate y tomate**: aceite 0→5 g (+44) · aguacate 50→60 g (+16)
+- **Yogur natural con naranja**: naranja 140→60 g (-38)
+- **Tostada integral con aguacate y huevo**: aceite 0→5 g (+44) · aguacate 50→60 g (+16)
+- **Plátano**: platano 120→150 g (+27)
+- **Crema de calabacín con picatostes de pan integral**: pan-integral 20→30 g (+25) · calabacin 170→300 g (+22) · cebolla 30→60 g (+12) · aceite 11→10 g (-9)
+- **Patatas guisadas con merluza y verduras**: zanahoria 0→60 g (+25) · patata 156→178 g (+19) · merluza 115→135 g (+18) · cebolla 30→60 g (+12) · pimiento 30→60 g (+8)
+- **Bocadillo de tortilla**: huevo 51→100 g (+70) · aceite 8→14 g (+53) · cebolla 22→0 g (-9)
+- **Tapas: patatas bravas y croquetas**: patata-frita 150→0 g (-285) · croqueta 0→120 g (+236) · patata 0→134 g (+117) · harina 12→0 g (-44) · mantequilla 6→0 g (-43) · leche-entera 50→0 g (-31)
+- **Tostada integral con tomate y huevo revuelto**: aceite 3→8 g (+44)
+- **Lentejas guisadas con arroz integral**: arroz-integral 66→115 g (+55) · aceite 7→10 g (+27) · lentejas 152→137 g (-18) · zanahoria 30→60 g (+12) · cebolla 20→50 g (+12) · liquido 150→300 g (+9)
+- **Menú del día: ensalada mixta, filete con patatas fritas, pan y fruta**: patata-frita 150→0 g (-285) · patata 0→160 g (+139) · atun-lata-aceite 0→50 g (+95) · manzana 0→150 g (+78) · naranja 140→0 g (-66) · huevo 25→0 g (-36)

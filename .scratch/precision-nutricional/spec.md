@@ -568,3 +568,10 @@ de cifras, rutina y deporte neto, necesidades especiales y reajuste en código. 
   - 08 parte de la ración personal.
   - 14, 21 y 23 se despliegan juntos: con la ración de AESAN y un plato por comida, el día se queda
     corto.
+
+- 2026-09-25 — **Fase 2 implementada en código (sin desplegar).** Tickets 05, 06, 14, 16, 17, 18,
+  21, 22 y 23; estado y pendientes en cada ticket. `eval:recipes` (2.ª iteración): sesgo +21,5 % →
+  +6,6 %, error por ración 23,2 % → 10,8 %, proteína 23,3 % → 10,4 %, casado de la tabla 64,7 % →
+  100 %; la densidad empeora (5,2 % → 12,6 %, masa de líquido). `eval:plan-lite`: 5/21 días a ±15 %
+  del objetivo (objetivo ≥ 70 %), sesgo a la baja: la estructura de la comida en el prompt no cierra
+  el día. Como 14, 21 y 23 se despliegan juntos, no se despliega hasta decidir cómo cerrarlo (10/08).

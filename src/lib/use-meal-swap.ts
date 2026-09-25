@@ -24,7 +24,8 @@ import {
 } from "@/lib/day-settle";
 import { settleDay } from "@/lib/day-settle.functions";
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { guideReuse, isMealCalculated, mergeGuide, perMealDeltas } from "@/lib/macros";
+import { guideMeals, guideReuse, isMealCalculated, mergeGuide, perMealDeltas } from "@/lib/macros";
+import type { PortionSize } from "@/lib/nutrition/portion";
 import { VAGUE_DISH_MESSAGE } from "@/lib/content-guard";
 import { setPlanMeal } from "@/lib/plan.functions";
 import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "@/lib/plan-shared";
@@ -75,10 +76,12 @@ async function resolveDishDeltas(dishes: PendingDish[]): Promise<ResolvedDishes>
   // (`macroEstimate`) salía inflado con una merienda que ni se muestra en Hoy, y
   // ese objetivo es contra el que se miden la barra de macros y el semáforo del
   // calendario.
-  const meals = mealsForDate(planBefore, today, plannedSlots)
-    .filter((m) => m.idea)
-    .map((m) => ({ moment: m.moment, idea: m.idea }));
   const currentLog = await fetchTodayLog();
+  // Cada comida cambiada se mide con la ración habitual y su tamaño (ticket 17).
+  const meals = guideMeals(
+    mealsForDate(planBefore, today, plannedSlots).map((m) => ({ moment: m.moment, idea: m.idea })),
+    currentLog?.habits,
+  );
   const currentGuide = currentLog?.guide ?? null;
   const measured = dishes.filter((d) => d.kcalDeltaOverride == null);
   // Plato del plan sin cifra: se calcula ahora, con su receta, antes de medir.
@@ -87,7 +90,9 @@ async function resolveDishDeltas(dishes: PendingDish[]): Promise<ResolvedDishes>
     data: {
       meals,
       reuse: guideReuse(currentGuide?.mealMacros, currentLog?.habits),
-      extraDishes: needPlanned.map((d) => d.plannedDish),
+      // Con su comida: el plato del plan se mide con la ración del plan (ticket 21).
+      extraDishes: needPlanned.map((d) => ({ dish: d.plannedDish, moment: d.label })),
+      today,
     },
   });
   const guide: DailyGuide = {
@@ -213,7 +218,7 @@ export function useMealSwap(
       label: string,
       slot: MealSlot,
       dish: string,
-      opts: { manualKcal?: number } = {},
+      opts: { manualKcal?: number; size?: PortionSize } = {},
     ): Promise<{ ok: true } | { ok: false; vague: boolean; message: string }> => {
       const today = todayISO();
       const log = getLog();
@@ -276,6 +281,8 @@ export function useMealSwap(
                       : {}),
                   }),
               ...(manualKcal != null ? { manualKcal } : {}),
+              // El tamaño elegido: la guía lo usa para medir el plato comido.
+              portionSize: manualKcal == null ? opts.size : undefined,
               // El ajuste anterior de esta comida ya no describe la realidad.
               adjustmentChanges: undefined,
               adjustmentSummary: undefined,

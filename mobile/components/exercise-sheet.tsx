@@ -40,6 +40,8 @@ export function ExerciseSheet({
   today,
   onSaved,
   showNumbers = true,
+  weightKg,
+  hasRoutine = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +49,10 @@ export function ExerciseSheet({
   onSaved: (exercise: DayExercise) => void;
   /** `false` con la preferencia de no ver cifras (ticket 01). */
   showNumbers?: boolean;
+  /** Peso de la persona: el gasto es neto y depende de él (ticket 16). */
+  weightKg?: number | null;
+  /** Tiene una rutina dentro de su objetivo (D9): sus sesiones no se compensan. */
+  hasRoutine?: boolean;
 }) {
   const [activity, setActivity] = useState(EXERCISE_ACTIVITIES[0]!.label);
   const [minutes, setMinutes] = useState("30");
@@ -65,7 +71,7 @@ export function ExerciseSheet({
   const mins = Number(minutes.replace(",", "."));
   const validMinutes =
     Number.isFinite(mins) && mins >= EXERCISE_MINUTES_MIN && mins <= EXERCISE_MINUTES_MAX;
-  const burn = validMinutes ? estimateExerciseKcal(activity, mins, intensity) : null;
+  const burn = validMinutes ? estimateExerciseKcal(activity, mins, intensity, weightKg) : null;
 
   const save = async () => {
     if (!validMinutes) {
@@ -155,7 +161,16 @@ export function ExerciseSheet({
             <Text className="font-heading text-foreground" style={{ fontSize: 24, lineHeight: 28 }}>
               ≈ {burn} kcal quemadas
             </Text>
+            <Text className="mt-1 text-xs text-muted-foreground">
+              Por encima de lo que gastas en reposo, con tu peso.
+            </Text>
           </View>
+        ) : null}
+
+        {hasRoutine ? (
+          <Text className="text-xs text-muted-foreground">
+            Si es una de tus sesiones de siempre, ya va en tu plan: solo cuenta lo que pase de ella.
+          </Text>
         ) : null}
 
         {error ? <Text className="text-sm text-destructive">{error}</Text> : null}

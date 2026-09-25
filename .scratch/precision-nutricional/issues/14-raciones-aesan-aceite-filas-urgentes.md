@@ -1,6 +1,6 @@
 # 14 — Raciones AESAN, aceite por método y filas urgentes de la tabla (medido con el eval)
 
-Status: ready
+Status: implementado en código (2026-09-25, fase 2, sin desplegar); criterios del eval pendientes, ver Comments
 Blocked by: — (usa la línea base provisional del 02; se vuelve a medir cuando se fije la definitiva)
 Tamaño: M
 Fase: 1
@@ -115,3 +115,37 @@ para productos españoles, la mediana de Open Food Facts, igual que `golden-exte
   dejarían el día corto. Además, sus filas nuevas necesitan `source`/`sourceId` verificables y la
   comparación de `eval:recipes`, que no se han hecho. Lo que el 13 ya cubre de su terreno: un
   ingrediente sin casar cae en su categoría (la manteca ya no vale 130 kcal/100 g).
+
+- 2026-09-25 — **Implementado junto con el 05** (el pipeline pasa a crudo, así que el 14 se hizo
+  directamente sobre la receta canónica, sin una versión intermedia en cocido). Anclas AESAN en
+  crudo en el prompt; `OIL_BY_METHOD` en `cooking.ts` (sustituye a la grasa del modelo; de dos
+  métodos de calor cuenta el mayor, el aliño se suma, el untado solo sin calor: el eval midió
+  13 g frente a 3 g en un revuelto sobre tostada al sumar); filas nuevas con fuente trazable
+  (bacon, sobrasada, pavo loncheado, tortilla de patatas, pizza, croquetas, granola, copos de
+  maíz, harina de garbanzo, bebidas de soja y almendra, leche condensada; filas en seco de arroz
+  integral, pasta integral, quinoa, cuscús y alubias); fuet → salchichón; wrap sin "tortilla" en
+  cabeza; tortilla francesa → huevo. §4: campo `basis` en cada fila con `cookedYield`; salmón,
+  merluza, caballa, mejillones y calamar eran valores CRUDOS (el salmón sin rendimiento, porque
+  USDA da casi lo mismo cocinado). §5: calidad por kcal y umbral 0,90 (`MIN_RECIPE_QUALITY`).
+  Pendiente: chistorra y muesli sin fuente fiable (Open Food Facts no tiene chistorra etiquetada y
+  la categoría de muesli devolvía la de granola); verificar con USDA los `fdcId` de la patata
+  (170026 / 170438) y del salmón crudo (175167) cuando haya clave propia.
+
+- 2026-09-25 — **Eval (`eval:recipes`, mismo golden set, GPT-5, 3 pasadas), segunda iteración:**
+
+  | Métrica | Línea base | 1.ª iteración | 2.ª iteración | Criterio |
+  |---|---|---|---|---|
+  | Sesgo de kcal con signo | +21,5 % | +9,8 % | **+6,6 %** | ≤ ±8 % ✓ |
+  | kcal por ración, error medio | 23,2 % | 14,9 % | **10,8 %** | ≤ 12 % ✓ |
+  | kcal por ración, P90 | 44,5 % | 35,7 % | **25 %** | — |
+  | Densidad (kcal/100 g) | 5,2 % | 10,9 % | **12,6 %** | no empeorar ✗ |
+  | Proteína por ración | 23,3 % | 12,5 % | **10,4 %** | — |
+  | Omitidos | 9,2 % | 12,7 % | **8,7 %** | — |
+  | Casado de la tabla | 64,7 % | 94,1 % | **100 %**, 0 filas que faltan | ≥ 85 % ✓ |
+  | Sin descomponer | 24/225 | 6/225 | **1/225** | — |
+
+  Entre las dos iteraciones: grasa de dos métodos sin sumar, un huevo si acompaña, dos bases de
+  hidrato que se reparten la ración y el líquido de guisos en el prompt. La densidad empeora sobre
+  todo por la masa de líquido de cremas y guisos (−22 % a −29 % en esos platos), que apenas mueve las
+  kcal por ración; no se ha cambiado la métrica para taparlo. Desde esta iteración el líquido
+  (caldo o agua) cuenta como un mismo ingrediente en la comparación de omisiones.

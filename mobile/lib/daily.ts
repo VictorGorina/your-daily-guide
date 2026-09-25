@@ -139,6 +139,8 @@ export type MealMacroEstimate = MacroEstimate & {
   vague?: boolean;
   /** La cifra la escribió la persona (texto vago en "comí distinto"): solo kcal. */
   manual?: boolean;
+  /** Factor de ración con el que se calculó (ticket 21); no va en las compartidas. */
+  portion?: number;
 };
 
 /** Macros de un plato suelto pedido aparte (`extraDishes`), p. ej. el del plan. */
@@ -155,6 +157,8 @@ export type DailyGuide = {
   mealMacros?: MealMacroEstimate[] | null;
   /** Objetivo del día calculado en código (ticket 07); ver `GeneratedGuide.targets`. */
   targets?: MacroEstimate | null;
+  /** Ración personal con la que se calcularon los platos (ticket 21). */
+  portionFactor?: number;
   behaviors: string[];
   meals?: { moment: string; idea: string }[];
   tips?: string[];

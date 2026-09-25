@@ -434,7 +434,7 @@ export const settleDay = createServerFn({ method: "POST" })
           dish: h.confirmedIdea || h.actual || "",
           plannedDish: h.plannedIdea || h.wasIdea || "",
         }));
-      const { plan, before, summary } = await reflowMeals({
+      const { plan, before, summary, absorbedKcal, partial } = await reflowMeals({
         supabase,
         userId,
         key,
@@ -453,6 +453,8 @@ export const settleDay = createServerFn({ method: "POST" })
         kcalDelta: decision.kcalDelta,
         window: window.dates,
         soloOnly: true,
+        // Ticket 18: lo que la tarjeta dice haber movido es lo que se midió.
+        measure: true,
       });
       const futureChanges = diffFutureMeals(before, plan, today);
       // Solo la proteína disparaba y el modelo no ha movido nada: se devuelve la
@@ -475,6 +477,8 @@ export const settleDay = createServerFn({ method: "POST" })
             changes: futureChanges,
             summary,
             kcal: reservation.total,
+            ...(absorbedKcal != null ? { absorbedKcal } : {}),
+            ...(partial ? { partial: true } : {}),
           }),
           lastOutcome: "adjusted",
         },

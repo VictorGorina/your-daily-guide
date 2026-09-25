@@ -88,6 +88,8 @@ import {
   type TripTiming,
 } from "@/lib/plan-shared";
 import { freshRiskNames, freshRisksForTrip } from "@/lib/perishability";
+import { planDishesToWarm, useRecipeWarmProgress, warmPlanRecipes } from "@/lib/recipe-warm";
+import { warmRecipes } from "@/lib/recipes.functions";
 import {
   clearPlanUpdatedNotice,
   flushPlanRecalc,
@@ -473,6 +475,18 @@ function PlanPage() {
     if (!isSoloPlanner) flushPlanRecalc(month);
   }, [month, isSoloPlanner]);
 
+  // Todos los platos del plan, calculados al generarlo o cambiarlo (ticket 06,
+  // D13): ninguno llega a Hoy "Calculando…". Solo lo que falte en la caché; si
+  // la app se cerró a medias, se retoma aquí.
+  const warmFn = useServerFn(warmRecipes);
+  const warmProgress = useRecipeWarmProgress();
+  useEffect(() => {
+    if (!plan || !actionable) return;
+    void warmPlanRecipes(planDishesToWarm(plan, month, today), (dishes) =>
+      warmFn({ data: { dishes } }),
+    );
+  }, [plan, actionable, month, today, warmFn]);
+
   const goToMonth = (target: string) => {
     if (target < bounds.earliest || target > bounds.latest) return;
     setSelectedMonth(target);
@@ -598,6 +612,11 @@ function PlanPage() {
             </button>
           </div>
         </div>
+        {warmProgress.running ? (
+          <p className="mt-2 text-center text-xs text-muted-foreground" aria-live="polite">
+            Calculando tus platos {warmProgress.done}/{warmProgress.total}…
+          </p>
+        ) : null}
         {plan && actionable ? (
           <AlertDialog>
             <AlertDialogTrigger asChild>

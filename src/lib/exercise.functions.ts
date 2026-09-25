@@ -16,14 +16,18 @@ import {
   EXERCISE_INTENSITY,
   EXERCISE_MINUTES_MAX,
   EXERCISE_MINUTES_MIN,
-  estimateExerciseKcal,
+  isoWeekDaysUntil,
   pendingExerciseKcal,
+  routineSessionsIn,
+  splitRoutineSession,
   withExercise,
   withoutExercise,
   type DayExercise,
   type ExerciseEntry,
   type ExerciseOutcome,
 } from "@/lib/exercise";
+import { normalizeActivity } from "@/lib/nutrition/energy";
+import { parseTraining } from "@/lib/nutrition/exercise-energy";
 import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 
@@ -32,8 +36,9 @@ import { zonedTodayISO } from "@/lib/zoned-date";
  * revés: un déficit en vez de un exceso.
  *
  * - `logExercise` calcula las kcal quemadas EN EL SERVIDOR con la tabla
- *   determinista (`estimateExerciseKcal`), a partir de actividad/minutos/
- *   intensidad ya validados — nunca se confía en una cifra que mande el
+ *   determinista (`splitRoutineSession`: netas, con el peso, y separando la
+ *   parte que ya va en el objetivo por ser de su rutina, ticket 16), a partir
+ *   de actividad/minutos/intensidad ya validados — nunca se confía en una cifra que mande el
  *   cliente, a diferencia del picoteo (que si acepta los macros calculados en
  *   su paso de estimación, porque ahí la cifra sale de una llamada al modelo
  *   que ya corrió en el servidor). Escribe SOLO la columna
@@ -159,23 +164,81 @@ export const logExercise = createServerFn({ method: "POST" })
     ...cleanActivityInput(input),
   }))
   .handler(async ({ data, context }): Promise<{ exercise: DayExercise; entry: ExerciseEntry }> => {
-    const burn = estimateExerciseKcal(data.activity, data.minutes, data.intensity);
-    const entry: ExerciseEntry = {
-      id: crypto.randomUUID(),
-      activity: data.activity,
-      minutes: data.minutes,
-      intensity: data.intensity,
-      kcal: -burn,
-      at: new Date().toISOString(),
-    };
-    const exercise = await patchExercise(
-      context.supabase as never,
+    const supabase = context.supabase as never as Client;
+    const { routine, weightKg, earlierRoutineSessions } = await routineContext(
+      supabase,
       context.userId,
       data.today,
-      (current) => withExercise(current, entry),
     );
-    return { exercise, entry };
+    let entry: ExerciseEntry | null = null;
+    const exercise = await patchExercise(supabase, context.userId, data.today, (current) => {
+      // Dentro de la escritura (que se reintenta si se cruza otra): las sesiones
+      // de rutina de HOY se cuentan sobre la fila que se va a escribir.
+      const split = splitRoutineSession({
+        activity: data.activity,
+        minutes: data.minutes,
+        intensity: data.intensity,
+        weightKg,
+        routine,
+        routineSessionsBefore: earlierRoutineSessions + routineSessionsIn([current]),
+      });
+      entry = {
+        id: crypto.randomUUID(),
+        activity: data.activity,
+        minutes: data.minutes,
+        intensity: data.intensity,
+        kcal: -split.extraKcal,
+        at: new Date().toISOString(),
+        ...(split.routine
+          ? {
+              routine: true,
+              routineKcal: split.routineKcal,
+              routineIndex: split.routineIndex,
+              routineOf: split.routineOf,
+            }
+          : {}),
+      };
+      return withExercise(current, entry);
+    });
+    return { exercise, entry: entry! };
   });
+
+/**
+ * Lo que decide si una sesión es de la rutina (ticket 16, D9): la rutina del
+ * perfil, el peso y las sesiones de rutina ya apuntadas esta semana ISO antes de
+ * hoy. Un perfil antiguo (sin `daily_activity`) no tiene la rutina dentro del
+ * objetivo — su factor de actividad ya incluía el deporte —, así que para él no
+ * hay rutina y todo cuenta como extra, igual que antes (ver `energyTargets`).
+ */
+async function routineContext(supabase: Client, userId: string, today: string) {
+  const [{ data: profile }, earlier] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    (async () => {
+      const days = isoWeekDaysUntil(today).filter((d) => d < today);
+      if (!days.length) return [];
+      const { data, error } = await supabase
+        .from("daily_logs")
+        .select("exercise")
+        .eq("user_id", userId)
+        .in("log_date", days);
+      if (error) throw error;
+      return ((data ?? []) as { exercise?: unknown }[]).map((row) =>
+        cleanDayExercise(row.exercise),
+      );
+    })(),
+  ]);
+  const p = (profile ?? {}) as {
+    current_weight_kg?: number | null;
+    daily_activity?: string | null;
+    training?: string | null;
+  };
+  const routine = normalizeActivity(p.daily_activity) ? parseTraining(p.training) : null;
+  return {
+    routine,
+    weightKg: Number(p.current_weight_kg) || null,
+    earlierRoutineSessions: routineSessionsIn(earlier),
+  };
+}
 
 export const removeExercise = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

@@ -1,3 +1,4 @@
+import { exerciseNetKcal } from "./exercise-energy";
 import type { MealChange } from "./plan-shared";
 
 /**
@@ -9,35 +10,47 @@ import type { MealChange } from "./plan-shared";
  * quien tiene el servidor) sin invertir nada. La UI muestra `-entry.kcal`
  * (positivo, "kcal quemadas").
  *
+ * Ticket 16 de `precision-nutricional`: la cifra es NETA y con el peso, y una
+ * sesión de la rutina de la semana solo desvía lo que pasa de ella. Ese reparto
+ * lo decide el servidor al guardar (`splitRoutineSession` en la web).
+ *
  * Copia de `src/lib/exercise.ts` de la web (no hay código compartido entre las
  * dos apps). La usan Hoy y el detalle de un día pasado; el servidor es la web.
  */
 
-export const EXERCISE_ACTIVITIES: { label: string; kcalPerMin: number }[] = [
-  { label: "Correr", kcalPerMin: 10 },
-  { label: "Caminar", kcalPerMin: 4 },
-  { label: "Bici", kcalPerMin: 8 },
-  { label: "Gimnasio / pesas", kcalPerMin: 7 },
-  { label: "Natación", kcalPerMin: 9 },
-  { label: "Otra", kcalPerMin: 6 },
+/** Las mismas etiquetas que la tabla MET de `exercise-energy.ts`. */
+export const EXERCISE_ACTIVITIES: { label: string }[] = [
+  { label: "Correr" },
+  { label: "Caminar" },
+  { label: "Bici" },
+  { label: "Gimnasio / pesas" },
+  { label: "Natación" },
+  { label: "Otra" },
 ];
 
-export const EXERCISE_INTENSITY: { label: string; factor: number }[] = [
-  { label: "Suave", factor: 0.8 },
-  { label: "Normal", factor: 1 },
-  { label: "Fuerte", factor: 1.25 },
+export const EXERCISE_INTENSITY: { label: string }[] = [
+  { label: "Suave" },
+  { label: "Normal" },
+  { label: "Fuerte" },
 ];
+
+/** Peso con el que se calcula si el perfil no lo tiene. */
+export const DEFAULT_EXERCISE_WEIGHT_KG = 70;
 
 export const EXERCISE_MINUTES_MIN = 5;
 export const EXERCISE_MINUTES_MAX = 360;
 /** Entradas como mucho por día: un tope contra un bucle, no un límite real. */
 export const EXERCISE_MAX_ENTRIES = 30;
 
-/** kcal quemadas (positivo), con la misma fórmula que veía la persona antes de guardar. */
-export function estimateExerciseKcal(activity: string, minutes: number, intensity: string): number {
-  const base = EXERCISE_ACTIVITIES.find((a) => a.label === activity)?.kcalPerMin ?? 6;
-  const factor = EXERCISE_INTENSITY.find((i) => i.label === intensity)?.factor ?? 1;
-  return Math.round(minutes * base * factor);
+/** kcal NETAS quemadas (positivo) con el peso de la persona (ticket 16). */
+export function estimateExerciseKcal(
+  activity: string,
+  minutes: number,
+  intensity: string,
+  weightKg?: number | null,
+): number {
+  const kg = Number(weightKg) > 0 ? Number(weightKg) : DEFAULT_EXERCISE_WEIGHT_KG;
+  return exerciseNetKcal(activity, minutes, intensity, kg);
 }
 
 export type ExerciseEntry = {
@@ -45,10 +58,19 @@ export type ExerciseEntry = {
   activity: string;
   minutes: number;
   intensity: string;
-  /** Negativo: kcal quemadas como déficit frente al plan. */
+  /**
+   * Negativo: la parte que DESVÍA el día. En una sesión de su rutina, solo lo
+   * que pasa de la sesión típica (ticket 16).
+   */
   kcal: number;
   /** Cuándo se apuntó (ISO). */
   at: string;
+  /** Es una de las sesiones de la rutina de la semana: ya va en el objetivo. */
+  routine?: boolean;
+  routineKcal?: number;
+  /** "2 de 3 esta semana". */
+  routineIndex?: number;
+  routineOf?: number;
 };
 
 export type ExerciseOutcome =
@@ -99,6 +121,9 @@ function cleanEntry(raw: unknown): ExerciseEntry | null {
     Math.max(EXERCISE_MINUTES_MIN, Math.round(num(o.minutes))),
   );
   const kcal = Math.max(-EXERCISE_KCAL_MAX, Math.min(0, Math.round(num(o.kcal))));
+  const routine = o.routine === true;
+  const index = Math.round(num(o.routineIndex));
+  const of = Math.round(num(o.routineOf));
   return {
     id,
     activity,
@@ -106,6 +131,13 @@ function cleanEntry(raw: unknown): ExerciseEntry | null {
     intensity: String(o.intensity ?? EXERCISE_INTENSITY[1]!.label),
     kcal,
     at: String(o.at ?? ""),
+    ...(routine
+      ? {
+          routine,
+          routineKcal: Math.max(0, Math.min(EXERCISE_KCAL_MAX, Math.round(num(o.routineKcal)))),
+          ...(index > 0 && of > 0 ? { routineIndex: index, routineOf: of } : {}),
+        }
+      : {}),
   };
 }
 
@@ -141,6 +173,12 @@ export function cleanDayExercise(raw: unknown): DayExercise | null {
 /** Suma de kcal (negativa) de todo el deporte del día. */
 export function exerciseTotals(exercise: DayExercise | null | undefined): number {
   return (exercise?.entries ?? []).reduce((sum, e) => sum + e.kcal, 0);
+}
+
+/** ¿Todo el deporte del día fue de su rutina, sin nada extra? (para `balanceNote`). */
+export function onlyRoutineExercise(exercise: DayExercise | null | undefined): boolean {
+  const entries = exercise?.entries ?? [];
+  return entries.length > 0 && entries.every((e) => e.routine && e.kcal === 0);
 }
 
 /** kcal de deporte que todavía no se han mandado a compensar (con signo, negativo = pendiente de reponer). */

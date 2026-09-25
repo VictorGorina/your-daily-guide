@@ -22,6 +22,7 @@ import {
   FOODS,
   GENERIC_FOOD,
   matchFood,
+  RAW_TO_COOKED,
   type Food,
   type ResolvedIngredient,
 } from "@/lib/nutrition/nutrition";
@@ -74,17 +75,13 @@ export type GoldenExternal = {
 const FOOD_BY_KEY = new Map<string, Food>(FOODS.map((food) => [food.key, food]));
 
 /**
- * Filas en seco con su pareja cocida en la tabla. El pipeline da estos
- * alimentos en cocido (lo pide el prompt), así que la referencia en seco se pasa
- * a la fila cocida con el factor que implica la propia tabla (kcal seco / kcal
- * cocido: la cocción añade agua, no energía).
+ * Filas en seco con su pareja cocida en la tabla (la de `nutrition.ts`). Para
+ * comparar, referencia y salida se pasan a la fila COCIDA con el factor que
+ * implica la propia tabla (kcal seco / kcal cocido: la cocción añade agua, no
+ * energía). Así la densidad (kcal por 100 g) se mide igual aunque el pipeline
+ * dé la receta en seco (ticket 05, D8) y la referencia algo en cocido.
  */
-export const DRY_TO_COOKED: Record<string, string> = {
-  "arroz-crudo": "arroz-blanco",
-  "pasta-cruda": "pasta",
-  "lentejas-secas": "lentejas",
-  "garbanzos-secos": "garbanzos",
-};
+export const DRY_TO_COOKED: Readonly<Record<string, string>> = RAW_TO_COOKED;
 
 /**
  * Filas que son el alimento YA COCIDO a partir de uno seco y que no tienen fila
@@ -105,15 +102,24 @@ export const COOKED_ONLY: ReadonlySet<string> = new Set([
 ]);
 
 const OIL_KEYS: ReadonlySet<string> = new Set(["aceite-oliva", "aceite-girasol", "aceite-coco"]);
+const LIQUID_ID = "liquido";
 
 /**
  * Identidad para comparar presencia de ingredientes: el arroz seco y el cocido
  * son el mismo ingrediente, y los tres aceites también (mismas macros). Un
  * ingrediente sin identificar nunca coincide con nada.
  */
-export function foodIdentity(food: Food, name = ""): string {
-  if (food === GENERIC_FOOD) return `?${name.trim().toLowerCase()}`;
+export function foodIdentity(food: Food, name?: string): string {
+  if (food === GENERIC_FOOD) return `?${(name ?? "").trim().toLowerCase()}`;
   if (OIL_KEYS.has(food.key)) return OIL_ID;
+  // El líquido de un guiso o una crema: la referencia lo apunta como caldo o como
+  // agua (fila `sal`, 0 kcal, ver el golden set) y el modelo, igual, a su manera.
+  // Es el mismo ingrediente; sin esto contaba como "omite caldo + inventa agua".
+  // En la referencia (sin nombre) la fila `sal` siempre es agua.
+  if (food.key === "caldo") return LIQUID_ID;
+  if (food.key === "sal" && (name === undefined || /agua|hielo/.test(name.toLowerCase()))) {
+    return LIQUID_ID;
+  }
   return DRY_TO_COOKED[food.key] ?? food.key;
 }
 
@@ -182,9 +188,16 @@ export function toTableBasis(recipe: GoldenRecipe): PortionItem[] {
   });
 }
 
-/** La salida del pipeline (`DishBreakdown.ingredients`) en la misma forma. */
+/** La salida del pipeline (`DishBreakdown.ingredients`) en la misma forma y la misma base. */
 export function fromResolved(ingredients: ResolvedIngredient[]): PortionItem[] {
-  return ingredients.map((ing) => itemOf(foodIdentity(ing.food, ing.name), ing.grams, ing.food));
+  return ingredients.map((ing) => {
+    const cookedKey = DRY_TO_COOKED[ing.food.key];
+    const cooked = cookedKey ? FOOD_BY_KEY.get(cookedKey) : undefined;
+    if (cooked && cooked.kcal > 0) {
+      return itemOf(foodIdentity(cooked), (ing.grams * ing.food.kcal) / cooked.kcal, cooked);
+    }
+    return itemOf(foodIdentity(ing.food, ing.name), ing.grams, ing.food);
+  });
 }
 
 export type TableError = {

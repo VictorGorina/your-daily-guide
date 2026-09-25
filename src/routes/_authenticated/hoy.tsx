@@ -56,9 +56,11 @@ import {
 
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { caloriesText, energyTargets, targetsAsMacros } from "@/lib/nutrition/energy";
+import { learnedPortionSize, portionSizeHistory } from "@/lib/nutrition/portion";
 import {
   addMacros,
   donePendingMeals,
+  guideMeals,
   guideReuse,
   mealsToRecalculate,
   mergeGuide,
@@ -96,7 +98,7 @@ import {
 import { fillChildMeals, generateMonthlyPlan } from "@/lib/plan.functions";
 import { cleanDayAdjustment, dayBalance } from "@/lib/day-balance";
 import { scheduleDaySettle, useDaySettle } from "@/lib/day-settle";
-import { cleanDayExercise } from "@/lib/exercise";
+import { cleanDayExercise, onlyRoutineExercise } from "@/lib/exercise";
 import { removeExercise as removeExerciseFn } from "@/lib/exercise.functions";
 import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
@@ -527,10 +529,15 @@ function Hoy() {
     try {
       const { dishMacros: _none, ...g } = await makeGuide({
         data: {
-          meals: todayMeals.filter((m) => m.idea).map((m) => ({ moment: m.moment, idea: m.idea })),
+          // Con lo que se comió de verdad en cada "comí distinto" (ticket 17).
+          meals: guideMeals(
+            todayMeals.map((m) => ({ moment: m.moment, idea: m.idea })),
+            today?.habits,
+          ),
           // Lo que ya tiene cifra no se vuelve a descomponer.
           reuse: guideReuse(today?.guide?.mealMacros, today?.habits),
           macrosOnly,
+          today: today0,
         },
       });
       // Solo cifras: el texto de la guía se queda como estaba.
@@ -668,6 +675,8 @@ function Hoy() {
   };
 
   const impulso = impulsoFrom(logsQ.data ?? []);
+  // El tamaño que suele elegir en "comí distinto" (ticket 17).
+  const learnedSize = learnedPortionSize(portionSizeHistory(logsQ.data ?? []));
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
   // El registro del día se casa con las comidas que esta persona planifica de
   // verdad: `daily_logs.habits` se escribe UNA vez, al crear el día, y lo crea
@@ -725,8 +734,13 @@ function Hoy() {
   // Los planes ya generados se hicieron antes de que existiera el objetivo
   // (ticket 07): si lo que el plan de hoy suma se queda muy por debajo, se dice
   // en vez de dejar que la barra parezca un fallo de la persona.
+  // Solo en un plan anterior al ticket 23 (sin objetivo por comida ni
+  // estructura): uno nuevo que se quede corto no se "preparó antes".
   const planShortOfTarget =
-    !!dayTarget && !!guide?.macroEstimate && guide.macroEstimate.kcal < dayTarget.kcal * 0.85;
+    !!dayTarget &&
+    !!guide?.macroEstimate &&
+    !planQ.data?.plan?.targetsVersion &&
+    guide.macroEstimate.kcal < dayTarget.kcal * 0.85;
 
   // La copia del objetivo en la guía de hoy se mantiene al día (peso, actividad
   // u objetivo cambiados en Ajustes): es la que usa el semáforo de este día
@@ -917,8 +931,8 @@ function Hoy() {
       ) : null}
       {showNumbers && planShortOfTarget ? (
         <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
-          Tu plan de este mes se preparó antes de calcular tu objetivo: por eso sus platos suman
-          menos de lo que necesitas.
+          Tu plan de este mes se hizo antes de calcular tu objetivo y sus platos suman menos de lo
+          que necesitas: el mes que viene cuadrará.
         </p>
       ) : null}
 
@@ -1281,6 +1295,7 @@ function Hoy() {
           que se lee como el resumen de todo lo de arriba. */}
       <DayBalanceCard
         showNumbers={showNumbers}
+        onlyRoutineExercise={onlyRoutineExercise(exercise)}
         balance={balance}
         record={adjustmentRecord}
         settling={daySettle.pending || daySettle.running}
@@ -1345,6 +1360,7 @@ function Hoy() {
           en segundo plano (adjustMonthlyPlan) — sin navegar al chat. */}
       <MealSwapSheet
         showNumbers={showNumbers}
+        defaultSize={learnedSize}
         open={swapIndex != null}
         onOpenChange={(v) => {
           if (!v) setSwapIndex(null);
@@ -1385,6 +1401,8 @@ function Hoy() {
 
       <ExerciseSheet
         showNumbers={showNumbers}
+        weightKg={profile?.current_weight_kg ?? null}
+        hasRoutine={!!energy && !energy.basis.legacyActivity && energy.basis.routineKcal > 0}
         open={activityOpen}
         onOpenChange={setActivityOpen}
         today={today0}

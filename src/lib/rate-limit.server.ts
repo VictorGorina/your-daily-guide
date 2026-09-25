@@ -46,6 +46,10 @@ const RATE_LIMITS = {
   // Calcular las kcal de un picoteo antes de guardarlo (`picoteo-hoy`). La
   // compensación que pueda venir después gasta de `plan-adjust`.
   "snack-estimate": { limit: 40, windowSeconds: HOUR, action: "calcular el picoteo" },
+  // Calcular de antemano los platos del plan del mes (ticket 06 de
+  // `precision-nutricional`): ~8 platos por llamada, ~10 llamadas por plan. Un
+  // plato ya en la caché global no cuesta nada.
+  "recipe-warm": { limit: 60, windowSeconds: HOUR, action: "calcular los platos del plan" },
   "coach-aux": { limit: 40, windowSeconds: HOUR, action: "pedirle esto al coach" },
   // Sin sesión y por correo, no por cuenta. Se suman al freno de 60 s que ya hay
   // en memoria en `auth.functions.ts`.

@@ -107,18 +107,25 @@ despensa) la lista de la compra nunca cambia — si un plato pide algo no compra
 aparece como aviso en `PlanDay.extras`. La única excepción es un cambio en la mesa del hogar, que
 sí re-dimensiona las cantidades (ver "Recálculo automático del plan" más abajo).
 
-**Macros y kcal — deterministas, no del modelo** (feature `nutricion-determinista`, Fase 2,
-`src/lib/nutrition/`). El modelo ya no estima las macros de un plato. `generateDailyGuide`
-descompone cada plato real de hoy en `{ingrediente, gramos}` con **una** llamada al modelo
-(`decomposeDishes` en `resolve-dish.server.ts`) y suma cada ingrediente contra una tabla de
-composición estática de ~200 alimentos (`foods.data.ts`, valores por 100 g + precio ES
-aproximado) con `matchFood`/`macrosOf` (`nutrition.ts`, puro y testeado). Así el mismo plato da
-el mismo número cada día. `matchFood` casa por alias exacto, contención de label o solape de
-tokens (un solo token solo cuenta si es la cabecera del alimento). Banco de pruebas
-de cobertura: `bun run eval:dishes` (gasta llamadas al modelo, no va en CI).
+**Macros y kcal — receta canónica, no del modelo** (`precision-nutricional`, fase 2;
+`src/lib/nutrition/`, explicación larga en AGENTS.md). El modelo solo propone la COMPOSICIÓN de un
+plato: `decomposeDishes` (`resolve-dish.server.ts`) pide con salida estructurada UNA ración base de
+AESAN en gramos **crudos**, y el código pone la cantidad y las cifras: casado contra la tabla
+(`foods.data.ts`, por 100 g con `basis` crudo/cocinado; `matchFood`/`resolveIngredient` en
+`nutrition.ts`), grasa por método de cocción (`OIL_BY_METHOD`, `cooking.ts`) y `validateRecipe`
+(techos, inventados, UN reintento con pista; calibrado para no tocar el golden set). La receta se
+guarda **una vez para toda la app** en `dish_recipes` (`getRecipes`, `recipes.server.ts`, clave
+`dishKey`) y las macros se calculan **al leer** (`macrosOfRecipe(receta, factor)`), nunca se
+guardan. El factor es la **ración personal** (`portion.ts`): `plan` = objetivo ÷ 2.000 en los
+platos del plan (la media de los adultos en una comida compartida, que no se guarda con la comida
+por privacidad) y `habitual` = mantenimiento ÷ 2.000 en "comí distinto". La pantalla Plan
+precalienta los platos del mes (`recipe-warm.ts`, `/api/v1/recipes/warm`). Ingredientes que no
+casan y pesan: USDA (`usda.server.ts`, `USDA_FDC_API_KEY`, tabla `foods_extra`) y si no, el más
+parecido. Medida: `bun run eval:recipes` (exactitud contra el golden set) y `bun run
+eval:plan-lite` (el plan contra el objetivo); gastan llamadas y no van en CI.
 `src/lib/nutrition/index.ts` reexporta solo lo puro; `foods.data.ts` no debe entrar en el bundle
-de navegador. Fases 3-5 (lista de la compra y `reflowMeals` sobre el mismo lookup) están
-pendientes en `.scratch/nutricion-determinista/`.
+de navegador. Las migraciones `dish_recipes` y `foods_extra` son manuales: sin ellas todo
+funciona, sin caché global.
 
 **Todo plato se calcula: nada de promedios** (ticket 13 de `precision-nutricional`, D13; ya no
 existe `roughMealMacros`). Cada `MealMacroEstimate` está `calculado` (sale de su receta, o la

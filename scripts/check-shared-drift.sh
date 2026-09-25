@@ -49,6 +49,18 @@ for f in perishability.ts quotes.ts profile-fields.ts day-log-ack.ts; do
   fi
 done
 
+# --- Núcleo de nutrición puro (precision-nutricional): en la web vive en
+# src/lib/nutrition/, en el móvil directamente en mobile/lib/.
+for f in energy.ts exercise-energy.ts portion.ts dish-key.ts; do
+  a=$(strip_portable "src/lib/nutrition/$f")
+  b=$(strip_portable "mobile/lib/$f")
+  if [ "$a" != "$b" ]; then
+    echo "DRIFT (funcional): nutrition/$f"
+    diff <(echo "$a") <(echo "$b") || true
+    fail=1
+  fi
+done
+
 # --- Catálogos i18n: mismas claves en ES/EN y en web/móvil (requiere jq) ---
 # Los catálogos son intencionalmente un espejo exacto entre plataformas (a
 # diferencia del resto de este script, que excluye lo que diverge a propósito):

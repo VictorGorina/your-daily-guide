@@ -188,12 +188,28 @@ describe("clampGrams", () => {
 });
 
 describe("resolutionQuality", () => {
-  it("es la proporción de gramos identificados con confianza alta", () => {
+  it("es la proporción de KCAL identificadas, no de gramos (ticket 14 §5)", () => {
     const ingredients = [
-      resolveIngredient({ key: "pechuga-pollo", name: "pollo", grams: 150 }), // high
-      resolveIngredient({ name: "salsa marciana", grams: 50 }), // low → genérico
+      resolveIngredient({ key: "pechuga-pollo", name: "pollo", grams: 150 }), // 247,5 kcal, high
+      resolveIngredient({ name: "salsa marciana", grams: 50 }), // 65 kcal, genérico
     ];
-    expect(resolutionQuality(ingredients)).toBeCloseTo(0.75, 2);
+    expect(resolutionQuality(ingredients)).toBeCloseTo(247.5 / 312.5, 3);
+  });
+
+  it("300 g de caldo bien casado no tapan 30 g de manteca sin casar", () => {
+    const ingredients = [
+      resolveIngredient({ key: "caldo", name: "caldo", grams: 300 }),
+      resolveIngredient({ name: "manteca de cerdo", grams: 30, category: "grasa" }),
+    ];
+    // Por gramos daría 0,91; por kcal, casi nada está identificado.
+    expect(resolutionQuality(ingredients)).toBeLessThan(0.1);
+  });
+
+  it("lo resuelto con el alimento más parecido cuenta como identificado", () => {
+    const [manteca] = [
+      resolveIngredient({ name: "manteca de cerdo", grams: 30, category: "grasa" }),
+    ];
+    expect(resolutionQuality([{ ...manteca!, fallback: "closest" }])).toBe(1);
   });
 
   it("es 0 sin gramos", () => {
@@ -249,5 +265,83 @@ describe("ingrediente que no casa con la tabla", () => {
       resolveIngredient({ name: "hierba rara", grams: 1, category: "verdura" }),
     ];
     expect(heavyUnmatched(ingredients)).toEqual([1]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ticket 14 (§3, §4) y 05 (D8): filas nuevas, base de cada fila y estado
+// ---------------------------------------------------------------------------
+
+describe("casado de los nombres de la auditoría (H22)", () => {
+  const expected: [string, string][] = [
+    ["fuet", "salchichon"],
+    ["bacon", "bacon"],
+    ["panceta", "bacon"],
+    ["tortilla de patatas", "tortilla-patatas"],
+    ["tortilla francesa", "huevo"],
+    ["pizza margarita", "pizza"],
+    ["croquetas de jamón", "croqueta"],
+    ["bebida de soja", "bebida-soja"],
+    ["leche de almendras", "bebida-almendra"],
+    ["pechuga de pavo loncheada", "pechuga-pavo-loncheada"],
+    ["sobrasada", "sobrasada"],
+    ["granola", "granola"],
+    ["corn flakes", "cereales-desayuno"],
+    ["leche condensada", "leche-condensada"],
+    ["harina de garbanzo", "harina-garbanzo"],
+  ];
+  for (const [name, key] of expected) {
+    it(`${name} → ${key}`, () => expect(matchFood(name)?.food.key).toBe(key));
+  }
+
+  it("la tortilla francesa ya no casa con el wrap", () => {
+    expect(matchFood("tortilla francesa")?.food.key).not.toBe("wrap");
+  });
+});
+
+describe("base de las filas con rendimiento (ticket 14 §4)", () => {
+  it("toda fila con cookedYield dice si su valor es crudo o cocinado", () => {
+    const missing = FOODS.filter((f) => f.cookedYield && !f.basis).map((f) => f.key);
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("estado de los gramos (D8)", () => {
+  const kcal = (r: ReturnType<typeof resolveIngredient>) => (r.food.kcal * r.grams) / 100;
+
+  it("70 g de arroz en crudo van contra la fila en seco, no contra el cocido", () => {
+    const r = resolveIngredient({ name: "arroz", grams: 70, state: "crudo" });
+    expect(r.food.key).toBe("arroz-crudo");
+    expect(Math.round(kcal(r))).toBe(252);
+  });
+
+  it("la legumbre de bote, tal cual, va contra la fila cocida", () => {
+    expect(
+      resolveIngredient({ name: "lentejas de bote", grams: 200, state: "listo" }).food.key,
+    ).toBe("lentejas");
+  });
+
+  it("carne cruda sobre una fila cocinada: × rendimiento", () => {
+    const r = resolveIngredient({ key: "pechuga-pollo", grams: 100, state: "crudo" });
+    expect(r.grams).toBe(75);
+    expect(r.gramsRaw).toBe(100);
+  });
+
+  it("pescado ya hecho sobre una fila cruda: ÷ rendimiento (la merluza es valor crudo)", () => {
+    const r = resolveIngredient({ key: "merluza", grams: 85, state: "listo" });
+    expect(r.grams).toBe(100);
+  });
+
+  it("el salmón cuenta igual crudo que a la plancha (USDA casi no cambia)", () => {
+    const raw = resolveIngredient({ key: "salmon", grams: 100, state: "crudo" });
+    const cooked = resolveIngredient({ key: "salmon", grams: 100, state: "listo" });
+    expect(raw.grams).toBe(100);
+    expect(cooked.grams).toBe(100);
+  });
+
+  it("patatas fritas en crudo son patata: el aceite lo pone el método", () => {
+    expect(resolveIngredient({ name: "patatas fritas", grams: 150, state: "crudo" }).food.key).toBe(
+      "patata",
+    );
   });
 });

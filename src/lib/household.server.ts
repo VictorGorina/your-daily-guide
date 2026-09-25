@@ -66,7 +66,7 @@ export type HouseholdContext = {
   text: string;
 };
 
-const emptyContext = (): HouseholdContext => ({
+export const emptyContext = (): HouseholdContext => ({
   householdId: null,
   plannerId: null,
   sharedSlots: cleanSharedSlots(null),
@@ -467,4 +467,92 @@ export async function syncSharedMeals(opts: {
   }
 
   return { synced };
+}
+
+/**
+ * Factor de ración de las comidas COMPARTIDAS de un día (ticket 21 de
+ * `precision-nutricional`, D4): la media del factor `plan` de los adultos con
+ * cuenta que esa comida comen en casa. El mismo número para todos.
+ *
+ * Privacidad: lee el perfil de otros miembros con la clave de servicio, en el
+ * servidor, y solo sale de aquí la media por comida — nunca el objetivo, el
+ * peso ni el factor de nadie. Quien lo llama no debe guardarla junto a la
+ * comida en ningún sitio que llegue al cliente (ver `guide.functions.ts`).
+ *
+ * Vacío si no hay hogar o ese día no se comparte nada.
+ */
+export async function sharedMealPortions(
+  supabase: AnyClient,
+  userId: string,
+  date: string,
+): Promise<Partial<Record<(typeof MEAL_KEYS)[number], number>>> {
+  const home = await householdContext(supabase, userId);
+  if (!home.householdId) return {};
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; // 0 = lunes
+  const eaters = new Map<(typeof MEAL_KEYS)[number], string[]>();
+  for (const meal of MEAL_KEYS) {
+    if (!home.sharedSlots[meal].includes(weekday)) continue;
+    const ids = home.members
+      .filter((mb) => mb.userId && mb.usesApp)
+      .filter((mb) => (mb.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday))
+      .map((mb) => mb.userId!);
+    if (ids.length) eaters.set(meal, ids);
+  }
+  if (!eaters.size) return {};
+
+  const ids = [...new Set([...eaters.values()].flat())];
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.from("profiles").select("*").in("id", ids);
+  if (error) {
+    console.error("sharedMealPortions", error);
+    return {};
+  }
+  const { energyTargets } = await import("@/lib/nutrition/energy");
+  const { portionFactors, sharedPortion } = await import("@/lib/nutrition/portion");
+  const planById = new Map<string, number>();
+  for (const p of (data ?? []) as { id: string; sex?: string | null }[]) {
+    planById.set(p.id, portionFactors(energyTargets(p as never), p).plan);
+  }
+  const out: Partial<Record<(typeof MEAL_KEYS)[number], number>> = {};
+  for (const [meal, mealIds] of eaters) {
+    const factor = sharedPortion(mealIds.map((id) => planById.get(id) ?? NaN));
+    if (factor != null) out[meal] = factor;
+  }
+  return out;
+}
+
+/**
+ * Objetivo por comida de las comidas compartidas del hogar, para el prompt del
+ * plan (ticket 23 de `precision-nutricional`): la media de los adultos con cuenta,
+ * sin nombres ni cifras individuales (D4 e invariante 8). Solo las comidas que
+ * se comparten algún día. Vacío sin hogar o sin datos.
+ */
+export async function householdMealTargets(
+  supabase: AnyClient,
+  userId: string,
+): Promise<Partial<Record<(typeof MEAL_KEYS)[number], { kcal: number; protein_g: number }>>> {
+  const home = await householdContext(supabase, userId);
+  if (!home.householdId) return {};
+  const ids = home.members.filter((m) => m.userId && m.usesApp).map((m) => m.userId!);
+  if (ids.length < 2) return {};
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.from("profiles").select("*").in("id", ids);
+  if (error) {
+    console.error("householdMealTargets", error);
+    return {};
+  }
+  const { energyTargets } = await import("@/lib/nutrition/energy");
+  const all = (data ?? []).map((p) => energyTargets(p as never)).filter((t) => !!t);
+  const out: Partial<Record<(typeof MEAL_KEYS)[number], { kcal: number; protein_g: number }>> = {};
+  for (const meal of MEAL_KEYS) {
+    if (!home.sharedSlots[meal].length) continue;
+    const slots = all.map((t) => t!.perSlot[meal]).filter((s) => !!s);
+    if (!slots.length) continue;
+    out[meal] = {
+      kcal: Math.round(slots.reduce((sum, s) => sum + s!.kcal, 0) / slots.length),
+      protein_g: Math.round(slots.reduce((sum, s) => sum + s!.protein_g, 0) / slots.length),
+    };
+  }
+  return out;
 }

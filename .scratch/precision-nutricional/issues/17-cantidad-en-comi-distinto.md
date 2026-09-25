@@ -1,6 +1,6 @@
 # 17 — "Comí distinto": una cantidad aproximada, pero proporcional a cada persona
 
-Status: ready (D10 confirmada y revisada con la propuesta del usuario)
+Status: implementado (2026-09-25, sin desplegar); falta el aviso de kcal antes de guardar
 Blocked by: 05, 06, 21
 Tamaño: M
 Fase: 2
@@ -96,3 +96,9 @@ Los valores exactos se fijan en los tests con la receta canónica real.
 
 - 2026-09-24 — Reescrito con la propuesta del usuario (cantidad proporcional a la necesidad
   calórica). Pasa a la fase 2: depende del factor personal (21), no del escalado fino (08).
+
+- 2026-09-25 — **Implementado** web y móvil: `eatenPortion` (texto → unidad → plato × habitual),
+  chips con tamaño aprendido (`learnedPortionSize`, `MealHabit.portionSize`), la guía mide el plato
+  comido con su ración y el del plan con el factor `plan`. **No hecho:** enseñar las kcal ANTES de
+  guardar (haría falta un endpoint y 20-60 s de espera dentro de la hoja con un plato nuevo); la
+  cifra aparece en la fila en cuanto se guarda.

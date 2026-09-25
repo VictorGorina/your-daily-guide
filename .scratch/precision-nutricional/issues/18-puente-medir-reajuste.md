@@ -1,6 +1,6 @@
 # 18 — Puente: medir lo que absorbe el reajuste actual
 
-Status: ready
+Status: implementado (2026-09-25, sin desplegar)
 Blocked by: 06
 Tamaño: S
 Fase: 2
@@ -48,3 +48,8 @@ los números, y la tarjeta "Balance de hoy" dice lo que se movió de verdad.
 - [ ] Log: proporción `absorbed / pending` por asentamiento, para comparar después con el 12.
 
 ## Comments
+
+- 2026-09-25 — **Implementado**: `reflowMeals({ measure: true })` mide con las recetas
+  (`absorbedKcal`), insiste UNA vez con los números por debajo del 50 %, guarda
+  `DayAdjustment.absorbedKcal`/`partial` y la tarjeta lo dice (`absorbedNote`), web y móvil. Log
+  `reflowMeals: absorbido {ratio}` para compararlo con el 12.

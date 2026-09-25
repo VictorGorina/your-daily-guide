@@ -1,6 +1,6 @@
 # 21 — Ración personal: un factor por persona a partir de su objetivo y su gasto
 
-Status: ready
+Status: implementado (2026-09-25, sin desplegar)
 Blocked by: 07, 14
 Tamaño: M
 Fase: 2
@@ -88,3 +88,9 @@ verdad que el plan se queda corto frente al objetivo. Es cierto, pero confunde. 
 - [ ] Simulador iOS: las mismas cifras que la web.
 
 ## Comments
+
+- 2026-09-25 — **Implementado**: `portion.ts` + tests con los ejemplos, `sharedMealPortions`
+  (media de los adultos con la clave de servicio), guía con `portionFactor` y factor por comida
+  (no en las compartidas: con el propio dejaría despejar el de la pareja), línea en "Mis
+  respuestas" (web y móvil; vista en el navegador: "×0,89"). Pendiente: la prueba de hogar en el
+  navegador.

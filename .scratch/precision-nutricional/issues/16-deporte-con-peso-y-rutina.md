@@ -1,6 +1,6 @@
 # 16 — Deporte: gasto con el peso, neto y sin contar la rutina dos veces
 
-Status: ready si se aprueba D9
+Status: implementado (2026-09-25, sin desplegar)
 Blocked by: 07
 Tamaño: M
 Fase: 2
@@ -81,3 +81,10 @@ rutina** de la semana, porque la rutina ya va dentro del objetivo (07, D9).
 - [ ] Simulador iOS: mismo caso.
 
 ## Comments
+
+- 2026-09-25 — **Implementado** web y móvil: `estimateExerciseKcal` neto y con el peso,
+  `splitRoutineSession` en `logExercise` (semana ISO; un perfil sin `daily_activity` no separa
+  rutina), lista "Dentro de tu rutina (2 de 3 esta semana) · ya está en tu plan", `balanceNote`
+  con la rutina. MET de correr normal = 9 (tabla del 07): 30 min dan 200/400 kcal a 50/100 kg (el
+  ticket decía ~220/~440 con 9,8). Visto en el navegador: 30 min de correr = 276 kcal con 69 kg.
+  La hoja guiada del chat usa la cifra neta pero aún compensa por el coach: tarea aparte.

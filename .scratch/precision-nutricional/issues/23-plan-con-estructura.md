@@ -1,6 +1,6 @@
 # 23 — Plan con objetivo: kcal por comida y estructura de la comida en el prompt
 
-Status: ready
+Status: implementado el prompt (2026-09-25); el eval NO cumple, ver Comments
 Blocked by: 07, 21
 Tamaño: M
 Fase: 2
@@ -72,3 +72,19 @@ El 10 lo lleva a ±5 % con la comprobación y la corrección en código.
 - [ ] Simulador iOS: las comidas con componentes se leen bien.
 
 ## Comments
+
+- 2026-09-25 — **Implementado**: `planTargetsPrompt` (objetivo por comida, media del hogar,
+  estructura " · ", sesgo por objetivo), `targetsVersion` en el plan, aviso en Hoy solo para planes
+  anteriores, `bun run eval:plan-lite`. Se mantiene `askForJson` (no se ha medido aún la salida
+  estructurada del plan largo). **Resultado de `eval:plan-lite`: ver abajo.**
+
+- 2026-09-25 — **`eval:plan-lite` (7 días × 3 tipologías, GPT-5 para las recetas, PLAN_MODEL para
+  el plan): NO cumple.** Días a ±15 % del objetivo: **5/21 (24 %)**, frente al ≥ 70 % provisional.
+  Comidas principales de un solo componente: **8/42** (objetivo 0). Sesgo a la baja en las tres:
+  mujer que pierde (1.330 kcal) −25 % a −67 %, 0/7; hombre que mantiene (2.431) −5 % a −41 %, 1/7;
+  hombre que gana (3.421) −40 % a +2 %, 4/7. Sin escalar, un día de raciones AESAN con la estructura
+  que devuelve el modelo ronda 1.100 kcal para la persona de referencia, no 2.000: la estructura en
+  el prompt no cierra el día. Apareció además un "Comida social o tu plato preferido" genérico
+  (memoria `plan-no-generic-eating-out`). Lo que lo cerraría es la comprobación y corrección en
+  código del día (10, `planFit`) y el escalado por grupos (08), de la fase 3. Decisión pendiente del
+  usuario: ver el resumen de la sesión.

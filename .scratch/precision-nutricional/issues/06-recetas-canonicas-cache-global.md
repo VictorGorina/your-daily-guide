@@ -1,6 +1,6 @@
 # 06 — Recetas canónicas: caché global en Supabase
 
-Status: ready
+Status: implementado (2026-09-25, sin desplegar); falta aplicar la migración
 Blocked by: 05
 Tamaño: M
 Fase: 2
@@ -127,3 +127,11 @@ vuelve a descomponer aunque cambie `PIPELINE_VERSION`.
   el 14 (aceite) y el 17 (unidad natural). Con la caché, el 18 mide lo que absorbe el reajuste actual.
 
 - 2026-09-24 — Tras confirmar D7-D13: D13: todos los platos del plan se calculan al generarlo (antes, solo los próximos 7 días).
+
+- 2026-09-25 — **Implementado**: migración `20260925140000_dish_recipes.sql` (+ `text_quantity`,
+  para que "media pizza" guarde su cantidad), `dishKey` + test, `getRecipes` (tolera la tabla sin
+  crear: caché por proceso), guía, compensación de cambios futuros y picoteo sobre la caché,
+  precalentamiento en la pantalla Plan (web y móvil, `/api/v1/recipes/warm`, bucket `recipe-warm`),
+  `bun run recipes:review`. Pendiente: aplicar la migración (SQL Editor) y la prueba de RLS con un
+  JWT del perfil demo; sustituir un plato del plan que no se deja calcular (hoy queda
+  "calculando" y se reintenta).

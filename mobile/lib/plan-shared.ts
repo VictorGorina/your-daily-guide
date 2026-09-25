@@ -207,7 +207,12 @@ export type MonthlyPlan = {
   coverage?: PlanCoverage;
   /** Cada cuánto se compra. Fuente de verdad de la cadencia; el reparto de `trip` la refleja. */
   cadence?: ShoppingCadence;
+  /** Se generó conociendo el objetivo por comida (ticket 23). */
+  targetsVersion?: number;
 };
+
+/** Versión actual de `MonthlyPlan.targetsVersion`. */
+export const PLAN_TARGETS_VERSION = 1;
 
 const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -387,6 +392,8 @@ export type MealHabit = {
   plannedKcal?: number;
   /** Proteína (g) del plato del plan, congelada igual que `plannedKcal` (ticket 13). */
   plannedProtein?: number;
+  /** Tamaño que eligió en "comí distinto" (ticket 17), sobre su ración habitual. */
+  portionSize?: "pequena" | "normal" | "grande";
   /**
    * kcal que la persona apuntó a mano porque su texto no permitía calcular el
    * plato ("comí algo rápido", ticket 13). La cifra es suya, no un promedio.

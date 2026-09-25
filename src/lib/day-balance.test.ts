@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  absorbedKcal,
+  absorbedNote,
+  absorbsTooLittle,
   balanceNote,
   cleanDayAdjustment,
   changedMealsKcal,
@@ -376,5 +379,69 @@ describe("proteína del día", () => {
     });
     expect(note).toContain("22 g menos de proteína");
     expect(note).not.toContain("compensar el exceso");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ticket 18: lo que absorbe de verdad el reajuste
+// ---------------------------------------------------------------------------
+
+describe("absorbedKcal (ticket 18)", () => {
+  const kcal: Record<string, number> = {
+    "Lentejas con chorizo": 520,
+    "Garbanzos con espinacas": 490,
+    "Pollo con verduras": 380,
+    "Crema de calabacín": 180,
+  };
+  const kcalOf = (d: string) => kcal[d] ?? null;
+
+  it("lentejas → garbanzos mueve 30 kcal, no 'todo compensado'", () => {
+    const a = absorbedKcal(
+      [{ before: "Lentejas con chorizo", after: "Garbanzos con espinacas" }],
+      kcalOf,
+    )!;
+    expect(a).toBe(30);
+    expect(absorbsTooLittle(a, 400)).toBe(true);
+  });
+
+  it("dos cenas más ligeras compensan un exceso de 400", () => {
+    const a = absorbedKcal(
+      [
+        { before: "Lentejas con chorizo", after: "Pollo con verduras" },
+        { before: "Garbanzos con espinacas", after: "Crema de calabacín" },
+      ],
+      kcalOf,
+    )!;
+    expect(a).toBe(140 + 310);
+    expect(absorbsTooLittle(a, 400)).toBe(false);
+  });
+
+  it("un déficit se compensa sumando: mismo criterio con el signo", () => {
+    const a = absorbedKcal(
+      [{ before: "Crema de calabacín", after: "Lentejas con chorizo" }],
+      kcalOf,
+    )!;
+    expect(a).toBe(-340);
+    expect(absorbsTooLittle(a, -300)).toBe(false);
+    expect(absorbsTooLittle(a, 300)).toBe(true);
+  });
+
+  it("sin cifra de algún plato no se mide", () => {
+    expect(
+      absorbedKcal([{ before: "Lentejas con chorizo", after: "Algo nuevo" }], kcalOf),
+    ).toBeNull();
+  });
+
+  it("la tarjeta dice lo que se midió, con o sin cifras", () => {
+    expect(absorbedNote({ absorbedKcal: 347, kcal: 400 }, true)).toBe(
+      "He movido unas 350 kcal de tus próximos días.",
+    );
+    expect(absorbedNote({ absorbedKcal: 347, kcal: 400 }, false)).toBe(
+      "He aligerado un poco tus próximas comidas.",
+    );
+    expect(absorbedNote({ absorbedKcal: 80, kcal: 400, partial: true }, true)).toBe(
+      "He ajustado una parte; el resto no lo persigo.",
+    );
+    expect(absorbedNote({ kcal: 400 }, true)).toBeNull();
   });
 });

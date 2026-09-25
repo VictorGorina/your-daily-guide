@@ -30,11 +30,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { DISH_MODEL } from "@/lib/ai-provider.server";
-import {
-  _clearDishMemo,
-  decomposeDishes,
-  type DishBreakdown,
-} from "@/lib/nutrition/resolve-dish.server";
+import { decomposeDishes, type DishBreakdown } from "@/lib/nutrition/resolve-dish.server";
+import type { RecipeSlot } from "@/lib/nutrition/validate-recipe";
 
 import {
   accuracyOf,
@@ -125,16 +122,16 @@ function summarizeTable(errors: TableError[]) {
 async function decomposeAll(
   dishes: string[],
   model: string,
+  slots: ReadonlyMap<string, RecipeSlot>,
 ): Promise<{ breakdowns: Map<string, DishBreakdown>; seconds: number }> {
-  // Una pasada sin memo: si no, la 2.ª y la 3.ª devolverían la 1.ª tal cual y
-  // el determinismo saldría perfecto sin medir nada.
-  _clearDishMemo();
+  // `decomposeDishes` no guarda nada (la caché es `getRecipes`): cada pasada
+  // descompone de verdad, así que el determinismo mide al modelo.
   const breakdowns = new Map<string, DishBreakdown>();
   const started = performance.now();
   for (let i = 0; i < dishes.length; i += BATCH) {
     const batch = dishes.slice(i, i + BATCH);
     // Sin persona detrás: el gasto del eval no cuenta contra ningún tope.
-    const map = await decomposeDishes(batch, { servings: 1, userId: null, model });
+    const map = await decomposeDishes(batch, { userId: null, model, slots });
     for (const [k, v] of map) breakdowns.set(k, v);
     process.stdout.write(`    ${Math.min(i + BATCH, dishes.length)}/${dishes.length}\r`);
   }
@@ -245,11 +242,12 @@ async function main() {
   }
 
   const dishes = recipes.map((r) => r.dish);
+  const slots = new Map<string, RecipeSlot>(recipes.map((r) => [r.dish, r.slot]));
   const runs: Map<string, DishBreakdown>[] = [];
   const seconds: number[] = [];
   for (let p = 0; p < passes; p += 1) {
     console.log(`  Pasada ${p + 1}/${passes}…`);
-    const { breakdowns, seconds: s } = await decomposeAll(dishes, model);
+    const { breakdowns, seconds: s } = await decomposeAll(dishes, model, slots);
     runs.push(breakdowns);
     seconds.push(s);
   }

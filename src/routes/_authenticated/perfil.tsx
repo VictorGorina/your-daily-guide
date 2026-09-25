@@ -10,6 +10,7 @@ import { ageFromDOB } from "@/lib/age";
 import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
 import { showsNutritionNumbers } from "@/lib/macros";
 import { energyExplanation, energyTargets } from "@/lib/nutrition/energy";
+import { portionExplanation, portionFactors } from "@/lib/nutrition/portion";
 import {
   PROFILE_SECTIONS,
   chipToValue,
@@ -156,6 +157,9 @@ function Perfil() {
         <section className="surface-card mt-5 p-4">
           <h2 className="px-1 text-sm font-semibold">Tu objetivo diario</h2>
           <p className="mt-2 px-1 text-sm text-foreground">{energyExplanation(energy)}</p>
+          <p className="mt-1 px-1 text-sm text-foreground">
+            {portionExplanation(portionFactors(energy, profile))}
+          </p>
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
             Es una estimación: entre personas puede variar un ±10 %. Se recalcula sola cuando
             cambias tu peso, tu día a día, tu rutina o tu objetivo.

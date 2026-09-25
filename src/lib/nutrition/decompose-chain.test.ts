@@ -12,8 +12,8 @@ import {
 const withRecipe = (): RawDish => ({
   comida: true,
   vago: false,
-  coccion: "otra",
-  ingredientes: [{ key: "lentejas", name: "lentejas", gramos: 200 }],
+  metodos: ["guiso"],
+  ingredientes: [{ key: "lentejas-secas", nombre: "lentejas", gramos: 60, estado: "crudo" }],
 });
 
 /** Un `ask` de mentira: por modelo, qué platos contesta y cuáles no. */
@@ -122,8 +122,8 @@ describe("runDecomposeChain — todo plato se calcula (D13)", () => {
       {
         [PRIMARY]: () =>
           new Map<string, RawDish>([
-            ["algo rapido", { comida: true, vago: true, coccion: null, ingredientes: [] }],
-            ["una piedra", { comida: false, vago: false, coccion: null, ingredientes: [] }],
+            ["algo rapido", { comida: true, vago: true, metodos: [], ingredientes: [] }],
+            ["una piedra", { comida: false, vago: false, metodos: [], ingredientes: [] }],
           ]),
       },
       calls,

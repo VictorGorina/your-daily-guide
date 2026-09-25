@@ -58,6 +58,7 @@ import { Route as ApiV1PlanShoppingOwnedRouteImport } from './routes/api/v1/plan
 import { Route as ApiV1PlanTripActualRouteImport } from './routes/api/v1/plan/trip-actual'
 import { Route as ApiV1PlanTripConfirmRouteImport } from './routes/api/v1/plan/trip-confirm'
 import { Route as ApiV1PlanWelcomeRouteImport } from './routes/api/v1/plan/welcome'
+import { Route as ApiV1RecipesWarmRouteImport } from './routes/api/v1/recipes/warm'
 import { Route as ApiV1SnacksEstimateRouteImport } from './routes/api/v1/snacks/estimate'
 import { Route as ApiV1SnacksLogRouteImport } from './routes/api/v1/snacks/log'
 import { Route as ApiV1SnacksRemoveRouteImport } from './routes/api/v1/snacks/remove'
@@ -311,6 +312,11 @@ const ApiV1PlanWelcomeRoute = ApiV1PlanWelcomeRouteImport.update({
   path: '/api/v1/plan/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1RecipesWarmRoute = ApiV1RecipesWarmRouteImport.update({
+  id: '/api/v1/recipes/warm',
+  path: '/api/v1/recipes/warm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1SnacksEstimateRoute = ApiV1SnacksEstimateRouteImport.update({
   id: '/api/v1/snacks/estimate',
   path: '/api/v1/snacks/estimate',
@@ -381,6 +387,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
+  '/api/v1/recipes/warm': typeof ApiV1RecipesWarmRoute
   '/api/v1/snacks/estimate': typeof ApiV1SnacksEstimateRoute
   '/api/v1/snacks/log': typeof ApiV1SnacksLogRoute
   '/api/v1/snacks/remove': typeof ApiV1SnacksRemoveRoute
@@ -435,6 +442,7 @@ export interface FileRoutesByTo {
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
+  '/api/v1/recipes/warm': typeof ApiV1RecipesWarmRoute
   '/api/v1/snacks/estimate': typeof ApiV1SnacksEstimateRoute
   '/api/v1/snacks/log': typeof ApiV1SnacksLogRoute
   '/api/v1/snacks/remove': typeof ApiV1SnacksRemoveRoute
@@ -491,6 +499,7 @@ export interface FileRoutesById {
   '/api/v1/plan/trip-actual': typeof ApiV1PlanTripActualRoute
   '/api/v1/plan/trip-confirm': typeof ApiV1PlanTripConfirmRoute
   '/api/v1/plan/welcome': typeof ApiV1PlanWelcomeRoute
+  '/api/v1/recipes/warm': typeof ApiV1RecipesWarmRoute
   '/api/v1/snacks/estimate': typeof ApiV1SnacksEstimateRoute
   '/api/v1/snacks/log': typeof ApiV1SnacksLogRoute
   '/api/v1/snacks/remove': typeof ApiV1SnacksRemoveRoute
@@ -547,6 +556,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
+    | '/api/v1/recipes/warm'
     | '/api/v1/snacks/estimate'
     | '/api/v1/snacks/log'
     | '/api/v1/snacks/remove'
@@ -601,6 +611,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
+    | '/api/v1/recipes/warm'
     | '/api/v1/snacks/estimate'
     | '/api/v1/snacks/log'
     | '/api/v1/snacks/remove'
@@ -656,6 +667,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/trip-actual'
     | '/api/v1/plan/trip-confirm'
     | '/api/v1/plan/welcome'
+    | '/api/v1/recipes/warm'
     | '/api/v1/snacks/estimate'
     | '/api/v1/snacks/log'
     | '/api/v1/snacks/remove'
@@ -704,6 +716,7 @@ export interface RootRouteChildren {
   ApiV1PlanTripActualRoute: typeof ApiV1PlanTripActualRoute
   ApiV1PlanTripConfirmRoute: typeof ApiV1PlanTripConfirmRoute
   ApiV1PlanWelcomeRoute: typeof ApiV1PlanWelcomeRoute
+  ApiV1RecipesWarmRoute: typeof ApiV1RecipesWarmRoute
   ApiV1SnacksEstimateRoute: typeof ApiV1SnacksEstimateRoute
   ApiV1SnacksLogRoute: typeof ApiV1SnacksLogRoute
   ApiV1SnacksRemoveRoute: typeof ApiV1SnacksRemoveRoute
@@ -1055,6 +1068,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanWelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/recipes/warm': {
+      id: '/api/v1/recipes/warm'
+      path: '/api/v1/recipes/warm'
+      fullPath: '/api/v1/recipes/warm'
+      preLoaderRoute: typeof ApiV1RecipesWarmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/snacks/estimate': {
       id: '/api/v1/snacks/estimate'
       path: '/api/v1/snacks/estimate'
@@ -1153,6 +1173,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanTripActualRoute: ApiV1PlanTripActualRoute,
   ApiV1PlanTripConfirmRoute: ApiV1PlanTripConfirmRoute,
   ApiV1PlanWelcomeRoute: ApiV1PlanWelcomeRoute,
+  ApiV1RecipesWarmRoute: ApiV1RecipesWarmRoute,
   ApiV1SnacksEstimateRoute: ApiV1SnacksEstimateRoute,
   ApiV1SnacksLogRoute: ApiV1SnacksLogRoute,
   ApiV1SnacksRemoveRoute: ApiV1SnacksRemoveRoute,

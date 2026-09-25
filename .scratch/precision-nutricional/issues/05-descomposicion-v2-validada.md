@@ -1,6 +1,6 @@
 # 05 — Receta canónica validada: una lectura estructurada, gramos crudos y reglas en código
 
-Status: ready (replanificado el 2026-09-24, D7 y D8)
+Status: implementado (2026-09-25, sin desplegar); A/B de modelos pendiente, ver Comments
 Blocked by: 14
 Tamaño: L
 Fase: 2
@@ -144,3 +144,12 @@ plato, la latencia P50/P90 y las pasadas sin descomponer.
   original porque la ración base pasa a ser la de AESAN (más pequeña que la anterior).
 
 - 2026-09-24 — Tras confirmar D7-D13: respaldo sustituido por la cadena del 13 y USDA (22); `categoria` y `vago` en el esquema (D13).
+
+- 2026-09-25 — **Implementado**: `generateText` + `Output.object` (Zod; `generateObject` está
+  obsoleto en `ai` v7) con el esquema del ticket, `validateRecipe` + test que lo calibra contra el
+  golden set (ninguna referencia se recorta ni pide reintento), UN reintento con pista, calidad por
+  kcal. La banda de kcal por comida es solo flag, sin reintento, a propósito: el golden set tiene
+  cenas de verdad por debajo (una crema de 126 kcal) y pedir "más" al modelo es lo que infla las
+  raciones (D7). Retirado `eval:dishes`. **No hecho: el A/B de modelos** (Flash con y sin
+  razonamiento): primero se fija el pipeline con GPT-5 y el eval; el A/B cuesta 3 pasadas por
+  modelo.

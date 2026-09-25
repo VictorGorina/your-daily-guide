@@ -52,6 +52,25 @@ export function mealsToRecalculate(
  * cifra para ese mismo plato, para no volver a descomponerlas. Incluye las kcal
  * que la persona apuntó a mano en "comí distinto" (`MealHabit.manualKcal`).
  */
+/**
+ * Las comidas de hoy tal como las pide la guía: el plato y, si es "comí
+ * distinto", que se mida con la ración habitual y el tamaño elegido (ticket 17).
+ * Copia de `guideMeals` de la web.
+ */
+export function guideMeals(
+  meals: readonly { moment: string; idea: string }[],
+  habits: DailyLog["habits"] | null | undefined,
+): { moment: string; idea: string; eaten?: boolean; size?: string | null }[] {
+  return meals
+    .filter((m) => m.idea)
+    .map((m) => {
+      const h = (habits ?? []).find((x) => x.label === m.moment);
+      return h?.status === "distinto"
+        ? { moment: m.moment, idea: m.idea, eaten: true, size: h.portionSize ?? null }
+        : { moment: m.moment, idea: m.idea };
+    });
+}
+
 export function guideReuse(
   mealMacros: readonly MealMacroEstimate[] | null | undefined,
   habits: DailyLog["habits"] | null | undefined,

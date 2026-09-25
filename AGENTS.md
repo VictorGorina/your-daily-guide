@@ -325,6 +325,64 @@ miembro leer la fila del planificador hace que cualquier `.maybeSingle()` sin
 `.eq("user_id", …)` explícito devuelva 2 filas para un no planificador y lance `PGRST116`.
 En server functions se usa el helper `ownPlanRow`; en `daily.ts`, `fetchOwnMonthlyPlan`.
 
+## Receta canónica, caché y ración personal (`precision-nutricional`, fase 2)
+
+Spec y tickets en `.scratch/precision-nutricional/` (05, 06, 14, 16, 17, 18, 21, 22, 23). Lo que
+un cambio suele romper sin querer:
+
+- **El modelo propone la composición; el código pone la cantidad.** `decomposeDishes`
+  (`resolve-dish.server.ts`) pide con salida estructurada (`Output.object` + Zod) UNA ración base
+  de AESAN en gramos **crudos** (arroz, pasta y legumbre en seco) y el `estado` de cada gramaje. El
+  código: lleva lo crudo a la fila en seco (`COOKED_TO_RAW`) o convierte con `cookedYield` según la
+  `basis` de la fila (`gramsInRowBasis`); **sustituye** la grasa del modelo por `OIL_BY_METHOD`
+  (`cooking.ts`; de dos métodos de calor cuenta el mayor, el aliño se suma, el untado solo sin
+  calor); y pasa `validateRecipe` (techos por ingrediente, un huevo si acompaña, sin patata en una
+  crema que no la nombra, fruta troceada a media pieza, UN reintento con pista si falta algo que
+  el título nombra). `validateRecipe` está calibrado contra el golden set: su test exige que
+  ninguna receta de referencia se toque. Si una regla nueva lo rompe, la regla está mal.
+- **Calidad por kcal, umbral 0,90** (`resolutionQuality`, `MIN_RECIPE_QUALITY`). Lo que no casa y
+  pesa ≥ 5 % de las kcal: primero USDA (ticket 22), luego el alimento más parecido (13). Por debajo
+  del umbral el plato no se da por calculado (D13): "Calculando…" y se reintenta.
+- **Caché global `dish_recipes`** (`getRecipes` en `recipes.server.ts`, clave `dishKey`: palabras
+  ordenadas y en singular, sin quitar nunca "sin" ni "fresco"). Solo escribe el servidor. Las
+  macros NO se guardan: `macrosOfRecipe(receta, factor)` al leer. Una receta de un
+  `PIPELINE_VERSION` antiguo sin `reviewed` se vuelve a descomponer. Sin la migración aplicada
+  (PGRST205), todo funciona con una caché por proceso. `bun run recipes:review` lista las más
+  usadas con calidad < 0,95 o flags.
+- **Precalentamiento**: la pantalla Plan manda los platos del mes de hoy en adelante a
+  `POST /api/v1/recipes/warm` en trozos de 8 (`recipe-warm.ts`, web y móvil) y enseña "Calculando tus
+  platos 24/48". Recuerda en `localStorage`/`AsyncStorage` lo ya calculado; si la app se cierra a
+  medias, lo retoma al volver a Plan.
+- **Ración personal** (`portion.ts`, copia en `mobile/lib/`): factor `plan` = objetivo ÷ 2.000 para
+  los platos del plan y `habitual` = mantenimiento ÷ 2.000 para "comí distinto", entre 0,6 y 1,7;
+  sin datos, por sexo. En una comida compartida del hogar, la **media** de los adultos
+  (`sharedMealPortions`, con la clave de servicio). **Privacidad:** esa media no se guarda junto a
+  la comida (`MealMacroEstimate.portion` solo va en las propias): con el factor propio dejaría
+  despejar el de los demás. `guide.portionFactor` guarda el factor del día para los días pasados.
+- **"Comí distinto" (17)**: la guía recibe cada comida cambiada con `eaten` y su `size`
+  (`guideMeals`). Cantidad = la del texto ("media pizza") → una pieza entera si es `unidad` → plato
+  × `habitual`, con los chips pequeño · normal · grande (×0,75 · ×1 · ×1,3) que aprenden el tamaño
+  tras 5 iguales (`learnedPortionSize`, `MealHabit.portionSize`). El plato del plan contra el que se
+  mide sale con el factor `plan`: las dos cifras a la misma escala.
+- **Deporte (16)**: neto y con el peso (`estimateExerciseKcal` → `exerciseNetKcal`). `logExercise`
+  reparte cada sesión con `splitRoutineSession`: si esta semana ISO quedan sesiones de la rutina de
+  `profiles.training`, su parte normal ya va en el objetivo y solo `kcal` (lo que desvía el día)
+  lleva el exceso. Un perfil sin `daily_activity` no tiene rutina separada (todo extra, como antes).
+  La hoja guiada del chat usa la misma cifra, pero aún compensa por el coach (tarea aparte).
+- **Reajuste medido (18, puente hasta el 12)**: `reflowMeals({ measure: true })` mide con las
+  recetas cuánto compensan de verdad los platos cambiados (`absorbedKcal`); por debajo del 50 %
+  insiste UNA vez con los números. `DayAdjustment.absorbedKcal` y la tarjeta lo dicen
+  (`absorbedNote`). Se registra `ratio` en el log para compararlo con el 12.
+- **Plan con objetivo (23)**: el prompt del plan lleva las kcal y la proteína por comida, la media
+  del hogar para las compartidas y la estructura "plato · acompañamiento · postre"
+  (`planTargetsPrompt`). Los planes nuevos llevan `targetsVersion`; Hoy explica que uno anterior se
+  queda corto. `bun run eval:plan-lite` lo mide.
+- **USDA (22)**: `USDA_FDC_API_KEY` en `.env` y en Vercel (clave gratuita de api.data.gov; sin ella
+  no se busca). Lo encontrado va a `foods_extra` y se registra como una fila más
+  (`registerExtraFoods`, `ensureExtraFoods`). `bun run foods:review` para pasarlas a la tabla.
+- **Migraciones manuales**: `20260925140000_dish_recipes.sql` y `20260925150000_foods_extra.sql`
+  (SQL Editor). Hasta aplicarlas no hay caché global ni filas de USDA persistentes.
+
 ## Push notifications
 
 Web Push real (VAPID) vía [`@pushforge/builder`](https://github.com/draphy/pushforge) — usa solo

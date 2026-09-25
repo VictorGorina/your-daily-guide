@@ -57,11 +57,9 @@ función), no solo el valor que devuelve hoy.
 
 ## Evals (gastan llamadas, no van en CI)
 
-Dos bancos distintos en `src/lib/plan-eval/`, que se corren a mano:
+Dos bancos en `src/lib/plan-eval/`, que se corren a mano (`eval:dishes`, el de cobertura, se
+retiró con el ticket 05: daba "100 % de calidad" a platos con un 40 % de error):
 
-- `bun run eval:dishes` — **cobertura** de la tabla de composición: cuántos platos se
-  descomponen, con qué confianza, qué ingredientes caen en el genérico. No mide error: un plato
-  con un 40 % de error puede salir "100 % de calidad".
 - `bun run eval:recipes` — **exactitud** (`precision-nutricional`, ticket 02): el error de las
   cifras frente a 75 recetas de referencia (`golden-recipes.data.ts`, ración base = mitad del
   rango de AESAN) y el de la tabla frente a 17 referencias externas (`golden-external.data.ts`,
@@ -69,6 +67,13 @@ Dos bancos distintos en `src/lib/plan-eval/`, que se corren a mano:
   y compara con `baseline-recipes.json`; `--save-baseline` la fija, `--passes`, `--limit`,
   `--dish`, `--model` y `--reviewed` acotan la pasada. Una pasada en la que el modelo no
   devuelve nada se cuenta aparte, no como error de exactitud.
+- `bun run eval:plan-lite` — **el plan contra el objetivo** (ticket 23): genera el plan de varias
+  tipologías con el generador de producción y suma cada día con la ración personal frente a
+  `energyTargets`. Objetivo provisional: ≥ 70 % de los días a ±15 % y ninguna comida principal de
+  un solo componente. `--only <tipología>` y `--days <n>` lo acotan.
+
+`validateRecipe` tiene además un test que NO gasta llamadas y hace de red: ninguna receta del
+golden set puede recortarse ni pedir reintento. Si una regla nueva lo rompe, la regla está mal.
 
 ## Nota: tipos de `bun:test` y `tsc`
 

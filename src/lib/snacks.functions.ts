@@ -171,15 +171,6 @@ export type SnackEstimate = {
   ingredients: { name: string; grams: number }[];
 };
 
-/**
- * Por debajo de esta proporción de gramos identificados no se da cifra: la
- * precisión de las kcal es la base de la app, y un número inventado con el
- * alimento genérico es peor que pedirlo a mano.
- */
-const MIN_QUALITY = 0.4;
-/** Por debajo de esta, la cifra se da pero con aviso de revisarla. */
-const SURE_QUALITY = 0.7;
-
 export const estimateSnack = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { text: string }) => ({ text: cleanText(input?.text) }))
@@ -190,23 +181,32 @@ export const estimateSnack = createServerFn({ method: "POST" })
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "snack-estimate");
 
-    const { dishToIngredients } = await import("@/lib/nutrition/resolve-dish.server");
-    const b = await dishToIngredients(data.text, {
-      servings: 1,
-      apiKey: key,
-      userId: context.userId,
-    });
+    // De la caché global (ticket 06): el mismo picoteo da siempre la misma cifra.
+    const { getRecipes } = await import("@/lib/nutrition/recipes.server");
+    const { macrosOfRecipe } = await import("@/lib/nutrition/recipe");
+    const found = (await getRecipes([data.text], { apiKey: key, userId: context.userId })).get(
+      data.text.trim(),
+    );
+    const recipe = found?.recipe ?? null;
     // Un refresco sin azúcar da 0 kcal de verdad: lo que decide es si se
-    // entendió lo descrito, no que la cifra sea positiva.
-    const notFood = !b.isFood;
-    const resolved =
-      !notFood && b.source === "model" && b.ingredients.length > 0 && b.quality >= MIN_QUALITY;
+    // entendió lo descrito, no que la cifra sea positiva. Por debajo de la
+    // calidad mínima el pipeline ya no lo da por calculado (ticket 05 §5), así
+    // que aquí no hay umbral propio: sin cifra fiable, se piden a mano.
+    const notFood = found ? !found.isFood : false;
+    const resolved = !notFood && !!recipe;
+    // La receta es UNA ración o pieza; "dos cañas" trae la cantidad aparte.
+    const quantity = found?.textQuantity ?? 1;
     return {
       resolved,
       notFood,
-      macros: resolved ? b.perServing : null,
-      lowConfidence: resolved && b.quality < SURE_QUALITY,
-      ingredients: b.ingredients.map((i) => ({ name: i.name, grams: i.grams })),
+      macros: recipe ? macrosOfRecipe(recipe, quantity) : null,
+      // Aviso de revisarla si algo se resolvió por aproximación (el alimento
+      // más parecido, ticket 13) en vez de casar con la tabla.
+      lowConfidence: !!recipe && recipe.ingredients.some((i) => i.fallback === "closest"),
+      ingredients: (recipe?.ingredients ?? []).map((i) => ({
+        name: i.name,
+        grams: Math.round(i.gramsRaw * quantity),
+      })),
     };
   });
 

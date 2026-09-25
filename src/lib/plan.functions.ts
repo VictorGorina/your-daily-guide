@@ -76,6 +76,8 @@ import {
   type MonthConstraints,
   type MonthlyPlan,
   type PantryExtra,
+  PLAN_TARGETS_VERSION,
+  type PlanChange,
   type PlanDay,
   type ShoppingList,
   type TripActuals,
@@ -83,6 +85,8 @@ import {
   type TripReceipts,
   withPlanMeal,
 } from "@/lib/plan-shared";
+import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
+import { PLAN_STRUCTURE_REMINDER } from "@/lib/nutrition/plan-targets";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import { RateLimitError } from "@/lib/rate-limit-error";
 import { cleanDaySnacks } from "@/lib/snacks";
@@ -471,8 +475,22 @@ async function generatePlanBody(opts: {
   home: HouseholdContext;
   profile: unknown;
   constraints: MonthConstraints | null;
+  /** Objetivo medio de las comidas compartidas del hogar (`householdMealTargets`). */
+  sharedTargets?: Awaited<
+    ReturnType<(typeof import("@/lib/household.server"))["householdMealTargets"]>
+  >;
 }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> {
   const { key, userId, month, cadence, coverage, home, profile, constraints } = opts;
+
+  // Objetivo por comida y estructura de la comida (ticket 23): con la ración de
+  // AESAN un solo plato no llena una comida. Informativo: las cantidades las
+  // pone el código (ración personal, ticket 21).
+  const { energyTargets } = await import("@/lib/nutrition/energy");
+  const { planTargetsPrompt } = await import("@/lib/nutrition/plan-targets");
+  const targetsLine = planTargetsPrompt({
+    targets: energyTargets(profile as never),
+    shared: opts.sharedTargets,
+  });
 
   // Qué comidas quiere que se le planifiquen (issue merienda/slots elegidos):
   // único punto de lectura, compartido con `mealsForDate` en la pantalla, así
@@ -634,6 +652,8 @@ async function generatePlanBody(opts: {
         `${servingsLine}` +
         `${kidsLine}` +
         `${awayLine ? `${awayLine} ` : ""}` +
+        `${targetsLine} ` +
+        'Los componentes de cada comida (pan, fruta, lácteo del postre) también van en la compra, en su "weekQty". ' +
         "Platos sencillos, repetibles y realistas (puedes repetir platos entre semanas). Frases cortas para que el JSON quepa completo. Sin gramajes rígidos en los platos. Sin markdown ni explicaciones.",
     },
     (parsed) => {
@@ -666,9 +686,17 @@ async function generatePlanBody(opts: {
   // absoluto (independiente de si comparte mesa o no): `mealSlotsLine` ya
   // se lo pidió a la IA, esto lo garantiza aunque no haya obedecido.
   const planBody = blankUnselectedSlots(sharedBlanked, selectedSlots);
-  const plan: MonthlyPlan = { ...planBody, coverage, cadence };
+  const plan: MonthlyPlan = {
+    ...planBody,
+    coverage,
+    cadence,
+    targetsVersion: PLAN_TARGETS_VERSION,
+  };
   return { plan, shopping };
 }
+
+/** Solo para `bun run eval:plan-lite` (ticket 23): el mismo generador que producción. */
+export const _generatePlanBodyForEval = generatePlanBody;
 
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -704,10 +732,15 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       fetchMonthConstraints(context.supabase as never, context.userId, data.month),
     ]);
 
-    const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
-    const home = await householdContext(context.supabase as never, context.userId);
+    const { householdContext, householdMealTargets, syncSharedMeals } =
+      await import("@/lib/household.server");
+    const [home, sharedTargets] = await Promise.all([
+      householdContext(context.supabase as never, context.userId),
+      householdMealTargets(context.supabase as never, context.userId),
+    ]);
 
     const { plan, shopping } = await generatePlanBody({
+      sharedTargets,
       key,
       userId: context.userId,
       month: data.month,
@@ -1298,7 +1331,21 @@ export async function reflowMeals(opts: {
    * compartidas, que son de toda la casa. Se corrige en las suyas en solitario.
    */
   soloOnly?: boolean;
-}): Promise<{ plan: MonthlyPlan; before: MonthlyPlan; summary: string; synced: number }> {
+  /**
+   * Medir cuánto mueven los cambios con sus recetas y, si se quedan cortos,
+   * insistir UNA vez con los números (ticket 18). Lo usa `settleDay`.
+   */
+  measure?: boolean;
+}): Promise<{
+  plan: MonthlyPlan;
+  before: MonthlyPlan;
+  summary: string;
+  synced: number;
+  /** Lo que compensan de verdad (ver `absorbedKcal`); `null` sin medir. */
+  absorbedKcal: number | null;
+  /** Se insistió y siguió corto. */
+  partial: boolean;
+}> {
   const { supabase, userId, key, month, today, note, kcalDelta } = opts;
 
   const { data: row } = await ownPlanRow(supabase, userId, month, "plan, shopping, pantry_extras");
@@ -1470,6 +1517,7 @@ export async function reflowMeals(opts: {
           `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
           `REGLA 3: ${kcalLine}\n` +
           "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
+          `${PLAN_STRUCTURE_REMINDER} ` +
           `${sharedSlotsLine}` +
           `${mealSlotsLine}` +
           "En 'intro', 1-2 frases en lenguaje sencillo explicando qué has recolocado y por qué. " +
@@ -1488,11 +1536,77 @@ export async function reflowMeals(opts: {
     );
 
   let reflow = await askReflow("");
+  let absorbed: number | null = null;
+  let partial = false;
+
+  /**
+   * Ticket 18: cuánto compensan de verdad unos cambios, con las recetas de la
+   * caché a la ración del plan (solo se recolocan comidas propias). Hasta que
+   * el reajuste sea código (ticket 12), es lo que evita dar por "compensado" un
+   * cambio de lentejas por garbanzos que mueve 30 kcal de 400.
+   */
+  const measure = async (changes: PlanChange[]): Promise<number | null> => {
+    const cells = diffFutureMeals(current, applyPlanChanges(current, changes, today), today);
+    if (!cells.length) return 0;
+    const [{ getRecipes }, { macrosOfRecipe }, { energyTargets }, { portionFactors }] =
+      await Promise.all([
+        import("@/lib/nutrition/recipes.server"),
+        import("@/lib/nutrition/recipe"),
+        import("@/lib/nutrition/energy"),
+        import("@/lib/nutrition/portion"),
+      ]);
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+    const factor = portionFactors(energyTargets(profile as never), profile as never).plan;
+    const recipes = await getRecipes(
+      cells.flatMap((c) => [c.before, c.after]),
+      { apiKey: key, userId },
+    );
+    return absorbedKcal(cells, (dish) => {
+      const recipe = recipes.get(dish.trim())?.recipe;
+      return recipe ? macrosOfRecipe(recipe, factor).kcal : null;
+    });
+  };
+
+  if (opts.measure && kcalDelta) {
+    absorbed = await measure(reflow.changes).catch((error) => {
+      console.error("reflowMeals: medir", error);
+      return null;
+    });
+    // Corto (o nada): UNA insistencia, con los números. Sustituye a la genérica
+    // de "no has cambiado nada".
+    if (absorbed != null && strongDelta && absorbsTooLittle(absorbed, kcalDelta)) {
+      const sign = Math.sign(kcalDelta);
+      const missing = Math.round(Math.abs(kcalDelta) - Math.max(0, absorbed * sign));
+      const second = await askReflow(
+        `AVISO: tus cambios mueven unas ${Math.max(0, Math.round(absorbed * sign))} de las ` +
+          `${Math.abs(kcalDelta)} kcal que hay que ${sign > 0 ? "quitar" : "reponer"}; faltan unas ` +
+          `${missing}. ${sign > 0 ? "Cambia platos por otros más ligeros" : "Cambia platos por otros más completos"} ` +
+          "en los días permitidos hasta cubrir esa diferencia, repartida en al menos dos días.\n\n",
+      );
+      const again = second.changes.length ? await measure(second.changes).catch(() => null) : null;
+      if (again != null && again * sign > absorbed * sign) {
+        reflow = second;
+        absorbed = again;
+      }
+      partial = absorbsTooLittle(absorbed, kcalDelta);
+    }
+    // Para comparar después con el reajuste en código (ticket 12).
+    console.info("reflowMeals: absorbido", {
+      pending: kcalDelta,
+      absorbed,
+      ratio: absorbed != null ? Math.round((absorbed / kcalDelta) * 100) / 100 : null,
+    });
+  }
+
   // Un desvío grande sin ni un cambio es, casi siempre, el modelo escurriendo
   // el bulto. Se le insiste UNA vez: cuesta una llamada extra y solo pasa en el
   // caso que la persona nota como incoherente ("me he comido una pizza y dice
-  // que no cambia nada").
-  if (strongDelta && !reflow.changes.length) {
+  // que no cambia nada"). Con `measure`, la insistencia de arriba ya lo cubre.
+  if (!opts.measure && strongDelta && !reflow.changes.length) {
     console.warn(`reflowMeals: ${kcalDelta} kcal de desvío y ningún cambio; insistiendo`);
     const second = await askReflow(
       "AVISO: en tu respuesta anterior no cambiaste ningún día, y para este desvío eso no vale. Devuelve al menos DOS días con platos distintos.\n\n",
@@ -1536,7 +1650,7 @@ export async function reflowMeals(opts: {
         ? `${final.intro} También he ajustado las comidas compartidas de tu hogar.`
         : final.intro;
 
-  return { plan: final, before: current, summary, synced };
+  return { plan: final, before: current, summary, synced, absorbedKcal: absorbed, partial };
 }
 
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })
@@ -1712,13 +1826,6 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
       await enforceUserRateLimit(userId, "plan-adjust");
 
-      const { decomposeDishes, isCalculated } = await import("@/lib/nutrition/resolve-dish.server");
-      const breakdowns = await decomposeDishes([plannedDish, dish], { apiKey: key, userId });
-      const from = breakdowns.get(plannedDish.trim());
-      const to = breakdowns.get(dish.trim());
-      // Solo con las dos cifras calculadas (D13): sin una, no se compensa a ciegas.
-      if (!isCalculated(from) || !isCalculated(to)) return { adjusted: false, reason: "no-macros" };
-
       const { data: profileRow } = await supabase
         .from("profiles")
         .select("*")
@@ -1727,9 +1834,24 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       const profile = (profileRow ?? {}) as Record<string, unknown>;
       const goal = resolveCompensationGoal(profile);
 
+      // Las dos recetas de la caché (ticket 06), a la ración del plan de la
+      // persona (ticket 21): los dos platos se comerán como plan.
+      const { getRecipes } = await import("@/lib/nutrition/recipes.server");
+      const { macrosOfRecipe } = await import("@/lib/nutrition/recipe");
+      const { energyTargets } = await import("@/lib/nutrition/energy");
+      const { portionFactors } = await import("@/lib/nutrition/portion");
+      const factor = portionFactors(energyTargets(profile as never), profile).plan;
+      const recipes = await getRecipes([plannedDish, dish], { apiKey: key, userId });
+      const fromRecipe = recipes.get(plannedDish.trim())?.recipe;
+      const toRecipe = recipes.get(dish.trim())?.recipe;
+      // Solo con las dos cifras calculadas (D13): sin una, no se compensa a ciegas.
+      if (!fromRecipe || !toRecipe) return { adjusted: false, reason: "no-macros" };
+      const from = macrosOfRecipe(fromRecipe, factor);
+      const to = macrosOfRecipe(toRecipe, factor);
+
       const decision = compensationNeed({
-        deltaKcal: to!.perServing.kcal - from!.perServing.kcal,
-        deltaProtein: to!.perServing.protein_g - from!.perServing.protein_g,
+        deltaKcal: to.kcal - from.kcal,
+        deltaProtein: to.protein_g - from.protein_g,
         goal,
         pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
       });
@@ -1847,7 +1969,10 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     const cadence: ShoppingCadence = current.cadence ?? cadenceOf(currentShopping);
     const coverage = current.coverage ?? monthCoverage(data.month, data.today);
 
+    const { householdMealTargets } = await import("@/lib/household.server");
+    const sharedTargets = await householdMealTargets(context.supabase as never, context.userId);
     const fresh = await generatePlanBody({
+      sharedTargets,
       key,
       userId: context.userId,
       month: data.month,

@@ -12,8 +12,10 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test",
     "db": "bun scripts/db.ts",
-    "eval:dishes": "bun src/lib/plan-eval/dish-coverage.ts",
     "eval:recipes": "bun src/lib/plan-eval/recipe-accuracy.ts",
+    "recipes:review": "bun scripts/recipes-review.ts",
+    "foods:review": "bun scripts/foods-review.ts",
+    "eval:plan-lite": "bun src/lib/plan-eval/plan-lite.ts",
     "format": "prettier --write ."
   },
   "dependencies": {
