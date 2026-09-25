@@ -432,21 +432,22 @@ const SCREENS: Screen[] = [
     subtitle: "Objetivos",
     questions: [
       {
-        q: "¿Cuál es tu objetivo principal?",
-        chips: [
-          "Perder peso",
-          "Ganar masa muscular",
-          "Mantener",
-          "Mejorar hábitos",
-          "Más energía y sueño",
-        ],
-        followUp: { test: (t) => /ganar masa muscular/i.test(t), question: TRAINING_EXPERIENCE_Q },
-      },
-      {
-        q: "Si tu objetivo es de peso, ¿cuánto y en qué plazo te gustaría lograrlo? Sin presión, solo para orientarnos.",
-        hint: "Ej.: 5 kg antes de junio (o 'no aplica')",
+        q: "¿En qué peso te gustaría mantenerte? Si ya estás en tu peso, pon ese número.",
+        hint: "Ej.: 75 kg",
+        followUp: {
+          test: (t) => /músculo|musculo|fuerza|gym|gimnasio|pesas/i.test(t),
+          question: TRAINING_EXPERIENCE_Q,
+        },
       },
       NUMBERS_Q,
+      {
+        q: "¿Para cuándo te gustaría alcanzar ese peso? Sin presión — es para calcular un ritmo saludable.",
+        hint: "Ej.: para junio, en 6 meses, sin prisa",
+      },
+      {
+        q: "Aparte del peso, ¿quieres que te ayude con algo más?",
+        chips: ["Solo la comida", "Comida y hábitos saludables", "Comida, energía y sueño"],
+      },
       {
         q: "¿Qué es lo que más te ha costado mantener en intentos anteriores? Y de paso: ¿has probado antes a contar calorías o macros, o con otras dietas? ¿Te ayudó o te obsesionó?",
         hint: "Saberlo me ayuda a no repetir lo que no te funciona",
@@ -461,10 +462,6 @@ const SCREENS: Screen[] = [
       {
         q: "¿Prefieres que sea más motivador y relajado o más exigente y directo?",
         chips: ["Relajado", "Neutro", "Exigente"],
-      },
-      {
-        q: "¿Quieres también sugerencias de comportamiento (salir a caminar 15 min) o prefieres que me centre solo en la comida?",
-        chips: ["Comida y hábitos", "Solo comida"],
       },
       {
         q: "Última: ¿a qué hora te gustaría recibir el resumen matutino y el repaso nocturno?",
@@ -570,7 +567,10 @@ const buildFlat = (answers: Record<string, string>, numbersQuestion = false): Fl
 // pregunta equivocada. Subir la versión descarta esos borradores a medias.
 // v3: la pregunta de ver cifras (ticket 01 de `precision-nutricional`) entra en
 // "Hacia dónde vamos" y desplaza las de detrás.
-const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v3";
+// v4: "Hacia dónde vamos" pasa al peso objetivo (como la web) y la pregunta de
+// sugerencias de comportamiento sale de "Cómo te acompaño": cambian las claves de
+// las dos pantallas.
+const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v4";
 
 type Panel = "chat" | "index" | "resumen" | "saved";
 
