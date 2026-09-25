@@ -33,6 +33,11 @@ import {
   monthISO,
   todayISO,
 } from "../../lib/daily";
+import { ensureDaySettleDeps, scheduleDaySettle } from "../../lib/day-settle";
+import type { ExerciseEntry } from "../../lib/exercise";
+import { exerciseAckMessage, LOGGED_ACK_METADATA, snackAckMessage } from "../../lib/day-log-ack";
+import { showsNutritionNumbers } from "../../lib/macros";
+import type { SnackEntry } from "../../lib/snacks";
 import { consumePendingChatMessage } from "../../lib/pending-chat-message";
 import { coachPlanContext, type ShoppingList } from "../../lib/plan-shared";
 import { useCoachActions } from "../../lib/use-coach-actions";
@@ -196,6 +201,26 @@ export default function Chat() {
     void sendMessage({ text: clean });
   };
 
+  // Deporte o picoteo apuntado desde el registro guiado: ya está guardado
+  // (`/api/v1/exercise/log`, `/api/v1/snacks/log`) y entra en el MISMO
+  // asentamiento del día que el de Hoy — una sola decisión con el día entero
+  // (`day-settle.ts`). Al coach solo se le cuenta, con la marca que hace que
+  // `/api/chat` le quite las herramientas en ese turno: si lo compensara él,
+  // decidiría por origen (ver `day-log-ack.ts`). Mismo flujo que la web.
+  const showNumbers = showsNutritionNumbers(profileQ.data);
+  const afterDayLogged = (text: string, metadata: { logged: string }) => {
+    refresh();
+    ensureDaySettleDeps({ onDone: refresh });
+    scheduleDaySettle(todayISO());
+    if (busy) return;
+    void addMessage("user", text);
+    void sendMessage({ text, metadata });
+  };
+  const onExerciseLogged = (entry: ExerciseEntry) =>
+    afterDayLogged(exerciseAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.exercise);
+  const onSnackLogged = (entry: SnackEntry) =>
+    afterDayLogged(snackAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.snack);
+
   const handleSubmit = () => {
     if (!input.trim() || busy) return;
     send(input);
@@ -356,7 +381,9 @@ export default function Chat() {
       <GuidedLogSheet
         open={guidedOpen}
         onOpenChange={setGuidedOpen}
-        onSend={send}
+        onExerciseLogged={onExerciseLogged}
+        onSnackLogged={onSnackLogged}
+        showNumbers={showNumbers}
         disabled={busy}
       />
     </SafeAreaView>

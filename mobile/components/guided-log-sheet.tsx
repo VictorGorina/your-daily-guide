@@ -1,21 +1,22 @@
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
-import { X } from "lucide-react-native";
+import { Activity, Cookie } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
+import { apiPost } from "../lib/api";
+import { todayISO } from "../lib/daily";
 import {
   EXERCISE_ACTIVITIES as ACTIVITIES,
   EXERCISE_INTENSITY as INTENSITY,
+  EXERCISE_MINUTES_MAX,
+  EXERCISE_MINUTES_MIN,
+  type DayExercise,
+  type ExerciseEntry,
 } from "../lib/exercise";
+import type { SnackEntry } from "../lib/snacks";
+import { SnackForm } from "./snack-sheet";
 import { Sheet } from "./ui/sheet";
 
-const EXCESS_PRESETS = [
-  "Comida fuera de casa",
-  "Postre o dulce",
-  "Alcohol",
-  "Picoteo entre horas",
-  "Cena copiosa",
-];
+type Mode = "activity" | "snack";
 
 function Chip({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   return (
@@ -32,108 +33,79 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
   );
 }
 
+/**
+ * Registro guiado del chat. Las dos pestañas guardan en el día lo mismo que Hoy
+ * —"Registrar deporte" (`/api/v1/exercise/log`) y "Añadir picoteo"
+ * (`SnackForm`)— y NO le piden al coach que lo compense: quien lo abre programa
+ * el asentamiento del día (`scheduleDaySettle`), que suma el día entero una
+ * sola vez. Antes las dos acababan en `ajustar_plan_mensual` con una cifra
+ * estimada por el modelo, que decidía por origen (ver `day-log-ack.ts`).
+ *
+ * "Picoteo o extra" es lo que se come ENCIMA del plan. Una comida del plan
+ * cambiada por otra no va aquí: apuntarla entera como extra contaría también la
+ * comida planeada que sustituyó. Esa va por "Comí otra cosa" en Hoy o por el
+ * coach (`cambiar_plato`), que miden la diferencia con lo planeado. Mismo
+ * criterio que la web (src/components/guided-log-sheet.tsx).
+ */
 export function GuidedLogSheet({
-  onSend,
-  onSkip,
-  disabled,
   open,
   onOpenChange,
-  mode = "meal",
-  contextNote,
-  mealLabel,
+  onExerciseLogged,
+  onSnackLogged,
+  disabled,
+  showNumbers = true,
 }: {
-  onSend: (text: string) => void;
-  /** Se llama cuando el usuario pulsa "Me lo salté" dentro del sheet de comida. */
-  onSkip?: () => void;
-  disabled?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** "meal" = comí distinto + me lo salté; "activity" = registro de actividad física. */
-  mode?: "meal" | "activity";
-  /** Línea de contexto opcional (p.ej. qué comida se está detallando). */
-  contextNote?: string;
-  /**
-   * Nombre de la comida concreta de HOY que se está registrando (p.ej. "Cena").
-   * Al venir informado, el mensaje pide explícitamente cambiar ESE plato de hoy
-   * (además de ajustar los días futuros) — ver `wasIdea` en lib/daily.ts. Mismo
-   * criterio que la web (src/components/guided-log-sheet.tsx).
-   */
-  mealLabel?: string;
+  onExerciseLogged: (entry: ExerciseEntry) => void;
+  onSnackLogged: (entry: SnackEntry) => void;
+  disabled?: boolean;
+  /** Preferencia de ver cifras (ticket 01), para la pestaña de picoteo. */
+  showNumbers?: boolean;
 }) {
+  const [mode, setMode] = useState<Mode>("activity");
+
   // Actividad
   const [activity, setActivity] = useState(ACTIVITIES[0]!.label);
   const [minutes, setMinutes] = useState("30");
   const [intensity, setIntensity] = useState(INTENSITY[1]!.label);
 
-  // Exceso / ajuste
-  const [what, setWhat] = useState("");
-  const [kcal, setKcal] = useState("");
-
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
+  // Al cerrar se vuelve a la primera pestaña, como al abrirlo la primera vez.
   const reset = () => {
+    setMode("activity");
     setMinutes("30");
     setIntensity(INTENSITY[1]!.label);
-    setWhat("");
-    setKcal("");
     setError(null);
+    setSaving(false);
   };
 
-  const submit = () => {
+  // Mismo camino que "Registrar deporte" en Hoy (`exercise-sheet.tsx`): el
+  // servidor calcula las kcal y decide qué parte es extra; el cliente no manda
+  // ninguna cifra.
+  const saveActivity = async () => {
     setError(null);
-
-    if (mode === "activity") {
-      const mins = Number(minutes.replace(",", "."));
-      if (!Number.isFinite(mins) || mins < 5 || mins > 360) {
-        setError("Indica entre 5 y 360 minutos.");
-        return;
-      }
-      const base = ACTIVITIES.find((a) => a.label === activity)?.kcalPerMin ?? 6;
-      const factor = INTENSITY.find((i) => i.label === intensity)?.factor ?? 1;
-      const burn = Math.round(mins * base * factor);
-      onSend(
-        `Registro de actividad: ${activity.toLowerCase()} ${Math.round(mins)} min, intensidad ${intensity.toLowerCase()}. ` +
-          `Gasto extra estimado ~${burn} kcal (déficit). Ajusta solo los días futuros del plan compensando ese déficit ` +
-          `(kcal_extra ≈ -${burn}) y dime cómo afecta a mi objetivo.`,
-      );
-    } else {
-      const desc = what.trim();
-      if (desc.length < 3) {
-        setError("Cuéntame en pocas palabras qué ha pasado.");
-        return;
-      }
-      if (!isCleanFood(desc)) {
-        setError(BLOCKED_FOOD_MESSAGE);
-        return;
-      }
-      let extra: number | null = null;
-      if (kcal.trim()) {
-        const n = Number(kcal.replace(",", "."));
-        if (!Number.isFinite(n) || n < 50 || n > 3000) {
-          setError("Las kcal extra deben estar entre 50 y 3000 (o déjalo vacío).");
-          return;
-        }
-        extra = Math.round(n);
-      }
-      const kcalNote = extra ? ` Exceso estimado ~${extra} kcal (kcal_extra ≈ +${extra}).` : "";
-      onSend(
-        mealLabel
-          ? `Esto es lo que de verdad he comido en ${mealLabel.toLowerCase()} de HOY, en vez de lo planeado: ${desc}.${kcalNote} ` +
-              `Cambia el plato de ${mealLabel.toLowerCase()} de hoy a esto exacto y además corrige de forma suave los días futuros del plan (la compra no cambia) y dime cómo queda mi objetivo.`
-          : `Registro de exceso/ajuste de hoy: ${desc}.${kcalNote} ` +
-              `Corrige solo los días futuros del plan de forma suave (hoy queda fijado y la compra no cambia) y dime cómo queda mi objetivo.`,
-      );
+    const mins = Number(minutes.replace(",", "."));
+    if (!Number.isFinite(mins) || mins < EXERCISE_MINUTES_MIN || mins > EXERCISE_MINUTES_MAX) {
+      setError(`Indica entre ${EXERCISE_MINUTES_MIN} y ${EXERCISE_MINUTES_MAX} minutos.`);
+      return;
     }
-
-    reset();
-    onOpenChange(false);
+    setSaving(true);
+    try {
+      const { entry } = await apiPost<{ exercise: DayExercise; entry: ExerciseEntry }>(
+        "exercise/log",
+        { today: todayISO(), activity, minutes: Math.round(mins), intensity },
+      );
+      onExerciseLogged(entry);
+      reset();
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No he podido guardar el deporte.");
+      setSaving(false);
+    }
   };
-
-  const title = mode === "activity" ? "Registrar actividad" : "Comí distinto";
-  const description =
-    mode === "activity"
-      ? "Apunta tu actividad física y ajusto los días futuros del plan."
-      : "Cuéntame qué has comido y ajusto los días futuros del plan.";
 
   return (
     <Sheet
@@ -142,13 +114,41 @@ export function GuidedLogSheet({
         onOpenChange(v);
         if (!v) reset();
       }}
-      title={title}
-      description={description}
+      title="Registro guiado"
+      description={
+        mode === "activity"
+          ? "Apunta tu actividad física. Queda en tu día, como en «Registrar deporte», y si hace falta repongo energía en los próximos días."
+          : "Apunta lo que has comido fuera del plan. Queda en tu día, como en «Añadir picoteo», y si hace falta ajusto los próximos días."
+      }
     >
       <View className="gap-5 pb-8 pt-4">
-        {contextNote ? (
-          <Text className="text-xs font-sans-medium text-primary">{contextNote}</Text>
-        ) : null}
+        <View className="flex-row gap-2">
+          {(
+            [
+              { value: "activity", label: "Actividad", Icon: Activity },
+              { value: "snack", label: "Picoteo o extra", Icon: Cookie },
+            ] as const
+          ).map(({ value, label, Icon }) => {
+            const active = mode === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => {
+                  setMode(value);
+                  setError(null);
+                }}
+                className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl px-3 py-2 active:opacity-80 ${
+                  active ? "bg-primary/10" : "bg-secondary"
+                }`}
+              >
+                <Icon size={16} color={active ? "#3e3d39" : "#83796c"} />
+                <Text className={`text-sm ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         {mode === "activity" ? (
           <>
@@ -167,7 +167,9 @@ export function GuidedLogSheet({
             </View>
 
             <View className="gap-2">
-              <Text className="text-xs text-muted-foreground">Minutos (5-360)</Text>
+              <Text className="text-xs text-muted-foreground">
+                Minutos ({EXERCISE_MINUTES_MIN}-{EXERCISE_MINUTES_MAX})
+              </Text>
               <TextInput
                 className="h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
                 keyboardType="numeric"
@@ -191,78 +193,41 @@ export function GuidedLogSheet({
                 ))}
               </View>
             </View>
+
+            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+
+            <Pressable
+              onPress={() => void saveActivity()}
+              disabled={disabled || saving}
+              className="w-full flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
+            >
+              {saving ? <ActivityIndicator size="small" color="#3e3d39" /> : null}
+              <Text className="text-sm font-sans-semibold text-primary-foreground">
+                {saving ? "Guardando…" : "Guardar deporte"}
+              </Text>
+            </Pressable>
+            <Text className="text-center text-xs text-muted-foreground">
+              Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los próximos
+              días.
+            </Text>
           </>
         ) : (
           <>
-            {onSkip ? (
-              <Pressable
-                onPress={() => {
-                  onSkip();
-                  reset();
-                  onOpenChange(false);
-                }}
-                className="flex-row items-center gap-3 rounded-2xl bg-secondary/60 px-4 py-3 active:opacity-80"
-              >
-                <X size={16} color="#83796c" />
-                <View className="flex-1">
-                  <Text className="text-sm font-sans-medium text-foreground">Me lo salté</Text>
-                  <Text className="text-xs text-muted-foreground">
-                    No he comido nada en esta comida
-                  </Text>
-                </View>
-              </Pressable>
-            ) : null}
-
-            <View className="gap-2">
-              <Text className="text-xs text-muted-foreground">¿Qué has comido?</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {EXCESS_PRESETS.map((p) => (
-                  <Chip key={p} label={p} active={what === p} onPress={() => setWhat(p)} />
-                ))}
-              </View>
-              <TextInput
-                className="min-h-[80px] rounded-2xl bg-muted px-4 py-3 text-sm text-foreground"
-                multiline
-                textAlignVertical="top"
-                value={what}
-                onChangeText={setWhat}
-                placeholder="Por ejemplo: he comido pizza y postre en una comida familiar"
-                placeholderTextColor="#83796c"
-              />
-            </View>
-
-            <View className="gap-2">
-              <Text className="text-xs text-muted-foreground">
-                Kcal extra aproximadas (opcional, 50-3000)
-              </Text>
-              <TextInput
-                className="h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
-                keyboardType="numeric"
-                value={kcal}
-                onChangeText={setKcal}
-                placeholder="Si no lo sabes, déjalo vacío"
-                placeholderTextColor="#83796c"
-              />
-            </View>
+            <Text className="rounded-2xl bg-secondary/60 px-4 py-3 text-xs leading-snug text-muted-foreground">
+              ¿Comiste otra cosa en lugar de una comida del plan? Cámbiala en Hoy con «Comí otra
+              cosa» o cuéntamelo en el chat: así cuento solo la diferencia con lo planeado.
+            </Text>
+            <SnackForm
+              today={todayISO()}
+              showNumbers={showNumbers}
+              onSaved={(_snacks, entry) => {
+                onSnackLogged(entry);
+                reset();
+                onOpenChange(false);
+              }}
+            />
           </>
         )}
-
-        {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-
-        <Pressable
-          onPress={submit}
-          disabled={disabled}
-          className="w-full items-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
-        >
-          <Text className="text-sm font-sans-semibold text-primary-foreground">
-            Enviar al coach y ajustar plan
-          </Text>
-        </Pressable>
-        <Text className="text-center text-xs text-muted-foreground">
-          {mode === "meal" && mealLabel
-            ? `Cambio el plato de ${mealLabel.toLowerCase()} de hoy a lo que comiste de verdad; los demás días futuros se ajustan y la compra no varía.`
-            : "Hoy queda fijado; solo cambian los días futuros y la lista de la compra no varía."}
-        </Text>
       </View>
     </Sheet>
   );

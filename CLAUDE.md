@@ -183,6 +183,22 @@ con un picoteo de +110 (+230 reales, por encima del umbral) no movía nada porqu
 200 en su propio libro. **El átomo es el día, no el evento.** No conviertas esto otra vez en una
 decisión por origen.
 
+**El chat tampoco compensa por origen.** El deporte y lo que se come encima del plan nunca van
+por `ajustar_plan_mensual` (que decidía con una cifra estimada por el modelo y contaba también las
+sesiones de la rutina, que ya van en el objetivo — ticket 16, D9):
+
+- El registro guiado del chat (`guided-log-sheet.tsx`, web y móvil) guarda igual que Hoy:
+  "Actividad" con `logExercise` y "Picoteo o extra" con `SnackForm` (el formulario de
+  `snack-sheet.tsx`, que usa también "Añadir picoteo"). Una comida del plan cambiada por otra NO
+  va ahí — como extra contaría también la comida planeada —, sino por "Comí otra cosa" o
+  `cambiar_plato`. El chat programa `scheduleDaySettle` (con `ensureDaySettleDeps` por si Hoy no
+  se ha montado) y al coach solo le llega un acuse (`day-log-ack.ts`) con una marca en el
+  `metadata`, así que `/api/chat` contesta ese turno **sin herramientas**. El prefijo del acuse
+  queda en el historial y el prompt prohíbe volver a registrarlo o compensarlo después.
+- El deporte contado por escrito va por la herramienta `registrar_deporte` (actividad, minutos e
+  intensidad de las listas de `exercise.ts`; las kcal no las da el modelo), que en el cliente
+  (`use-coach-actions.ts`, web y móvil) hace lo mismo: `logExercise` + `scheduleDaySettle`.
+
 Los tres libros siguen donde estaban y son la PROCEDENCIA (`habits[].swapKcalDelta`,
 `snacks.compensatedKcal`, `exercise.compensatedKcal`): de ahí sale el desglose que se enseña, y
 mantienen la garantía de no compensar dos veces. El RESULTADO se guarda una sola vez, en

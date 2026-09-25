@@ -1,7 +1,8 @@
-import { Activity, ClipboardList, UtensilsCrossed, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { Activity, ClipboardList, Cookie, Loader2 } from "lucide-react";
+import { useState } from "react";
 
-import { DictateButton } from "@/components/dictate-button";
+import { SnackForm } from "@/components/snack-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,19 +14,18 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
-import { EXERCISE_ACTIVITIES as ACTIVITIES, EXERCISE_INTENSITY as INTENSITY } from "@/lib/exercise";
+import { todayISO } from "@/lib/daily";
+import {
+  EXERCISE_ACTIVITIES as ACTIVITIES,
+  EXERCISE_INTENSITY as INTENSITY,
+  EXERCISE_MINUTES_MAX,
+  EXERCISE_MINUTES_MIN,
+  type ExerciseEntry,
+} from "@/lib/exercise";
+import { logExercise } from "@/lib/exercise.functions";
+import type { SnackEntry } from "@/lib/snacks";
 
-type Mode = "actividad" | "exceso";
-
-const EXCESS_PRESETS = [
-  "Comida fuera de casa",
-  "Postre o dulce",
-  "Alcohol",
-  "Picoteo entre horas",
-  "Cena copiosa",
-];
+type Mode = "actividad" | "picoteo";
 
 function chipClass(active: boolean) {
   return `rounded-full px-3 py-1.5 text-xs transition-colors ${
@@ -33,117 +33,74 @@ function chipClass(active: boolean) {
   }`;
 }
 
+/**
+ * Registro guiado del chat. Las dos pestañas guardan en el día lo mismo que Hoy
+ * —"Registrar deporte" (`logExercise`) y "Añadir picoteo" (`SnackForm`)— y NO le
+ * piden al coach que lo compense: quien lo abre programa el asentamiento del
+ * día (`scheduleDaySettle`), que suma el día entero una sola vez. Antes las dos
+ * acababan en `ajustar_plan_mensual` con una cifra estimada por el modelo, que
+ * decidía por origen (ver `day-log-ack.ts`).
+ *
+ * "Picoteo o extra" es lo que se come ENCIMA del plan. Una comida del plan
+ * cambiada por otra no va aquí: apuntarla entera como extra contaría también la
+ * comida planeada que sustituyó. Esa va por "Comí otra cosa" en Hoy o por el
+ * coach (`cambiar_plato`), que miden la diferencia con lo planeado.
+ */
 export function GuidedLogSheet({
-  onSend,
-  onSkip,
+  onExerciseLogged,
+  onSnackLogged,
   disabled,
-  open: openProp,
-  onOpenChange,
-  trigger = true,
-  initialMode = "actividad",
-  contextNote,
-  mealLabel,
+  showNumbers = true,
 }: {
-  onSend: (text: string) => void;
-  /** Se llama al pulsar "Me lo salté" dentro del sheet de comida (modo exceso). */
-  onSkip?: () => void;
+  onExerciseLogged: (entry: ExerciseEntry) => void;
+  onSnackLogged: (entry: SnackEntry) => void;
   disabled?: boolean;
-  /** Apertura controlada desde fuera (p.ej. hoy.tsx). Si se omite, el sheet gestiona su propio estado. */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  /** Oculta el botón "Registro guiado" propio cuando se controla desde fuera. */
-  trigger?: boolean;
-  initialMode?: Mode;
-  /** Línea de contexto opcional (p.ej. qué comida se está detallando). */
-  contextNote?: string;
-  /**
-   * Nombre de la comida concreta de HOY que se está registrando (p.ej. "Cena"),
-   * cuando el sheet se abre desde "comí otra cosa" en Hoy. Al venir informado,
-   * el mensaje enviado pide explícitamente cambiar ESE plato de hoy (además de
-   * ajustar los días futuros), para que la pantalla de Hoy refleje lo que de
-   * verdad se comió — ver `wasIdea` en daily.ts. Sin ella (registro genérico
-   * desde el FAB del chat, sin comida asociada), hoy sigue quedando fijado.
-   */
-  mealLabel?: string;
+  /** Preferencia de ver cifras (ticket 01), para la pestaña de picoteo. */
+  showNumbers?: boolean;
 }) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const open = openProp ?? internalOpen;
-  const setOpen = onOpenChange ?? setInternalOpen;
-  const [mode, setMode] = useState<Mode>(initialMode);
-
-  useEffect(() => {
-    if (open) setMode(initialMode);
-  }, [open, initialMode]);
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("actividad");
 
   // Actividad
   const [activity, setActivity] = useState(ACTIVITIES[0]!.label);
   const [minutes, setMinutes] = useState("30");
   const [intensity, setIntensity] = useState(INTENSITY[1]!.label);
 
-  // Exceso / ajuste
-  const [what, setWhat] = useState("");
-  const [kcal, setKcal] = useState("");
-
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const logFn = useServerFn(logExercise);
 
+  // Al cerrar se vuelve a la primera pestaña, como al abrirlo la primera vez.
   const reset = () => {
+    setMode("actividad");
     setMinutes("30");
     setIntensity(INTENSITY[1]!.label);
-    setWhat("");
-    setKcal("");
     setError(null);
+    setSaving(false);
   };
 
-  const submit = () => {
+  // Mismo camino que "Registrar deporte" en Hoy (`exercise-sheet.tsx`): el
+  // servidor calcula las kcal y decide qué parte es extra; el cliente no manda
+  // ninguna cifra.
+  const saveActivity = async () => {
     setError(null);
-
-    if (mode === "actividad") {
-      const mins = Number(minutes.replace(",", "."));
-      if (!Number.isFinite(mins) || mins < 5 || mins > 360) {
-        setError("Indica entre 5 y 360 minutos.");
-        return;
-      }
-      const base = ACTIVITIES.find((a) => a.label === activity)?.kcalPerMin ?? 6;
-      const factor = INTENSITY.find((i) => i.label === intensity)?.factor ?? 1;
-      const burn = Math.round(mins * base * factor);
-      onSend(
-        `Registro de actividad: ${activity.toLowerCase()} ${Math.round(mins)} min, intensidad ${intensity.toLowerCase()}. ` +
-          `Gasto extra estimado ~${burn} kcal (déficit). Ajusta solo los días futuros del plan compensando ese déficit ` +
-          `(kcal_extra ≈ -${burn}) y dime cómo afecta a mi objetivo.`,
-      );
-    } else {
-      const desc = what.trim();
-      if (desc.length < 3) {
-        setError("Cuéntame en pocas palabras qué ha pasado.");
-        return;
-      }
-      // Esto se le manda al coach tal cual y acaba en `motivo`: mismo listón
-      // que un plato escrito a mano.
-      if (!isCleanFood(desc)) {
-        setError(BLOCKED_FOOD_MESSAGE);
-        return;
-      }
-      let extra: number | null = null;
-      if (kcal.trim()) {
-        const n = Number(kcal.replace(",", "."));
-        if (!Number.isFinite(n) || n < 50 || n > 3000) {
-          setError("Las kcal extra deben estar entre 50 y 3000 (o déjalo vacío).");
-          return;
-        }
-        extra = Math.round(n);
-      }
-      const kcalNote = extra ? ` Exceso estimado ~${extra} kcal (kcal_extra ≈ +${extra}).` : "";
-      onSend(
-        mealLabel
-          ? `Esto es lo que de verdad he comido en ${mealLabel.toLowerCase()} de HOY, en vez de lo planeado: ${desc}.${kcalNote} ` +
-              `Cambia el plato de ${mealLabel.toLowerCase()} de hoy a esto exacto y además corrige de forma suave los días futuros del plan (la compra no cambia) y dime cómo queda mi objetivo.`
-          : `Registro de exceso/ajuste de hoy: ${desc}.${kcalNote} ` +
-              `Corrige solo los días futuros del plan de forma suave (hoy queda fijado y la compra no cambia) y dime cómo queda mi objetivo.`,
-      );
+    const mins = Number(minutes.replace(",", "."));
+    if (!Number.isFinite(mins) || mins < EXERCISE_MINUTES_MIN || mins > EXERCISE_MINUTES_MAX) {
+      setError(`Indica entre ${EXERCISE_MINUTES_MIN} y ${EXERCISE_MINUTES_MAX} minutos.`);
+      return;
     }
-
-    reset();
-    setOpen(false);
+    setSaving(true);
+    try {
+      const { entry } = await logFn({
+        data: { today: todayISO(), activity, minutes: Math.round(mins), intensity },
+      });
+      onExerciseLogged(entry);
+      reset();
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No he podido guardar el deporte.");
+      setSaving(false);
+    }
   };
 
   return (
@@ -154,71 +111,63 @@ export function GuidedLogSheet({
         if (!v) reset();
       }}
     >
-      {trigger ? (
-        <SheetTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            className="gap-1.5 text-muted-foreground"
-          >
-            <ClipboardList className="size-4" aria-hidden />
-            Registro guiado
-          </Button>
-        </SheetTrigger>
-      ) : null}
+      <SheetTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          className="gap-1.5 text-muted-foreground"
+        >
+          <ClipboardList className="size-4" aria-hidden />
+          Registro guiado
+        </Button>
+      </SheetTrigger>
 
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
-            {trigger
-              ? "Registro guiado"
-              : mode === "actividad"
-                ? "Registrar actividad"
-                : "Comí distinto"}
+            Registro guiado
           </SheetTitle>
           <SheetDescription>
-            {trigger
-              ? "Cuéntame la actividad o el exceso del día y ajusto los días futuros del plan."
-              : mode === "actividad"
-                ? "Apunta tu actividad física y ajusto los días futuros del plan."
-                : "Cuéntame qué has comido y ajusto los días futuros del plan."}
+            {mode === "actividad"
+              ? "Apunta tu actividad física. Queda en tu día, como en «Registrar deporte», y si hace falta repongo energía en los próximos días."
+              : "Apunta lo que has comido fuera del plan. Queda en tu día, como en «Añadir picoteo», y si hace falta ajusto los próximos días."}
           </SheetDescription>
-          {contextNote ? <p className="text-xs font-medium text-primary">{contextNote}</p> : null}
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-8">
-          {/* El selector de modo solo aparece en el registro guiado suelto (chat).
-              Cuando el sheet se abre desde Hoy (comida o "Registrar deporte") el
-              modo ya está fijado y se enseña solo ese formulario, como en móvil. */}
-          {trigger ? (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setMode("actividad")}
-                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
-                  mode === "actividad"
-                    ? "bg-primary/10 text-foreground"
-                    : "bg-secondary text-muted-foreground"
-                }`}
-              >
-                <Activity className="size-4" aria-hidden />
-                Actividad
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("exceso")}
-                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
-                  mode === "exceso"
-                    ? "bg-primary/10 text-foreground"
-                    : "bg-secondary text-muted-foreground"
-                }`}
-              >
-                <UtensilsCrossed className="size-4" aria-hidden />
-                Exceso o ajuste
-              </button>
-            </div>
-          ) : null}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("actividad");
+                setError(null);
+              }}
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
+                mode === "actividad"
+                  ? "bg-primary/10 text-foreground"
+                  : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              <Activity className="size-4" aria-hidden />
+              Actividad
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("picoteo");
+                setError(null);
+              }}
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm ${
+                mode === "picoteo"
+                  ? "bg-primary/10 text-foreground"
+                  : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              <Cookie className="size-4" aria-hidden />
+              Picoteo o extra
+            </button>
+          </div>
 
           {mode === "actividad" ? (
             <>
@@ -240,7 +189,7 @@ export function GuidedLogSheet({
 
               <div className="space-y-2">
                 <Label htmlFor="glog-min" className="text-xs text-muted-foreground">
-                  Minutos (5-360)
+                  Minutos ({EXERCISE_MINUTES_MIN}-{EXERCISE_MINUTES_MAX})
                 </Label>
                 <Input
                   id="glog-min"
@@ -266,82 +215,45 @@ export function GuidedLogSheet({
                   ))}
                 </div>
               </div>
+
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+              <Button
+                className="w-full"
+                onClick={() => void saveActivity()}
+                disabled={disabled || saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                    Guardando…
+                  </>
+                ) : (
+                  "Guardar deporte"
+                )}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los
+                próximos días.
+              </p>
             </>
           ) : (
             <>
-              {onSkip ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSkip();
-                    reset();
-                    setOpen(false);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-2xl bg-secondary/60 px-4 py-3 text-left transition-opacity active:opacity-80"
-                >
-                  <X className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-foreground">Me lo salté</span>
-                    <span className="block text-xs text-muted-foreground">
-                      No he comido nada en esta comida
-                    </span>
-                  </span>
-                </button>
-              ) : null}
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  {trigger ? "¿Qué ha pasado?" : "¿Qué has comido?"}
-                </Label>
-                <div className="flex flex-wrap gap-2">
-                  {EXCESS_PRESETS.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setWhat(p)}
-                      className={chipClass(what === p)}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-                <Textarea
-                  value={what}
-                  onChange={(e) => setWhat(e.target.value)}
-                  placeholder="Por ejemplo: he comido pizza y postre en una comida familiar"
-                  rows={3}
-                />
-                <DictateButton
-                  onText={(t) => setWhat((prev) => (prev ? `${prev.trim()} ${t}` : t))}
-                  label="Dictar"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="glog-kcal" className="text-xs text-muted-foreground">
-                  Kcal extra aproximadas (opcional, 50-3000)
-                </Label>
-                <Input
-                  id="glog-kcal"
-                  inputMode="numeric"
-                  value={kcal}
-                  onChange={(e) => setKcal(e.target.value)}
-                  placeholder="Si no lo sabes, déjalo vacío"
-                />
-              </div>
+              <p className="rounded-2xl bg-secondary/60 px-4 py-3 text-xs leading-snug text-muted-foreground">
+                ¿Comiste otra cosa en lugar de una comida del plan? Cámbiala en Hoy con «Comí otra
+                cosa» o cuéntamelo en el chat: así cuento solo la diferencia con lo planeado.
+              </p>
+              <SnackForm
+                today={todayISO()}
+                showNumbers={showNumbers}
+                onSaved={(_snacks, entry) => {
+                  onSnackLogged(entry);
+                  reset();
+                  setOpen(false);
+                }}
+              />
             </>
           )}
-
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-          <Button className="w-full" onClick={submit} disabled={disabled}>
-            Enviar al coach y ajustar plan
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            {mode === "exceso" && mealLabel
-              ? `Cambio el plato de ${mealLabel.toLowerCase()} de hoy a lo que comiste de verdad; los demás días futuros se ajustan y la compra no varía.`
-              : "Hoy queda fijado; solo cambian los días futuros y la lista de la compra no varía."}
-          </p>
         </div>
       </SheetContent>
     </Sheet>

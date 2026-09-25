@@ -9,6 +9,7 @@ import {
   type UIMessage,
 } from "ai";
 import {
+  Activity,
   AlertCircle,
   Check,
   Loader2,
@@ -63,6 +64,7 @@ const ACTION_META: Record<string, { icon: typeof Scale; running: string }> = {
   quitar_habito: { icon: ListChecks, running: "Quitando el hábito..." },
   regenerar_guia: { icon: Sparkles, running: "Regenerando tu guía de hoy..." },
   cambiar_plato: { icon: UtensilsCrossed, running: "Cambiando el plato en tu plan..." },
+  registrar_deporte: { icon: Activity, running: "Apuntando tu deporte de hoy..." },
   ajustar_plan_mensual: { icon: CalendarRange, running: "Reajustando los días que quedan..." },
   recalcular_objetivo: { icon: Target, running: "Recalculando tu objetivo..." },
   cambiar_fecha_objetivo: { icon: Target, running: "Actualizando tu fecha objetivo..." },

@@ -12,8 +12,16 @@ import {
   type DailyLog,
   type Profile,
 } from "./daily";
-import { queueDishChange } from "./day-settle";
-import { guideReuse, isMealCalculated, mergeGuide, perMealDeltas } from "./macros";
+import { exerciseToolResult } from "./day-log-ack";
+import { ensureDaySettleDeps, queueDishChange, scheduleDaySettle } from "./day-settle";
+import type { DayExercise, ExerciseEntry } from "./exercise";
+import {
+  guideReuse,
+  isMealCalculated,
+  mergeGuide,
+  perMealDeltas,
+  showsNutritionNumbers,
+} from "./macros";
 import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "./plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS, chipToValue, PROFILE_FIELD_LABELS } from "./profile-fields";
 
@@ -246,6 +254,27 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
           ? `${base}. Ojo: ${off.join(", ")} no está en la lista de la compra.`
           : `${base} (con lo que ya hay comprado)`;
       }
+      if (toolName === "registrar_deporte") {
+        // Mismo camino que "Registrar deporte" en Hoy: `/api/v1/exercise/log`
+        // calcula las kcal con la tabla y separa lo que ya va en la rutina (D9),
+        // y el día se asienta UNA vez con todo lo demás (`settleDay`). Antes el
+        // coach lo compensaba con `ajustar_plan_mensual` y su propia
+        // estimación, que decidía por origen (ver `day-log-ack.ts`).
+        const { entry } = await apiPost<{ exercise: DayExercise; entry: ExerciseEntry }>(
+          "exercise/log",
+          {
+            today: date,
+            activity: String(input.actividad ?? ""),
+            minutes: Number(input.minutos),
+            intensity: String(input.intensidad ?? ""),
+          },
+        );
+        // Desde el chat abierto por enlace, Hoy todavía no ha registrado las suyas.
+        ensureDaySettleDeps({ onDone: refresh });
+        scheduleDaySettle(date);
+        const profile = qc.getQueryData<Profile | null>(["profile"]);
+        return exerciseToolResult(entry, showsNutritionNumbers(profile));
+      }
       if (toolName === "ajustar_plan_mensual") {
         const kcal = Number(input.kcal_extra);
         const { summary } = await apiPost<{ summary: string }>("plan/adjust", {
@@ -311,7 +340,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       }
       return "Acción desconocida";
     },
-    [date, getLog],
+    [date, getLog, qc, refresh],
   );
 
   return { runTool, refresh };

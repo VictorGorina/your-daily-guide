@@ -309,6 +309,19 @@ export function bindDaySettleDeps(next: DaySettleDeps): void {
 }
 
 /**
+ * Registra unas dependencias mínimas si nadie lo ha hecho todavía. Es para
+ * quien desvía el día sin pasar por Hoy: el registro guiado del chat tras
+ * recargar en /chat. Sin ellas el lote esperaría a que se abriera Hoy, y si no
+ * se abre ese día, el pendiente se tiraría sin compensar. No saben calcular
+ * platos (eso es de `use-meal-swap`): uno encolado vuelve a la cola hasta que
+ * Hoy registre las suyas, que siempre mandan sobre estas.
+ */
+export function ensureDaySettleDeps(fallback: Omit<DaySettleDeps, "resolveDishDeltas">): void {
+  if (deps) return;
+  deps = { ...fallback, resolveDishDeltas: async (dishes) => ({ deltas: [], unresolved: dishes }) };
+}
+
+/**
  * Red de seguridad al abrir Hoy: si se cerró la app con algo por asentar, se
  * manda. Un pendiente de otro día se descarta — compensar desde ayer tocaría
  * hoy, que ya está cerrado.

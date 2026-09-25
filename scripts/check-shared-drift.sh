@@ -39,7 +39,7 @@ strip_portable() {
     "$1"
 }
 
-for f in perishability.ts quotes.ts profile-fields.ts; do
+for f in perishability.ts quotes.ts profile-fields.ts day-log-ack.ts; do
   a=$(strip_portable "src/lib/$f")
   b=$(strip_portable "mobile/lib/$f")
   if [ "$a" != "$b" ]; then

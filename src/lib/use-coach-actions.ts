@@ -13,10 +13,18 @@ import {
   type MonthlyPlanRow,
   type Profile,
 } from "@/lib/daily";
-import { queueDishChange } from "@/lib/day-settle";
+import { ensureDaySettleDeps, queueDishChange, scheduleDaySettle } from "@/lib/day-settle";
 import { settleDay } from "@/lib/day-settle.functions";
+import { exerciseToolResult } from "@/lib/day-log-ack";
+import { logExercise } from "@/lib/exercise.functions";
 import { generateDailyGuide } from "@/lib/guide.functions";
-import { guideReuse, isMealCalculated, mergeGuide, perMealDeltas } from "@/lib/macros";
+import {
+  guideReuse,
+  isMealCalculated,
+  mergeGuide,
+  perMealDeltas,
+  showsNutritionNumbers,
+} from "@/lib/macros";
 import {
   adjustMonthlyPlan,
   compensateFutureDishChange,
@@ -59,6 +67,7 @@ export function useCoachActions(
   // esta puerta decidiría por origen otra vez.
   const compensate = useServerFn(settleDay);
   const compensateFuture = useServerFn(compensateFutureDishChange);
+  const logSport = useServerFn(logExercise);
   const date = todayISO();
 
   const refresh = useCallback(() => {
@@ -283,6 +292,26 @@ export function useCoachActions(
           ? `${base}. Ojo: ${off.join(", ")} no está en la lista de la compra.`
           : `${base} (con lo que ya hay comprado)`;
       }
+      if (toolName === "registrar_deporte") {
+        // Mismo camino que "Registrar deporte" en Hoy: `logExercise` calcula
+        // las kcal con la tabla y separa lo que ya va en la rutina (D9), y el
+        // día se asienta UNA vez con todo lo demás (`settleDay`). Antes el coach
+        // lo compensaba con `ajustar_plan_mensual` y su propia estimación, que
+        // decidía por origen (ver `day-log-ack.ts`).
+        const { entry } = await logSport({
+          data: {
+            today: date,
+            activity: String(input.actividad ?? ""),
+            minutes: Number(input.minutos),
+            intensity: String(input.intensidad ?? ""),
+          },
+        });
+        // Desde /chat recién cargado, Hoy todavía no ha registrado las suyas.
+        ensureDaySettleDeps({ settle: compensate, onDone: refresh });
+        scheduleDaySettle(date);
+        const profile = qc.getQueryData<Profile | null>(["profile"]);
+        return exerciseToolResult(entry, showsNutritionNumbers(profile));
+      }
       if (toolName === "ajustar_plan_mensual") {
         const kcal = Number(input.kcal_extra);
         const { summary } = await adjustPlan({
@@ -359,7 +388,10 @@ export function useCoachActions(
       date,
       getLog,
       getPlan,
+      logSport,
       makeGuide,
+      qc,
+      refresh,
     ],
   );
 

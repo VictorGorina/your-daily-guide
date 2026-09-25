@@ -3,6 +3,7 @@ import { useChat } from "@ai-sdk/react";
 import { authHeaders } from "@/lib/auth-headers";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
@@ -38,6 +39,12 @@ import {
   monthISO,
   todayISO,
 } from "@/lib/daily";
+import { ensureDaySettleDeps, scheduleDaySettle } from "@/lib/day-settle";
+import { settleDay } from "@/lib/day-settle.functions";
+import type { ExerciseEntry } from "@/lib/exercise";
+import { exerciseAckMessage, LOGGED_ACK_METADATA, snackAckMessage } from "@/lib/day-log-ack";
+import { showsNutritionNumbers } from "@/lib/macros";
+import type { SnackEntry } from "@/lib/snacks";
 import { consumePendingChatMessage } from "@/lib/pending-chat-message";
 import { coachPlanContext } from "@/lib/plan-shared";
 import { useCoachActions } from "@/lib/use-coach-actions";
@@ -198,6 +205,27 @@ function ChatPage() {
     void sendMessage({ text });
   };
 
+  // Deporte o picoteo apuntado desde el registro guiado: ya está guardado
+  // (`logExercise`, `logSnack`) y entra en el MISMO asentamiento del día que el
+  // de Hoy — una sola decisión con el día entero (`day-settle.ts`). Al coach
+  // solo se le cuenta, con la marca que hace que `/api/chat` le quite las
+  // herramientas en ese turno: si lo compensara él, decidiría por origen (ver
+  // `day-log-ack.ts`).
+  const settle = useServerFn(settleDay);
+  const showNumbers = showsNutritionNumbers(profileQ.data);
+  const afterDayLogged = (text: string, metadata: { logged: string }) => {
+    refresh();
+    ensureDaySettleDeps({ settle, onDone: refresh });
+    scheduleDaySettle(todayISO());
+    if (busy) return;
+    void addMessage("user", text);
+    void sendMessage({ text, metadata });
+  };
+  const onExerciseLogged = (entry: ExerciseEntry) =>
+    afterDayLogged(exerciseAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.exercise);
+  const onSnackLogged = (entry: SnackEntry) =>
+    afterDayLogged(snackAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.snack);
+
   // Mensaje dejado desde fuera de /chat (p.ej. el registro guiado de "Comí
   // distinto" en hoy.tsx). Se envía en cuanto el historial de hoy ha cargado,
   // para no perderlo si setMessages(initial) llega justo después.
@@ -222,7 +250,12 @@ function ChatPage() {
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <GuidedLogSheet onSend={sendQuick} disabled={busy} />
+          <GuidedLogSheet
+            onExerciseLogged={onExerciseLogged}
+            onSnackLogged={onSnackLogged}
+            showNumbers={showNumbers}
+            disabled={busy}
+          />
           <ChatHistorySheet />
         </div>
       </header>
