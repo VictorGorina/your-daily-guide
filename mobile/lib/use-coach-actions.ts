@@ -16,6 +16,7 @@ import { exerciseToolResult } from "./day-log-ack";
 import { ensureDaySettleDeps, queueDishChange, scheduleDaySettle } from "./day-settle";
 import type { DayExercise, ExerciseEntry } from "./exercise";
 import {
+  guideMeals,
   guideReuse,
   isMealCalculated,
   mergeGuide,
@@ -118,7 +119,8 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
             .map((m) => ({ moment: m.moment, idea: m.idea }));
           const logNow = getLog();
           const freshGuide = await apiPost<DailyGuide>("guide", {
-            meals,
+            // Con el plato del plan congelado: el día se cierra con él.
+            meals: guideMeals(meals, logNow?.habits),
             reuse: guideReuse(logNow?.guide?.mealMacros, logNow?.habits),
           });
           // El objetivo de la barra de macros (`macroEstimate`) se fija la

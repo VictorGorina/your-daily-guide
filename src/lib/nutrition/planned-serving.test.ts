@@ -24,6 +24,7 @@ describe("resolveServing", () => {
     expect(resolveServing("Comida", ctx())).toEqual({
       serving: { base: 0.9, target: { kcal: 630, protein_g: 35 } },
       shared: false,
+      goal: { kcal: 630, protein_g: 35 },
     });
   });
 
@@ -45,6 +46,8 @@ describe("resolveServing", () => {
     expect(resolveServing("Cena", c)).toEqual({
       serving: { base: 1.05, target: { kcal: 610, protein_g: 33 } },
       shared: true,
+      // En su día cuenta su propio objetivo de la cena, no el medio del hogar.
+      goal: { kcal: 500, protein_g: 30 },
     });
   });
 

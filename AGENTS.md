@@ -365,10 +365,24 @@ un cambio suele romper sin querer:
   kcal primero (±1 %), luego la proteína de la comida, luego el reparto menos deformado. Límites
   sobre la ración personal: `fP` 0,75-1,6, `fE` 0,6-2,0, `fP/fE` 0,5-2 (el 08 proponía `fE` ≤ 1,4,
   pero la ración de cereal de AESAN es la mitad de un plato y con ese techo ningún día llegaba). Lo
-  que no cabe queda como residuo. Una pieza (`unidad`) no se escala. Se calcula al leer, no se
+  que no cabe queda como residuo. Una pieza (`unidad`) no se escala por grupos: en el plan se sirve
+  en piezas enteras, las más cercanas al objetivo (mínimo una). Se calcula al leer, no se
   guarda: `plannedServingsFor` (`planned-serving.server.ts`) junta la ración personal, `perSlot`,
   el `kcalAdjust` del día y la ración y el objetivo medios del hogar (`sharedMealPortions`); la
   guía, `compensateFutureDishChange` y `eval:plan-lite` lo usan.
+- **Cierre del día (`alignSoloMeals` del 08)**: `day-close.ts` (`closeDay`/`serveDay`, puro).
+  Lo que una comida no alcanza por sus límites (una merienda de una fruta, un desayuno de solo
+  pan) se reparte entre las demás comidas propias del día que responden al escalado, en
+  proporción a su objetivo, hasta 3 pasadas; una que toca su límite se queda en lo que sirve y lo
+  que ya no cabe queda como `residual` (lo que el `planFit` del 10 tiene que corregir cambiando
+  platos). Una compartida no absorbe pero cuenta con el objetivo PROPIO de esa comida
+  (`ResolvedServing.goal`), no con el medio del hogar con el que se sirve: si el plato común da
+  de más, bajan las propias. **Se cierra siempre sobre los platos planeados** (`plannedIdea`, que
+  `guideMeals` manda como `planned` si hoy se cambió): la ración de la cena no puede cambiar por
+  lo que se comió a mediodía, porque compensar un cambio de hoy es de `settleDay` y solo desde
+  mañana. Por eso toda llamada a la guía pasa las comidas por `guideMeals` (también el cambio de
+  plato del chat y el recálculo de un día pasado, que manda el día entero con su fecha).
+  `compensateFutureDishChange` mide el desvío del día entero cerrado, no el del plato suelto.
 - **"Comí distinto" (17)**: la guía recibe cada comida cambiada con `eaten` y su `size`
   (`guideMeals`). Cantidad = la del texto ("media pizza") → una pieza entera si es `unidad` → plato
   × `habitual`, con los chips pequeño · normal · grande (×0,75 · ×1 · ×1,3) que aprenden el tamaño

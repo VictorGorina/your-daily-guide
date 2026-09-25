@@ -10,8 +10,10 @@
  *
  * - "sin escalar": receta × el factor `plan` de la persona (ticket 21), como
  *   hasta el ticket 08;
- * - "escalado": cada plato al objetivo de su comida (`plannedMacros`, lo que
- *   enseña Hoy desde el 08 adelantado).
+ * - "escalado": cada plato al objetivo de su comida (`plannedMacros`) y el día
+ *   cerrado (`closeDay`: lo que una comida no alcanza lo absorben las demás),
+ *   lo que enseña Hoy. Cada comida se imprime sin escalar → escalada sola →
+ *   con el día cerrado.
  *
  * Mide días a ±15 % y a ±5 % del objetivo (el 10 pide ≥ 90 % a ±5 %), la
  * proteína del día frente a la suya y las comidas principales de un solo
@@ -32,6 +34,7 @@ import { resolveServing } from "@/lib/nutrition/planned-serving.server";
 import { portionFactors } from "@/lib/nutrition/portion";
 import { macrosOfRecipe } from "@/lib/nutrition/recipe";
 import { getRecipes } from "@/lib/nutrition/recipes.server";
+import { serveDay } from "@/lib/nutrition/day-close";
 import { plannedMacros } from "@/lib/nutrition/scale";
 import { recipeSlotOfMoment } from "@/lib/nutrition/validate-recipe";
 import { _generatePlanBodyForEval } from "@/lib/plan.functions";
@@ -143,8 +146,6 @@ for (const t of TYPOLOGIES.filter((x) => !args.only || x.id === args.only)) {
   for (const date of dates) {
     const today = meals.filter((m) => m.date === date && m.idea);
     let kcal = 0;
-    let scaled = 0;
-    let protein = 0;
     let missing = 0;
     const lines: string[] = [];
     for (const m of today) {
@@ -152,22 +153,32 @@ for (const t of TYPOLOGIES.filter((x) => !args.only || x.id === args.only)) {
         mainMeals += 1;
         if (!m.idea.includes("·")) singleComponent += 1;
       }
+      if (!recipes.get(m.idea.trim())?.recipe) missing += 1;
+    }
+    // El día como lo enseña Hoy: cada plato a su comida y el día cerrado.
+    const day = serveDay(
+      today.map((m) => {
+        const { serving, goal, shared } = resolveServing(m.moment, servingCtx);
+        return { recipe: recipes.get(m.idea.trim())?.recipe ?? null, serving, goal, shared };
+      }),
+    );
+    const scaled = day.total.kcal;
+    const protein = day.total.protein_g;
+    today.forEach((m, i) => {
       const recipe = recipes.get(m.idea.trim())?.recipe;
       if (!recipe) {
-        missing += 1;
         lines.push(`      ${m.moment}: ${m.idea} (sin calcular)`);
-        continue;
+        return;
       }
       const flat = macrosOfRecipe(recipe, factor).kcal;
-      const served = plannedMacros(recipe, resolveServing(m.moment, servingCtx).serving).macros;
+      const alone = plannedMacros(recipe, resolveServing(m.moment, servingCtx).serving).macros;
       kcal += flat;
-      scaled += served.kcal;
-      protein += served.protein_g;
       const goal = targets?.perSlot[m.slot]?.kcal;
       lines.push(
-        `      ${m.moment}: ${flat} → ${served.kcal} kcal${goal ? ` (objetivo ${goal})` : ""} · ${m.idea}`,
+        `      ${m.moment}: ${flat} → ${alone.kcal} → ${day.meals[i]!.kcal} kcal` +
+          `${goal ? ` (objetivo ${goal})` : ""} · ${m.idea}`,
       );
-    }
+    });
     const err = targets ? (kcal - targets.kcal) / targets.kcal : 0;
     const errScaled = targets ? (scaled - targets.kcal) / targets.kcal : 0;
     const ok = Math.abs(err) <= 0.15 && !missing;

@@ -1867,23 +1867,46 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       const profile = (profileRow ?? {}) as Record<string, unknown>;
       const goal = resolveCompensationGoal(profile);
 
-      // Las dos recetas de la caché (ticket 06), servidas como plan ese día: al
-      // objetivo de esa comida (`plannedMacros`). Así el plato nuevo se escala
-      // igual que el viejo y solo cuenta lo que el escalado no llega a cubrir.
+      // El día entero servido como plan, con un plato y con el otro: cada plato
+      // al objetivo de su comida (`plannedMacros`) y el día cerrado
+      // (`closeDay`). Lo que el escalado de ese plato no cubre lo absorben las
+      // demás comidas propias del mismo día; solo lo que queda fuera del día
+      // es desvío que compensar en otros.
       const { getRecipes } = await import("@/lib/nutrition/recipes.server");
-      const { plannedMacros } = await import("@/lib/nutrition/scale");
-      const { plannedServingsFor } = await import("@/lib/nutrition/planned-serving.server");
+      const { serveDay } = await import("@/lib/nutrition/day-close");
+      const { plannedServingsFor, readOwnPlan } =
+        await import("@/lib/nutrition/planned-serving.server");
+      const ownPlan = await readOwnPlan(supabase, userId, date.slice(0, 7)).catch((error) => {
+        console.error("compensateFutureDishChange: plan", error);
+        return null;
+      });
+      const others = mealsForDate(
+        ownPlan,
+        date,
+        effectiveMealSlots(profile as { meal_slots?: unknown; meals_to_plan?: string | null }),
+      ).filter((m) => m.idea && m.moment !== label);
+      const dayMeals = [
+        ...others.map((m) => ({ moment: m.moment, idea: m.idea })),
+        { moment: label },
+      ];
       const [recipes, servings] = await Promise.all([
-        getRecipes([plannedDish, dish], { apiKey: key, userId }),
+        getRecipes([plannedDish, dish, ...others.map((m) => m.idea)], { apiKey: key, userId }),
         plannedServingsFor({ supabase: supabase as never, userId, profile, date }),
       ]);
       const fromRecipe = recipes.get(plannedDish.trim())?.recipe;
       const toRecipe = recipes.get(dish.trim())?.recipe;
       // Solo con las dos cifras calculadas (D13): sin una, no se compensa a ciegas.
       if (!fromRecipe || !toRecipe) return { adjusted: false, reason: "no-macros" };
-      const { serving } = servings.planned(label);
-      const from = plannedMacros(fromRecipe, serving).macros;
-      const to = plannedMacros(toRecipe, serving).macros;
+      const dayWith = (recipe: typeof fromRecipe) =>
+        serveDay(
+          dayMeals.map((m) => {
+            const { serving, goal, shared } = servings.planned(m.moment);
+            const own = "idea" in m ? (recipes.get(m.idea.trim())?.recipe ?? null) : recipe;
+            return { recipe: own, serving, goal, shared };
+          }),
+        ).total;
+      const from = dayWith(fromRecipe);
+      const to = dayWith(toRecipe);
 
       const decision = compensationNeed({
         deltaKcal: to.kcal - from.kcal,

@@ -23,6 +23,8 @@ import { generateDailyGuide } from "@/lib/guide.functions";
 import {
   addMacros,
   donePendingMeals,
+  guideMeals,
+  guideReuse,
   mealsToRecalculate,
   mergeGuide,
   showsNutritionNumbers,
@@ -151,16 +153,26 @@ export function DayDetailBody({
     const pending = mealsToRecalculate(guide?.mealMacros).filter((m) => m.idea);
     if (!guide || !pending.length || recalcTriedRef.current === date) return;
     recalcTriedRef.current = date;
+    // El día entero y con su fecha: el objetivo de cada comida depende de las
+    // demás (`closeDay`) y del hogar y el ajuste de ESE día. Solo se guardan
+    // las que faltaban; lo demás es historia.
+    const dayMeals = (guide.mealMacros ?? []).flatMap((m) =>
+      m.idea ? [{ moment: m.moment, idea: m.idea }] : [],
+    );
     void makeGuide({
       data: {
-        meals: pending.map((m) => ({ moment: m.moment, idea: m.idea! })),
+        meals: guideMeals(dayMeals, log?.habits),
+        reuse: guideReuse(guide.mealMacros, log?.habits),
         macrosOnly: true,
+        today: date,
       },
     })
       .then(async ({ mealMacros }) => {
         if (!mealMacros?.length) return;
-        const merged = (guide.mealMacros ?? []).map(
-          (m) => mealMacros.find((f) => f.moment === m.moment && f.idea === m.idea) ?? m,
+        const merged = (guide.mealMacros ?? []).map((m) =>
+          m.status === "calculando"
+            ? (mealMacros.find((f) => f.moment === m.moment && f.idea === m.idea) ?? m)
+            : m,
         );
         await updateLogByDate(date, { guide: mergeGuide(guide, { ...guide, mealMacros: merged }) });
         refreshLogs();

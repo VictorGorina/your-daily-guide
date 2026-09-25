@@ -16,11 +16,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sharedMealPortions, type SharedServing } from "@/lib/household.server";
-import { cleanPlan, planDayOf, type PlanDay } from "@/lib/plan-shared";
+import { cleanPlan, planDayOf, type MonthlyPlan, type PlanDay } from "@/lib/plan-shared";
 
 import { energyTargets, type EnergyTargets } from "./energy";
 import { portionFactors, type PortionFactors } from "./portion";
-import type { PlannedServing } from "./scale";
+import type { PlannedServing, ScaleTarget } from "./scale";
 import { recipeSlotOfMoment } from "./validate-recipe";
 
 type MealKey = "desayuno" | "comida" | "cena";
@@ -35,7 +35,15 @@ export type ServingContext = {
   kcalAdjust: PlanDay["kcalAdjust"] | null | undefined;
 };
 
-export type ResolvedServing = { serving: PlannedServing; shared: boolean };
+export type ResolvedServing = {
+  serving: PlannedServing;
+  shared: boolean;
+  /**
+   * El objetivo de esta comida en el día de la persona, para cerrar el día
+   * (`closeDay`): el propio también en una compartida, que se sirve a la media.
+   */
+  goal: ScaleTarget | null;
+};
 
 const perSlotKey = (moment: string | null | undefined): PerSlotKey | null => {
   const slot = recipeSlotOfMoment(moment);
@@ -48,20 +56,21 @@ export function resolveServing(
   ctx: ServingContext,
 ): ResolvedServing {
   const slot = perSlotKey(moment);
-  const shared = slot && slot !== "snack" ? ctx.shared[slot] : undefined;
-  if (shared) return { serving: { base: shared.factor, target: shared.target }, shared: true };
-
   const target = slot ? ctx.energy?.perSlot[slot] : undefined;
+  const shared = slot && slot !== "snack" ? ctx.shared[slot] : undefined;
+  if (shared) {
+    return {
+      serving: { base: shared.factor, target: shared.target },
+      shared: true,
+      goal: target ? { kcal: target.kcal, protein_g: target.protein_g } : null,
+    };
+  }
+
   const adjust = slot ? (ctx.kcalAdjust?.[slot] ?? 0) : 0;
-  return {
-    serving: {
-      base: ctx.own.plan,
-      target: target
-        ? { kcal: Math.max(0, target.kcal + adjust), protein_g: target.protein_g }
-        : null,
-    },
-    shared: false,
-  };
+  const own = target
+    ? { kcal: Math.max(0, target.kcal + adjust), protein_g: target.protein_g }
+    : null;
+  return { serving: { base: ctx.own.plan, target: own }, shared: false, goal: own };
 }
 
 /**
@@ -130,14 +139,23 @@ async function readPlanDay(
   userId: string,
   date: string,
 ): Promise<PlanDay | null> {
+  return planDayOf(await readOwnPlan(supabase, userId, date.slice(0, 7)), date);
+}
+
+/** El plan del mes de la fila PROPIA (`null` si no hay). */
+export async function readOwnPlan(
+  supabase: AnyClient,
+  userId: string,
+  month: string,
+): Promise<MonthlyPlan | null> {
   // Fila propia siempre (`.eq("user_id")`): la policy de SELECT deja ver también
   // la del planificador y un `.maybeSingle()` sin filtro daría PGRST116.
   const { data, error } = await supabase
     .from("monthly_plans")
     .select("plan")
-    .eq("month", date.slice(0, 7))
+    .eq("month", month)
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
-  return planDayOf(cleanPlan((data as { plan?: unknown } | null)?.plan), date);
+  return cleanPlan((data as { plan?: unknown } | null)?.plan);
 }

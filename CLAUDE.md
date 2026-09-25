@@ -125,7 +125,11 @@ con límites para que el plato siga siendo el mismo; `plannedMacros` para el pla
 `perSlot` + `PlanDay.kcalAdjust`, o la media del hogar en una compartida, vía
 `plannedServingsFor`) y `eatenMacros` para "comí distinto" (el objetivo de esa comida a
 mantenimiento, × texto o chip). Los dos lados se escalan igual: si no, cualquier cambio de plato
-parecería comer menos. Una ración de AESAN es una unidad (se recomiendan varias al día), así que
+parecería comer menos. Después **se cierra el día** (`closeDay`, `day-close.ts`): lo que una
+comida no alcanza lo absorben las demás propias; una compartida cuenta con el objetivo propio
+de esa comida, no con el medio. Se calcula sobre los platos **planeados** (`plannedIdea`, que
+`guideMeals` manda como `planned`), nunca sobre lo comido: si no, la cena cambiaría de tamaño
+por lo que se comió a mediodía y se compensaría dos veces (ahí y en `settleDay`). Una ración de AESAN es una unidad (se recomiendan varias al día), así que
 sin escalar el día del plan se quedaba en ~60 % del objetivo. La pantalla Plan
 precalienta los platos del mes (`recipe-warm.ts`, `/api/v1/recipes/warm`). Ingredientes que no
 casan y pesan: USDA (`usda.server.ts`, `USDA_FDC_API_KEY`, tabla `foods_extra`) y si no, el más

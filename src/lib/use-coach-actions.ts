@@ -19,6 +19,7 @@ import { exerciseToolResult } from "@/lib/day-log-ack";
 import { logExercise } from "@/lib/exercise.functions";
 import { generateDailyGuide } from "@/lib/guide.functions";
 import {
+  guideMeals,
   guideReuse,
   isMealCalculated,
   mergeGuide,
@@ -158,7 +159,11 @@ export function useCoachActions(
             .filter((m) => m.idea);
           const logNow = getLog();
           const { dishMacros: _unused, ...freshGuide } = await makeGuide({
-            data: { meals, reuse: guideReuse(logNow?.guide?.mealMacros, logNow?.habits) },
+            data: {
+              // Con el plato del plan congelado: el día se cierra con él.
+              meals: guideMeals(meals, logNow?.habits),
+              reuse: guideReuse(logNow?.guide?.mealMacros, logNow?.habits),
+            },
           });
           // El objetivo de la barra de macros (`macroEstimate`) se fija la
           // primera vez que hay guía del día, a partir del plan original — un

@@ -52,6 +52,9 @@ describe("foodGroup", () => {
     ["aceite-oliva", "E"],
     ["pimiento", "V"],
     ["naranja", "V"],
+    ["platano", "V"],
+    ["aguacate", "E"],
+    ["pasas", "E"],
     ["caldo", "V"],
   ])("%s → %s", (key, group) => {
     expect(foodGroup(foodByKey(key)!)).toBe(group as never);
@@ -154,9 +157,20 @@ describe("plannedMacros", () => {
     });
   });
 
-  it("una pieza (pizza, bocadillo) no se escala al objetivo", () => {
+  it("una pieza del plan se sirve en unidades enteras, las más cercanas al objetivo", () => {
+    const tostada = recipe([ing("pan-integral", 50), ing("aguacate", 60)], "unidad");
+    const unit = macrosOfRecipe(tostada, 1).kcal;
+    const at = (kcal: number) =>
+      plannedMacros(tostada, { base: 0.7, target: { kcal, protein_g: 20 } });
+    expect(at(unit * 2.2)).toEqual({ macros: macrosOfRecipe(tostada, 2), portion: 2 });
+    expect(at(unit * 2.6).portion).toBe(3);
+    // Nunca menos de una, por pequeño que sea el objetivo.
+    expect(at(unit * 0.3)).toEqual({ macros: macrosOfRecipe(tostada, 1), portion: 1 });
+  });
+
+  it("una pieza sin objetivo, la ración personal tal cual", () => {
     const pizza = recipe([ing("arroz-crudo", 100)], "unidad");
-    expect(plannedMacros(pizza, { base: 0.8, target: { kcal: 900, protein_g: 40 } })).toEqual({
+    expect(plannedMacros(pizza, { base: 0.8, target: null })).toEqual({
       macros: macrosOfRecipe(pizza, 0.8),
       portion: 0.8,
     });

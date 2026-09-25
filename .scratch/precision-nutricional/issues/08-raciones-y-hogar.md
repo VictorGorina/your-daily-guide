@@ -1,6 +1,6 @@
 # 08 — Raciones: escalado al objetivo, ración compartida del hogar y comidas propias
 
-Status: en parte (2026-09-25): `scaleRecipe` y ración compartida por objetivo medio; falta `alignSoloMeals` (ver Comments)
+Status: en parte (2026-09-25): `scaleRecipe`, ración compartida por objetivo medio y cierre del día (`closeDay`); falta la búsqueda de `m` del hogar, el redondeo y `scope: "portions"` (ver Comments)
 Blocked by: 06, 07, 21
 Tamaño: L
 Fase: 3
@@ -206,3 +206,35 @@ lo que diga el texto > la unidad natural > la misma masa que el plato planificad
   - Falta: `alignSoloMeals` (pasar el residuo de una comida que no llega a las demás del día y
     cerrar el día de cada adulto de un hogar), el redondeo a medidas de cocina (cuando se enseñen
     gramos, ticket 09) y el recálculo `scope: "portions"`. Una pieza (`unidad`) no se escala.
+
+- 2026-09-25 (tercera sesión) — **`alignSoloMeals` hecho como `closeDay`** (`src/lib/nutrition/day-close.ts`
+  + test, puro):
+  - Se escala cada plato a su comida y después lo que no alcanza (merienda de una fruta, desayuno
+    de solo pan) se reparte entre las comidas propias que responden al escalado, en proporción a
+    su objetivo; hasta 3 pasadas. Una comida que toca su límite se queda en lo que sirve (no con
+    un objetivo inflado) y lo que no cabe queda en `residual`: es la entrada del `planFit` del 10.
+  - Una compartida no absorbe pero cuenta con el objetivo PROPIO de esa comida
+    (`ResolvedServing.goal`), no con el medio del hogar con el que se sirve. Eso cubre el paso 3 de
+    este ticket para cada adulto sin guardar nada: cada uno cierra su día al leer su guía. Lo que
+    NO se ha hecho es la búsqueda del multiplicador `m` sobre las compartidas (§2.3): solo hace
+    falta si un adulto no tiene margen en sus propias, y eso lo ve el residuo.
+  - Se cierra con los platos **planeados** (`plannedIdea`, que `guideMeals` manda como `planned`),
+    nunca con lo comido: si no, la cena cambiaría por lo que se comió a mediodía y se compensaría
+    dos veces (ahí y en `settleDay`). Por eso también el cambio de plato del chat y el recálculo de
+    un día pasado pasan ahora por `guideMeals` (el segundo manda el día entero con su fecha; antes
+    usaba el hogar y el ajuste de HOY para un día pasado).
+  - `compensateFutureDishChange` mide el desvío del día entero cerrado con un plato y con el otro.
+  - `eval:plan-lite` imprime cada comida sin escalar → escalada sola → con el día cerrado.
+  - `eval:plan-lite` (7 días × 3 tipologías, mismo generador que producción), día cerrado:
+    **18/21 días a ±5 % (86 %)**, 20/21 a ±15 % (antes del cierre: 5/21 a ±15 % sin escalar y
+    0/7 a ±5 % en la mujer escalando por comida). Hombre que mantiene (2.431) y el que gana
+    (3.421): 14/14 a ±0,5 %. Mujer que pierde (1.330): 4/7 a ±5 %; fallan los días con platos que
+    no pueden llegar (merluza con brócoli · yogur: 272 de 465 con la merluza a 1,6×) y un
+    desayuno de tostadas marcado `unidad` que no se escala (177 de 333). Proteína ≥ 90 %: 13/21,
+    los fallos son de la mujer (55-81 de 99 g). Comidas principales de un componente: 6/42.
+  - Corregido de paso: `foodGroup` mandaba toda la fruta al grupo fijo; ahora una fruta o verdura
+    de más de 120 kcal/100 g (`DENSE_PRODUCE_KCAL`: aguacate, fruta desecada, salmorejo) es E.
+  - Decisión del usuario (2026-09-25): **una pieza del plan se sirve en unidades enteras**, las
+    más cercanas al objetivo de su comida (mínimo una), en vez de a la ración personal fraccionada.
+    "Una pieza es una pieza" sigue valiendo en "comí distinto" (lo comido es lo que es). En
+    `closeDay` una pieza cuenta pero no absorbe: su salto es de una pieza entera.

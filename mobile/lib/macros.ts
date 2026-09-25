@@ -53,21 +53,25 @@ export function mealsToRecalculate(
  * que la persona apuntó a mano en "comí distinto" (`MealHabit.manualKcal`).
  */
 /**
- * Las comidas de hoy tal como las pide la guía: el plato y, si es "comí
- * distinto", que se mida con la ración habitual y el tamaño elegido (ticket 17).
+ * Las comidas de hoy tal como las pide la guía: el plato, el del plan si se
+ * cambió y, si es "comí distinto", que se mida con la ración habitual y el
+ * tamaño elegido (ticket 17).
  * Copia de `guideMeals` de la web.
  */
 export function guideMeals(
   meals: readonly { moment: string; idea: string }[],
   habits: DailyLog["habits"] | null | undefined,
-): { moment: string; idea: string; eaten?: boolean; size?: string | null }[] {
+): { moment: string; idea: string; eaten?: boolean; size?: string | null; planned?: string }[] {
   return meals
     .filter((m) => m.idea)
     .map((m) => {
       const h = (habits ?? []).find((x) => x.label === m.moment);
+      // El plato del plan si hoy se cambió: el día se cierra con él (`closeDay`).
+      const planned =
+        h?.plannedIdea && h.plannedIdea.trim() !== m.idea.trim() ? { planned: h.plannedIdea } : {};
       return h?.status === "distinto"
-        ? { moment: m.moment, idea: m.idea, eaten: true, size: h.portionSize ?? null }
-        : { moment: m.moment, idea: m.idea };
+        ? { moment: m.moment, idea: m.idea, eaten: true, size: h.portionSize ?? null, ...planned }
+        : { moment: m.moment, idea: m.idea, ...planned };
     });
 }
 

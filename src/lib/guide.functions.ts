@@ -155,6 +155,12 @@ const cleanReused = (raw: unknown): ReusedMeal | null => {
 type TodayMeal = {
   moment: string;
   idea: string;
+  /**
+   * El plato que proponía el plan para esta comida (`MealHabit.plannedIdea`),
+   * si hoy se cambió por otro. El día se cierra con los platos planeados
+   * (`closeDay`): la ración de la cena no cambia por lo que se comió a mediodía.
+   */
+  planned?: string;
   /** "Comí distinto" (ticket 17): se mide con la ración habitual, no la del plan. */
   eaten?: boolean;
   /** Chip de tamaño que eligió al cambiarlo. */
@@ -199,19 +205,51 @@ async function macrosFromLookup(
 }> {
   const { getRecipes } = await import("@/lib/nutrition/recipes.server");
   const { eatenMacros, plannedMacros } = await import("@/lib/nutrition/scale");
+  const { closeDay } = await import("@/lib/nutrition/day-close");
   const { recipeSlotOfMoment } = await import("@/lib/nutrition/validate-recipe");
   const { normName } = await import("@/lib/plan-shared");
 
   const sameMeal = (r: ReusedMeal, meal: TodayMeal) =>
     r.moment === meal.moment && normName(r.idea) === normName(meal.idea);
 
-  const slots = new Map(todayMeals.map((m) => [m.idea.trim(), recipeSlotOfMoment(m.moment)]));
+  const plannedDish = (m: TodayMeal) => m.planned ?? m.idea;
+  const slots = new Map(
+    todayMeals.flatMap((m) => {
+      const slot = recipeSlotOfMoment(m.moment);
+      return [
+        [m.idea.trim(), slot],
+        [plannedDish(m).trim(), slot],
+      ] as const;
+    }),
+  );
   const lookups = await getRecipes(
-    [...todayMeals.map((m) => m.idea), ...extraDishes.map((d) => d.dish)],
+    [
+      ...todayMeals.map((m) => m.idea),
+      ...todayMeals.flatMap((m) => (m.planned ? [m.planned] : [])),
+      ...extraDishes.map((d) => d.dish),
+    ],
     { apiKey, userId, slots },
   );
 
-  const mealMacros = todayMeals.map((meal): MealMacroEstimate => {
+  // El día cerrado (`alignSoloMeals`, ticket 08): lo que no alcanza una comida
+  // (la merienda de una fruta) lo absorben las demás propias. Con los platos
+  // PLANEADOS, así el objetivo de cada comida no depende de lo que se cambió.
+  const resolved = todayMeals.map((m) => servings.planned(m.moment));
+  const closed = closeDay(
+    todayMeals.map((m, i) => ({
+      recipe: lookups.get(plannedDish(m).trim())?.recipe ?? null,
+      serving: resolved[i]!.serving,
+      goal: resolved[i]!.goal,
+      shared: resolved[i]!.shared,
+    })),
+  );
+  /** La ración de un plato del plan en la comida `i`, con el día ya cerrado. */
+  const servingAt = (i: number): PlannedServing => ({
+    base: resolved[i]!.serving.base,
+    target: closed.targets[i] ?? null,
+  });
+
+  const mealMacros = todayMeals.map((meal, i): MealMacroEstimate => {
     const found = lookups.get(meal.idea.trim());
     const recipe = found?.recipe ?? null;
     const manual = reuse.find((r) => sameMeal(r, meal) && r.manual);
@@ -227,8 +265,8 @@ async function macrosFromLookup(
       return { moment: meal.moment, idea: meal.idea, ...macros, status: "calculado", portion };
     }
     if (recipe) {
-      const { serving, shared } = servings.planned(meal.moment);
-      const { macros, portion } = plannedMacros(recipe, serving);
+      const { shared } = resolved[i]!;
+      const { macros, portion } = plannedMacros(recipe, servingAt(i));
       return {
         moment: meal.moment,
         idea: meal.idea,
@@ -250,10 +288,14 @@ async function macrosFromLookup(
 
   const dishMacros = extraDishes.map((extra): DishMacros => {
     const recipe = lookups.get(extra.dish.trim())?.recipe ?? null;
+    // El plato del plan de una comida de hoy se sirve con el día cerrado, igual
+    // que la cifra que se congela al cambiarlo (`plannedKcal`).
+    const at = todayMeals.findIndex((m) => m.moment === extra.moment);
+    const serving = at >= 0 ? servingAt(at) : servings.planned(extra.moment).serving;
     return recipe
       ? {
           dish: extra.dish,
-          ...plannedMacros(recipe, servings.planned(extra.moment).serving).macros,
+          ...plannedMacros(recipe, serving).macros,
           status: "calculado",
         }
       : { dish: extra.dish, ...ZERO, status: "calculando" };
@@ -270,7 +312,14 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
     (input?: {
-      meals?: { moment: string; idea: string; eaten?: boolean; size?: string | null }[];
+      meals?: {
+        moment: string;
+        idea: string;
+        eaten?: boolean;
+        size?: string | null;
+        /** El plato del plan si hoy se cambió (`MealHabit.plannedIdea`). */
+        planned?: string | null;
+      }[];
       /** Comidas ya calculadas (ver `macrosFromLookup`). */
       reuse?: MealMacroEstimate[];
       /** Solo las cifras, sin el texto: el reintento de lo que quedó "calculando". */
@@ -291,6 +340,9 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
           moment: String(m.moment ?? "").slice(0, 40),
           idea: String(m.idea ?? "").slice(0, 200),
           ...(m.eaten === true ? { eaten: true, size: parsePortionSize(m.size) } : {}),
+          ...(m.planned && String(m.planned).trim() !== String(m.idea).trim()
+            ? { planned: String(m.planned).slice(0, 200) }
+            : {}),
         })),
       reuse: (Array.isArray(input?.reuse) ? input.reuse : [])
         .slice(0, 6)

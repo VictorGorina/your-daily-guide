@@ -13,6 +13,7 @@
  * (`energyTargets().perSlot`), por grupos, decididos por los datos del alimento:
  *
  * - **V** (fijo): verdura, fruta y condimentos de pocas kcal (caldo, vinagre).
+ *   No el aguacate ni la fruta desecada, que son energía (`DENSE_PRODUCE_KCAL`).
  *   Bajar ración nunca quita verdura; subirla no llena el plato de lechuga.
  * - **P** (proteína): la proteína aporta ≥ 35 % de sus kcal (pollo, pescado,
  *   huevo, tofu, yogur griego).
@@ -62,8 +63,19 @@ export type ScaledPortion = {
   residual: { kcal: number; protein_g: number };
 };
 
+/**
+ * Por encima de esto (kcal / 100 g), una fruta o verdura es energía, no
+ * volumen: aguacate, fruta desecada, salmorejo. El plátano (89) sigue fijo.
+ */
+export const DENSE_PRODUCE_KCAL = 120;
+
 export function foodGroup(food: Pick<Food, "category" | "kcal" | "protein_g">): FoodGroup {
-  if (food.category === "verdura" || food.category === "fruta") return "V";
+  if (
+    (food.category === "verdura" || food.category === "fruta") &&
+    food.kcal <= DENSE_PRODUCE_KCAL
+  ) {
+    return "V";
+  }
   if (food.category === "despensa" && food.kcal < 60) return "V";
   if (food.kcal > 0 && (4 * food.protein_g) / food.kcal >= PROTEIN_SHARE_P) return "P";
   return "E";
@@ -197,9 +209,9 @@ export function scaleRecipe(
 export type PlannedServing = { base: number; target: ScaleTarget | null };
 
 /**
- * Macros de un plato DEL PLAN. Sin objetivo (menor de edad o faltan datos), o
- * si el plato es una pieza (pizza, bocadillo: una pizza pesa lo que pesa), la
- * ración personal tal cual, como hasta ahora. `portion` es el factor efectivo
+ * Macros de un plato DEL PLAN. Sin objetivo (menor de edad o faltan datos), la
+ * ración personal tal cual. Una pieza (tostadas, bocadillo, pizza) no se escala
+ * por grupos: se sirven piezas enteras, las más cercanas al objetivo. `portion` es el factor efectivo
  * (kcal servidas ÷ kcal de la ración base), el que se guarda con la comida para
  * saber si una cifra reutilizada sigue valiendo.
  *
@@ -213,8 +225,15 @@ export function plannedMacros(
 ): { macros: Macros; portion: number } {
   const base = serving.base * times;
   const uniform = () => ({ macros: macrosOfRecipe(recipe, base), portion: round2(base) });
-  if (!serving.target || recipe.servingKind === "unidad" || serving.target.kcal <= 0) {
-    return uniform();
+  if (!serving.target || serving.target.kcal <= 0) return uniform();
+  if (recipe.servingKind === "unidad") {
+    // Una pieza no se deforma: se sirven piezas enteras, las que dejan la
+    // comida más cerca de su objetivo (mínimo una). El plan decide cuántas
+    // tostadas tocan; lo que no cuadre lo absorben las demás (`closeDay`).
+    const unitKcal = macrosOfRecipe(recipe, 1).kcal;
+    if (unitKcal <= 0) return uniform();
+    const units = Math.max(1, Math.round(serving.target.kcal / unitKcal)) * times;
+    return { macros: macrosOfRecipe(recipe, units), portion: units };
   }
   const scaled = scaleRecipe(recipe, serving.target, serving.base);
   if (!scaled) return uniform();
