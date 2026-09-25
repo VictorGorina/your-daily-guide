@@ -5,11 +5,17 @@
  *
  * Para cada tipología genera el plan del mes que viene con el MISMO generador
  * que producción (`generatePlanBody`), toma los primeros `--days` días y suma
- * cada comida con su receta canónica × el factor `plan` de la persona (ticket
- * 21), frente a su objetivo (`energyTargets`). Mide:
+ * cada comida con su receta canónica frente al objetivo (`energyTargets`), de
+ * dos formas:
  *
- * - días a ±15 % del objetivo (objetivo provisional: ≥ 70 %; el 10 lo lleva a ±5 %);
- * - comidas principales de un solo componente (objetivo: ninguna).
+ * - "sin escalar": receta × el factor `plan` de la persona (ticket 21), como
+ *   hasta el ticket 08;
+ * - "escalado": cada plato al objetivo de su comida (`plannedMacros`, lo que
+ *   enseña Hoy desde el 08 adelantado).
+ *
+ * Mide días a ±15 % y a ±5 % del objetivo (el 10 pide ≥ 90 % a ±5 %), la
+ * proteína del día frente a la suya y las comidas principales de un solo
+ * componente (objetivo: ninguna).
  *
  * Gasta llamadas (plan con PLAN_MODEL + recetas nuevas con DISH_MODEL). Se corre
  * a mano:
@@ -22,9 +28,11 @@ import { parseArgs } from "node:util";
 
 import { emptyContext } from "@/lib/household.server";
 import { energyTargets } from "@/lib/nutrition/energy";
+import { resolveServing } from "@/lib/nutrition/planned-serving.server";
 import { portionFactors } from "@/lib/nutrition/portion";
 import { macrosOfRecipe } from "@/lib/nutrition/recipe";
 import { getRecipes } from "@/lib/nutrition/recipes.server";
+import { plannedMacros } from "@/lib/nutrition/scale";
 import { recipeSlotOfMoment } from "@/lib/nutrition/validate-recipe";
 import { _generatePlanBodyForEval } from "@/lib/plan.functions";
 import { mealsForDate, MEAL_SLOTS, monthCoverage } from "@/lib/plan-shared";
@@ -87,6 +95,9 @@ const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 const month = next.toISOString().slice(0, 7);
 
 let inBand = 0;
+let scaledIn15 = 0;
+let scaledIn5 = 0;
+let proteinOk = 0;
 let totalDays = 0;
 let singleComponent = 0;
 let mainMeals = 0;
@@ -126,32 +137,59 @@ for (const t of TYPOLOGIES.filter((x) => !args.only || x.id === args.only)) {
     },
   );
 
+  const own = portionFactors(targets, profile as { sex?: string });
+  const servingCtx = { own, energy: targets, shared: {}, kcalAdjust: null };
+  const pct = (err: number) => `${err >= 0 ? "+" : ""}${Math.round(err * 100)} %`;
   for (const date of dates) {
     const today = meals.filter((m) => m.date === date && m.idea);
     let kcal = 0;
+    let scaled = 0;
+    let protein = 0;
     let missing = 0;
+    const lines: string[] = [];
     for (const m of today) {
       if (m.slot === "comida" || m.slot === "cena") {
         mainMeals += 1;
         if (!m.idea.includes("·")) singleComponent += 1;
       }
       const recipe = recipes.get(m.idea.trim())?.recipe;
-      if (recipe) kcal += macrosOfRecipe(recipe, factor).kcal;
-      else missing += 1;
+      if (!recipe) {
+        missing += 1;
+        lines.push(`      ${m.moment}: ${m.idea} (sin calcular)`);
+        continue;
+      }
+      const flat = macrosOfRecipe(recipe, factor).kcal;
+      const served = plannedMacros(recipe, resolveServing(m.moment, servingCtx).serving).macros;
+      kcal += flat;
+      scaled += served.kcal;
+      protein += served.protein_g;
+      const goal = targets?.perSlot[m.slot]?.kcal;
+      lines.push(
+        `      ${m.moment}: ${flat} → ${served.kcal} kcal${goal ? ` (objetivo ${goal})` : ""} · ${m.idea}`,
+      );
     }
     const err = targets ? (kcal - targets.kcal) / targets.kcal : 0;
+    const errScaled = targets ? (scaled - targets.kcal) / targets.kcal : 0;
     const ok = Math.abs(err) <= 0.15 && !missing;
     totalDays += 1;
     if (ok) inBand += 1;
+    if (!missing && Math.abs(errScaled) <= 0.15) scaledIn15 += 1;
+    if (!missing && Math.abs(errScaled) <= 0.05) scaledIn5 += 1;
+    if (!missing && targets && protein >= 0.9 * targets.protein_g) proteinOk += 1;
     console.log(
-      `  ${date}: ${kcal} kcal (${err >= 0 ? "+" : ""}${Math.round(err * 100)} %)` +
-        `${missing ? ` · ${missing} sin calcular` : ""}${ok ? "" : " ✗"}`,
+      `  ${date}: sin escalar ${kcal} kcal (${pct(err)}) · escalado ${scaled} kcal (${pct(errScaled)})` +
+        ` · proteína ${protein}/${targets?.protein_g ?? "?"} g` +
+        `${missing ? ` · ${missing} sin calcular` : ""}`,
     );
-    for (const m of today) console.log(`      ${m.moment}: ${m.idea}`);
+    for (const line of lines) console.log(line);
   }
 }
 
+const share = (n: number) =>
+  `${n}/${totalDays} (${Math.round((n / Math.max(1, totalDays)) * 100)} %)`;
 console.log(
-  `\nDías a ±15 % del objetivo: ${inBand}/${totalDays} (${Math.round((inBand / Math.max(1, totalDays)) * 100)} %; objetivo ≥ 70 %)` +
-    ` · comidas principales de un solo componente: ${singleComponent}/${mainMeals} (objetivo 0)`,
+  `\nSin escalar, días a ±15 %: ${share(inBand)}` +
+    `\nEscalado, días a ±15 %: ${share(scaledIn15)} · a ±5 %: ${share(scaledIn5)} (el 10 pide ≥ 90 %)` +
+    `\nEscalado, proteína ≥ 90 % del objetivo: ${share(proteinOk)}` +
+    `\nComidas principales de un solo componente: ${singleComponent}/${mainMeals} (objetivo 0)`,
 );

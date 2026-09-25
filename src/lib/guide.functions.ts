@@ -3,12 +3,9 @@ import { generateText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
-import {
-  eatenPortion,
-  parsePortionSize,
-  type PortionFactors,
-  type PortionSize,
-} from "@/lib/nutrition/portion";
+import { parsePortionSize, type PortionSize } from "@/lib/nutrition/portion";
+import type { ResolvedServing } from "@/lib/nutrition/planned-serving.server";
+import type { PlannedServing } from "@/lib/nutrition/scale";
 import { parseJsonLoose } from "@/lib/plan-shared";
 
 /**
@@ -174,13 +171,16 @@ type ExtraDish = { dish: string; moment?: string };
  * un promedio. Nunca lanza.
  *
  * Cada plato se escala con su ración:
- * - del plan: el factor `plan` de la persona o, en una comida compartida del
- *   hogar, la media de los adultos (`shared`);
- * - "comí distinto": lo que se comió (`eatenPortion`: texto, unidad o plato ×
- *   factor habitual, con el chip de tamaño).
+ * - del plan: al objetivo de su comida (`plannedMacros`, ticket 08 adelantado),
+ *   con el ajuste de la compensación del día; en una comida compartida del
+ *   hogar, al objetivo medio de los adultos (`servings.planned`, `shared`);
+ * - "comí distinto": lo que se comió (`eatenMacros`: la ración habitual escalada
+ *   igual que el plan, por la cantidad del texto o el chip; una pieza, tal cual).
  *
- * `reuse` son las comidas que el cliente ya tiene calculadas para ese plato:
- * solo se reutilizan con el mismo factor (o si la cifra la escribió la persona).
+ * `reuse` son las comidas que el cliente ya tiene calculadas: solo se conserva la
+ * cifra que escribió la persona (`manual`). Todo lo demás se recalcula con su
+ * receta, porque el factor depende del plato y del objetivo y no se conoce sin
+ * ella; un plato sin receta queda `calculando` y se reintenta.
  */
 async function macrosFromLookup(
   todayMeals: TodayMeal[],
@@ -188,33 +188,22 @@ async function macrosFromLookup(
   extraDishes: ExtraDish[],
   apiKey: string,
   userId: string,
-  portions: { own: PortionFactors; shared: Partial<Record<string, number>> },
+  servings: {
+    planned: (moment: string | undefined) => ResolvedServing;
+    eaten: (moment: string | undefined) => PlannedServing;
+  },
 ): Promise<{
   macroEstimate: MacroEstimate | null;
   mealMacros: MealMacroEstimate[];
   dishMacros: DishMacros[];
 }> {
   const { getRecipes } = await import("@/lib/nutrition/recipes.server");
-  const { macrosOfRecipe } = await import("@/lib/nutrition/recipe");
+  const { eatenMacros, plannedMacros } = await import("@/lib/nutrition/scale");
   const { recipeSlotOfMoment } = await import("@/lib/nutrition/validate-recipe");
   const { normName } = await import("@/lib/plan-shared");
 
-  /** Factor de un plato del plan en esa comida; `shared` = no se guarda con la comida. */
-  const planned = (moment: string | undefined) => {
-    const slot = recipeSlotOfMoment(moment);
-    const shared = slot && slot !== "merienda" ? portions.shared[slot] : undefined;
-    return shared != null
-      ? { factor: shared, shared: true }
-      : { factor: portions.own.plan, shared: false };
-  };
-
-  const reusedFor = (meal: TodayMeal, factor: number, shared: boolean) =>
-    reuse.find(
-      (r) =>
-        r.moment === meal.moment &&
-        normName(r.idea) === normName(meal.idea) &&
-        (r.manual || (!shared && r.portion === factor)),
-    );
+  const sameMeal = (r: ReusedMeal, meal: TodayMeal) =>
+    r.moment === meal.moment && normName(r.idea) === normName(meal.idea);
 
   const slots = new Map(todayMeals.map((m) => [m.idea.trim(), recipeSlotOfMoment(m.moment)]));
   const lookups = await getRecipes(
@@ -225,26 +214,29 @@ async function macrosFromLookup(
   const mealMacros = todayMeals.map((meal): MealMacroEstimate => {
     const found = lookups.get(meal.idea.trim());
     const recipe = found?.recipe ?? null;
-    // Ración: la del plan (o la compartida), o lo que se comió.
-    const plan = planned(meal.moment);
-    const factor = meal.eaten
-      ? eatenPortion({
-          servingKind: recipe?.servingKind ?? "plato",
-          textQuantity: found?.textQuantity ?? null,
-          habitual: portions.own.habitual,
-          size: meal.size,
-        })
-      : plan.factor;
-    const shared = !meal.eaten && plan.shared;
-    const reused = reusedFor(meal, factor, shared);
-    if (reused) return { ...reused, moment: meal.moment, idea: meal.idea };
+    const manual = reuse.find((r) => sameMeal(r, meal) && r.manual);
+    if (manual) return { ...manual, moment: meal.moment, idea: meal.idea };
+
+    if (meal.eaten && recipe) {
+      // Lo que se comió: la ración habitual, escalada igual que el plan.
+      const { macros, portion } = eatenMacros(recipe, {
+        serving: servings.eaten(meal.moment),
+        textQuantity: found?.textQuantity ?? null,
+        size: meal.size,
+      });
+      return { moment: meal.moment, idea: meal.idea, ...macros, status: "calculado", portion };
+    }
     if (recipe) {
+      const { serving, shared } = servings.planned(meal.moment);
+      const { macros, portion } = plannedMacros(recipe, serving);
       return {
         moment: meal.moment,
         idea: meal.idea,
-        ...macrosOfRecipe(recipe, factor),
+        ...macros,
         status: "calculado",
-        ...(shared ? {} : { portion: factor }),
+        // En una compartida no: su factor es el del hogar y, junto al propio,
+        // dejaría despejar el de los demás.
+        ...(shared ? {} : { portion }),
       };
     }
     return {
@@ -261,7 +253,7 @@ async function macrosFromLookup(
     return recipe
       ? {
           dish: extra.dish,
-          ...macrosOfRecipe(recipe, planned(extra.moment).factor),
+          ...plannedMacros(recipe, servings.planned(extra.moment).serving).macros,
           status: "calculado",
         }
       : { dish: extra.dish, ...ZERO, status: "calculando" };
@@ -351,16 +343,15 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     const energy = energyTargets(profile as never);
     const targets = energy ? targetsAsMacros(energy) : null;
     const calories = caloriesText(energy, showsNutritionNumbers(profile as never));
-    // Ración personal (ticket 21) y la de las comidas compartidas del hogar (D4).
+    // Ración personal (ticket 21) y, para los platos del plan, el objetivo de
+    // cada comida con el ajuste del día y las compartidas del hogar (D4).
     const own = portionFactors(energy, profile as { sex?: string | null } | null);
-    const { sharedMealPortions } = await import("@/lib/household.server");
-    const shared = await sharedMealPortions(
-      context.supabase as never,
-      context.userId,
-      data.today ?? zonedTodayISO(),
-    ).catch((error) => {
-      console.error("sharedMealPortions", error);
-      return {};
+    const { plannedServingsFor } = await import("@/lib/nutrition/planned-serving.server");
+    const servings = await plannedServingsFor({
+      supabase: context.supabase as never,
+      userId: context.userId,
+      profile,
+      date: data.today ?? zonedTodayISO(),
     });
 
     const todayMeals = data.todayMeals;
@@ -368,10 +359,14 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     // con el texto de la guía.
     const macrosPromise =
       todayMeals.length || data.extraDishes.length
-        ? macrosFromLookup(todayMeals, data.reuse, data.extraDishes, key, context.userId, {
-            own,
-            shared,
-          }).catch((error) => {
+        ? macrosFromLookup(
+            todayMeals,
+            data.reuse,
+            data.extraDishes,
+            key,
+            context.userId,
+            servings,
+          ).catch((error) => {
             console.error("macrosFromLookup", error);
             return null;
           })

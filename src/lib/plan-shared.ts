@@ -128,6 +128,14 @@ export type PlanDay = {
   extras?: Partial<Record<MealSlot, string[]>>;
   kids?: ChildMeal[];
   pinned?: MealSlot[];
+  /**
+   * kcal que la compensación de un día anterior (`settleDay`) movió a esta
+   * comida: negativo = más ligera. Los platos del plan se escalan al objetivo
+   * de su comida (`plannedMacros`), así que cambiar un plato por otro más ligero
+   * ya no mueve kcal por sí solo; lo que mueve es este ajuste del objetivo. Solo
+   * en comidas propias (se compensa con `soloOnly`); en una compartida se ignora.
+   */
+  kcalAdjust?: Partial<Record<MealSlot, number>>;
 };
 
 /** ¿Esta comida del día la eligió la persona a mano? */
@@ -1160,13 +1168,28 @@ const cleanDay = (raw: unknown): PlanDay => {
   const kids = cleanKids(d.kids);
   const rawPinned: unknown[] = Array.isArray(d.pinned) ? d.pinned : [];
   const pinned = MEAL_SLOTS.filter((s) => rawPinned.includes(s));
+  const kcalAdjust = cleanKcalAdjust(d.kcalAdjust);
   if (breakfast) day.breakfast = breakfast;
   if (snack) day.snack = snack;
   if (extras) day.extras = extras;
   if (kids) day.kids = kids;
   if (pinned.length) day.pinned = pinned;
+  if (kcalAdjust) day.kcalAdjust = kcalAdjust;
   return day;
 };
+
+/** Tope de `kcalAdjust` por comida: por encima es un dato roto, no una compensación. */
+const KCAL_ADJUST_MAX = 1500;
+
+function cleanKcalAdjust(raw: unknown): PlanDay["kcalAdjust"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Partial<Record<MealSlot, number>> = {};
+  for (const slot of MEAL_SLOTS) {
+    const n = Math.round(Number((raw as Record<string, unknown>)[slot]));
+    if (Number.isFinite(n) && n !== 0 && Math.abs(n) <= KCAL_ADJUST_MAX) out[slot] = n;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 const cleanCoverage = (raw: unknown): PlanCoverage | undefined => {
   const o = (raw ?? {}) as Record<string, unknown>;
@@ -1770,6 +1793,50 @@ export function planSlotIndex(
   const byName = week.days.findIndex((d) => normDay(d.day).includes(target));
   const dayIndex = byName >= 0 ? byName : (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
   return week.days[dayIndex] ? { weekIndex, dayIndex } : null;
+}
+
+/** El día del plan de una fecha (ver `planSlotIndex`). */
+export function planDayOf(plan: MonthlyPlan | null, date: string): PlanDay | null {
+  const at = planSlotIndex(plan, date);
+  return at ? (plan!.weeks[at.weekIndex]!.days[at.dayIndex] ?? null) : null;
+}
+
+/**
+ * Suma a cada celda (fecha y comida) las kcal que la compensación le ha movido
+ * (`PlanDay.kcalAdjust`). Solo días posteriores a `today`: hoy y el pasado no
+ * se tocan. Se acumula: dos compensaciones sobre la misma cena se suman.
+ */
+export type KcalAdjustCell = { date: string; slot: MealSlot; kcal: number };
+
+export function addKcalAdjust(
+  plan: MonthlyPlan,
+  cells: readonly KcalAdjustCell[],
+  today: string,
+): MonthlyPlan {
+  const byCell = new Map<string, { slot: MealSlot; kcal: number }[]>();
+  for (const c of cells) {
+    if (c.date <= today || !Math.round(c.kcal)) continue;
+    const at = planSlotIndex(plan, c.date);
+    if (!at) continue;
+    const key = `${at.weekIndex}:${at.dayIndex}`;
+    byCell.set(key, [...(byCell.get(key) ?? []), c]);
+  }
+  if (!byCell.size) return plan;
+  return {
+    ...plan,
+    weeks: plan.weeks.map((week, wi) => ({
+      ...week,
+      days: week.days.map((day, di) => {
+        const add = byCell.get(`${wi}:${di}`);
+        if (!add) return day;
+        const next: Partial<Record<MealSlot, number>> = { ...(day.kcalAdjust ?? {}) };
+        for (const { slot, kcal } of add) next[slot] = Math.round((next[slot] ?? 0) + kcal);
+        const kcalAdjust = cleanKcalAdjust(next);
+        const { kcalAdjust: _drop, ...rest } = day;
+        return kcalAdjust ? { ...rest, kcalAdjust } : rest;
+      }),
+    })),
+  };
 }
 
 /**

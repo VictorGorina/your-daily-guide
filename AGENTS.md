@@ -359,11 +359,23 @@ un cambio suele romper sin querer:
   (`sharedMealPortions`, con la clave de servicio). **Privacidad:** esa media no se guarda junto a
   la comida (`MealMacroEstimate.portion` solo va en las propias): con el factor propio dejaría
   despejar el de los demás. `guide.portionFactor` guarda el factor del día para los días pasados.
+- **Escalado al objetivo de la comida (08 adelantado)**: `scale.ts` (puro, solo servidor). Grupos
+  por los datos del alimento: V (verdura, fruta, condimentos < 60 kcal) fijo, P (proteína ≥ 35 %
+  de las kcal) y E (el resto). Se recorre `fP` en pasos de 0,01 y `fE` se despeja de las kcal:
+  kcal primero (±1 %), luego la proteína de la comida, luego el reparto menos deformado. Límites
+  sobre la ración personal: `fP` 0,75-1,6, `fE` 0,6-2,0, `fP/fE` 0,5-2 (el 08 proponía `fE` ≤ 1,4,
+  pero la ración de cereal de AESAN es la mitad de un plato y con ese techo ningún día llegaba). Lo
+  que no cabe queda como residuo. Una pieza (`unidad`) no se escala. Se calcula al leer, no se
+  guarda: `plannedServingsFor` (`planned-serving.server.ts`) junta la ración personal, `perSlot`,
+  el `kcalAdjust` del día y la ración y el objetivo medios del hogar (`sharedMealPortions`); la
+  guía, `compensateFutureDishChange` y `eval:plan-lite` lo usan.
 - **"Comí distinto" (17)**: la guía recibe cada comida cambiada con `eaten` y su `size`
   (`guideMeals`). Cantidad = la del texto ("media pizza") → una pieza entera si es `unidad` → plato
   × `habitual`, con los chips pequeño · normal · grande (×0,75 · ×1 · ×1,3) que aprenden el tamaño
-  tras 5 iguales (`learnedPortionSize`, `MealHabit.portionSize`). El plato del plan contra el que se
-  mide sale con el factor `plan`: las dos cifras a la misma escala.
+  tras 5 iguales (`learnedPortionSize`, `MealHabit.portionSize`). Un plato (no una pieza) se escala
+  como los del plan, pero con la ración habitual y al objetivo de esa comida a mantenimiento
+  (`eatenMacros`, `resolveEatenServing`), y encima texto o chip. Las dos cifras a la misma escala:
+  para quien mantiene, comerse el plato del plan con el chip "normal" da desvío 0.
 - **Deporte (16)**: neto y con el peso (`estimateExerciseKcal` → `exerciseNetKcal`). `logExercise`
   reparte cada sesión con `splitRoutineSession`: si esta semana ISO quedan sesiones de la rutina de
   `profiles.training`, su parte normal ya va en el objetivo y solo `kcal` (lo que desvía el día)
@@ -372,7 +384,10 @@ un cambio suele romper sin querer:
 - **Reajuste medido (18, puente hasta el 12)**: `reflowMeals({ measure: true })` mide con las
   recetas cuánto compensan de verdad los platos cambiados (`absorbedKcal`); por debajo del 50 %
   insiste UNA vez con los números. `DayAdjustment.absorbedKcal` y la tarjeta lo dicen
-  (`absorbedNote`). Se registra `ratio` en el log para compararlo con el 12.
+  (`absorbedNote`). Se registra `ratio` en el log para compararlo con el 12. Con el escalado, lo
+  que mueve cada plato se guarda en el día (`PlanDay.kcalAdjust`, `addKcalAdjust`) y el objetivo
+  de esa comida lo resta; también sin `measure` cuando hay `kcalDelta` (coach, plato futuro). Solo
+  cuenta en comidas propias. El 12 escribirá el mismo campo sin cambiar platos.
 - **Plan con objetivo (23)**: el prompt del plan lleva las kcal y la proteína por comida, la media
   del hogar para las compartidas y la estructura "plato · acompañamiento · postre"
   (`planTargetsPrompt`). Los planes nuevos llevan `targetsVersion`; Hoy explica que uno anterior se

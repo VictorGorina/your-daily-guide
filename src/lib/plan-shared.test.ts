@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { SharedSlots } from "./household-shared";
 import {
+  addKcalAdjust,
   addMonths,
   awayPlanLine,
   cadenceOf,
@@ -13,6 +14,7 @@ import {
   cleanReflowChanges,
   cleanShopping,
   applyPlanChanges,
+  planDayOf,
   childMealsForDate,
   childPureeGaps,
   cleanTripActuals,
@@ -2263,5 +2265,62 @@ describe("awayPlanLine", () => {
     expect(line).toBe(
       'NOTAS PARA ESTE MES (contexto adicional de la persona, tenlo en cuenta si es relevante): "algo"',
     );
+  });
+});
+
+describe("addKcalAdjust (puente hasta el ticket 12)", () => {
+  // 9 de septiembre de 2026 = miércoles de la semana 1 → celda (1, 2).
+  it("escribe el ajuste en la celda de la fecha y lo acumula", () => {
+    const once = addKcalAdjust(
+      plan(),
+      [{ date: "2026-09-09", slot: "cena", kcal: -150 }],
+      "2026-09-07",
+    );
+    expect(once.weeks[1]!.days[2]!.kcalAdjust).toEqual({ cena: -150 });
+    const twice = addKcalAdjust(
+      once,
+      [
+        { date: "2026-09-09", slot: "cena", kcal: -60 },
+        { date: "2026-09-09", slot: "comida", kcal: 80 },
+      ],
+      "2026-09-07",
+    );
+    expect(planDayOf(twice, "2026-09-09")!.kcalAdjust).toEqual({ cena: -210, comida: 80 });
+    expect(twice.weeks[1]!.days[2]!.dinner).toBe("Cena S1D2");
+  });
+
+  it("no toca hoy ni el pasado, y un ajuste que vuelve a cero desaparece", () => {
+    const base = plan();
+    expect(
+      addKcalAdjust(base, [{ date: "2026-09-07", slot: "cena", kcal: -100 }], "2026-09-07"),
+    ).toBe(base);
+    const on = addKcalAdjust(
+      base,
+      [{ date: "2026-09-09", slot: "cena", kcal: -100 }],
+      "2026-09-07",
+    );
+    const off = addKcalAdjust(on, [{ date: "2026-09-09", slot: "cena", kcal: 100 }], "2026-09-07");
+    expect(off.weeks[1]!.days[2]!.kcalAdjust).toBeUndefined();
+  });
+
+  it("sobrevive a cleanPlan, a una recolocación y a una regeneración", () => {
+    const on = addKcalAdjust(
+      plan(),
+      [{ date: "2026-09-09", slot: "cena", kcal: -120 }],
+      "2026-09-07",
+    );
+    expect(cleanPlan(JSON.parse(JSON.stringify(on)))!.weeks[1]!.days[2]!.kcalAdjust).toEqual({
+      cena: -120,
+    });
+    const moved = applyPlanChanges(on, [{ date: "2026-09-09", dinner: "Otra cena" }], "2026-09-07");
+    expect(moved.weeks[1]!.days[2]!.kcalAdjust).toEqual({ cena: -120 });
+    const merged = mergeFuturePlan(on, plan(), "2026-09-07");
+    expect(merged.weeks[1]!.days[2]!.kcalAdjust).toEqual({ cena: -120 });
+  });
+
+  it("cleanPlan descarta un ajuste roto", () => {
+    const raw = JSON.parse(JSON.stringify(plan()));
+    raw.weeks[1].days[2].kcalAdjust = { cena: "x", comida: 99999, merienda: -50, snack: -40 };
+    expect(cleanPlan(raw)!.weeks[1]!.days[2]!.kcalAdjust).toEqual({ snack: -40 });
   });
 });

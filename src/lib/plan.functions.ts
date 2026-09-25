@@ -39,6 +39,7 @@ import {
   coverageRatio,
   diffFutureMeals,
   effectiveMealSlots,
+  addKcalAdjust,
   applyPlanChanges,
   awayPlanLine,
   cleanReflowChanges,
@@ -72,6 +73,7 @@ import {
   normName,
   weekdayName,
   type ChildMeal,
+  type KcalAdjustCell,
   type MealSlot,
   type MonthConstraints,
   type MonthlyPlan,
@@ -1538,16 +1540,24 @@ export async function reflowMeals(opts: {
   let reflow = await askReflow("");
   let absorbed: number | null = null;
   let partial = false;
+  /** Lo que mueve cada plato recolocado del reflow elegido (ver `addKcalAdjust`). */
+  let movedCells: KcalAdjustCell[] = [];
 
   /**
    * Ticket 18: cuánto compensan de verdad unos cambios, con las recetas de la
    * caché a la ración del plan (solo se recolocan comidas propias). Hasta que
    * el reajuste sea código (ticket 12), es lo que evita dar por "compensado" un
    * cambio de lentejas por garbanzos que mueve 30 kcal de 400.
+   *
+   * Devuelve también lo que mueve cada plato: es lo que se guarda en el día como
+   * `kcalAdjust`, porque los platos del plan se escalan al objetivo de su comida
+   * (`plannedMacros`) y un plato más ligero, escalado, ya no aligera nada.
    */
-  const measure = async (changes: PlanChange[]): Promise<number | null> => {
+  const measure = async (
+    changes: PlanChange[],
+  ): Promise<{ absorbed: number; cells: KcalAdjustCell[] } | null> => {
     const cells = diffFutureMeals(current, applyPlanChanges(current, changes, today), today);
-    if (!cells.length) return 0;
+    if (!cells.length) return { absorbed: 0, cells: [] };
     const [{ getRecipes }, { macrosOfRecipe }, { energyTargets }, { portionFactors }] =
       await Promise.all([
         import("@/lib/nutrition/recipes.server"),
@@ -1565,17 +1575,29 @@ export async function reflowMeals(opts: {
       cells.flatMap((c) => [c.before, c.after]),
       { apiKey: key, userId },
     );
-    return absorbedKcal(cells, (dish) => {
+    const kcalOf = (dish: string) => {
       const recipe = recipes.get(dish.trim())?.recipe;
       return recipe ? macrosOfRecipe(recipe, factor).kcal : null;
-    });
+    };
+    const total = absorbedKcal(cells, kcalOf);
+    if (total == null) return null;
+    return {
+      absorbed: total,
+      cells: cells.map((c) => ({
+        date: c.date,
+        slot: c.slot,
+        kcal: (kcalOf(c.after) ?? 0) - (kcalOf(c.before) ?? 0),
+      })),
+    };
   };
 
   if (opts.measure && kcalDelta) {
-    absorbed = await measure(reflow.changes).catch((error) => {
+    const first = await measure(reflow.changes).catch((error) => {
       console.error("reflowMeals: medir", error);
       return null;
     });
+    absorbed = first?.absorbed ?? null;
+    movedCells = first?.cells ?? [];
     // Corto (o nada): UNA insistencia, con los números. Sustituye a la genérica
     // de "no has cambiado nada".
     if (absorbed != null && strongDelta && absorbsTooLittle(absorbed, kcalDelta)) {
@@ -1588,9 +1610,10 @@ export async function reflowMeals(opts: {
           "en los días permitidos hasta cubrir esa diferencia, repartida en al menos dos días.\n\n",
       );
       const again = second.changes.length ? await measure(second.changes).catch(() => null) : null;
-      if (again != null && again * sign > absorbed * sign) {
+      if (again != null && again.absorbed * sign > absorbed * sign) {
         reflow = second;
-        absorbed = again;
+        absorbed = again.absorbed;
+        movedCells = again.cells;
       }
       partial = absorbsTooLittle(absorbed, kcalDelta);
     }
@@ -1614,8 +1637,18 @@ export async function reflowMeals(opts: {
     if (second.changes.length) reflow = second;
     else console.warn("reflowMeals: sigue sin cambiar nada tras insistir");
   }
+  // Sin `measure` (el coach, un plato futuro cambiado a mano), si hay desvío que
+  // compensar también se guarda lo que mueve cada plato: si no, el escalado al
+  // objetivo de la comida lo borraría y el cambio no compensaría nada.
+  if (!opts.measure && kcalDelta && reflow.changes.length) {
+    const moved = await measure(reflow.changes).catch((error) => {
+      console.error("reflowMeals: medir", error);
+      return null;
+    });
+    movedCells = moved?.cells ?? [];
+  }
   const merged: MonthlyPlan = {
-    ...applyPlanChanges(current, reflow.changes, today),
+    ...addKcalAdjust(applyPlanChanges(current, reflow.changes, today), movedCells, today),
     intro: reflow.intro || current.intro,
   };
   // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
@@ -1834,20 +1867,23 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       const profile = (profileRow ?? {}) as Record<string, unknown>;
       const goal = resolveCompensationGoal(profile);
 
-      // Las dos recetas de la caché (ticket 06), a la ración del plan de la
-      // persona (ticket 21): los dos platos se comerán como plan.
+      // Las dos recetas de la caché (ticket 06), servidas como plan ese día: al
+      // objetivo de esa comida (`plannedMacros`). Así el plato nuevo se escala
+      // igual que el viejo y solo cuenta lo que el escalado no llega a cubrir.
       const { getRecipes } = await import("@/lib/nutrition/recipes.server");
-      const { macrosOfRecipe } = await import("@/lib/nutrition/recipe");
-      const { energyTargets } = await import("@/lib/nutrition/energy");
-      const { portionFactors } = await import("@/lib/nutrition/portion");
-      const factor = portionFactors(energyTargets(profile as never), profile).plan;
-      const recipes = await getRecipes([plannedDish, dish], { apiKey: key, userId });
+      const { plannedMacros } = await import("@/lib/nutrition/scale");
+      const { plannedServingsFor } = await import("@/lib/nutrition/planned-serving.server");
+      const [recipes, servings] = await Promise.all([
+        getRecipes([plannedDish, dish], { apiKey: key, userId }),
+        plannedServingsFor({ supabase: supabase as never, userId, profile, date }),
+      ]);
       const fromRecipe = recipes.get(plannedDish.trim())?.recipe;
       const toRecipe = recipes.get(dish.trim())?.recipe;
       // Solo con las dos cifras calculadas (D13): sin una, no se compensa a ciegas.
       if (!fromRecipe || !toRecipe) return { adjusted: false, reason: "no-macros" };
-      const from = macrosOfRecipe(fromRecipe, factor);
-      const to = macrosOfRecipe(toRecipe, factor);
+      const { serving } = servings.planned(label);
+      const from = plannedMacros(fromRecipe, serving).macros;
+      const to = plannedMacros(toRecipe, serving).macros;
 
       const decision = compensationNeed({
         deltaKcal: to.kcal - from.kcal,

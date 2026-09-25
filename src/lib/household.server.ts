@@ -479,13 +479,17 @@ export async function syncSharedMeals(opts: {
  * peso ni el factor de nadie. Quien lo llama no debe guardarla junto a la
  * comida en ningún sitio que llegue al cliente (ver `guide.functions.ts`).
  *
+ * Con el factor va el objetivo medio de esa comida (kcal y proteína de
+ * `perSlot`, de los que tienen objetivo): los platos del plan se escalan a él
+ * (`plannedMacros`), la misma ración para todos. `null` si ninguno tiene objetivo.
+ *
  * Vacío si no hay hogar o ese día no se comparte nada.
  */
 export async function sharedMealPortions(
   supabase: AnyClient,
   userId: string,
   date: string,
-): Promise<Partial<Record<(typeof MEAL_KEYS)[number], number>>> {
+): Promise<Partial<Record<(typeof MEAL_KEYS)[number], SharedServing>>> {
   const home = await householdContext(supabase, userId);
   if (!home.householdId) return {};
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
@@ -511,16 +515,35 @@ export async function sharedMealPortions(
   const { energyTargets } = await import("@/lib/nutrition/energy");
   const { portionFactors, sharedPortion } = await import("@/lib/nutrition/portion");
   const planById = new Map<string, number>();
+  const targetsById = new Map<string, ReturnType<typeof energyTargets>>();
   for (const p of (data ?? []) as { id: string; sex?: string | null }[]) {
-    planById.set(p.id, portionFactors(energyTargets(p as never), p).plan);
+    const targets = energyTargets(p as never);
+    targetsById.set(p.id, targets);
+    planById.set(p.id, portionFactors(targets, p).plan);
   }
-  const out: Partial<Record<(typeof MEAL_KEYS)[number], number>> = {};
+  const out: Partial<Record<(typeof MEAL_KEYS)[number], SharedServing>> = {};
   for (const [meal, mealIds] of eaters) {
     const factor = sharedPortion(mealIds.map((id) => planById.get(id) ?? NaN));
-    if (factor != null) out[meal] = factor;
+    if (factor == null) continue;
+    const slots = mealIds.map((id) => targetsById.get(id)?.perSlot[meal]).filter((s) => !!s);
+    out[meal] = {
+      factor,
+      target: slots.length
+        ? {
+            kcal: Math.round(slots.reduce((sum, s) => sum + s!.kcal, 0) / slots.length),
+            protein_g: Math.round(slots.reduce((sum, s) => sum + s!.protein_g, 0) / slots.length),
+          }
+        : null,
+    };
   }
   return out;
 }
+
+/** La ración de una comida compartida (ver `sharedMealPortions`). */
+export type SharedServing = {
+  factor: number;
+  target: { kcal: number; protein_g: number } | null;
+};
 
 /**
  * Objetivo por comida de las comidas compartidas del hogar, para el prompt del

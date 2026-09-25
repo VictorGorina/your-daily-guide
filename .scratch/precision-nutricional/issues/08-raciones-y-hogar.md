@@ -1,6 +1,6 @@
 # 08 — Raciones: escalado al objetivo, ración compartida del hogar y comidas propias
 
-Status: ready (D1, D2 y D4 aprobadas)
+Status: en parte (2026-09-25): `scaleRecipe` y ración compartida por objetivo medio; falta `alignSoloMeals` (ver Comments)
 Blocked by: 06, 07, 21
 Tamaño: L
 Fase: 3
@@ -182,3 +182,27 @@ lo que diga el texto > la unidad natural > la misma masa que el plato planificad
   la referencia a `kcalDeltaOf`, que ya no existe (`resolveDishDeltas` / `perMealDeltas`).
 
 - 2026-09-24 — Tras confirmar D7-D13: los factores parten de la ración personal del 21, con límites más estrechos; la estructura de la comida (23) cubre lo que el escalado no debe.
+
+- 2026-09-25 — **Adelantado en parte para cerrar el hueco del plan** (el eval del 23 dejaba el día
+  en ~60 % del objetivo). Hecho:
+  - `scaleRecipe` en `src/lib/nutrition/scale.ts` (+ test): grupos V/P/E por los datos del
+    alimento, como aquí. En vez de la forma cerrada 2×2 con un caso por límite activo, recorre `fP`
+    en pasos de 0,01 y despeja `fE` de las kcal (kcal ±1 %, luego proteína, luego el reparto menos
+    deformado): determinista y trata igual los tres límites.
+  - **Límites más anchos en E** (`fE` 0,6-2,0; `fP` 0,75-1,6; `fP/fE` 0,5-2), porque con `fE` ≤ 1,4
+    ningún día de la persona de referencia llegaba: una ración de AESAN es una unidad de
+    recomendación (4-6 de cereal al día), no el plato de un adulto.
+  - Se calcula **al leer**, no se guarda (`PlanDay.portions` no existe): las recetas del mes se
+    calculan en el cliente después de generar el plan, así que al generar no están. Un factor que
+    depende solo de (plato, objetivo de la comida, ajuste del día) es determinista.
+  - `plannedMacros` para el plan (`perSlot` + `PlanDay.kcalAdjust`; en una compartida, la media
+    del hogar vía `sharedMealPortions`, que ahora devuelve también el objetivo medio) y
+    `eatenMacros` para "comí distinto" (el mismo escalado a la ración habitual y al objetivo de la
+    comida a mantenimiento, × texto o chip). Sin lo segundo, cualquier cambio de plato parecía
+    comer un tercio menos y `settleDay` compensaba al revés.
+  - Puente con la compensación (ticket 12): al escalar, un plato más ligero ya no aligera, así que
+    `reflowMeals` guarda en el día lo que mueve cada plato recolocado (`PlanDay.kcalAdjust`) y el
+    objetivo de esa comida lo resta.
+  - Falta: `alignSoloMeals` (pasar el residuo de una comida que no llega a las demás del día y
+    cerrar el día de cada adulto de un hogar), el redondeo a medidas de cocina (cuando se enseñen
+    gramos, ticket 09) y el recálculo `scope: "portions"`. Una pieza (`unidad`) no se escala.

@@ -116,9 +116,17 @@ AESAN en gramos **crudos**, y el código pone la cantidad y las cifras: casado c
 (techos, inventados, UN reintento con pista; calibrado para no tocar el golden set). La receta se
 guarda **una vez para toda la app** en `dish_recipes` (`getRecipes`, `recipes.server.ts`, clave
 `dishKey`) y las macros se calculan **al leer** (`macrosOfRecipe(receta, factor)`), nunca se
-guardan. El factor es la **ración personal** (`portion.ts`): `plan` = objetivo ÷ 2.000 en los
-platos del plan (la media de los adultos en una comida compartida, que no se guarda con la comida
-por privacidad) y `habitual` = mantenimiento ÷ 2.000 en "comí distinto". La pantalla Plan
+guardan. El punto de partida es la **ración personal** (`portion.ts`): `plan` = objetivo ÷ 2.000
+en los platos del plan (la media de los adultos en una comida compartida, que no se guarda con la
+comida por privacidad) y `habitual` = mantenimiento ÷ 2.000 en "comí distinto". Encima, **cada
+plato se escala al objetivo de su comida** (`scale.ts`, ticket 08 adelantado): verdura y fruta
+fijas, dos factores para el grupo proteína y el grupo energía (kcal primero, luego proteína),
+con límites para que el plato siga siendo el mismo; `plannedMacros` para el plan (objetivo de
+`perSlot` + `PlanDay.kcalAdjust`, o la media del hogar en una compartida, vía
+`plannedServingsFor`) y `eatenMacros` para "comí distinto" (el objetivo de esa comida a
+mantenimiento, × texto o chip). Los dos lados se escalan igual: si no, cualquier cambio de plato
+parecería comer menos. Una ración de AESAN es una unidad (se recomiendan varias al día), así que
+sin escalar el día del plan se quedaba en ~60 % del objetivo. La pantalla Plan
 precalienta los platos del mes (`recipe-warm.ts`, `/api/v1/recipes/warm`). Ingredientes que no
 casan y pesan: USDA (`usda.server.ts`, `USDA_FDC_API_KEY`, tabla `foods_extra`) y si no, el más
 parecido. Medida: `bun run eval:recipes` (exactitud contra el golden set) y `bun run
@@ -181,7 +189,11 @@ Esa función suma el día con `dayBalance` ([src/lib/day-balance.ts](src/lib/day
 testeado), decide **una vez** con `compensationNeed` (tabla aprobada por objetivo), reserva los tres
 libros de cuentas a la vez y llama **una vez** a `reflowMeals` con la nota del día entero
 (`dayNote`). Recoloca comidas/cenas **propias** de mañana a hoy + 6 (`compensationWindow`,
-`soloOnly`); la compra, hoy y el pasado no cambian.
+`soloOnly`); la compra, hoy y el pasado no cambian. Como los platos del plan se escalan al objetivo de su comida,
+cambiar un plato por otro más ligero ya no aligera nada por sí solo: `reflowMeals` guarda en cada
+día recolocado lo que mueve cada plato (`PlanDay.kcalAdjust`, puente hasta el ticket 12, que lo
+escribirá sin cambiar platos) y el escalado apunta a `objetivo + ajuste`. Lo que dice la tarjeta
+(`absorbedKcal`) es exactamente lo que cambian esos días.
 
 Antes cada origen tenía su libro, su timer, su umbral y su llamada a la IA, los tres sobre la misma
 ventana de días. Eso rompía la exactitud por los dos lados: picotear +250 y quemar −300 (un día a

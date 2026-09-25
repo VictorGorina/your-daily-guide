@@ -5,14 +5,14 @@ Para retomar en una sesión nueva. El detalle de cada ticket está en sus `## Co
 
 ## Estado
 
-- **Implementado en código, SIN COMMIT y sin desplegar**, en el checkout principal
-  (`/Users/v/your-daily-guide`, rama `main`): tickets 05, 06, 14, 16, 17, 18, 21, 22 y 23, en web y
-  en la app iOS. Puertas en verde al cerrar: `bun run test` (702), `bun run typecheck`, `npx tsc` en
-  `mobile/`, `scripts/check-shared-drift.sh` y `bun run lint` (0 errores).
+- **Desplegado** el 2026-09-25: commit `799e486` en `main`, integrado encima de los tres commits de
+  la otra sesión (registro de deporte y picoteo del chat vía `logExercise`/`settleDay`). CI verde y
+  producción sirviendo la versión nueva. Tras integrar: 724 tests, typecheck web y móvil, drift,
+  lint (0 errores) y build de producción en verde. La app iOS necesita una build nueva de EAS para
+  llevarlo al móvil.
 - **Supabase de producción: hecho.** Tablas `dish_recipes` y `foods_extra` creadas y
-  `increment_dish_recipe_hits` cerrada a `anon`/`authenticated` (migración
-  `20260925160000_dish_recipes_revoke_anon.sql`). Comprobado con la clave publishable: no puede
-  insertar, modificar ni llamar a la función; la clave de servicio sí.
+  `increment_dish_recipe_hits` cerrada a `anon`/`authenticated`. Comprobado con la clave
+  publishable: no puede insertar, modificar ni llamar a la función; la clave de servicio sí.
 - **Falta** `USDA_FDC_API_KEY` en `.env` y Vercel (clave gratuita de api.data.gov). Sin ella el
   código funciona y no busca en USDA.
 
@@ -25,16 +25,34 @@ Para retomar en una sesión nueva. El detalle de cada ticket está en sus `## Co
   las tres tipologías; 8/42 comidas principales de un solo componente. La estructura de la comida
   en el prompt no cierra el día.
 
-## Decisiones pendientes del usuario
+## Escalado al objetivo (08 adelantado, 2026-09-25, segunda sesión)
 
-1. **Subir a `main`**: el usuario ha dicho "subiremos a main luego". La otra sesión (worktree
-   `.claude/worktrees/sleepy-hofstadter-88081f`, registro de deporte y picoteo del chat) sube lo
-   suyo por separado. Al integrar, chocan `guided-log-sheet.tsx` (web y móvil) y `chat.tsx` (web y
-   móvil): en la versión de esa sesión el camino de actividad guarda con `logExercise` y la prop
-   `weightKg` de `GuidedLogSheet` que añadí aquí sobra — quedarse con la suya y quitar la prop.
-2. **El plan se queda corto frente al objetivo** (14, 21 y 23 debían salir juntos para evitarlo).
-   Opciones planteadas: adelantar el ticket 10 (el código escala las raciones de cada día hasta el
-   objetivo), desplegar solo lo independiente, o esperar.
+Cada plato del plan se sirve al objetivo de su comida (`scale.ts`, `planned-serving.server.ts`):
+verdura fija, grupos proteína y energía con límites, calculado al leer. "Comí distinto" se escala
+igual a la ración habitual (si no, todo cambio de plato parecía comer menos). La compensación de
+`settleDay` guarda lo que mueve cada plato en `PlanDay.kcalAdjust` (puente hasta el 12). Detalle en
+el comentario del ticket 08.
+
+`eval:plan-lite`, mujer que pierde (1.330 kcal), mismo plan: sin escalar −32 % a −51 %, escalado
+**−8 % a −28 %**; la comida clava su objetivo todos los días. Lo que falta es estructura: meriendas
+de una sola fruta (52-89 kcal para 160) y desayunos de solo yogur (125 para 333). Hombre y
+"ganar": el eval quedó corriendo al cerrar, sin cifras.
+
+## Pendiente
+
+1. **Ticket 10 propiamente dicho**: `planFit` + UNA ronda de cambio de platos para las comidas
+   que no pueden llegar (sobre todo desayuno y merienda de un componente). El escalado no debe
+   inflar una fruta.
+2. `alignSoloMeals` (08): pasar el residuo de una comida a las demás del día y cerrar el día de
+   cada adulto de un hogar. Cuidado: calcularlo sobre el plato PLANEADO (`plannedIdea`), no sobre
+   el comido, o hoy se compensaría dentro del mismo día.
+3. Verificación en navegador (perfil demo) y simulador iOS de Hoy con las cifras escaladas: el
+   navegador integrado rechazó `localhost` en esta sesión.
+4. Terminar `bun run eval:plan-lite` para el hombre que mantiene y el que gana.
+5. Ticket 12: compensar en código escribiendo `kcalAdjust` sin cambiar platos (el campo ya existe).
+6. Ticket 11: la compra sigue saliendo del modelo, no de las raciones escaladas.
+7. Privacidad del hogar: con dos adultos, las kcal de una comida compartida ≈ objetivo medio, y
+   con el propio se puede aproximar el del otro. Ya pasaba con el factor medio; decidir si importa.
 
 ## Lo que no se hizo
 
