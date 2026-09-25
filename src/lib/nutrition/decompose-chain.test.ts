@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   DecomposeError,
+  matchAnswer,
   parseDecomposition,
   runDecomposeChain,
   type AskModel,
@@ -169,5 +170,60 @@ describe("parseDecomposition", () => {
     expect(() => parseDecomposition("", parse)).toThrow("sin-respuesta");
     expect(() => parseDecomposition("{no json", parse)).toThrow("json-invalido");
     expect(() => parseDecomposition('{"x": 1}', parse)).toThrow("json-invalido");
+  });
+});
+
+describe("matchAnswer — casar la respuesta con los platos pedidos", () => {
+  const raw = withRecipe();
+  const answerOf = (...labels: string[]) =>
+    new Map(labels.map((label) => [label, { ...raw, coccion: label }] as const));
+
+  it("por nombre, como siempre", () => {
+    const got = matchAnswer(["Pasta con tomate"], answerOf("pasta con tomate"));
+    expect(got.get("Pasta con tomate")?.coccion).toBe("pasta con tomate");
+  });
+
+  it("etiquetas con el número de la lista que copió el modelo (regresión 2026-09-24)", () => {
+    const got = matchAnswer(
+      ["Pasta con tomate", "Lentejas"],
+      answerOf("1. pasta con tomate", "2) lentejas"),
+    );
+    expect(got.get("Pasta con tomate")?.coccion).toBe("1. pasta con tomate");
+    expect(got.get("Lentejas")?.coccion).toBe("2) lentejas");
+  });
+
+  it("un plato que empieza por número no pierde el número", () => {
+    const got = matchAnswer(["2 huevos fritos"], answerOf("2 huevos fritos"));
+    expect(got.get("2 huevos fritos")).toBeDefined();
+    // Sin separador no es un número de lista: "huevos fritos" no casa con él.
+    expect(
+      matchAnswer(["Huevos fritos", "Otro"], answerOf("2 huevos fritos", "x")).get("Huevos fritos"),
+    ).toBeUndefined();
+  });
+
+  it("un plato y una fila: casa por posición aunque el modelo reescriba la etiqueta", () => {
+    const got = matchAnswer(["Pasta boloñesa"], answerOf("espaguetis a la boloñesa"));
+    expect(got.get("Pasta boloñesa")?.coccion).toBe("espaguetis a la boloñesa");
+  });
+
+  it("varios platos con etiquetas reescritas: no adivina (mejor reintentar que cifras cruzadas)", () => {
+    const got = matchAnswer(["Pasta", "Lentejas"], answerOf("espaguetis", "legumbres"));
+    expect(got.get("Pasta")).toBeUndefined();
+    expect(got.get("Lentejas")).toBeUndefined();
+  });
+
+  it("la cadena da por buenos los platos numerados sin reintentar uno a uno", async () => {
+    const calls: { model: string; dishes: string[] }[] = [];
+    const result = await runDecomposeChain({
+      dishes: ["Pasta con tomate", "Lentejas"],
+      ask: fakeAsk(
+        { m: (d) => new Map(d.map((dish, i) => [`${i + 1}. ${dish.toLowerCase()}`, raw])) },
+        calls,
+      ),
+      model: "m",
+      fallbackModel: "f",
+    });
+    expect(result.raws.size).toBe(2);
+    expect(calls).toHaveLength(1);
   });
 });

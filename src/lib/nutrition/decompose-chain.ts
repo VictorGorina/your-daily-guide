@@ -85,6 +85,42 @@ export function parseDecomposition(
   return out;
 }
 
+/** "1. pasta", "2) pasta", "3 - pasta" → "pasta". Exige el separador para no
+ * comerse el número de un plato que empieza por él ("2 huevos fritos"). */
+const withoutListNumber = (label: string) => label.replace(/^\s*\d+\s*[.):-]\s*/, "");
+
+/**
+ * Casa lo que devolvió el modelo (indexado por su etiqueta, que es texto libre)
+ * con los platos pedidos. El prompt numera los platos y a veces el modelo copia
+ * el número en TODAS las etiquetas ("1. Pasta…"): sin esto ninguna casaba y el
+ * lote entero se perdía, aunque traía los ingredientes bien (2026-09-24).
+ *
+ * Nunca adivina entre varios: casar dos platos al revés daría cifras
+ * equivocadas sin avisar, y es mejor que el plato vuelva a la cola y se
+ * reintente solo. Por posición, únicamente un plato pedido con una fila.
+ */
+export function matchAnswer(
+  asked: string[],
+  answer: Map<string, RawDish>,
+): Map<string, RawDish | undefined> {
+  const bare = new Map<string, RawDish | null>();
+  for (const [label, raw] of answer) {
+    const key = withoutListNumber(label);
+    if (key === label) continue;
+    // Dos filas que quedan iguales sin el número: ambiguo, no se usa.
+    bare.set(key, bare.has(key) ? null : raw);
+  }
+  const out = new Map<string, RawDish | undefined>();
+  for (const dish of asked) {
+    const key = normName(dish);
+    out.set(dish, answer.get(key) ?? bare.get(key) ?? undefined);
+  }
+  if (asked.length === 1 && answer.size === 1 && !out.get(asked[0]!)) {
+    out.set(asked[0]!, answer.values().next().value);
+  }
+  return out;
+}
+
 /** Pregunta al modelo por varios platos. Lanza si no hay nada utilizable. */
 export type AskModel = (
   dishes: string[],
@@ -127,9 +163,9 @@ export async function runDecomposeChain(opts: {
   const step = async (asked: string[], stepModel: string, timeoutMs: number) => {
     if (capped || !asked.length) return;
     try {
-      const answer = await ask(asked, stepModel, timeoutMs);
+      const answer = matchAnswer(asked, await ask(asked, stepModel, timeoutMs));
       for (const dish of asked) {
-        const raw = answer.get(normName(dish));
+        const raw = answer.get(dish);
         if (settledRaw(raw)) {
           raws.set(dish, raw);
           failures.delete(dish);
