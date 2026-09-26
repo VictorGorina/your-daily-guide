@@ -26,6 +26,18 @@ import { redactFields } from "@/lib/log-redact";
 
 export type LogLevel = "info" | "warn" | "error";
 
+/**
+ * Texto de un error para un campo de log. Hace falta porque los errores de
+ * Supabase son objetos planos con una clave `message`, que `redactFields`
+ * taparía.
+ */
+export function errorText(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
+}
+
 export function logEvent(
   level: LogLevel,
   event: string,

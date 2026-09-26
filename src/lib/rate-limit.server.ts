@@ -7,6 +7,7 @@ import {
   type SpendCapDecision,
   type SpendCapScope,
 } from "@/lib/ai-spend";
+import { errorText, logEvent } from "@/lib/log.server";
 import { RateLimitError } from "@/lib/rate-limit-error";
 
 /**
@@ -96,7 +97,7 @@ async function consume(subject: string, bucket: RateLimitBucket): Promise<Consum
     // coach, sin plan y sin guía: convertiríamos un problema de infraestructura
     // en una caída de producto. Queda en el log para que se vea, porque
     // mientras esto falle no hay tope de gasto.
-    console.error("consume_rate_limit", error);
+    logEvent("error", "rate_limit_failopen", { bucket, error: errorText(error) });
     return { allowed: true, retryAfterSeconds: 0 };
   }
 
@@ -127,7 +128,7 @@ async function spendCapDecision(userId: string): Promise<SpendCapDecision | null
     if (!decision.allowed) {
       // Llegar aquí usando la app con normalidad es casi imposible (ver
       // AI_SPEND_CAPS): si se repite para una cuenta, merece un vistazo.
-      console.warn("ai_spend cap", {
+      logEvent("warn", "spend_cap_reached", {
         userId,
         scope: decision.scope,
         daySpentUsd: decision.daySpentUsd,
@@ -136,7 +137,7 @@ async function spendCapDecision(userId: string): Promise<SpendCapDecision | null
     }
     return decision;
   } catch (error) {
-    console.error("ai_spend read", error);
+    logEvent("error", "spend_cap_failopen", { userId, error: errorText(error) });
     return null;
   }
 }
@@ -173,7 +174,7 @@ export async function recordAiSpend(userId: string, costUsd: number): Promise<vo
     });
     if (error) throw error;
   } catch (error) {
-    console.error("record_ai_spend", error);
+    logEvent("error", "spend_record_failed", { userId, costUsd, error: errorText(error) });
   }
 }
 
