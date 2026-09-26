@@ -91,6 +91,7 @@ import {
   withPlanMeal,
   monthTitle,
   assertShoppingStateColumns,
+  sharedSlotWriteBlocked,
   withOwnedMark,
 } from "@/lib/plan-shared";
 import { cleanIntakeText, monthIntakeNotes, type IntakeAnswers } from "@/lib/month-intake";
@@ -110,13 +111,6 @@ import type { Misfit, WeeklyIdea } from "@/lib/nutrition/plan-fit";
 import type { RotationMisfit } from "@/lib/nutrition/plan-fit.server";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
-
-/**
- * `MealSlot` (plan-shared, 4 comidas) y `MealKey` (household-shared, issue 03)
- * comparten los mismos 3 nombres para desayuno/comida/cena — solo el snack no
- * tiene equivalente, porque nunca es una comida compartida del hogar (D5).
- */
-const mealKeyOf = (slot: MealSlot): MealKey | null => (slot === "snack" ? null : slot);
 
 /** Lee lo que la persona avisó para un mes antes de generar el plan (§`setMonthConstraints`). */
 async function fetchMonthConstraints(
@@ -251,18 +245,11 @@ async function guardSharedSlotWrite(
   date: string,
   slot: MealSlot,
 ): Promise<void> {
-  const mealKey = mealKeyOf(slot);
-  if (!mealKey) return;
+  if (slot === "snack") return;
   const { householdContext } = await import("@/lib/household.server");
   const home = await householdContext(supabase as never, userId);
-  if (!home.plannerId || home.plannerId === userId) return;
-  const weekday = planCursor(date).dayIndex;
-  if (!isSharedSlot(home.sharedSlots, mealKey, weekday)) return;
-  const plannerName =
-    home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
-  throw new ValidationError(
-    `Esa comida la lleva ${plannerName} de tu casa. Puedo cambiar tus comidas en solitario.`,
-  );
+  const blocked = sharedSlotWriteBlocked(home, userId, date, slot);
+  if (blocked) throw new ValidationError(blocked);
 }
 
 /**

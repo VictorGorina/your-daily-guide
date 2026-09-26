@@ -1592,6 +1592,39 @@ export const planCursor = (date: string) => {
 };
 
 /**
+ * `MealSlot` (plan-shared, 4 comidas) y `MealKey` (household-shared, issue 03)
+ * comparten los mismos 3 nombres para desayuno/comida/cena — solo el snack no
+ * tiene equivalente, porque nunca es una comida compartida del hogar (D5).
+ */
+const mealKeyOf = (slot: MealSlot): MealKey | null => (slot === "snack" ? null : slot);
+
+/**
+ * Si esa comida de ese día es compartida y quien llama NO es quien planifica
+ * en casa, el cambio no es suyo que hacer (D2): devuelve el mensaje que se le
+ * enseña. `date` decide el día de la semana; si no hay hogar (o no tiene
+ * planificador con cuenta) o la comida no se comparte, `null`.
+ */
+export function sharedSlotWriteBlocked(
+  home: {
+    plannerId: string | null;
+    sharedSlots: SharedSlots;
+    members: { userId: string | null; displayName: string }[];
+  },
+  userId: string,
+  date: string,
+  slot: MealSlot,
+): string | null {
+  const mealKey = mealKeyOf(slot);
+  if (!mealKey) return null;
+  if (!home.plannerId || home.plannerId === userId) return null;
+  const weekday = planCursor(date).dayIndex;
+  if (!isSharedSlot(home.sharedSlots, mealKey, weekday)) return null;
+  const plannerName =
+    home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
+  return `Esa comida la lleva ${plannerName} de tu casa. Puedo cambiar tus comidas en solitario.`;
+}
+
+/**
  * Fecha que ocupa una celda `(semana, día)` del plan, o `null` si esa celda no
  * cae en el mes. Es la inversa de `planSlotIndex`.
  *

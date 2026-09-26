@@ -76,6 +76,7 @@ import {
   weekDayCounts,
   withPlanMeal,
   assertShoppingStateColumns,
+  sharedSlotWriteBlocked,
   withOwnedMark,
 } from "./plan-shared";
 
@@ -2504,5 +2505,57 @@ describe("withOwnedMark", () => {
     expect(withOwnedMark(input, "Ajo", 0, "store")).toEqual(canonical());
     withOwnedMark(input, "Tomate", 3, "store");
     expect(input).toEqual(canonical());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ¿Puede quien llama escribir esa comida? (D2: las compartidas, solo quien planifica)
+// ---------------------------------------------------------------------------
+
+describe("sharedSlotWriteBlocked", () => {
+  // Comida compartida los lunes (0) y cena compartida los martes (1).
+  const home = {
+    plannerId: "ana",
+    sharedSlots: { desayuno: [], comida: [0], cena: [1] },
+    members: [
+      { userId: "ana", displayName: "Ana" },
+      { userId: "bea", displayName: "Bea" },
+      { userId: null, displayName: "Abuela" },
+    ],
+  };
+  const monday = "2026-09-28";
+  const tuesday = "2026-09-29";
+
+  it("un no planificador no escribe una comida compartida: el mensaje nombra a quien la lleva", () => {
+    expect(sharedSlotWriteBlocked(home, "bea", monday, "comida")).toBe(
+      "Esa comida la lleva Ana de tu casa. Puedo cambiar tus comidas en solitario.",
+    );
+    expect(sharedSlotWriteBlocked(home, "bea", tuesday, "cena")).toContain("Ana");
+  });
+
+  it("la misma comida otro día, o una que no se comparte, sí es suya", () => {
+    expect(sharedSlotWriteBlocked(home, "bea", tuesday, "comida")).toBeNull();
+    expect(sharedSlotWriteBlocked(home, "bea", monday, "cena")).toBeNull();
+    expect(sharedSlotWriteBlocked(home, "bea", monday, "desayuno")).toBeNull();
+  });
+
+  it("el snack nunca se comparte (D5)", () => {
+    expect(sharedSlotWriteBlocked(home, "bea", monday, "snack")).toBeNull();
+  });
+
+  it("quien planifica escribe cualquier comida", () => {
+    expect(sharedSlotWriteBlocked(home, "ana", monday, "comida")).toBeNull();
+  });
+
+  it("sin hogar, o sin planificador con cuenta, no hay nada que impedir", () => {
+    expect(
+      sharedSlotWriteBlocked({ ...home, plannerId: null }, "bea", monday, "comida"),
+    ).toBeNull();
+  });
+
+  it("si el nombre de quien planifica no está en la mesa, un genérico", () => {
+    expect(sharedSlotWriteBlocked({ ...home, members: [] }, "bea", monday, "comida")).toContain(
+      "quien lleva la cocina",
+    );
   });
 });
