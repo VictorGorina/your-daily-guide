@@ -2130,6 +2130,52 @@ export function withPlanMeal(
   };
 }
 
+/**
+ * Pone (o, con `dish` vacío, quita) el plato aparte de un niño en la celda de
+ * `date`. Nunca toca la comida de los adultos. Con `onlyIfEmpty` solo rellena un
+ * hueco: si ese niño ya tiene plato en esa comida, lo deja (lo usa
+ * `fillChildMeals`, que no debe pisar un plato puesto a mano).
+ *
+ * Devuelve el MISMO objeto si no cambia nada, y `null` si la fecha no tiene
+ * celda en el plan.
+ */
+export function withChildMeal(
+  plan: MonthlyPlan,
+  date: string,
+  meal: { childId: string; slot: MealSlot; dish: string; off?: readonly string[] },
+  opts: { onlyIfEmpty?: boolean } = {},
+): MonthlyPlan | null {
+  const at = planSlotIndex(plan, date);
+  if (!at) return null;
+  const day = plan.weeks[at.weekIndex]!.days[at.dayIndex]!;
+  const same = (k: ChildMeal) => k.childId === meal.childId && k.slot === meal.slot;
+  if (opts.onlyIfEmpty && (day.kids ?? []).some(same)) return plan;
+  const others = (day.kids ?? []).filter((k) => !same(k));
+  const kids: ChildMeal[] = meal.dish
+    ? [
+        ...others,
+        {
+          childId: meal.childId,
+          slot: meal.slot,
+          dish: meal.dish,
+          ...(meal.off?.length ? { off: [...meal.off] } : {}),
+        },
+      ]
+    : others;
+  if (!meal.dish && others.length === (day.kids?.length ?? 0)) return plan;
+  const updated: PlanDay = { ...day };
+  if (kids.length) updated.kids = kids;
+  else delete updated.kids;
+  return {
+    ...plan,
+    weeks: plan.weeks.map((week, wi) =>
+      wi !== at.weekIndex
+        ? week
+        : { ...week, days: week.days.map((d, di) => (di === at.dayIndex ? updated : d)) },
+    ),
+  };
+}
+
 /** Platos del plan mensual para una fecha concreta (YYYY-MM-DD). */
 export function planForDate(plan: MonthlyPlan | null, date: string) {
   const at = planSlotIndex(plan, date);

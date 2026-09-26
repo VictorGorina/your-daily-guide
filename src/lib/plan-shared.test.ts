@@ -75,6 +75,7 @@ import {
   tripLabel,
   tripsForCoverage,
   weekDayCounts,
+  withChildMeal,
   withPlanMeal,
   assertShoppingStateColumns,
   sharedSlotWriteBlocked,
@@ -2054,6 +2055,66 @@ describe("reconstruir el cambio de la IA sobre la versión más reciente", () =>
     const out = addKcalAdjust(withOther, [{ date: "2026-09-10", slot: "cena", kcal: -50 }], TODAY);
     expect(out.weeks[1]!.days[3]!.kcalAdjust).toEqual({ cena: -130 });
     expect(out.weeks[1]!.days[2]!.pinned).toEqual(["cena"]);
+  });
+});
+
+describe("withChildMeal", () => {
+  // 9 de septiembre de 2026 = miércoles de la semana 1 → celda (1, 2).
+  const DATE = "2026-09-09";
+  const withLeo = () =>
+    withChildMeal(plan(), DATE, { childId: "leo", slot: "cena", dish: "Puré de calabaza" })!;
+
+  it("pone el plato del niño sin tocar la comida de los adultos", () => {
+    const out = withChildMeal(plan(), DATE, {
+      childId: "leo",
+      slot: "cena",
+      dish: "Puré",
+      off: ["calabaza"],
+    })!;
+    expect(out.weeks[1]!.days[2]!.kids).toEqual([
+      { childId: "leo", slot: "cena", dish: "Puré", off: ["calabaza"] },
+    ]);
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Cena S1D2");
+    expect(out.weeks[1]!.days[3]).toEqual(plan().weeks[1]!.days[3]!);
+  });
+
+  it("sustituye el plato de ese niño y esa comida, y con plato vacío lo quita", () => {
+    const replaced = withChildMeal(withLeo(), DATE, {
+      childId: "leo",
+      slot: "cena",
+      dish: "Crema de zanahoria",
+    })!;
+    expect(replaced.weeks[1]!.days[2]!.kids).toEqual([
+      { childId: "leo", slot: "cena", dish: "Crema de zanahoria" },
+    ]);
+    const cleared = withChildMeal(replaced, DATE, { childId: "leo", slot: "cena", dish: "" })!;
+    expect("kids" in cleared.weeks[1]!.days[2]!).toBe(false);
+  });
+
+  it("con onlyIfEmpty no pisa un plato puesto a mano (fillChildMeals)", () => {
+    const base = withLeo();
+    const out = withChildMeal(
+      base,
+      DATE,
+      { childId: "leo", slot: "cena", dish: "Otro puré" },
+      { onlyIfEmpty: true },
+    );
+    expect(out).toBe(base);
+    const other = withChildMeal(
+      base,
+      DATE,
+      { childId: "leo", slot: "comida", dish: "Puré de pollo" },
+      { onlyIfEmpty: true },
+    )!;
+    expect(other.weeks[1]!.days[2]!.kids).toHaveLength(2);
+  });
+
+  it("quitar lo que no está devuelve el mismo plan; sin celda, null", () => {
+    const base = plan();
+    expect(withChildMeal(base, DATE, { childId: "leo", slot: "cena", dish: "" })).toBe(base);
+    expect(
+      withChildMeal({ ...base, weeks: [] }, DATE, { childId: "leo", slot: "cena", dish: "x" }),
+    ).toBeNull();
   });
 });
 

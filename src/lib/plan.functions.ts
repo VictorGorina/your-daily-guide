@@ -72,7 +72,6 @@ import {
   shoppingTotal,
   normName,
   weekdayName,
-  type ChildMeal,
   type KcalAdjustCell,
   type MealSlot,
   type MonthConstraints,
@@ -86,6 +85,7 @@ import {
   type TripActuals,
   type TripConfirmations,
   type TripReceipts,
+  withChildMeal,
   withPlanMeal,
   monthTitle,
   assertShoppingStateColumns,
@@ -2513,13 +2513,6 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       const at = planSlotIndex(current, data.date);
       if (!at) throw new ValidationError("Ese día todavía no tiene menú en el plan");
 
-      // Plato resuelto tal cual se veía en pantalla antes de este cambio (con
-      // la rotación semanal ya aplicada para desayuno/snack si no había un
-      // plato pedido a mano ese día), para que el caller pueda guardarlo como
-      // "lo que había antes" — ver `wasIdea` en daily.ts.
-      const previousIdea =
-        mealsForDate(current, data.date).find((m) => m.slot === data.slot)?.idea ?? "";
-
       const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
       const pantryExtras = cleanPantryExtras(
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
@@ -2531,17 +2524,34 @@ export const setPlanMeal = createServerFn({ method: "POST" })
         pantryExtras,
         data.pin && !data.manual,
       );
-      const previousPinned = isPinned(current.weeks[at.weekIndex]?.days[at.dayIndex], data.slot);
 
-      const next = withPlanMeal(current, data.date, data.slot, dish, { off, pin: data.pin });
-      if (!next) throw new ValidationError("Ese día todavía no tiene menú en el plan");
-
-      const { error } = await context.supabase
-        .from("monthly_plans")
-        .update({ plan: next as never } as never)
-        .eq("month", month)
-        .eq("user_id", context.userId);
-      if (error) {
+      // Se escribe sobre la versión más reciente de la fila (ticket 21):
+      // `resolveDish` tarda y entretanto una recolocación puede haber escrito.
+      // Lo de "antes" sale de esa misma versión, que es la que se sobrescribe.
+      let next = current;
+      let previousIdea = "";
+      let previousPinned = false;
+      try {
+        await updatePlanRowCas(context.supabase as never, context.userId, month, "plan", (r) => {
+          const latest = cleanPlan(r.plan);
+          const cell = latest && planSlotIndex(latest, data.date);
+          const written =
+            latest && withPlanMeal(latest, data.date, data.slot, dish, { off, pin: data.pin });
+          if (!latest || !cell || !written) {
+            throw new ValidationError("Ese día todavía no tiene menú en el plan");
+          }
+          // Plato resuelto tal cual se veía en pantalla antes de este cambio
+          // (con la rotación semanal ya aplicada para desayuno/snack si no había
+          // un plato pedido a mano ese día), para que el caller pueda guardarlo
+          // como "lo que había antes" — ver `wasIdea` en daily.ts.
+          previousIdea =
+            mealsForDate(latest, data.date).find((m) => m.slot === data.slot)?.idea ?? "";
+          previousPinned = isPinned(latest.weeks[cell.weekIndex]?.days[cell.dayIndex], data.slot);
+          next = written;
+          return { plan: written };
+        });
+      } catch (error) {
+        if (error instanceof ValidationError) throw error;
         console.error("setPlanMeal", error);
         throw new Error("No hemos podido guardar el cambio de plato");
       }
@@ -2714,44 +2724,20 @@ export const setChildMeal = createServerFn({ method: "POST" })
         ? await resolveDish(context.userId, data.dish, shopping, pantryExtras)
         : { dish: "", off: [] as string[] };
 
-      const next: MonthlyPlan = {
-        ...current,
-        weeks: current.weeks.map((week, wi) =>
-          wi !== at.weekIndex
-            ? week
-            : {
-                ...week,
-                days: week.days.map((day, di) => {
-                  if (di !== at.dayIndex) return day;
-                  const others = (day.kids ?? []).filter(
-                    (k) => !(k.childId === child.id && k.slot === data.slot),
-                  );
-                  const kids: ChildMeal[] = dish
-                    ? [
-                        ...others,
-                        {
-                          childId: child.id,
-                          slot: data.slot,
-                          dish,
-                          ...(off.length ? { off } : {}),
-                        },
-                      ]
-                    : others;
-                  const updated: PlanDay = { ...day };
-                  if (kids.length) updated.kids = kids;
-                  else delete updated.kids;
-                  return updated;
-                }),
-              },
-        ),
-      };
-
-      const { error } = await context.supabase
-        .from("monthly_plans")
-        .update({ plan: next as never } as never)
-        .eq("month", month)
-        .eq("user_id", context.userId);
-      if (error) {
+      // Sobre la versión más reciente de la fila (ticket 21): `resolveDish`
+      // tarda y entretanto otra escritura puede haber llegado.
+      const meal = { childId: child.id, slot: data.slot, dish, off };
+      let next = current;
+      try {
+        await updatePlanRowCas(context.supabase as never, context.userId, month, "plan", (r) => {
+          const latest = cleanPlan(r.plan);
+          const written = latest && withChildMeal(latest, data.date, meal);
+          if (!written) throw new ValidationError("Ese día todavía no tiene menú en el plan");
+          next = written;
+          return written === latest ? null : { plan: written };
+        });
+      } catch (error) {
+        if (error instanceof ValidationError) throw error;
         console.error("setChildMeal", error);
         throw new Error("No hemos podido guardar el plato del niño");
       }
@@ -2926,51 +2912,34 @@ export const fillChildMeals = createServerFn({ method: "POST" })
         },
       );
 
+      // Se rellena sobre la versión más reciente de la fila (ticket 21): la IA
+      // tarda y entretanto el planificador puede haber puesto un plato a mano,
+      // que `onlyIfEmpty` respeta. Lo rellenado se cuenta en esa versión.
       let next = current;
       let filled = 0;
       const filledChildIds = new Set<string>();
-      for (const p of proposals) {
-        const at = planSlotIndex(next, p.date);
-        if (!at) continue;
-        next = {
-          ...next,
-          weeks: next.weeks.map((week, wi) =>
-            wi !== at.weekIndex
-              ? week
-              : {
-                  ...week,
-                  days: week.days.map((dayItem, di) => {
-                    if (di !== at.dayIndex) return dayItem;
-                    const already = (dayItem.kids ?? []).some(
-                      (k) => k.childId === p.childId && k.slot === p.slot,
-                    );
-                    if (already) return dayItem;
-                    const kid: ChildMeal = {
-                      childId: p.childId,
-                      slot: p.slot,
-                      dish: p.dish,
-                      ...(p.off.length ? { off: p.off } : {}),
-                    };
-                    filled++;
-                    filledChildIds.add(p.childId);
-                    return { ...dayItem, kids: [...(dayItem.kids ?? []), kid] };
-                  }),
-                },
-          ),
-        };
+      try {
+        await updatePlanRowCas(context.supabase as never, context.userId, month, "plan", (r) => {
+          const latest = cleanPlan(r.plan);
+          if (!latest) return null;
+          next = latest;
+          filled = 0;
+          filledChildIds.clear();
+          for (const p of proposals) {
+            const after = withChildMeal(next, p.date, p, { onlyIfEmpty: true });
+            if (!after || after === next) continue;
+            next = after;
+            filled++;
+            filledChildIds.add(p.childId);
+          }
+          return filled ? { plan: next } : null;
+        });
+      } catch (error) {
+        console.error("fillChildMeals", error);
+        throw new Error("No hemos podido guardar el menú de los peques");
       }
 
       if (filled) {
-        const { error } = await context.supabase
-          .from("monthly_plans")
-          .update({ plan: next as never } as never)
-          .eq("month", month)
-          .eq("user_id", context.userId);
-        if (error) {
-          console.error("fillChildMeals", error);
-          throw new Error("No hemos podido guardar el menú de los peques");
-        }
-
         await syncSharedMeals({
           supabase: context.supabase as never,
           userId: context.userId,
