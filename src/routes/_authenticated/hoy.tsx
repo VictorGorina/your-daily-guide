@@ -439,7 +439,9 @@ function Hoy() {
     if (deviceTz && profile.timezone !== deviceTz) {
       // Best-effort: si la escritura falla (p. ej. la migración todavía no está
       // aplicada) no pasa nada, se reintenta en la siguiente carga de Hoy.
-      saveProfile({ timezone: deviceTz }).catch(() => {});
+      saveProfile({ timezone: deviceTz }).catch((error) =>
+        console.warn("hoy: guardar zona horaria", error),
+      );
     }
   }, [profile?.onboarding_completed, profile?.timezone]);
 
@@ -648,7 +650,7 @@ function Hoy() {
       })
       // Sin aviso: es una reparación de fondo, no una acción de la persona, y
       // lo reconciliado ya se está pintando aunque el guardado falle.
-      .catch(() => {});
+      .catch((error) => console.warn("hoy: guardar la reconciliación de comidas", error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id, storedHabits, reconciled.changed, settled]);
   const doneCount = habits.filter((h) => h.done).length;
@@ -690,7 +692,7 @@ function Hoy() {
           qc.invalidateQueries({ queryKey: ["today"] }),
         );
       })
-      .catch(() => {});
+      .catch((error) => console.warn("hoy: guardar el objetivo del día en la guía", error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id, today?.guide?.targets?.kcal, dayTarget?.kcal, generating]);
 

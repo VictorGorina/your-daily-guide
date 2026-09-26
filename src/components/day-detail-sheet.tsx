@@ -177,7 +177,7 @@ export function DayDetailBody({
         await updateLogByDate(date, { guide: mergeGuide(guide, { ...guide, mealMacros: merged }) });
         refreshLogs();
       })
-      .catch(() => {});
+      .catch((error) => console.warn("day-detail: recalcular los platos pendientes", error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, log?.guide]);
 

@@ -119,7 +119,7 @@ async function resolveDishDeltas(dishes: PendingDish[]): Promise<ResolvedDishes>
           ? { ...h, plannedKcal: p.kcal, plannedProtein: p.protein }
           : h;
       }),
-    ).catch(() => {});
+    ).catch((error) => console.warn("meal-swap: guardar las kcal planeadas", error));
   }
   const withPlanned = measured.map((d) => {
     const p = planned.get(d.label);
@@ -335,7 +335,10 @@ export function useMealSwap(
       try {
         // Si el lote de ESTA comida está en vuelo, hay que esperarlo: el desvío
         // que escribe el servidor es justo la cifra que luego hay que devolver.
-        if (!queued) await daySettleInFlight()?.catch(() => {});
+        if (!queued)
+          await daySettleInFlight()?.catch((error) =>
+            console.warn("meal-swap: esperar el ajuste en curso", error),
+          );
 
         // El registro se relee de la base de datos, no de la caché: el servidor
         // escribe `swapCompensated` y la caché puede ir por detrás.

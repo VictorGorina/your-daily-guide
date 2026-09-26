@@ -18,6 +18,8 @@
  * Server-only.
  */
 
+import { errorText, logEvent } from "@/lib/log.server";
+
 import type { RecipeSlot } from "./validate-recipe";
 import { dishKey } from "./dish-key";
 import {
@@ -206,9 +208,14 @@ export async function getRecipes(
 
   // Un uso más de cada receta servida, sin esperar: prioriza la revisión manual.
   if (admin && tableOk && cachedKeys.length) {
+    // `rpc` casi nunca rechaza: el fallo llega como `{ error }`, así que se mira también.
     void Promise.resolve(
       admin.rpc("increment_dish_recipe_hits" as never, { _keys: cachedKeys } as never),
-    ).catch(() => {});
+    )
+      .then(({ error }) => {
+        if (error) logEvent("warn", "recipe_hits_failed", { error: errorText(error) });
+      })
+      .catch((error) => logEvent("warn", "recipe_hits_failed", { error: errorText(error) }));
   }
 
   // 3. Lo que falta, con el pipeline del ticket 05.
