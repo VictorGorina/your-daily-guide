@@ -219,4 +219,18 @@ describe("planFit (ticket 10)", () => {
     ]);
     expect(cleanWeeklyIdeas({}, allowed)).toEqual([]);
   });
+
+  it("una idea semanal genérica de comer fuera no entra", () => {
+    const allowed = new Set(["0|desayuno|0", "0|snack|0"]);
+    const ideas = cleanWeeklyIdeas(
+      {
+        ideas: [
+          { semana: 1, comida: "desayuno", opcion: 1, plato: "Desayuno en la cafetería" },
+          { semana: 1, comida: "merienda", opcion: 1, plato: "Yogur griego o similar · nueces" },
+        ],
+      },
+      allowed,
+    );
+    expect(ideas).toEqual([{ week: 0, option: 0, slot: "snack", dish: "Yogur griego · nueces" }]);
+  });
 });

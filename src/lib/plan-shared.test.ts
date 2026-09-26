@@ -1863,6 +1863,24 @@ describe("cleanReflowChanges", () => {
     expect(out?.changes).toEqual([]);
   });
 
+  it("un plato de comer fuera se queda sin el sitio, y uno genérico o un cheat day no entra", () => {
+    // Una recolocación compensa con platos calculables: "no cambiar" siempre vale.
+    const out = cleanReflowChanges(
+      {
+        cambios: [
+          {
+            fecha: "2026-09-09",
+            comida: "Comida fuera de casa: Paella o similar",
+            cena: "Comer fuera",
+          },
+          { fecha: "2026-09-10", comida: "Plato libre que te apetezca" },
+        ],
+      },
+      allowed,
+    );
+    expect(out?.changes).toEqual([{ date: "2026-09-09", lunch: "Paella" }]);
+  });
+
   it("lista vacía es respuesta válida; una respuesta sin 'cambios' no lo es", () => {
     // La diferencia importa: null hace que `askForJson` reintente, y "no hace
     // falta cambiar nada" no es un fallo que haya que reintentar.

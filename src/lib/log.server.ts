@@ -17,6 +17,10 @@
  * - `recipe_hits_failed` (warn): no se pudo sumar el uso de una receta.
  * - `reflow_changes_discarded` (warn): la IA propuso cambios fuera de las fechas
  *   permitidas y se descartaron.
+ * - `plan_generic_dish_fixed` (warn): el plan recién generado traía platos de
+ *   "comer fuera" genéricos o más de un cheat day por semana, y `concretizePlan`
+ *   los arregló (`rewritten`/`replaced`) o no encontró con qué (`unresolved`).
+ *   Suelto es el modelo barato; repetido, el prompt ha dejado de funcionar.
  * - `email_send_failed` (error): Resend rechazó un correo.
  * - `env_missing` (error): falta una variable de entorno y se usa un respaldo.
  * - `settle_release_failed` (error): `settleDay` no pudo devolver una reserva.

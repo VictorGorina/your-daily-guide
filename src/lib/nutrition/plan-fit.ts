@@ -29,6 +29,7 @@
 
 import { serveDay, type DayMeal } from "./day-close";
 import { plannedMacros, type ScaleTarget } from "./scale";
+import { concreteDish } from "@/lib/plan-concrete-dish";
 
 export type FitSlot = "desayuno" | "comida" | "cena" | "snack";
 export type MainSlot = "comida" | "cena";
@@ -268,9 +269,9 @@ export function cleanWeeklyIdeas(raw: unknown, allowed: ReadonlySet<string>): We
     const option = Number(o.opcion) - 1;
     const meal = String(o.comida ?? "").toLowerCase();
     const slot = meal === "desayuno" ? "desayuno" : meal === "merienda" ? "snack" : null;
-    const dish = String(o.plato ?? "")
-      .trim()
-      .slice(0, 200);
+    // Solo platos concretos: nada de "desayuno fuera" ni "o similar".
+    const verdict = concreteDish(String(o.plato ?? "").trim());
+    const dish = verdict.kind === "ok" ? verdict.dish.slice(0, 200) : "";
     if (!slot || !dish || !Number.isInteger(week) || !Number.isInteger(option)) continue;
     if (!allowed.has(`${week}|${slot}|${option}`)) continue;
     out.push({ week, option, slot, dish });

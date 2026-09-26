@@ -99,6 +99,7 @@ import { cleanIntakeText, monthIntakeNotes, type IntakeAnswers } from "@/lib/mon
 import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
 import { hasTimeFor, requestDeadline, stepTimeout, type Deadline } from "@/lib/deadline";
 import { PLAN_STRUCTURE_REMINDER } from "@/lib/nutrition/plan-targets";
+import { CHEAT_DAY_DISH, concretizePlan } from "@/lib/plan-concrete-dish";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import { logEvent } from "@/lib/log.server";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";
@@ -677,7 +678,7 @@ async function generatePlanBody(opts: {
         `${budgetLine} ` +
         `${cadenceLine} ` +
         "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
-        'Ten en cuenta cuándo cocina y come en casa y cuándo come fuera: incluso en las comidas fuera de casa da SIEMPRE un plato concreto y realista, tipo fiambrera o menú de oficina (ensalada de atún, pechuga con arroz, sándwich de pavo...), nunca "come fuera", un menú del día o un restaurante genéricos — la única excepción es un cheat day puntual (por ejemplo, tras hacer mucho deporte o comer poco ese día), donde sí vale dejarlo abierto. No cuentes los ingredientes de esas comidas fuera de casa en la lista de la compra. ' +
+        `COMER FUERA: cada plato dice QUÉ se come, nunca DÓNDE. Aunque ese día coma fuera de casa, escribe un plato concreto y realista que pueda pedir, elegir o llevarse (p. ej. "Paella de marisco", "Ensalada de pasta con atún en tupper", "Pechuga con arroz"), sin "fuera de casa", "restaurante", "menú del día", "o similar" ni nada abierto. Única excepción: un cheat day puntual, como mucho uno a la semana, escrito exactamente "${CHEAT_DAY_DISH}". No cuentes en la compra los ingredientes de una comida que sabes que hace fuera de casa. ` +
         `${mealSlotsLine}` +
         `${servingsLine}` +
         `${kidsLine}` +
@@ -688,9 +689,15 @@ async function generatePlanBody(opts: {
     },
     (parsed) => {
       const p = (parsed ?? {}) as { plan?: unknown; shopping?: unknown };
-      const plan = completePlan(cleanPlan(p.plan));
+      const completed = completePlan(cleanPlan(p.plan));
       const shopping = cleanShopping(p.shopping);
-      if (!plan || !shopping.length) return null;
+      if (!completed || !shopping.length) return null;
+      // Red determinista para "Comida fuera de casa: Paella o similar": se
+      // arregla aquí y no con un reintento, que rehacía el plan entero (~100 s).
+      const { plan, report } = concretizePlan(completed);
+      if (report.rewritten || report.replaced || report.unresolved) {
+        logEvent("warn", "plan_generic_dish_fixed", { ...report });
+      }
       return { plan, shopping };
     },
   );

@@ -120,4 +120,5 @@ export function planTargetsPrompt(opts: {
 /** Para recolocar platos (`reflowMeals`): que los nuevos mantengan la estructura. */
 export const PLAN_STRUCTURE_REMINDER =
   "Mantén la estructura de cada comida al cambiarla (plato principal · acompañamiento · postre, " +
-  'separados por " · ").';
+  'separados por " · "). Cada plato dice qué se come, nunca dónde: nada de "fuera de casa", ' +
+  '"restaurante", "menú del día" ni "o similar".';
