@@ -86,7 +86,10 @@ import {
   type TripConfirmations,
   type TripReceipts,
   withChildMeal,
+  withPantryExtra,
   withPlanMeal,
+  withTripActual,
+  withTripConfirmed,
   monthTitle,
   assertShoppingStateColumns,
   sharedSlotWriteBlocked,
@@ -1192,9 +1195,7 @@ export const setTripActual = createServerFn({ method: "POST" })
       data.month,
       "trip_actuals",
       (row) => {
-        next = { ...cleanTripActuals(row.trip_actuals) };
-        if (data.amount == null) delete next[data.trip];
-        else next[data.trip] = data.amount;
+        next = withTripActual(cleanTripActuals(row.trip_actuals), data.trip, data.amount);
         return { trip_actuals: next };
       },
     ).catch((error: unknown) => {
@@ -1232,7 +1233,6 @@ export const setPantryExtra = createServerFn({ method: "POST" })
     // La despensa "ya lo tenemos en casa" es del hogar (issue 06): cualquier
     // miembro la edita, aunque viva en la fila del planificador.
     const target = await resolveShoppingRow(context.supabase, context.userId);
-    const key = normName(data.name);
     let next: PantryExtra[] = [];
     const { latest } = await updateShoppingState<{ pantry_extras?: unknown }>(
       context.supabase,
@@ -1240,20 +1240,11 @@ export const setPantryExtra = createServerFn({ method: "POST" })
       data.month,
       "pantry_extras",
       (row) => {
-        const withoutIt = cleanPantryExtras(row.pantry_extras).filter(
-          (e) => normName(e.name) !== key,
+        next = withPantryExtra(
+          cleanPantryExtras(row.pantry_extras),
+          data,
+          new Date().toISOString(),
         );
-        next = data.remove
-          ? withoutIt
-          : [
-              ...withoutIt,
-              {
-                name: data.name,
-                ...(data.qty ? { qty: data.qty } : {}),
-                source: "manual" as const,
-                addedAt: new Date().toISOString(),
-              },
-            ].slice(0, 40);
         return { pantry_extras: next };
       },
     ).catch((error: unknown) => {
@@ -1548,9 +1539,11 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     }>(context.supabase, target, data.month, "plan, shopping, confirmed_trips", (row) => {
       const shopping = cleanShopping(row.shopping);
       if (!shopping.length) return null;
-      const confirmed = { ...cleanTripConfirmations(row.confirmed_trips) };
-      if (data.confirmed) confirmed[data.trip] = zonedTodayISO();
-      else delete confirmed[data.trip];
+      const confirmed = withTripConfirmed(
+        cleanTripConfirmations(row.confirmed_trips),
+        data.trip,
+        data.confirmed ? zonedTodayISO() : null,
+      );
 
       // El número "oficial" de tramos es el de la cadencia guardada, no el que
       // se deduzca de los datos (un tramo sin artículos asignados no debe contar

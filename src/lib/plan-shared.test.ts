@@ -76,7 +76,10 @@ import {
   tripsForCoverage,
   weekDayCounts,
   withChildMeal,
+  withPantryExtra,
   withPlanMeal,
+  withTripActual,
+  withTripConfirmed,
   assertShoppingStateColumns,
   sharedSlotWriteBlocked,
   withOwnedMark,
@@ -2688,6 +2691,35 @@ describe("withOwnedMark", () => {
     expect(second[0].items[1].ownedTrips).toEqual({ 1: "fridge" });
     // Reintentar la misma marca no la invierte: fijar, no alternar.
     expect(withOwnedMark(second, "Tomate", 2, "store")).toEqual(second);
+  });
+});
+
+describe("estado de compra por tramo (ticket 21)", () => {
+  it("withTripActual pone y quita el gasto de una compra sin tocar las demás", () => {
+    const base = { 0: 42.5 };
+    expect(withTripActual(base, 1, 30)).toEqual({ 0: 42.5, 1: 30 });
+    expect(withTripActual(base, 0, null)).toEqual({});
+    expect(base).toEqual({ 0: 42.5 });
+  });
+
+  it("withTripConfirmed fija y deshace un tramo", () => {
+    const base = { 0: "2026-10-01" };
+    expect(withTripConfirmed(base, 1, "2026-10-08")).toEqual({
+      0: "2026-10-01",
+      1: "2026-10-08",
+    });
+    expect(withTripConfirmed(base, 0, null)).toEqual({});
+  });
+
+  it("withPantryExtra casa por nombre normalizado: añadir sustituye y quitar quita", () => {
+    const at = "2026-10-01T10:00:00.000Z";
+    const base = [{ name: "Garbanzos", source: "receipt" as const, addedAt: "antes" }];
+    expect(withPantryExtra(base, { name: "garbanzos", qty: "2 botes" }, at)).toEqual([
+      { name: "garbanzos", qty: "2 botes", source: "manual", addedAt: at },
+    ]);
+    expect(withPantryExtra(base, { name: "GARBANZOS", remove: true }, at)).toEqual([]);
+    expect(withPantryExtra(base, { name: "Arroz" }, at)).toHaveLength(2);
+    expect(base).toHaveLength(1);
   });
 });
 

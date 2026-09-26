@@ -412,6 +412,61 @@ export function withOwnedMark(
   }));
 }
 
+/**
+ * Estado de compra de un tramo, como función de la versión anterior (ticket 21).
+ * Las usan igual el servidor (sobre la fila más reciente, con CAS) y la
+ * actualización optimista de la pantalla: lo que se ve al instante es lo que se
+ * guarda. Ninguna muta la entrada.
+ */
+
+/** Gasto real de una compra; `null` lo quita. */
+export function withTripActual(
+  actuals: TripActuals,
+  trip: number,
+  amount: number | null,
+): TripActuals {
+  const next = { ...actuals };
+  if (amount == null) delete next[trip];
+  else next[trip] = amount;
+  return next;
+}
+
+/** Tramo fijado en `date`; `null` lo deshace. */
+export function withTripConfirmed(
+  confirmed: TripConfirmations,
+  trip: number,
+  date: string | null,
+): TripConfirmations {
+  const next = { ...confirmed };
+  if (date == null) delete next[trip];
+  else next[trip] = date;
+  return next;
+}
+
+/**
+ * Añade (o, con `remove`, quita) un ingrediente de la despensa extra. Casa por
+ * nombre normalizado (`normName`): añadir uno que ya estaba lo sustituye. Tope
+ * de 40, como siempre.
+ */
+export function withPantryExtra(
+  extras: readonly PantryExtra[],
+  entry: { name: string; qty?: string; remove?: boolean },
+  addedAt: string,
+): PantryExtra[] {
+  const key = normName(entry.name);
+  const withoutIt = extras.filter((e) => normName(e.name) !== key);
+  if (entry.remove) return withoutIt;
+  return [
+    ...withoutIt,
+    {
+      name: entry.name,
+      ...(entry.qty ? { qty: entry.qty } : {}),
+      source: "manual" as const,
+      addedAt,
+    },
+  ].slice(0, 40);
+}
+
 /** Una lista es canónica si sus artículos traen el desglose por semana (`weekQty`). */
 export const isCanonicalShopping = (shopping: ShoppingList | null | undefined): boolean =>
   !!shopping && shopping.some((g) => g.items.some((i) => Array.isArray(i.weekQty)));

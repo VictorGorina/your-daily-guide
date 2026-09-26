@@ -68,10 +68,17 @@ import {
   tripToText,
   shoppingTotal,
   tripActualsTotal,
+  withOwnedMark,
+  withPantryExtra,
+  withTripActual,
+  withTripConfirmed,
   type PantryExtra,
   type PlanMonthStatus,
   type ShoppingCadence,
   type ShoppingItem,
+  type ShoppingList,
+  type TripActuals,
+  type TripConfirmations,
   type TripReceipts,
   type TripTiming,
 } from "@/lib/plan-shared";
@@ -102,7 +109,9 @@ import {
   setTripConfirmed,
   toggleShoppingOwned,
   welcomeBriefing,
+  type ReceiptScan,
 } from "@/lib/plan.functions";
+import { useShoppingMutation } from "@/lib/use-shopping-mutation";
 
 export const Route = createFileRoute("/_authenticated/plan")({
   validateSearch: (search: Record<string, unknown>): { tab?: "compra"; month?: string } => ({
@@ -254,41 +263,104 @@ function PlanPage() {
     },
   });
 
+  // Estado de la compra (propia y de la casa): optimista y en serie por mes,
+  // ver `useShoppingMutation` (ticket 21). El cambio optimista es la misma
+  // función pura que aplica el servidor sobre la fila más reciente.
+  type ShoppingRow = NonNullable<typeof planQ.data> | NonNullable<typeof plannerShoppingQ.data>;
+  type OwnedVars = { itemName: string; trip: number; source: "fridge" | "store" | null };
+  type ActualVars = { trip: number; amount: number | null };
+  type ConfirmVars = { trip: number; confirmed: boolean };
+  type PantryVars = { name: string; qty?: string; remove?: boolean };
   const toggleOwned = useServerFn(toggleShoppingOwned);
-  const owned = useMutation({
-    mutationFn: (vars: { itemName: string; trip: number; source: "fridge" | "store" | null }) =>
-      toggleOwned({ data: { month, ...vars } }),
-    onSuccess: (res) => {
-      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
-        prev ? { ...prev, shopping: res.shopping } : prev,
-      );
-    },
-    onError: () => toast.error("No hemos podido guardar el cambio"),
-  });
-
   const tripActual = useServerFn(setTripActual);
-  const setActual = useMutation({
-    mutationFn: (vars: { trip: number; amount: number | null }) =>
-      tripActual({ data: { month, ...vars } }),
-    onSuccess: (res) => {
-      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
-        prev ? { ...prev, trip_actuals: res.trip_actuals } : prev,
-      );
-    },
-    onError: () => toast.error("No hemos podido guardar el gasto"),
-  });
-
   const tripConfirm = useServerFn(setTripConfirmed);
-  const confirmTrip = useMutation({
-    mutationFn: (vars: { trip: number; confirmed: boolean }) =>
-      tripConfirm({ data: { month, ...vars } }),
-    onSuccess: (res) => {
-      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
-        prev ? { ...prev, confirmed_trips: res.confirmed_trips } : prev,
-      );
+  const pantryFn = useServerFn(setPantryExtra);
+  const receiptFn = useServerFn(scanTripReceipt);
+  const shoppingOps = <Row extends ShoppingRow>() => ({
+    owned: {
+      kind: "owned",
+      mutationFn: (vars: OwnedVars) => toggleOwned({ data: { month, ...vars } }),
+      optimistic: (row: Row, v: OwnedVars): Row =>
+        row.shopping
+          ? { ...row, shopping: withOwnedMark(row.shopping, v.itemName, v.trip, v.source) }
+          : row,
+      settle: (row: Row, res: { shopping: ShoppingList }): Row => ({
+        ...row,
+        shopping: res.shopping,
+      }),
+      onError: () => toast.error("No hemos podido guardar el cambio"),
     },
-    onError: () => toast.error("No hemos podido fijar los ingredientes"),
+    actual: {
+      kind: "actual",
+      mutationFn: (vars: ActualVars) => tripActual({ data: { month, ...vars } }),
+      optimistic: (row: Row, v: ActualVars): Row => ({
+        ...row,
+        trip_actuals: withTripActual(row.trip_actuals ?? {}, v.trip, v.amount),
+      }),
+      settle: (row: Row, res: { trip_actuals: TripActuals }): Row => ({
+        ...row,
+        trip_actuals: res.trip_actuals,
+      }),
+      onError: () => toast.error("No hemos podido guardar el gasto"),
+    },
+    confirm: {
+      kind: "confirm",
+      mutationFn: (vars: ConfirmVars) => tripConfirm({ data: { month, ...vars } }),
+      optimistic: (row: Row, v: ConfirmVars): Row => ({
+        ...row,
+        confirmed_trips: withTripConfirmed(
+          row.confirmed_trips ?? {},
+          v.trip,
+          v.confirmed ? today : null,
+        ),
+      }),
+      settle: (row: Row, res: { confirmed_trips: TripConfirmations }): Row => ({
+        ...row,
+        confirmed_trips: res.confirmed_trips,
+      }),
+      onError: () => toast.error("No hemos podido fijar los ingredientes"),
+    },
+    pantry: {
+      kind: "pantry",
+      mutationFn: (vars: PantryVars) => pantryFn({ data: { month, ...vars } }),
+      optimistic: (row: Row, v: PantryVars): Row => ({
+        ...row,
+        pantry_extras: withPantryExtra(row.pantry_extras ?? [], v, new Date().toISOString()),
+      }),
+      settle: (row: Row, res: { pantry_extras: PantryExtra[] }): Row => ({
+        ...row,
+        pantry_extras: res.pantry_extras,
+      }),
+      onError: () => toast.error("No hemos podido guardar el ingrediente"),
+    },
+    receipt: {
+      kind: "receipt",
+      mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
+        receiptFn({ data: { month, ...vars } }),
+      settle: (row: Row, res: ReceiptScan): Row => ({
+        ...row,
+        trip_actuals: res.trip_actuals,
+        trip_receipts: res.trip_receipts,
+        pantry_extras: res.pantry_extras,
+      }),
+      onError: (e: unknown) =>
+        toast.error(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
+    },
   });
+  const receiptToast = (res: ReceiptScan, where: string) => {
+    const parts = [`Gasto guardado: ${eur(res.total)}`];
+    if (res.added.length) parts.push(`Añadí a ${where}: ${res.added.join(", ")}`);
+    if (res.discarded.length)
+      parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
+    toast.success(parts.join(". "));
+  };
+
+  type OwnRow = NonNullable<typeof planQ.data>;
+  const own = shoppingOps<OwnRow>();
+  const ownKey = { queryKey: ["plan", month], month };
+  const owned = useShoppingMutation({ ...ownKey, ...own.owned });
+  const setActual = useShoppingMutation({ ...ownKey, ...own.actual });
+  const confirmTrip = useShoppingMutation({ ...ownKey, ...own.confirm });
 
   // Un cambio en la despensa propia invalida los platos de los días futuros: se
   // programa un recálculo silencioso con debounce (issue 05). No para un no
@@ -298,104 +370,34 @@ function PlanPage() {
     if (!isSoloPlanner) schedulePlanRecalc(month, today, "meals");
   };
 
-  const pantryFn = useServerFn(setPantryExtra);
-  const pantry = useMutation({
-    mutationFn: (vars: { name: string; qty?: string; remove?: boolean }) =>
-      pantryFn({ data: { month, ...vars } }),
-    onSuccess: (res) => {
-      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
-        prev ? { ...prev, pantry_extras: res.pantry_extras } : prev,
-      );
-      recalcFromPantry();
-    },
-    onError: () => toast.error("No hemos podido guardar el ingrediente"),
+  const pantry = useShoppingMutation({
+    ...ownKey,
+    ...own.pantry,
+    onSuccess: () => recalcFromPantry(),
   });
-
-  const receiptFn = useServerFn(scanTripReceipt);
-  const receipt = useMutation({
-    mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
-      receiptFn({ data: { month, ...vars } }),
+  const receipt = useShoppingMutation({
+    ...ownKey,
+    ...own.receipt,
     onSuccess: (res) => {
-      qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
-        prev
-          ? {
-              ...prev,
-              trip_actuals: res.trip_actuals,
-              trip_receipts: res.trip_receipts,
-              pantry_extras: res.pantry_extras,
-            }
-          : prev,
-      );
-      const parts = [`Gasto guardado: ${eur(res.total)}`];
-      if (res.added.length) parts.push(`Añadí a tu despensa: ${res.added.join(", ")}`);
-      if (res.discarded.length)
-        parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
-      toast.success(parts.join(". "));
+      receiptToast(res, "tu despensa");
       if (res.added.length) recalcFromPantry();
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
   });
 
   // Mutaciones de la compra de la casa (issue 06): mismas server fns, pero el
   // servidor escribe en la fila del planificador y el cache es el de
   // `["planner-shopping", month]`. Los platos y las cantidades no se tocan.
-  const hhOwned = useMutation({
-    mutationFn: (vars: { itemName: string; trip: number; source: "fridge" | "store" | null }) =>
-      toggleOwned({ data: { month, ...vars } }),
-    onSuccess: (res) =>
-      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
-        prev ? { ...prev, shopping: res.shopping } : prev,
-      ),
-    onError: () => toast.error("No hemos podido guardar el cambio"),
-  });
-  const hhSetActual = useMutation({
-    mutationFn: (vars: { trip: number; amount: number | null }) =>
-      tripActual({ data: { month, ...vars } }),
-    onSuccess: (res) =>
-      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
-        prev ? { ...prev, trip_actuals: res.trip_actuals } : prev,
-      ),
-    onError: () => toast.error("No hemos podido guardar el gasto"),
-  });
-  const hhConfirmTrip = useMutation({
-    mutationFn: (vars: { trip: number; confirmed: boolean }) =>
-      tripConfirm({ data: { month, ...vars } }),
-    onSuccess: (res) =>
-      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
-        prev ? { ...prev, confirmed_trips: res.confirmed_trips } : prev,
-      ),
-    onError: () => toast.error("No hemos podido fijar los ingredientes"),
-  });
-  const hhPantry = useMutation({
-    mutationFn: (vars: { name: string; qty?: string; remove?: boolean }) =>
-      pantryFn({ data: { month, ...vars } }),
-    onSuccess: (res) =>
-      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
-        prev ? { ...prev, pantry_extras: res.pantry_extras } : prev,
-      ),
-    onError: () => toast.error("No hemos podido guardar el ingrediente"),
-  });
-  const hhReceipt = useMutation({
-    mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
-      receiptFn({ data: { month, ...vars } }),
-    onSuccess: (res) => {
-      qc.setQueryData(["planner-shopping", month], (prev: typeof plannerShoppingQ.data) =>
-        prev
-          ? {
-              ...prev,
-              trip_actuals: res.trip_actuals,
-              trip_receipts: res.trip_receipts,
-              pantry_extras: res.pantry_extras,
-            }
-          : prev,
-      );
-      const parts = [`Gasto guardado: ${eur(res.total)}`];
-      if (res.added.length) parts.push(`Añadí a la despensa de la casa: ${res.added.join(", ")}`);
-      if (res.discarded.length)
-        parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
-      toast.success(parts.join(". "));
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
+  type HouseRow = NonNullable<typeof plannerShoppingQ.data>;
+  const house = shoppingOps<HouseRow>();
+  const houseKey = { queryKey: ["planner-shopping", month], month };
+  const hhOwned = useShoppingMutation({ ...houseKey, ...house.owned });
+  const hhSetActual = useShoppingMutation({ ...houseKey, ...house.actual });
+  const hhConfirmTrip = useShoppingMutation({ ...houseKey, ...house.confirm });
+  const hhPantry = useShoppingMutation({ ...houseKey, ...house.pantry });
+  const hhReceipt = useShoppingMutation({
+    ...houseKey,
+    ...house.receipt,
+    onSuccess: (res) => receiptToast(res, "la despensa de la casa"),
   });
 
   const plan = planQ.data?.plan ?? null;
