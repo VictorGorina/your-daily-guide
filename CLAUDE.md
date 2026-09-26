@@ -450,6 +450,17 @@ la descomposición de platos va con `createAiProvider(key, userId, { capScope: "
 corta (el mensual sí), porque dejar un plato sin calcular rompe D13 y cuesta céntimos. Siguen
 sumando al gasto y a las cuotas por hora; el texto de la guía sí respeta el tope diario.
 
+**Presupuesto de tiempo por petición** ([src/lib/deadline.ts](src/lib/deadline.ts), ticket 22
+de la auditoría). Toda la app es UNA función de Vercel de 300 s, y la cadena de platos, el plan
+o `askForJson` (tres intentos) podían pasar de ahí: Vercel la corta y se pierde lo no guardado.
+Las server functions largas crean `requestDeadline()` (270 s) al entrar y lo pasan hacia abajo;
+cada paso con el modelo se acorta con `stepTimeout` y no empieza con menos de 10 s
+(`hasTimeFor`). Lo que no cabe sale "Calculando…" (motivo `sin-tiempo`) y lo recoge el
+reintento de Hoy. `getRecipes` guarda cada receta en cuanto es definitiva (no al final) y
+deduplica por instancia el plato que ya se está descomponiendo. La reserva de `settleDay`
+lleva su marca en `daily_logs.adjustment.pending`: si la petición muere, el siguiente
+asentamiento la devuelve pasados 5 min (`RESERVATION_TTL_MS`, ligado al `maxDuration`).
+
 **Límites: alcance de la IA y contenido de la persona** (spec en
 `.scratch/limites-ia-y-contenido/`, explicación larga en AGENTS.md). Dos límites, cada uno con
 dos redes:

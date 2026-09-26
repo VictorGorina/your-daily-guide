@@ -29,6 +29,11 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
       (service role, `OPENROUTER_API_KEY`, VAPID privada, `CRON_SECRET`) fuera del servidor.
 - [ ] Se usa el cliente de usuario de Supabase donde las políticas RLS bastan; la service
       role solo cuando de verdad hace falta saltárselas.
+- [ ] **Presupuesto de tiempo.** Una server function que llama al modelo (o a `getRecipes`)
+      crea `requestDeadline()` al entrar y lo pasa hacia abajo (`deadline`); una llamada
+      nueva al modelo usa `stepTimeout(suyo, deadline)` y no empieza sin `hasTimeFor`
+      ([deadline.ts](../../src/lib/deadline.ts)). Toda la app es una función de 300 s: si
+      Vercel la corta se pierde lo no guardado (ticket 22 de la auditoría).
 
 ## API HTTP espejo (`/api/v1/*`)
 
