@@ -6,6 +6,7 @@ import {
   cleanHomeSchedule,
   cleanSharedSlots,
   isSharedSlot,
+  scheduleTarget,
   type HomeSchedule,
   type SharedSlots,
 } from "@/lib/household-shared";
@@ -213,32 +214,29 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
     if (!ctx.householdId) throw new ValidationError("No estás en ningún hogar");
 
     const meInCtx = ctx.members.find((m) => m.userId === context.userId);
-    const isPlanner = meInCtx?.isPlanner ?? false;
+    const target = scheduleTarget({
+      memberId: data.memberId,
+      childId: data.childId,
+      isPlanner: meInCtx?.isPlanner ?? false,
+      ownMemberId: null,
+    });
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    if (data.childId) {
-      // Solo el planificador puede cambiar el horario de los niños.
-      if (!isPlanner)
-        throw new ValidationError("Solo quien lleva la cocina puede cambiar el horario de un niño");
+    if (target.kind === "child") {
       const { error } = await supabaseAdmin
         .from("household_children")
         .update({ home_schedule: data.schedule as never } as never)
-        .eq("id", data.childId);
+        .eq("id", target.childId);
       if (error) throw new Error("No hemos podido guardar el horario");
       return { saved: true };
     }
 
-    if (data.memberId) {
-      // Cambiar el horario de otro miembro (hueco sin cuenta): solo el planificador.
-      if (!isPlanner)
-        throw new ValidationError(
-          "Solo quien lleva la cocina puede cambiar el horario de otra persona",
-        );
+    if (target.kind === "member") {
       const { error } = await supabaseAdmin
         .from("household_members")
         .update({ home_schedule: data.schedule as never } as never)
-        .eq("id", data.memberId);
+        .eq("id", target.memberId);
       if (error) throw new Error("No hemos podido guardar el horario");
       return { saved: true };
     }

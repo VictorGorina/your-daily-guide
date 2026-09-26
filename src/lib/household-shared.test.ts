@@ -13,6 +13,7 @@ import {
   isSharedSlot,
   PERSON_COLORS,
   personColor,
+  scheduleTarget,
   servingsPerSlot,
   toggleDay,
   type SharedSlots,
@@ -237,5 +238,29 @@ describe("personColor", () => {
       Array.from({ length: 60 }, (_, i) => JSON.stringify(personColor(`seed-${i}`))),
     );
     expect(seen.size).toBe(PERSON_COLORS.length);
+  });
+});
+
+describe("scheduleTarget", () => {
+  const base = { memberId: null, childId: null, isPlanner: false, ownMemberId: "me" };
+
+  it("sin ids, el horario es el propio", () => {
+    expect(scheduleTarget(base)).toEqual({ kind: "self" });
+  });
+
+  it("el de un niño solo lo cambia quien planifica", () => {
+    expect(() => scheduleTarget({ ...base, childId: "k1" })).toThrow(/horario de un niño/);
+    expect(scheduleTarget({ ...base, childId: "k1", isPlanner: true })).toEqual({
+      kind: "child",
+      childId: "k1",
+    });
+  });
+
+  it("el de otro hueco solo lo cambia quien planifica", () => {
+    expect(() => scheduleTarget({ ...base, memberId: "other" })).toThrow(/de otra persona/);
+    expect(scheduleTarget({ ...base, memberId: "other", isPlanner: true })).toEqual({
+      kind: "member",
+      memberId: "other",
+    });
   });
 });

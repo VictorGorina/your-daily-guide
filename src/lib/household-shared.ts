@@ -1,5 +1,7 @@
 /** Configuración de comidas compartidas del hogar (compartido entre cliente y servidor). */
 
+import { ValidationError } from "@/lib/validation-error";
+
 export const MEAL_KEYS = ["desayuno", "comida", "cena"] as const;
 export type MealKey = (typeof MEAL_KEYS)[number];
 
@@ -132,6 +134,39 @@ export const EMPTY_SCHEDULE: HomeSchedule = { desayuno: [], comida: [], cena: []
 
 /** Parse + clean un home_schedule crudo de la BD (misma lógica que cleanSharedSlots). */
 export const cleanHomeSchedule = (raw: unknown): HomeSchedule => cleanSharedSlots(raw);
+
+/** De quién es el horario que se va a guardar (ver `scheduleTarget`). */
+export type ScheduleTarget =
+  { kind: "child"; childId: string } | { kind: "member"; memberId: string } | { kind: "self" };
+
+/**
+ * Qué horario puede cambiar quien llama: el suyo siempre; el de un niño o el de
+ * otro hueco de la mesa, solo quien planifica. Lanza con el mensaje que se enseña
+ * en pantalla si no puede. `ownMemberId` es el `id` de la fila propia en
+ * `household_members`.
+ */
+export function scheduleTarget(input: {
+  memberId: string | null;
+  childId: string | null;
+  isPlanner: boolean;
+  ownMemberId: string | null;
+}): ScheduleTarget {
+  if (input.childId) {
+    if (!input.isPlanner) {
+      throw new ValidationError("Solo quien lleva la cocina puede cambiar el horario de un niño");
+    }
+    return { kind: "child", childId: input.childId };
+  }
+  if (input.memberId) {
+    if (!input.isPlanner) {
+      throw new ValidationError(
+        "Solo quien lleva la cocina puede cambiar el horario de otra persona",
+      );
+    }
+    return { kind: "member", memberId: input.memberId };
+  }
+  return { kind: "self" };
+}
 
 /** Info de una persona presente en casa para un meal+día concreto. */
 export type AtHomePerson = {
