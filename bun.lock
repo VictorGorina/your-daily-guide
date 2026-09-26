@@ -76,6 +76,7 @@
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
         "@vitejs/plugin-react": "^5.2.0",
+        "bun-types": "1.3.14",
         "eslint": "^9.32.0",
         "eslint-config-prettier": "^10.1.1",
         "eslint-plugin-prettier": "^5.2.6",
@@ -715,6 +716,8 @@
     "brace-expansion": ["brace-expansion@1.1.16", "", { "dependencies": { "balanced-match": "^1.0.0", "concat-map": "0.0.1" } }, "sha512-IDw48K2/2kRkg9LdJxurvq3lV3aBgq0REY89duEqFRthjlPdXHKMj7EnQOXVckxzgisinf3nHfrcE2FufFLXMw=="],
 
     "browserslist": ["browserslist@4.28.7", "", { "dependencies": { "baseline-browser-mapping": "^2.10.44", "caniuse-lite": "^1.0.30001806", "electron-to-chromium": "^1.5.393", "node-releases": "^2.0.51", "update-browserslist-db": "^1.2.3" }, "bin": { "browserslist": "cli.js" } }, "sha512-JxV13hNrFxqjOc8alRbq9dK1MM79NEXYpma2B2J4wAtpWS5zIEIKqWPGCl7N4o7Uc7B7itylh7SuDujATRyyTw=="],
+
+    "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
     "callsites": ["callsites@3.1.0", "", {}, "sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ=="],
 

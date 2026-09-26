@@ -119,9 +119,9 @@ más **un solo archivo** de tipos: `node_modules/bun-types/test.d.ts`, el
 `declare module "bun:test"`. No uses `"types": ["bun-types"]` ni instales `@types/bun`:
 eso mete en el scope global todo `bun-types`, y su `fetch` con `preconnect` rompe el `fetch`
 de navegador que la app pasa a Supabase (4 errores en `client.ts`, `client.server.ts`,
-`auth-middleware.ts` y `api-auth.server.ts`). `bun-types` llega como dependencia transitiva;
-si una actualización lo quitara, `typecheck:test` fallaría con "Cannot find module
-'bun:test'".
+`auth-middleware.ts` y `api-auth.server.ts`). `bun-types` es una `devDependency` fijada a la
+versión de Bun del CI (`bun-version` en `ci.yml`): súbelas juntas. No está en `@types/`, así
+que TypeScript no carga sus globales solo.
 
 ## Cuándo sube el listón
 
