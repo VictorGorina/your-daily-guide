@@ -211,34 +211,44 @@ async function readShoppingRow<T>(
   return (data as T | null) ?? null;
 }
 
-/** Escribe SOLO columnas de estado de compra en la fila objetivo. El `patch`
- *  nunca incluye `plan` ni `weekQty`: un no planificador jamás toca los platos
- *  ni las cantidades de la lista de la casa (issue 06). */
-async function writeShoppingState(
+/**
+ * Cambia el estado de compra de la fila objetivo sobre su versión más reciente
+ * (ticket 21): dos toques seguidos, o dos miembros del hogar a la vez, se
+ * reconstruyen uno sobre otro en vez de pisarse. `rebuild` recibe las
+ * `columns` leídas y devuelve el `patch` (o `null` para no escribir).
+ *
+ * El `patch` nunca incluye `plan` ni `weekQty`: un no planificador jamás toca
+ * los platos ni las cantidades de la lista de la casa (issue 06). Devuelve
+ * `latest: null` si el mes no tiene fila.
+ */
+async function updateShoppingState<Row extends Record<string, unknown>>(
   supabase: unknown,
   target: { targetUserId: string; isMine: boolean },
   month: string,
-  patch: Record<string, unknown>,
-): Promise<{ error: unknown }> {
-  // Barandilla, no comentario: cuando la fila es de otra persona esto escribe
-  // con `supabaseAdmin`, que se salta RLS. Se comprueba aquí en vez de confiar
-  // en que cada sitio que llama respete la lista.
-  assertShoppingStateColumns(patch);
-  if (target.isMine) {
-    const { error } = await (supabase as SupabaseClient<never, never, never>)
-      .from("monthly_plans")
-      .update(patch as never)
-      .eq("month", month)
-      .eq("user_id", target.targetUserId);
-    return { error };
-  }
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { error } = await supabaseAdmin
-    .from("monthly_plans")
-    .update(patch as never)
-    .eq("user_id", target.targetUserId)
-    .eq("month", month);
-  return { error };
+  columns: string,
+  rebuild: (latest: Row) => Record<string, unknown> | null,
+): Promise<{ latest: Row | null; patch: Record<string, unknown> | null }> {
+  // La fila de otra persona se lee y escribe con `supabaseAdmin` (RLS solo le
+  // deja leerla): ver `resolveShoppingRow`.
+  const client = target.isMine
+    ? (supabase as SupabaseClient<never, never, never>)
+    : ((await import("@/integrations/supabase/client.server"))
+        .supabaseAdmin as unknown as SupabaseClient<never, never, never>);
+  const { latest, patch } = await updatePlanRowCas(
+    client,
+    target.targetUserId,
+    month,
+    columns,
+    (row) => {
+      const next = rebuild(row as unknown as Row);
+      // Barandilla, no comentario: cuando la fila es de otra persona esto
+      // escribe con `supabaseAdmin`, que se salta RLS. Se comprueba aquí en vez
+      // de confiar en que cada sitio que llama respete la lista.
+      if (next) assertShoppingStateColumns(next);
+      return next;
+    },
+  );
+  return { latest: latest as Row | null, patch };
 }
 
 /**
@@ -1088,6 +1098,43 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     return { plan, shopping };
   });
 
+/** Cuerpo de `toggleShoppingOwned`, aparte para poder probarlo (ticket 21). */
+export async function toggleShoppingOwnedHandler({
+  data,
+  context,
+}: {
+  data: { month: string; itemName: string; trip: number; source: "fridge" | "store" | null };
+  context: { supabase: unknown; userId: string };
+}): Promise<{ shopping: ShoppingList }> {
+  // La lista puede ser la de la casa: cualquier miembro con cuenta marca su
+  // estado, aunque la escritura vaya a la fila del planificador (issue 06).
+  const target = await resolveShoppingRow(context.supabase, context.userId);
+  // La marca se pone sobre la lista más reciente: otra marca que llegue a la
+  // vez se conserva. Es idempotente ("fijar a `source`"), así que un
+  // reintento no la deshace.
+  let shopping: ShoppingList = [];
+  try {
+    await updateShoppingState<{ shopping?: unknown }>(
+      context.supabase,
+      target,
+      data.month,
+      "shopping",
+      (row) => {
+        const current = cleanShopping(row.shopping);
+        if (!current.length) return null;
+        shopping = withOwnedMark(current, data.itemName, data.trip, data.source);
+        return { shopping };
+      },
+    );
+  } catch (error) {
+    console.error("toggleShoppingOwned", error);
+    throw new Error("No hemos podido guardar el cambio");
+  }
+  if (!shopping.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
+
+  return { shopping };
+}
+
 /**
  * Marca un ingrediente como comprado ("fridge": ya lo tenía en casa, "store":
  * lo ha comprado en el súper) o lo deja sin decidir (source null) — no cambia
@@ -1115,31 +1162,7 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
       return { month: input.month, itemName, trip: Math.round(trip), source };
     },
   )
-  .handler(async ({ data, context }): Promise<{ shopping: ShoppingList }> => {
-    // La lista puede ser la de la casa: cualquier miembro con cuenta marca su
-    // estado, aunque la escritura vaya a la fila del planificador (issue 06).
-    const target = await resolveShoppingRow(context.supabase, context.userId);
-    const row = await readShoppingRow<{ shopping?: unknown }>(
-      context.supabase,
-      target,
-      data.month,
-      "shopping",
-    );
-    const current = cleanShopping(row?.shopping);
-    if (!current.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
-
-    const shopping = withOwnedMark(current, data.itemName, data.trip, data.source);
-
-    const { error } = await writeShoppingState(context.supabase, target, data.month, {
-      shopping: shopping as never,
-    });
-    if (error) {
-      console.error("toggleShoppingOwned", error);
-      throw new Error("No hemos podido guardar el cambio");
-    }
-
-    return { shopping };
-  });
+  .handler(toggleShoppingOwnedHandler);
 
 /**
  * Guarda lo que se ha gastado de verdad en un viaje de compra concreto. Los
@@ -1162,24 +1185,23 @@ export const setTripActual = createServerFn({ method: "POST" })
     // El gasto real de la compra de la casa lo puede anotar cualquier miembro
     // (issue 06): resuelve la fila objetivo y escribe solo esa columna.
     const target = await resolveShoppingRow(context.supabase, context.userId);
-    const row = await readShoppingRow<{ trip_actuals?: unknown }>(
+    let next: TripActuals = {};
+    const { latest } = await updateShoppingState<{ trip_actuals?: unknown }>(
       context.supabase,
       target,
       data.month,
       "trip_actuals",
-    );
-    const current = cleanTripActuals(row?.trip_actuals);
-    const next = { ...current };
-    if (data.amount == null) delete next[data.trip];
-    else next[data.trip] = data.amount;
-
-    const { error } = await writeShoppingState(context.supabase, target, data.month, {
-      trip_actuals: next as never,
-    });
-    if (error) {
+      (row) => {
+        next = { ...cleanTripActuals(row.trip_actuals) };
+        if (data.amount == null) delete next[data.trip];
+        else next[data.trip] = data.amount;
+        return { trip_actuals: next };
+      },
+    ).catch((error: unknown) => {
       console.error("setTripActual", error);
       throw new Error("No hemos podido guardar el gasto");
-    }
+    });
+    if (!latest) throw new ValidationError("Todavía no hay plan de este mes");
 
     return { trip_actuals: next };
   });
@@ -1210,34 +1232,35 @@ export const setPantryExtra = createServerFn({ method: "POST" })
     // La despensa "ya lo tenemos en casa" es del hogar (issue 06): cualquier
     // miembro la edita, aunque viva en la fila del planificador.
     const target = await resolveShoppingRow(context.supabase, context.userId);
-    const row = await readShoppingRow<{ pantry_extras?: unknown }>(
+    const key = normName(data.name);
+    let next: PantryExtra[] = [];
+    const { latest } = await updateShoppingState<{ pantry_extras?: unknown }>(
       context.supabase,
       target,
       data.month,
       "pantry_extras",
-    );
-    const current = cleanPantryExtras(row?.pantry_extras);
-    const key = normName(data.name);
-    const withoutIt = current.filter((e) => normName(e.name) !== key);
-    const next: PantryExtra[] = data.remove
-      ? withoutIt
-      : [
-          ...withoutIt,
-          {
-            name: data.name,
-            ...(data.qty ? { qty: data.qty } : {}),
-            source: "manual" as const,
-            addedAt: new Date().toISOString(),
-          },
-        ].slice(0, 40);
-
-    const { error } = await writeShoppingState(context.supabase, target, data.month, {
-      pantry_extras: next as never,
-    });
-    if (error) {
+      (row) => {
+        const withoutIt = cleanPantryExtras(row.pantry_extras).filter(
+          (e) => normName(e.name) !== key,
+        );
+        next = data.remove
+          ? withoutIt
+          : [
+              ...withoutIt,
+              {
+                name: data.name,
+                ...(data.qty ? { qty: data.qty } : {}),
+                source: "manual" as const,
+                addedAt: new Date().toISOString(),
+              },
+            ].slice(0, 40);
+        return { pantry_extras: next };
+      },
+    ).catch((error: unknown) => {
       console.error("setPantryExtra", error);
       throw new Error("No hemos podido guardar el ingrediente");
-    }
+    });
+    if (!latest) throw new ValidationError("Todavía no hay plan de este mes");
 
     return { pantry_extras: next };
   });
@@ -1444,31 +1467,46 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
       }
     }
 
-    // 3) Persistir: importe real + resumen del tiquet + extras que encajan.
-    const nextActuals: TripActuals = { ...tripActuals, [data.trip]: receipt.total };
-    const nextReceipts: TripReceipts = {
-      ...tripReceipts,
-      [data.trip]: {
-        total: receipt.total,
-        itemCount: receipt.items.length,
-        scannedAt: new Date().toISOString(),
-      },
-    };
+    // 3) Persistir: importe real + resumen del tiquet + extras que encajan,
+    // sobre la versión más reciente (leer y clasificar el tiquet tarda, y
+    // entretanto otro miembro puede anotar un gasto o un extra).
     const nowIso = new Date().toISOString();
-    const nextPantry = cleanPantryExtras([
-      ...pantryExtras,
-      ...added.map((name) => ({ name, source: "receipt" as const, addedAt: nowIso })),
-    ]);
-
-    const { error } = await writeShoppingState(context.supabase, target, data.month, {
-      trip_actuals: nextActuals as never,
-      trip_receipts: nextReceipts as never,
-      pantry_extras: nextPantry as never,
-    });
-    if (error) {
+    const receiptSummary = {
+      total: receipt.total,
+      itemCount: receipt.items.length,
+      scannedAt: nowIso,
+    };
+    const fromReceipt = added.map((name) => ({
+      name,
+      source: "receipt" as const,
+      addedAt: nowIso,
+    }));
+    let nextActuals: TripActuals = { ...tripActuals, [data.trip]: receipt.total };
+    let nextReceipts: TripReceipts = { ...tripReceipts, [data.trip]: receiptSummary };
+    let nextPantry = cleanPantryExtras([...pantryExtras, ...fromReceipt]);
+    await updateShoppingState<{
+      pantry_extras?: unknown;
+      trip_actuals?: unknown;
+      trip_receipts?: unknown;
+    }>(
+      context.supabase,
+      target,
+      data.month,
+      "pantry_extras, trip_actuals, trip_receipts",
+      (row) => {
+        nextActuals = { ...cleanTripActuals(row.trip_actuals), [data.trip]: receipt.total };
+        nextReceipts = { ...cleanTripReceipts(row.trip_receipts), [data.trip]: receiptSummary };
+        nextPantry = cleanPantryExtras([...cleanPantryExtras(row.pantry_extras), ...fromReceipt]);
+        return {
+          trip_actuals: nextActuals,
+          trip_receipts: nextReceipts,
+          pantry_extras: nextPantry,
+        };
+      },
+    ).catch((error: unknown) => {
       console.error("scanTripReceipt save", error);
       throw new Error("Hemos leído el tiquet pero no hemos podido guardarlo. Inténtalo otra vez.");
-    }
+    });
 
     return {
       trip_actuals: nextActuals,
@@ -1502,40 +1540,40 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
     // (issue 06); `confirmed_at` se cierra en la fila del planificador cuando
     // todos los tramos quedan fijados — `syncSharedMeals` lo respeta.
     const target = await resolveShoppingRow(context.supabase, context.userId);
-    const typed = await readShoppingRow<{
+    let next = null as TripConfirmations | null;
+    await updateShoppingState<{
       plan?: unknown;
       shopping?: unknown;
       confirmed_trips?: unknown;
-    }>(context.supabase, target, data.month, "plan, shopping, confirmed_trips");
-    const shopping = cleanShopping(typed?.shopping);
-    if (!shopping.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
+    }>(context.supabase, target, data.month, "plan, shopping, confirmed_trips", (row) => {
+      const shopping = cleanShopping(row.shopping);
+      if (!shopping.length) return null;
+      const confirmed = { ...cleanTripConfirmations(row.confirmed_trips) };
+      if (data.confirmed) confirmed[data.trip] = zonedTodayISO();
+      else delete confirmed[data.trip];
 
-    const current = cleanTripConfirmations(typed?.confirmed_trips);
-    const next = { ...current };
-    if (data.confirmed) next[data.trip] = zonedTodayISO();
-    else delete next[data.trip];
-
-    // El número "oficial" de tramos es el de la cadencia guardada, no el que se
-    // deduzca de los datos (un tramo sin artículos asignados no debe contar de
-    // menos y dar por fijado el mes entero antes de tiempo).
-    const planRow = cleanPlan(typed?.plan);
-    const cadence = planRow?.cadence ?? cadenceOf(shopping);
-    // El nº de compras sale de la cobertura real del plan, igual que en pantalla
-    // (`tripsForCoverage`): con una cadencia semanal sobre los últimos 12 días
-    // del mes hay 2 compras, no 4, y esperar a 4 dejaría el mes sin poder
-    // fijarse nunca.
-    const allConfirmed =
-      Object.keys(next).length >=
-      tripsForCoverage(cadence, planRow?.coverage ?? monthCoverage(data.month, zonedTodayISO()));
-
-    const { error } = await writeShoppingState(context.supabase, target, data.month, {
-      confirmed_trips: next as never,
-      confirmed_at: allConfirmed ? new Date().toISOString() : null,
-    });
-    if (error) {
+      // El número "oficial" de tramos es el de la cadencia guardada, no el que
+      // se deduzca de los datos (un tramo sin artículos asignados no debe contar
+      // de menos y dar por fijado el mes entero antes de tiempo).
+      const planRow = cleanPlan(row.plan);
+      const cadence = planRow?.cadence ?? cadenceOf(shopping);
+      // El nº de compras sale de la cobertura real del plan, igual que en
+      // pantalla (`tripsForCoverage`): con una cadencia semanal sobre los
+      // últimos 12 días del mes hay 2 compras, no 4, y esperar a 4 dejaría el
+      // mes sin poder fijarse nunca.
+      const allConfirmed =
+        Object.keys(confirmed).length >=
+        tripsForCoverage(cadence, planRow?.coverage ?? monthCoverage(data.month, zonedTodayISO()));
+      next = confirmed;
+      return {
+        confirmed_trips: confirmed,
+        confirmed_at: allConfirmed ? new Date().toISOString() : null,
+      };
+    }).catch((error: unknown) => {
       console.error("setTripConfirmed", error);
       throw new Error("No hemos podido fijar los ingredientes");
-    }
+    });
+    if (!next) throw new ValidationError("Todavía no hay lista de la compra este mes");
 
     return { confirmed_trips: next };
   });
