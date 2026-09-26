@@ -230,9 +230,16 @@ export type SettleDayResult = {
   summary?: string;
 };
 
+type SettleDayInput = { today: string; changes: DishChange[] };
+
+type ReflowMeals = typeof import("@/lib/plan.functions").reflowMeals;
+
+/** Lo que el handler recibe de fuera; los tests cambian `reflow` (sin IA). */
+export type SettleDayDeps = { reflow?: ReflowMeals };
+
 export const settleDay = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input?: { today?: string; changes?: DishChangeInput[] }) => {
+  .validator((input?: { today?: string; changes?: DishChangeInput[] }): SettleDayInput => {
     const changes = (Array.isArray(input?.changes) ? input.changes : [])
       .slice(0, DISH_CHANGE_MAX)
       .map((c) => ({
@@ -249,196 +256,201 @@ export const settleDay = createServerFn({ method: "POST" })
       .filter((c) => c.label);
     return { today: todayOf(input?.today), changes };
   })
-  .handler(async ({ data, context }): Promise<SettleDayResult> => {
-    const supabase = context.supabase as never as Client;
-    const { userId } = context;
-    const { today, changes } = data;
-    const month = today.slice(0, 7);
+  .handler(({ data, context }) => settleDayHandler({ data, context }));
 
-    const recordOutcome = async (outcome: DayOutcome) => {
-      await patchDay(supabase, userId, today, (row) => ({
-        record: { adjustment: row.record?.adjustment ?? null, lastOutcome: outcome },
-      })).catch((err) =>
-        logEvent("warn", "settle_outcome_failed", { userId, date: today, error: errorText(err) }),
-      );
-    };
+export async function settleDayHandler(
+  { data, context }: { data: SettleDayInput; context: { supabase: unknown; userId: string } },
+  deps: SettleDayDeps = {},
+): Promise<SettleDayResult> {
+  const supabase = context.supabase as never as Client;
+  const { userId } = context;
+  const { today, changes } = data;
+  const month = today.slice(0, 7);
 
-    // 1. Los desvíos de los platos cambiados en este lote entran en `habits`
-    //    (sobrescriben el de la misma comida si ya se había cambiado hoy), y de
-    //    paso se lee el día entero.
-    const row = changes.length
-      ? await patchDay(supabase, userId, today, (current) => {
-          const byLabel = new Map(changes.map((c) => [c.label, c]));
-          return {
-            habits: current.habits.map((h) => {
-              const c = byLabel.get(h.label);
-              if (!c) return h;
-              const { swapProteinDelta: _previous, ...rest } = h;
-              return {
-                ...rest,
-                swapKcalDelta: c.kcalDelta,
-                ...(c.proteinDelta != null ? { swapProteinDelta: c.proteinDelta } : {}),
-                swapCompensated: false,
-              };
-            }),
-          };
-        })
-      : await readDayRow(supabase, userId, today);
-    if (!row) return { outcome: "no-plan", kcal: 0 };
+  const recordOutcome = async (outcome: DayOutcome) => {
+    await patchDay(supabase, userId, today, (row) => ({
+      record: { adjustment: row.record?.adjustment ?? null, lastOutcome: outcome },
+    })).catch((err) =>
+      logEvent("warn", "settle_outcome_failed", { userId, date: today, error: errorText(err) }),
+    );
+  };
 
-    // 2. El día entero, de una pieza.
-    const balance = dayBalance(row.habits, row.snacks, row.exercise);
-    if (!balance.pending && !balance.proteinPending) return { outcome: "nothing", kcal: 0 };
-
-    const [{ data: profileRow }, { data: planRow }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select(
-          "target_weight_kg, current_weight_kg, start_weight_kg, goal_type, pregnancy_status, meal_slots, meals_to_plan",
-        )
-        .eq("id", userId)
-        .maybeSingle(),
-      supabase
-        .from("monthly_plans")
-        .select("id")
-        .eq("month", month)
-        .eq("user_id", userId)
-        .maybeSingle(),
-    ]);
-    const profile = (profileRow ?? {}) as Record<string, unknown>;
-
-    // 3. UNA decisión, con el desvío sumado de los tres orígenes: kcal y, desde
-    //    el ticket 13, proteína (una bajada de ≥ 20 g se compensa siempre).
-    const needInput = {
-      deltaKcal: balance.pending,
-      goal: goalOf(profile),
-      pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
-      reversing: dayReversing(balance),
-    };
-    const decision = compensationNeed({ ...needInput, deltaProtein: balance.proteinPending });
-    // ¿Dispara SOLO la proteína? Cambia qué se hace si el modelo no mueve nada.
-    const proteinOnly = decision.compensate && !compensationNeed(needInput).compensate;
-    if (!decision.compensate) {
-      await recordOutcome(decision.reason);
-      return { outcome: decision.reason, kcal: balance.pending };
-    }
-    if (!planRow) {
-      await recordOutcome("no-plan");
-      return { outcome: "no-plan", kcal: balance.pending };
-    }
-
-    const { householdContext } = await import("@/lib/household.server");
-    const home = await householdContext(supabase as never, userId);
-    const window = compensationWindow({
-      today,
-      sharedSlots: home.sharedSlots,
-      selectedSlots: effectiveMealSlots(
-        profile as { meal_slots?: unknown; meals_to_plan?: string | null },
-      ),
-      soloAdult: home.members.length <= 1,
-    });
-    if (window.reason) {
-      await recordOutcome(window.reason);
-      return { outcome: window.reason, kcal: balance.pending };
-    }
-
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
-    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
-    await enforceUserRateLimit(userId, "plan-adjust");
-
-    // 4. Reserva: los tres libros se marcan como compensados ANTES de llamar a
-    //    la IA, releyendo lo último, para que un asentamiento simultáneo no
-    //    compense lo mismo dos veces.
-    let reservation: DayReservation = EMPTY_RESERVATION;
-    const reserved = await patchDay(supabase, userId, today, (current) => {
-      const reserve = reserveDay(current);
-      reservation = reserve.reservation;
-      return reserve.patch;
-    });
-    if (!reserved || (!reservation.total && !reservation.protein)) {
-      return { outcome: "nothing", kcal: 0 };
-    }
-
-    const release = async () => {
-      await patchDay(supabase, userId, today, (current) => releaseDay(current, reservation)).catch(
-        (err) =>
-          // La reserva se queda puesta: ese desvío cuenta como compensado sin
-          // estarlo hasta que el ticket 22 le dé caducidad.
-          logEvent("error", "settle_release_failed", {
-            userId,
-            date: today,
-            error: errorText(err),
+  // 1. Los desvíos de los platos cambiados en este lote entran en `habits`
+  //    (sobrescriben el de la misma comida si ya se había cambiado hoy), y de
+  //    paso se lee el día entero.
+  const row = changes.length
+    ? await patchDay(supabase, userId, today, (current) => {
+        const byLabel = new Map(changes.map((c) => [c.label, c]));
+        return {
+          habits: current.habits.map((h) => {
+            const c = byLabel.get(h.label);
+            if (!c) return h;
+            const { swapProteinDelta: _previous, ...rest } = h;
+            return {
+              ...rest,
+              swapKcalDelta: c.kcalDelta,
+              ...(c.proteinDelta != null ? { swapProteinDelta: c.proteinDelta } : {}),
+              swapCompensated: false,
+            };
           }),
-      );
-    };
+        };
+      })
+    : await readDayRow(supabase, userId, today);
+  if (!row) return { outcome: "no-plan", kcal: 0 };
 
-    try {
-      const { reflowMeals } = await import("@/lib/plan.functions");
-      const changedMeals = row.habits
-        .filter((h) => h.status === "distinto" && h.swapKcalDelta != null)
-        .map((h) => ({
-          label: h.label,
-          dish: h.confirmedIdea || h.actual || "",
-          plannedDish: h.plannedIdea || h.wasIdea || "",
-        }));
-      const { plan, before, summary, absorbedKcal, partial } = await reflowMeals({
-        supabase,
-        userId,
-        key,
-        month,
-        today,
-        note: dayNote({
-          // Los platos de ESTE lote se conocen con su texto exacto; para los de
-          // lotes anteriores del mismo día vale lo que quedó en el registro.
-          changedMeals: changes.length ? changes : changedMeals,
-          snackEntries: row.snacks?.entries ?? [],
-          exerciseEntries: row.exercise?.entries ?? [],
-          pendingKcal: reservation.total,
-          reversing: dayReversing(balance),
-          proteinDrop: decision.proteinDelta,
-        }),
-        kcalDelta: decision.kcalDelta,
-        window: window.dates,
-        soloOnly: true,
-        // Ticket 18: lo que la tarjeta dice haber movido es lo que se midió.
-        measure: true,
-      });
-      const futureChanges = diffFutureMeals(before, plan, today);
-      // Solo la proteína disparaba y el modelo no ha movido nada: se devuelve la
-      // reserva (no está compensado) pero SIN lanzar, para que el cliente no lo
-      // reintente cada minuto; el siguiente asentamiento del día lo retoma.
-      if (!futureChanges.length && proteinOnly) {
-        await release();
-        await recordOutcome("below-threshold");
-        return { outcome: "below-threshold", kcal: reservation.total };
-      }
-      // Un desvío por encima del umbral que no mueve ningún plato no está
-      // compensado: si se diera por bueno, el exceso se perdería en silencio.
-      // Se trata como intento fallido (se devuelve la reserva) y el cliente lo
-      // reintenta más tarde.
-      if (!futureChanges.length) throw new Error("El reajuste no ha cambiado ningún plato");
+  // 2. El día entero, de una pieza.
+  const balance = dayBalance(row.habits, row.snacks, row.exercise);
+  if (!balance.pending && !balance.proteinPending) return { outcome: "nothing", kcal: 0 };
 
-      await patchDay(supabase, userId, today, (current) => ({
-        record: {
-          adjustment: mergeDayAdjustment(current.record?.adjustment, {
-            changes: futureChanges,
-            summary,
-            kcal: reservation.total,
-            ...(absorbedKcal != null ? { absorbedKcal } : {}),
-            ...(partial ? { partial: true } : {}),
-          }),
-          lastOutcome: "adjusted",
-        },
-      }));
-      return {
-        outcome: "adjusted",
-        kcal: reservation.total,
-        changes: futureChanges,
-        summary,
-      };
-    } catch (error) {
-      await release();
-      throw error;
-    }
+  const [{ data: profileRow }, { data: planRow }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "target_weight_kg, current_weight_kg, start_weight_kg, goal_type, pregnancy_status, meal_slots, meals_to_plan",
+      )
+      .eq("id", userId)
+      .maybeSingle(),
+    supabase
+      .from("monthly_plans")
+      .select("id")
+      .eq("month", month)
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
+  const profile = (profileRow ?? {}) as Record<string, unknown>;
+
+  // 3. UNA decisión, con el desvío sumado de los tres orígenes: kcal y, desde
+  //    el ticket 13, proteína (una bajada de ≥ 20 g se compensa siempre).
+  const needInput = {
+    deltaKcal: balance.pending,
+    goal: goalOf(profile),
+    pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
+    reversing: dayReversing(balance),
+  };
+  const decision = compensationNeed({ ...needInput, deltaProtein: balance.proteinPending });
+  // ¿Dispara SOLO la proteína? Cambia qué se hace si el modelo no mueve nada.
+  const proteinOnly = decision.compensate && !compensationNeed(needInput).compensate;
+  if (!decision.compensate) {
+    await recordOutcome(decision.reason);
+    return { outcome: decision.reason, kcal: balance.pending };
+  }
+  if (!planRow) {
+    await recordOutcome("no-plan");
+    return { outcome: "no-plan", kcal: balance.pending };
+  }
+
+  const { householdContext } = await import("@/lib/household.server");
+  const home = await householdContext(supabase as never, userId);
+  const window = compensationWindow({
+    today,
+    sharedSlots: home.sharedSlots,
+    selectedSlots: effectiveMealSlots(
+      profile as { meal_slots?: unknown; meals_to_plan?: string | null },
+    ),
+    soloAdult: home.members.length <= 1,
   });
+  if (window.reason) {
+    await recordOutcome(window.reason);
+    return { outcome: window.reason, kcal: balance.pending };
+  }
+
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("Falta la clave de IA");
+  const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+  await enforceUserRateLimit(userId, "plan-adjust");
+
+  // 4. Reserva: los tres libros se marcan como compensados ANTES de llamar a
+  //    la IA, releyendo lo último, para que un asentamiento simultáneo no
+  //    compense lo mismo dos veces.
+  let reservation: DayReservation = EMPTY_RESERVATION;
+  const reserved = await patchDay(supabase, userId, today, (current) => {
+    const reserve = reserveDay(current);
+    reservation = reserve.reservation;
+    return reserve.patch;
+  });
+  if (!reserved || (!reservation.total && !reservation.protein)) {
+    return { outcome: "nothing", kcal: 0 };
+  }
+
+  const release = async () => {
+    await patchDay(supabase, userId, today, (current) => releaseDay(current, reservation)).catch(
+      (err) =>
+        // La reserva se queda puesta: ese desvío cuenta como compensado sin
+        // estarlo hasta que el ticket 22 le dé caducidad.
+        logEvent("error", "settle_release_failed", {
+          userId,
+          date: today,
+          error: errorText(err),
+        }),
+    );
+  };
+
+  try {
+    const reflowMeals = deps.reflow ?? (await import("@/lib/plan.functions")).reflowMeals;
+    const changedMeals = row.habits
+      .filter((h) => h.status === "distinto" && h.swapKcalDelta != null)
+      .map((h) => ({
+        label: h.label,
+        dish: h.confirmedIdea || h.actual || "",
+        plannedDish: h.plannedIdea || h.wasIdea || "",
+      }));
+    const { plan, before, summary, absorbedKcal, partial } = await reflowMeals({
+      supabase,
+      userId,
+      key,
+      month,
+      today,
+      note: dayNote({
+        // Los platos de ESTE lote se conocen con su texto exacto; para los de
+        // lotes anteriores del mismo día vale lo que quedó en el registro.
+        changedMeals: changes.length ? changes : changedMeals,
+        snackEntries: row.snacks?.entries ?? [],
+        exerciseEntries: row.exercise?.entries ?? [],
+        pendingKcal: reservation.total,
+        reversing: dayReversing(balance),
+        proteinDrop: decision.proteinDelta,
+      }),
+      kcalDelta: decision.kcalDelta,
+      window: window.dates,
+      soloOnly: true,
+      // Ticket 18: lo que la tarjeta dice haber movido es lo que se midió.
+      measure: true,
+    });
+    const futureChanges = diffFutureMeals(before, plan, today);
+    // Solo la proteína disparaba y el modelo no ha movido nada: se devuelve la
+    // reserva (no está compensado) pero SIN lanzar, para que el cliente no lo
+    // reintente cada minuto; el siguiente asentamiento del día lo retoma.
+    if (!futureChanges.length && proteinOnly) {
+      await release();
+      await recordOutcome("below-threshold");
+      return { outcome: "below-threshold", kcal: reservation.total };
+    }
+    // Un desvío por encima del umbral que no mueve ningún plato no está
+    // compensado: si se diera por bueno, el exceso se perdería en silencio.
+    // Se trata como intento fallido (se devuelve la reserva) y el cliente lo
+    // reintenta más tarde.
+    if (!futureChanges.length) throw new Error("El reajuste no ha cambiado ningún plato");
+
+    await patchDay(supabase, userId, today, (current) => ({
+      record: {
+        adjustment: mergeDayAdjustment(current.record?.adjustment, {
+          changes: futureChanges,
+          summary,
+          kcal: reservation.total,
+          ...(absorbedKcal != null ? { absorbedKcal } : {}),
+          ...(partial ? { partial: true } : {}),
+        }),
+        lastOutcome: "adjusted",
+      },
+    }));
+    return {
+      outcome: "adjusted",
+      kcal: reservation.total,
+      changes: futureChanges,
+      summary,
+    };
+  } catch (error) {
+    await release();
+    throw error;
+  }
+}

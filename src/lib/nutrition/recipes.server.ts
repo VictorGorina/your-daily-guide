@@ -152,6 +152,8 @@ export async function getRecipes(
     slots?: ReadonlyMap<string, RecipeSlot>;
     model?: string;
     noCache?: boolean;
+    /** Quién descompone lo que falta; solo lo cambian los tests (sin red). */
+    decompose?: typeof import("./resolve-dish.server").decomposeDishes;
   },
 ): Promise<Map<string, RecipeLookup>> {
   const out = new Map<string, RecipeLookup>();
@@ -224,7 +226,7 @@ export async function getRecipes(
 
   const { decomposeDishes, isCalculated } = await import("./resolve-dish.server");
   const texts = missingKeys.map((key) => byKey.get(key)![0]!);
-  const breakdowns = await decomposeDishes(texts, {
+  const breakdowns = await (opts.decompose ?? decomposeDishes)(texts, {
     apiKey: opts.apiKey,
     userId: opts.userId,
     model: opts.model,
