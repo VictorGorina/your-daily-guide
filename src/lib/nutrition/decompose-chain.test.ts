@@ -177,10 +177,12 @@ describe("matchAnswer — casar la respuesta con los platos pedidos", () => {
   const raw = withRecipe();
   const answerOf = (...labels: string[]) =>
     new Map(labels.map((label) => [label, { ...raw, coccion: label }] as const));
+  /** La marca que `answerOf` deja en cada fila, para saber cuál casó con qué plato. */
+  const markOf = (dish: RawDish | undefined) => (dish as { coccion?: string } | undefined)?.coccion;
 
   it("por nombre, como siempre", () => {
     const got = matchAnswer(["Pasta con tomate"], answerOf("pasta con tomate"));
-    expect(got.get("Pasta con tomate")?.coccion).toBe("pasta con tomate");
+    expect(markOf(got.get("Pasta con tomate"))).toBe("pasta con tomate");
   });
 
   it("etiquetas con el número de la lista que copió el modelo (regresión 2026-09-24)", () => {
@@ -188,8 +190,8 @@ describe("matchAnswer — casar la respuesta con los platos pedidos", () => {
       ["Pasta con tomate", "Lentejas"],
       answerOf("1. pasta con tomate", "2) lentejas"),
     );
-    expect(got.get("Pasta con tomate")?.coccion).toBe("1. pasta con tomate");
-    expect(got.get("Lentejas")?.coccion).toBe("2) lentejas");
+    expect(markOf(got.get("Pasta con tomate"))).toBe("1. pasta con tomate");
+    expect(markOf(got.get("Lentejas"))).toBe("2) lentejas");
   });
 
   it("un plato que empieza por número no pierde el número", () => {
@@ -203,7 +205,7 @@ describe("matchAnswer — casar la respuesta con los platos pedidos", () => {
 
   it("un plato y una fila: casa por posición aunque el modelo reescriba la etiqueta", () => {
     const got = matchAnswer(["Pasta boloñesa"], answerOf("espaguetis a la boloñesa"));
-    expect(got.get("Pasta boloñesa")?.coccion).toBe("espaguetis a la boloñesa");
+    expect(markOf(got.get("Pasta boloñesa"))).toBe("espaguetis a la boloñesa");
   });
 
   it("varios platos con etiquetas reescritas: no adivina (mejor reintentar que cifras cruzadas)", () => {

@@ -10,11 +10,12 @@ la IA. No hay tests de componentes ni end-to-end (todavía).
 bun test                        # toda la suite
 bun test src/lib/plan-shared    # un archivo
 bun test --watch                # en watch
-bun run typecheck               # tsc del código de app (no de los tests, ver abajo)
+bun run typecheck               # tsc del código de app
+bun run typecheck:test          # tsc con los tests dentro (ver abajo)
 ```
 
 El CI ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)) corre `bun install`,
-`lint`, `typecheck` y `test` en cada push y PR.
+`lint`, `typecheck`, `typecheck:test` y `test` en cada push y PR.
 
 ## Dónde viven
 
@@ -77,13 +78,15 @@ golden set puede recortarse ni pedir reintento. Si una regla nueva lo rompe, la 
 
 ## Nota: tipos de `bun:test` y `tsc`
 
-Los `*.test.ts` están **excluidos** de `tsconfig.json` a propósito. Instalar `@types/bun`
-para tipar `bun:test` arrastra `bun-types/globals.d.ts` al scope global (vía referencias
-`import("bun")` de la pila de Nitro), y su `fetch` con `preconnect` rompe el `fetch` de
-navegador que la app pasa a Supabase. `bun test` trae sus propios tipos en runtime, así que
-la suite corre sin el paquete; lo que se pierde es el autocompletado de `bun:test` en el
-editor. Si lo necesitas, instala `@types/bun` solo en tu entorno y asume el ruido en
-`bunx tsc` — no lo añadas a `package.json`.
+`tsconfig.json` excluye los `*.test.ts`; los comprueba `tsconfig.test.json`
+(`bun run typecheck:test`, también en el CI), que extiende el principal y añade los tests
+más **un solo archivo** de tipos: `node_modules/bun-types/test.d.ts`, el
+`declare module "bun:test"`. No uses `"types": ["bun-types"]` ni instales `@types/bun`:
+eso mete en el scope global todo `bun-types`, y su `fetch` con `preconnect` rompe el `fetch`
+de navegador que la app pasa a Supabase (4 errores en `client.ts`, `client.server.ts`,
+`auth-middleware.ts` y `api-auth.server.ts`). `bun-types` llega como dependencia transitiva;
+si una actualización lo quitara, `typecheck:test` fallaría con "Cannot find module
+'bun:test'".
 
 ## Cuándo sube el listón
 

@@ -42,6 +42,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: bun run typecheck
 
+      - name: Typecheck (tests)
+        if: ${{ !cancelled() }}
+        run: bun run typecheck:test
+
       - name: Tests
         if: ${{ !cancelled() }}
         run: bun test

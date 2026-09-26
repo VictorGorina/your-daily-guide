@@ -9,11 +9,12 @@ aplica cada una.
 
 ```sh
 bun run lint                    # ESLint + Prettier (falla si el formato no está aplicado)
-bunx tsc -p tsconfig.json       # typecheck; no hay script propio pero noEmit ya está puesto
+bun run typecheck               # tsc del código de app
+bun run typecheck:test          # tsc con los *.test.ts dentro (ver docs/agents/testing.md)
 bun test                        # suite de lógica pura (ver docs/agents/testing.md)
 ```
 
-Las tres corren en segundos y son las mismas que ejecuta el CI en cada PR
+Las cuatro corren en segundos y son las mismas que ejecuta el CI en cada PR
 ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)). Si tocas lógica de plan,
 compra, fechas o parsers, **añade o actualiza el test** antes de cerrar — es la única
 defensa contra el bucle "arreglo un bug y salen dos".

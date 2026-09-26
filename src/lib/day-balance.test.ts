@@ -154,6 +154,7 @@ describe("dayReversing", () => {
     net: 0,
     pending,
     compensated,
+    proteinPending: 0,
     active: true,
   });
 
@@ -279,6 +280,7 @@ describe("balanceNote", () => {
     net: meals + snack + ex,
     pending: meals + snack + ex,
     compensated: 0,
+    proteinPending: 0,
     active: true,
   });
 

@@ -23,7 +23,8 @@ bun run dev       # servidor de desarrollo, http://localhost:8080
 bun run build     # build de producción (preset Vercel vía Nitro)
 bun run preview   # sirve el build de producción en local
 bun run lint      # ESLint
-bun run typecheck # tsc del código de app (los *.test.ts van aparte, ver docs/agents/testing.md)
+bun run typecheck # tsc del código de app
+bun run typecheck:test # tsc con los *.test.ts (tsconfig.test.json, ver docs/agents/testing.md)
 bun run test      # suite de lógica pura con el runner de Bun
 bun run format    # Prettier --write
 ```

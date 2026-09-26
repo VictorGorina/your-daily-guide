@@ -523,6 +523,14 @@ describe("daySignalOf / hasDayRecord", () => {
 });
 
 describe("mergeGuide", () => {
+  // La forma que `mergeGuide` lee (su `GuideNumbers`). Sin darla explícita, `T`
+  // se infiere del literal y `{ macroEstimate: null }` tiparía el resultado como
+  // `null` aunque en ejecución devuelva la cifra de `prev`.
+  type Numbers = {
+    intro?: string;
+    macroEstimate?: MacroEstimate | null;
+    mealMacros?: MealMacroEstimate[] | null;
+  };
   const macros = (kcal: number): MacroEstimate => ({
     kcal,
     protein_g: 0,
@@ -534,7 +542,7 @@ describe("mergeGuide", () => {
 
   it("una guía de respaldo sin cifras no borra las que había", () => {
     const prev = { macroEstimate: macros(2000), mealMacros: [meal(600)] };
-    const merged = mergeGuide(prev, { intro: "x", macroEstimate: null, mealMacros: null });
+    const merged = mergeGuide<Numbers>(prev, { intro: "x", macroEstimate: null, mealMacros: null });
     expect(merged.macroEstimate).toEqual(macros(2000));
     expect(merged.mealMacros).toEqual([meal(600)]);
     expect(merged.intro).toBe("x");
@@ -556,7 +564,7 @@ describe("mergeGuide", () => {
 
   it("una lista de platos vacía cuenta como «sin cifras»", () => {
     const prev = { macroEstimate: macros(2000), mealMacros: [meal(600)] };
-    expect(mergeGuide(prev, { mealMacros: [] }).mealMacros).toEqual([meal(600)]);
+    expect(mergeGuide<Numbers>(prev, { mealMacros: [] }).mealMacros).toEqual([meal(600)]);
   });
 });
 
