@@ -23,6 +23,9 @@
  *   ese desvío queda marcado como compensado sin estarlo (ver ticket 22).
  * - `settle_outcome_failed` (warn): `settleDay` no pudo guardar `lastOutcome`;
  *   solo se pierde la nota de la tarjeta "Balance de hoy".
+ * - `plan_cas_exhausted` (warn): tres escrituras seguidas de la fila del mes
+ *   chocaron con otra (`updatePlanRowCas`) y se devolvió un error. Suelto es una
+ *   carrera normal; repetido, algo reescribe el plan en bucle.
  */
 import { redactFields } from "@/lib/log-redact";
 
