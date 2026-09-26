@@ -406,9 +406,19 @@ el `subject` lo construye siempre el servidor (`user:<uuid>` del JWT ya verifica
 `email:<sha256>` sin sesión), nunca el cliente. Dos avisos: la función SQL solo la puede ejecutar
 `service_role` — si se pudiera llamar con la sesión de una persona, esa persona podría gastarle
 la cuota a otra —, y si la consulta falla se **deja pasar** a propósito (un fallo de base de
-datos no debe dejar la app sin coach), así que un error de `consume_rate_limit` en los logs
-significa que ahora mismo no hay tope de gasto. Desde un `*.functions.ts` se carga con
+datos no debe dejar la app sin coach), así que un evento `rate_limit_failopen` en los logs
+significa que ahora mismo no hay cuota. Desde un `*.functions.ts` se carga con
 `await import(...)`: importa `client.server`, que no puede acabar en el bundle del navegador.
+
+**Logs del servidor — `logEvent`, no `console.error` suelto** ([src/lib/log.server.ts](src/lib/log.server.ts)).
+Una línea JSON por evento con nombre fijo en inglés (`snake_case`), para poder buscarlo y ponerle
+alertas; el catálogo de eventos está al principio del archivo y se amplía ahí. Los campos pasan por
+`redactFields` (`log-redact.ts`, puro y testeado), que tapa correos, nombres, notas, platos, datos
+de salud y suscripciones a cualquier profundidad: por eso una clave como `name` o `body` sale
+`"[redacted]"` (usa otra), y un error de Supabase se pasa como `errorText(error)`. En el cliente, un
+`.catch` nunca va vacío: como poco `console.warn("<pantalla>: <qué hacía>", error)`.
+`GET /api/health` (sin BD ni IA) responde `{ ok, version }` y, con `x-cron-secret`, qué variables
+de entorno están definidas.
 
 **Tope de gasto en IA (`ai_spend` + `record_ai_spend`):** complementa las cuotas por hora con un
 tope en dólares por persona, diario y mensual (`AI_SPEND_CAPS`, junto a `RATE_LIMITS`; días y
@@ -417,8 +427,8 @@ middleware que mira el tope **antes de cada llamada** y suma después el `usage.
 OpenRouter (pedido con `usage: { include: true }`; si no llega, se estima por tokens). Así no se
 escapa ninguna llamada: reintentos y helpers sin bucket (`offShoppingList`) incluidos.
 `enforceUserRateLimit` lo mira también en la entrada, para cortar con 429 antes de hacer trabajo.
-Mismo `RateLimitError` (su `scope` `day`/`month` cambia el mensaje) y mismo "dejar pasar" con log si
-falla la base de datos. Ojo con `streamText`: un error del middleware no llega a `result.text`
+Mismo `RateLimitError` (su `scope` `day`/`month` cambia el mensaje) y mismo "dejar pasar" si falla
+la base de datos, con `spend_cap_failopen` / `spend_record_failed` en el log. Ojo con `streamText`: un error del middleware no llega a `result.text`
 (rechaza con un genérico), solo a `onError` — por eso `askForJson` lo captura ahí y no reintenta.
 Lógica pura y testeada en [src/lib/ai-spend.ts](src/lib/ai-spend.ts). **Excepción deliberada:**
 la descomposición de platos va con `createAiProvider(key, userId, { capScope: "month" })` y
