@@ -2003,69 +2003,6 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
 // Compensación de un cambio de plato de un día FUTURO
 // ---------------------------------------------------------------------------
 
-/**
- * Relee, modifica y escribe `daily_logs.habits` de un día, reintentando si otra
- * escritura se cruzó — mismo patrón que `patchSnacks` en `snacks.functions.ts`,
- * pero para la columna `habits`. `null` si el día todavía no existe: lo crea
- * siempre el cliente al abrir Hoy, nunca esta función, así que sin fila no hay
- * nada que compensar.
- */
-type HabitsRow = { habits: MealHabit[]; updatedAt: string };
-const HABITS_WRITE_ATTEMPTS = 3;
-
-async function readHabitsRow(
-  supabase: SupabaseClient<never, never, never>,
-  userId: string,
-  date: string,
-): Promise<HabitsRow | null> {
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .select("habits, updated_at")
-    .eq("user_id", userId)
-    .eq("log_date", date)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  const row = data as { habits?: unknown; updated_at: string };
-  return {
-    habits: (Array.isArray(row.habits) ? row.habits : []) as MealHabit[],
-    updatedAt: row.updated_at,
-  };
-}
-
-async function writeHabitsIfUnchanged(
-  supabase: SupabaseClient<never, never, never>,
-  userId: string,
-  date: string,
-  row: HabitsRow,
-  habits: MealHabit[],
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .update({ habits } as never)
-    .eq("user_id", userId)
-    .eq("log_date", date)
-    .eq("updated_at", row.updatedAt)
-    .select("id");
-  if (error) throw error;
-  return !!data?.length;
-}
-
-async function patchHabits(
-  supabase: SupabaseClient<never, never, never>,
-  userId: string,
-  date: string,
-  update: (current: MealHabit[]) => MealHabit[],
-): Promise<MealHabit[] | null> {
-  for (let attempt = 0; attempt < HABITS_WRITE_ATTEMPTS; attempt++) {
-    const row = await readHabitsRow(supabase, userId, date);
-    if (!row) return null;
-    const next = update(row.habits);
-    if (await writeHabitsIfUnchanged(supabase, userId, date, row, next)) return next;
-  }
-  throw new Error("No hemos podido guardar el cambio de plato. Inténtalo de nuevo.");
-}
-
 /** `goal` que pide `compensationNeed`, a partir del perfil — mismo criterio que
  * usa el prompt del coach (peso objetivo si existe, si no el legacy `goal_type`). */
 function resolveCompensationGoal(profile: Record<string, unknown>) {

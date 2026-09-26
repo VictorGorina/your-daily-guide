@@ -333,6 +333,8 @@ export async function fetchTodayLog(): Promise<DailyLog | null> {
   return (data as unknown as DailyLog) ?? null;
 }
 
+const HABITS_WRITE_ATTEMPTS = 3;
+
 /**
  * Cambia las comidas del registro de hoy releyéndolas de la base de datos justo
  * antes de escribir, en vez de mandar un array que el cliente tenía en memoria.
@@ -345,17 +347,33 @@ export async function fetchTodayLog(): Promise<DailyLog | null> {
 export async function patchTodayHabits(
   update: (habits: MealHabit[]) => MealHabit[] | null,
 ): Promise<MealHabit[] | null> {
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .select("habits")
-    .eq("log_date", todayISO())
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  const next = update(((data as { habits?: MealHabit[] }).habits ?? []) as MealHabit[]);
-  if (!next) return null;
-  await updateTodayLog({ habits: next });
-  return next;
+  // Escritura condicional sobre `updated_at` (ticket 21 de la auditoría, igual
+  // que `patchDailyHabits` en el servidor): releer no basta si otra escritura cae
+  // entre la lectura y el guardado (la de `setPlanMeal`, la del servidor al
+  // asentar el día, otra pestaña). Si alguien escribió, se relee y se vuelve a
+  // aplicar `update` sobre lo nuevo; por eso `update` tiene que ser pura.
+  const date = todayISO();
+  for (let attempt = 0; attempt < HABITS_WRITE_ATTEMPTS; attempt++) {
+    const { data, error } = await supabase
+      .from("daily_logs")
+      .select("habits, updated_at")
+      .eq("log_date", date)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const row = data as { habits?: MealHabit[]; updated_at: string };
+    const next = update((row.habits ?? []) as MealHabit[]);
+    if (!next) return null;
+    const { data: written, error: writeError } = await supabase
+      .from("daily_logs")
+      .update({ habits: next } as never)
+      .eq("log_date", date)
+      .eq("updated_at", row.updated_at)
+      .select("id");
+    if (writeError) throw writeError;
+    if (written?.length) return next;
+  }
+  throw new Error("No hemos podido guardar el cambio de comida. Inténtalo de nuevo.");
 }
 
 export type ChatMessage = {
