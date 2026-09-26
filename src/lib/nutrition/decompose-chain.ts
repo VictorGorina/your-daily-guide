@@ -192,6 +192,11 @@ export async function runDecomposeChain(opts: {
   timeouts?: { batch: number; single: number; fallback: number };
   /** Presupuesto de la petición: un paso sin tiempo no empieza (`"sin-tiempo"`). */
   deadline?: Deadline;
+  /**
+   * Tras cada paso, los platos que acaban de quedar resueltos (ticket 22): quien
+   * llama puede guardarlos ya, sin esperar a los pasos que quedan.
+   */
+  onSettled?: (settled: Map<string, RawDish>) => Promise<void> | void;
 }): Promise<ChainResult> {
   const { dishes, ask, model, fallbackModel } = opts;
   const timeouts = opts.timeouts ?? CHAIN_TIMEOUTS;
@@ -209,21 +214,27 @@ export async function runDecomposeChain(opts: {
       for (const dish of asked) failures.set(dish, "sin-tiempo");
       return;
     }
+    let answer: Map<string, RawDish | undefined>;
     try {
-      const answer = matchAnswer(asked, await ask(asked, stepModel, timeoutMs));
-      for (const dish of asked) {
-        const raw = answer.get(dish);
-        if (settledRaw(raw)) {
-          raws.set(dish, raw);
-          failures.delete(dish);
-        } else failures.set(dish, "sin-respuesta");
-      }
+      answer = matchAnswer(asked, await ask(asked, stepModel, timeoutMs));
     } catch (error) {
       const reason = failureOf(error);
       for (const dish of asked) failures.set(dish, reason);
       // El tope mensual no se va a mover en los segundos que dura la cadena.
       if (reason === "tope-gasto") capped = true;
+      return;
     }
+    const settled = new Map<string, RawDish>();
+    for (const dish of asked) {
+      const raw = answer.get(dish);
+      if (settledRaw(raw)) {
+        raws.set(dish, raw);
+        settled.set(dish, raw);
+        failures.delete(dish);
+      } else failures.set(dish, "sin-respuesta");
+    }
+    // Fuera del `try`: un fallo de quien escucha no es un fallo del modelo.
+    if (settled.size) await opts.onSettled?.(settled);
   };
 
   await step(dishes, model, timeouts.batch);

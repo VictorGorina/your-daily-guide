@@ -444,6 +444,39 @@ const quantityOf = (raw: unknown): number | null => {
 };
 
 /**
+ * ¿Ningún paso posterior a la cadena va a tocar esta receta? Sin reintento con
+ * pista, sin ingredientes dudosos que pesen (lo único que miran USDA y la
+ * desambiguación, `resolveUnsure`) y con la calidad mínima. Una así ya es la
+ * receta final y se puede guardar sin esperar al resto (ticket 22).
+ */
+const isFinalDraft = (d: Draft): boolean =>
+  !d.retryHint &&
+  !heavyUnmatched(d.ingredients).length &&
+  resolutionQuality(d.ingredients) >= MIN_RECIPE_QUALITY;
+
+/** La receta calculada de un plato. Solo para drafts con ingredientes y calidad. */
+function breakdownOf(dish: string, raw: RawDish, draft: Draft): DishBreakdown {
+  const macros = macrosOf(draft.ingredients);
+  return {
+    dish,
+    servings: 1,
+    ingredients: draft.ingredients,
+    macros,
+    perServing: macros,
+    price: priceOf(draft.ingredients),
+    quality: resolutionQuality(draft.ingredients),
+    isFood: raw.comida,
+    vague: false,
+    source: "model",
+    methods: draft.methods,
+    servingKind: raw.tipo_racion === "unidad" ? "unidad" : "plato",
+    unitLabel: typeof raw.unidad === "string" && raw.unidad.trim() ? raw.unidad.trim() : null,
+    textQuantity: quantityOf(raw.cantidad_texto),
+    flags: draft.flags,
+  };
+}
+
+/**
  * Descompone varios platos en su receta canónica (1 ración base). Devuelve un
  * mapa indexado por el string de plato tal como se pasó. Nunca lanza.
  *
@@ -473,6 +506,12 @@ export async function decomposeDishes(
     slots?: ReadonlyMap<string, RecipeSlot>;
     /** Presupuesto de la petición (ticket 22): lo que no quepa sale "Calculando…". */
     deadline?: Deadline;
+    /**
+     * Recetas que ya son definitivas, en cuanto lo son (tras cada paso de la
+     * cadena), para guardarlas sin esperar al resto (ticket 22). Las que
+     * necesitan más pasos llegan solo en el mapa que se devuelve.
+     */
+    onCalculated?: (breakdowns: DishBreakdown[]) => Promise<void>;
   },
 ): Promise<Map<string, DishBreakdown>> {
   const unique = Array.from(new Set(dishes.map((d) => d.trim()).filter(Boolean)));
@@ -500,6 +539,18 @@ export async function decomposeDishes(
     noFallback: opts.noFallback,
     timeouts: CHAIN_TIMEOUTS,
     deadline: opts.deadline,
+    // `draftOf` es puro: la receta que sale aquí es la misma que sale al final.
+    onSettled: opts.onCalculated
+      ? (settled) => {
+          const ready: DishBreakdown[] = [];
+          for (const [dish, raw] of settled) {
+            if (!raw.comida || raw.vago || !raw.ingredientes.length) continue;
+            const draft = draftOf(dish, raw, slotOf(dish));
+            if (isFinalDraft(draft)) ready.push(breakdownOf(dish, raw, draft));
+          }
+          return ready.length ? opts.onCalculated?.(ready) : undefined;
+        }
+      : undefined,
   });
 
   // Receta casada, con grasa por método y validada.
@@ -554,25 +605,7 @@ export async function decomposeDishes(
       });
       continue;
     }
-    const macros = macrosOf(draft.ingredients);
-    const breakdown: DishBreakdown = {
-      dish,
-      servings: 1,
-      ingredients: draft.ingredients,
-      macros,
-      perServing: macros,
-      price: priceOf(draft.ingredients),
-      quality,
-      isFood: raw.comida,
-      vague: false,
-      source: "model",
-      methods: draft.methods,
-      servingKind: raw.tipo_racion === "unidad" ? "unidad" : "plato",
-      unitLabel: typeof raw.unidad === "string" && raw.unidad.trim() ? raw.unidad.trim() : null,
-      textQuantity: quantityOf(raw.cantidad_texto),
-      flags: draft.flags,
-    };
-    out.set(dish, breakdown);
+    out.set(dish, breakdownOf(dish, raw, draft));
   }
   if (unresolved.length) {
     // Sin el texto de los platos: es de la persona.

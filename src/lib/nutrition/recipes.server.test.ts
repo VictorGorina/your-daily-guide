@@ -118,6 +118,42 @@ describe("getRecipes — caché global de recetas", () => {
     expect(out.get("Pisto manchego")?.failure).toBe("tiempo");
   });
 
+  it("lo que llega antes de un paso que lanza queda guardado", async () => {
+    const fake = createFakeSupabase({ dish_recipes: [] });
+    setFakeAdmin(fake.client);
+    const decompose: Decompose = async (_dishes, opts) => {
+      await opts.onCalculated?.([calculated("Garbanzos con espinacas", "garbanzos", 60)]);
+      throw new Error("la función se cortó");
+    };
+
+    await expect(
+      getRecipes(["Garbanzos con espinacas", "Pisto"], { userId: "u1", decompose }),
+    ).rejects.toThrow("la función se cortó");
+
+    expect(fake.tables.dish_recipes!.map((r) => r.dish_label)).toEqual(["Garbanzos con espinacas"]);
+  });
+
+  it("lo guardado por el camino no se vuelve a escribir al final", async () => {
+    const fake = createFakeSupabase({ dish_recipes: [] });
+    setFakeAdmin(fake.client);
+    const early = calculated("Arroz con pollo", "arroz", 70);
+    const late = calculated("Sopa de fideos", "fideos", 40);
+    const decompose: Decompose = async (_dishes, opts) => {
+      await opts.onCalculated?.([early]);
+      return new Map([
+        [early.dish, early],
+        [late.dish, late],
+      ]);
+    };
+
+    await getRecipes(["Arroz con pollo", "Sopa de fideos"], { userId: "u1", decompose });
+
+    const upserts = fake.calls.filter((c) => c.table === "dish_recipes" && c.op === "upsert");
+    expect(
+      upserts.map((c) => (c.payload as { dish_label: string }[]).map((r) => r.dish_label)),
+    ).toEqual([["Arroz con pollo"], ["Sopa de fideos"]]);
+  });
+
   it("sin nada que descomponer no llama al modelo", async () => {
     const fake = createFakeSupabase(
       { dish_recipes: [cachedRow("cocido", "Cocido")] },

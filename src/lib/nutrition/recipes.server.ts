@@ -126,6 +126,25 @@ function recipeFromBreakdown(key: string, b: DishBreakdown): CanonicalRecipe {
   };
 }
 
+/** La fila de `dish_recipes` de una receta recién calculada. */
+function recipeRow(key: string, b: DishBreakdown): Record<string, unknown> {
+  const recipe = recipeFromBreakdown(key, b);
+  return {
+    dish_key: key,
+    dish_label: recipe.dishLabel,
+    ingredients: recipe.ingredients,
+    methods: recipe.methods,
+    serving_kind: recipe.servingKind,
+    unit_label: recipe.unitLabel ?? null,
+    text_quantity: b.textQuantity,
+    quality: recipe.quality,
+    flags: recipe.flags,
+    pipeline_version: recipe.pipelineVersion,
+    foods_version: recipe.foodsVersion,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 type Admin = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
 
 async function adminClient(): Promise<Admin | null> {
@@ -229,15 +248,42 @@ export async function getRecipes(
 
   const { decomposeDishes, isCalculated } = await import("./resolve-dish.server");
   const texts = missingKeys.map((key) => byKey.get(key)![0]!);
+  const keyOfText = new Map(missingKeys.map((key) => [byKey.get(key)![0]!, key]));
+
+  // Guardar en cuanto hay recetas (ticket 22): si la función se corta después
+  // (tiempo, un paso que lanza), lo ya pagado queda guardado. Si dos personas
+  // piden el mismo plato a la vez, las dos recetas son igual de válidas: gana
+  // la última. Una fila revisada a mano nunca se pisa (no llega aquí: una
+  // revisada siempre se sirve de la caché). Nunca lanza.
+  const saved = new Set<string>();
+  const saveRecipes = async (list: readonly DishBreakdown[]) => {
+    const rows = list.flatMap((b) => {
+      const key = keyOfText.get(b.dish);
+      if (!key || saved.has(key)) return [];
+      saved.add(key);
+      return [recipeRow(key, b)];
+    });
+    if (!admin || !tableOk || !rows.length) return;
+    try {
+      const { error } = await admin
+        .from("dish_recipes" as never)
+        .upsert(rows as never, { onConflict: "dish_key" });
+      if (error && !isMissingTable(error)) console.error("dish_recipes: escritura", error);
+    } catch (error) {
+      console.error("dish_recipes: escritura", error);
+    }
+  };
+
   const breakdowns = await (opts.decompose ?? decomposeDishes)(texts, {
     apiKey: opts.apiKey,
     userId: opts.userId,
     model: opts.model,
     slots: opts.slots,
     deadline: opts.deadline,
+    onCalculated: saveRecipes,
   });
 
-  const rows: Record<string, unknown>[] = [];
+  const calculatedList: DishBreakdown[] = [];
   for (const key of missingKeys) {
     const text = byKey.get(key)![0]!;
     const b: DishBreakdown | undefined = breakdowns.get(text);
@@ -255,9 +301,8 @@ export async function getRecipes(
       });
       continue;
     }
-    const recipe = recipeFromBreakdown(key, b);
     const lookup = {
-      recipe,
+      recipe: recipeFromBreakdown(key, b),
       textQuantity: b.textQuantity,
       vague: false,
       isFood: true,
@@ -265,30 +310,11 @@ export async function getRecipes(
     };
     fill(key, lookup);
     if (!opts.noCache) processCache.set(key, { ...lookup, dish: text, key });
-    rows.push({
-      dish_key: key,
-      dish_label: recipe.dishLabel,
-      ingredients: recipe.ingredients,
-      methods: recipe.methods,
-      serving_kind: recipe.servingKind,
-      unit_label: recipe.unitLabel ?? null,
-      text_quantity: b.textQuantity,
-      quality: recipe.quality,
-      flags: recipe.flags,
-      pipeline_version: recipe.pipelineVersion,
-      foods_version: recipe.foodsVersion,
-      updated_at: new Date().toISOString(),
-    });
+    calculatedList.push(b);
   }
 
-  // Guardar. Si dos personas piden el mismo plato a la vez, las dos recetas son
-  // igual de válidas: gana la última. Una fila revisada a mano nunca se pisa
-  // (no llega aquí: una revisada siempre se sirve de la caché).
-  if (admin && tableOk && rows.length) {
-    const { error } = await admin
-      .from("dish_recipes" as never)
-      .upsert(rows as never, { onConflict: "dish_key" });
-    if (error && !isMissingTable(error)) console.error("dish_recipes: escritura", error);
-  }
+  // Lo que necesitó los pasos de después de la cadena (y lo de un `decompose`
+  // que no avise por el camino).
+  await saveRecipes(calculatedList);
   return out;
 }

@@ -220,6 +220,46 @@ describe("runDecomposeChain — presupuesto de la petición (ticket 22)", () => 
   });
 });
 
+describe("runDecomposeChain — avisa de lo resuelto tras cada paso (ticket 22)", () => {
+  it("cada paso entrega solo sus platos recién resueltos", async () => {
+    const seen: string[][] = [];
+    await runDecomposeChain({
+      dishes: ["Lentejas", "Pisto", "Cocido"],
+      // El lote contesta Lentejas; el uno a uno, Pisto; Cocido, el respaldo.
+      ask: fakeAsk({
+        [PRIMARY]: (dishes) =>
+          new Map(
+            dishes
+              .filter((d) => d === "Lentejas" || (dishes.length === 1 && d === "Pisto"))
+              .map((d) => [d.toLowerCase(), withRecipe()]),
+          ),
+        [FALLBACK]: (dishes) => new Map(dishes.map((d) => [d.toLowerCase(), withRecipe()])),
+      }),
+      model: PRIMARY,
+      fallbackModel: FALLBACK,
+      timeouts: fast,
+      onSettled: (settled) => void seen.push([...settled.keys()]),
+    });
+
+    expect(seen).toEqual([["Lentejas"], ["Pisto"], ["Cocido"]]);
+  });
+
+  it("un fallo de quien escucha no cuenta como fallo del modelo", async () => {
+    await expect(
+      runDecomposeChain({
+        dishes: ["Lentejas"],
+        ask: fakeAsk({ [PRIMARY]: () => new Map([["lentejas", withRecipe()]]) }),
+        model: PRIMARY,
+        fallbackModel: FALLBACK,
+        timeouts: fast,
+        onSettled: () => {
+          throw new Error("guardar");
+        },
+      }),
+    ).rejects.toThrow("guardar");
+  });
+});
+
 describe("parseDecomposition", () => {
   const parse = (t: string) => JSON.parse(t);
 
