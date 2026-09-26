@@ -64,6 +64,13 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
 Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
 [src/lib/plan-shared.ts](../../src/lib/plan-shared.ts). Romperlos es el fallo clásico.
 
+- [ ] **Ninguna escritura ciega de `monthly_plans` ni de `daily_logs.habits`.** Un
+      `.update()` nuevo sobre esas filas va por `updatePlanRowCas`
+      ([plan-rows.server.ts](../../src/lib/plan-rows.server.ts)), `updateShoppingState`,
+      `patchDailyHabits` o `patchTodayHabits`, con el cambio expresado como función pura de la
+      versión más reciente. Leer, esperar a la IA y escribir lo leído deshace lo que otro
+      escribió entretanto (ticket 21 de la auditoría).
+
 - [ ] **El día de hoy no se toca nunca.** `setPlanMeal` cambia un plato de hoy en adelante
       tal cual lo pide la persona (sin IA). `adjustMonthlyPlan` recoloca solo días futuros.
 - [ ] Un cambio a mano se guarda en campos propios del día (`breakfast`/`snack`/`kids` en
@@ -97,7 +104,7 @@ Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
 - [ ] El estado de una comida es **por usuario**, nunca se sincroniza al hogar.
 - [ ] El **estado de compra** (marcas "en casa"/"comprado", gasto real, tiquets, despensa
       extra, cierre de tramos) SÍ es del hogar: cualquier miembro con cuenta lo edita sobre
-      la lista del planificador (`resolveShoppingRow` → `readShoppingRow`/`writeShoppingState`
+      la lista del planificador (`resolveShoppingRow` → `updateShoppingState`
       en [plan.functions.ts](../../src/lib/plan.functions.ts)). Un no planificador escribe la
       fila del planificador con `supabaseAdmin` (RLS solo le deja LEERla) y **solo** columnas
       de estado — nunca `plan` ni `weekQty`. Los platos, las cantidades y la cadencia siguen

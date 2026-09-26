@@ -246,7 +246,20 @@ Lo que aporta `use-meal-swap.ts` a ese lote es solo `resolveDishDeltas`: regener
 día una vez y sacar el desvío por comida contra `plannedKcal` (congelada como `plannedIdea`, para
 medir siempre contra el plan y no contra el cambio anterior). `setPlanMeal` escribe el plato al
 instante y sin IA, y el estado es por comida, no global. Cada escritura de `habits` desde el cliente
-pasa por `patchTodayHabits`, que relee la fila justo antes.
+pasa por `patchTodayHabits`, que escribe con CAS sobre `updated_at` (ver el párrafo siguiente).
+
+**Escrituras concurrentes — siempre sobre la versión más reciente** (ticket 21 de la auditoría).
+La fila `monthly_plans` del mes y `daily_logs.habits` las escriben varios caminos a la vez (la IA
+tarda 10-100 s, dos miembros del hogar, dos toques seguidos). Ninguna escritura es ciega: se lee la
+fila con su `updated_at`, se **reconstruye** el cambio sobre lo leído con una función pura
+(`applyPlanChanges`, `mergeRegeneratedPlan`, `withPlanMeal`, `withChildMeal`, `withOwnedMark`…) y
+se escribe con `.eq("updated_at", leído)`; si no cambia ninguna fila, se relee y se reintenta
+(hasta 3). Helpers: `updatePlanRowCas` (`plan-rows.server.ts`), `updateShoppingState` (estado de
+compra, con la lista blanca de columnas), `patchDailyHabits` (`daily-rows.server.ts`) y
+`patchTodayHabits` en el cliente. El trabajo caro no se repite: solo se vuelve a aplicar su
+resultado. En la pantalla, el estado de la compra va con `useShoppingMutation` (optimista con esas
+mismas funciones y en serie por mes, copia en `mobile/lib/`). `generateMonthlyPlan` usa `insert`:
+la restricción única es la guarda contra dos generaciones a la vez.
 
 **Tarjeta "Balance de hoy"** ([src/components/day-balance-card.tsx](src/components/day-balance-card.tsx)),
 debajo de "Registrar deporte". Es una petición explícita del usuario: la persona tiene que VER que
@@ -360,7 +373,7 @@ querer:
   planificador que pida tocar una comida compartida recibe un aviso (`guardSharedSlotWrite`).
 - **El estado de la compra es del hogar**: marcas "en casa"/"comprado", gasto, tiquets y
   despensa los edita cualquier miembro con cuenta sobre la lista del planificador
-  (`resolveShoppingRow` → `readShoppingRow` / `writeShoppingState`; `supabaseAdmin` + solo
+  (`resolveShoppingRow` → `updateShoppingState`, con CAS; `supabaseAdmin` + solo
   columnas de estado para un no planificador). Los platos, las cantidades y la cadencia, no.
 - **`PlanDay.kids`** (`{childId, slot, dish, off?}`): plato aparte de un niño cuando el
   compartido no le vale. Lo emite la IA o lo cambia el planificador con `setChildMeal` (ruta

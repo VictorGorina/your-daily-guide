@@ -282,9 +282,10 @@ aviso y no se toca nada (`guardSharedSlotWrite`).
 **El estado de la compra sí es de todos.** Marcas "en casa"/"comprado", gasto real, tiquets,
 despensa extra y cierre de tramos los edita cualquier miembro con cuenta sobre la lista del
 planificador. En `plan.functions.ts`, `resolveShoppingRow` decide la fila objetivo
-(`householdPlannerId`, una sola consulta) y `readShoppingRow` / `writeShoppingState` la leen
-y escriben: si el que llama no es el planificador, con `supabaseAdmin` (RLS solo le deja
-LEER esa fila) y **solo** columnas de estado, nunca `plan` ni `weekQty`. La pantalla Plan de
+(`householdPlannerId`, una sola consulta) y `updateShoppingState` la lee y escribe sobre su
+versión más reciente (CAS con `updated_at`, ticket 21): si el que llama no es el
+planificador, con `supabaseAdmin` (RLS solo le deja LEER esa fila) y **solo** columnas de
+estado, nunca `plan` ni `weekQty`. La pantalla Plan de
 un no planificador muestra "La compra de la casa" (la del planificador, operable: navegador
 de compras y modo súper propios) encima de "Tu compra en solitario" (la suya).
 
