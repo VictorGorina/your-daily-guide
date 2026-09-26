@@ -151,6 +151,14 @@ function ownPlanRow(
     .maybeSingle();
 }
 
+/** Un mes se genera una sola vez (`generateMonthlyPlan`). */
+function alreadyPlanned(month: string): ValidationError {
+  const title = monthTitle(month);
+  return new ValidationError(
+    `${title.charAt(0).toUpperCase()}${title.slice(1)} ya tiene su plan. Si cambia tu hogar se recalcula solo.`,
+  );
+}
+
 /**
  * Fila `monthly_plans` sobre la que se escribe el ESTADO de compra: marcas
  * "lo tengo en casa"/"comprado", gasto real, tiquets, despensa extra y cierre
@@ -723,10 +731,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
         "id",
       );
       if (existing) {
-        const title = monthTitle(data.month);
-        throw new ValidationError(
-          `${title.charAt(0).toUpperCase()}${title.slice(1)} ya tiene su plan. Si cambia tu hogar se recalcula solo.`,
-        );
+        throw alreadyPlanned(data.month);
       }
 
       // ¿Es el primer plan de la persona? Entonces el cliente pide además la
@@ -765,16 +770,20 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
         constraints,
       });
 
-      const { error } = await context.supabase.from("monthly_plans").upsert(
-        {
-          user_id: context.userId,
-          month: data.month,
-          plan: plan as never,
-          shopping: shopping as never,
-          confirmed_at: null,
-        } as never,
-        { onConflict: "user_id,month" },
-      );
+      // `insert`, no `upsert` (ticket 21): la comprobación de arriba va antes de
+      // ~100 s de IA, y dos generaciones a la vez (doble toque, web y móvil) la
+      // pasaban las dos; la segunda pisaba el plan que la persona ya veía. La
+      // restricción única (user_id, month) hace de guarda en la base de datos.
+      const { error } = await context.supabase.from("monthly_plans").insert({
+        user_id: context.userId,
+        month: data.month,
+        plan: plan as never,
+        shopping: shopping as never,
+        confirmed_at: null,
+      } as never);
+      if ((error as { code?: string } | null)?.code === "23505") {
+        throw alreadyPlanned(data.month);
+      }
       if (error) {
         console.error("saveMonthlyPlan", error);
         throw new Error("No hemos podido guardar el plan del mes. Inténtalo otra vez.");
