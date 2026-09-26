@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { updatePlanRowCas } from "@/lib/plan-rows.server";
+
 import {
   cleanFeedingStage,
   cleanHomeSchedule,
@@ -386,18 +388,7 @@ export async function syncSharedMeals(opts: {
   // Un mes íntegramente futuro se copia completo.
   let synced = 0;
   for (const target of targets) {
-    const { data: row } = await supabaseAdmin
-      .from("monthly_plans")
-      .select("plan, confirmed_at")
-      .eq("user_id", target.userId!)
-      .eq("month", opts.month)
-      .maybeSingle();
-    const targetPlan = cleanPlan((row as { plan?: unknown } | null)?.plan);
-    if (!targetPlan) continue;
-    // Un plan ya confirmado tiene su compra cerrada: no lo tocamos.
-    if ((row as { confirmed_at?: string | null } | null)?.confirmed_at) continue;
-
-    const nextPlan: MonthlyPlan = {
+    const mirror = (targetPlan: MonthlyPlan): MonthlyPlan => ({
       ...targetPlan,
       weeks: targetPlan.weeks.map((week, wi) => {
         const sourceWeek = source.weeks[wi];
@@ -455,15 +446,27 @@ export async function syncSharedMeals(opts: {
           }),
         };
       }),
-    };
+    });
 
-    const { error } = await supabaseAdmin
-      .from("monthly_plans")
-      .update({ plan: nextPlan as never } as never)
-      .eq("user_id", target.userId!)
-      .eq("month", opts.month);
-    if (error) console.error("syncSharedMeals", error);
-    else synced += 1;
+    // Sobre la versión más reciente de la fila de ese miembro (ticket 21): sus
+    // comidas propias pueden cambiar a la vez y no se deben pisar.
+    try {
+      const { patch } = await updatePlanRowCas(
+        supabaseAdmin as never,
+        target.userId!,
+        opts.month,
+        "plan, confirmed_at",
+        (row) => {
+          const targetPlan = cleanPlan(row.plan);
+          // Un plan ya confirmado tiene su compra cerrada: no lo tocamos.
+          if (!targetPlan || row.confirmed_at) return null;
+          return { plan: mirror(targetPlan) };
+        },
+      );
+      if (patch) synced += 1;
+    } catch (error) {
+      console.error("syncSharedMeals", error);
+    }
   }
 
   return { synced };

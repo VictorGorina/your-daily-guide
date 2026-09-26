@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
+import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeTables } from "@/test/fake-supabase";
 
-import { householdContext, householdPlannerId } from "./household.server";
+import { householdContext, householdPlannerId, syncSharedMeals } from "./household.server";
+import type { MonthlyPlan } from "./plan-shared";
 
 // Tres hogares en las mismas tablas. En producción la RLS solo deja ver las
 // filas del propio hogar; el doble no tiene RLS y devuelve todas, así que estos
@@ -216,5 +218,108 @@ describe("householdPlannerId", () => {
     const { fake, run } = plannerOf("bea");
     await run();
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([["household_members", "select"]]);
+  });
+});
+
+describe("syncSharedMeals", () => {
+  // Octubre entero es futuro respecto al 26 de septiembre: se copian todas las
+  // celdas compartidas (en h1, la comida todos los días y la cena sáb/dom).
+  const MONTH = "2026-10";
+  const TODAY = "2026-09-26";
+  const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+  const planOf = (who: string): MonthlyPlan => ({
+    intro: who,
+    focus: [],
+    weeks: [
+      {
+        label: "Semana 1",
+        focus: "",
+        breakfasts: ["Avena"],
+        snacks: ["Fruta"],
+        days: DAYS.map((day, di) => ({
+          day,
+          lunch: `Comida ${who} ${di}`,
+          dinner: `Cena ${who} ${di}`,
+        })),
+      },
+    ],
+  });
+  const withPlans = (bea: Record<string, unknown> = {}): FakeTables => ({
+    ...seed(),
+    monthly_plans: [
+      { user_id: "ana", month: MONTH, plan: planOf("Ana"), updated_at: "2026-09-26T10:00:00Z" },
+      {
+        user_id: "bea",
+        month: MONTH,
+        plan: planOf("Bea"),
+        confirmed_at: null,
+        updated_at: "2026-09-26T10:00:00Z",
+        ...bea,
+      },
+    ],
+  });
+  const beaPlan = (tables: FakeTables) =>
+    tables.monthly_plans!.find((r) => r.user_id === "bea")!.plan as MonthlyPlan;
+
+  it("copia al miembro los platos compartidos y deja los suyos", async () => {
+    const fake = createFakeSupabase(withPlans());
+    setFakeAdmin(fake.client);
+    const out = await syncSharedMeals({
+      supabase: fake.client,
+      userId: "ana",
+      month: MONTH,
+      today: TODAY,
+    });
+
+    expect(out).toEqual({ synced: 1 });
+    const days = beaPlan(fake.tables).weeks[0]!.days;
+    expect(days[2]!.lunch).toBe("Comida Ana 2");
+    expect(days[2]!.dinner).toBe("Cena Bea 2"); // cena del miércoles: no se comparte
+    expect(days[5]!.dinner).toBe("Cena Ana 5");
+  });
+
+  it("si el miembro cambia una comida suya a mitad, se reconstruye sobre su versión", async () => {
+    const tables = withPlans();
+    let raced = false;
+    const fake = createFakeSupabase(tables, {
+      failOn: (op) => {
+        if (raced || op.table !== "monthly_plans" || op.op !== "update") return null;
+        raced = true;
+        const row = tables.monthly_plans!.find((r) => r.user_id === "bea")!;
+        const plan = structuredClone(row.plan) as MonthlyPlan;
+        plan.weeks[0]!.days[2]!.dinner = "Tortilla que puso Bea";
+        plan.weeks[0]!.days[2]!.pinned = ["cena"];
+        row.plan = plan;
+        row.updated_at = "2026-09-26T10:00:05Z";
+        return null;
+      },
+    });
+    setFakeAdmin(fake.client);
+    const out = await syncSharedMeals({
+      supabase: fake.client,
+      userId: "ana",
+      month: MONTH,
+      today: TODAY,
+    });
+
+    expect(out).toEqual({ synced: 1 });
+    expect(fake.calls.filter((c) => c.op === "update")).toHaveLength(2);
+    const day = beaPlan(tables).weeks[0]!.days[2]!;
+    expect(day.dinner).toBe("Tortilla que puso Bea");
+    expect(day.pinned).toEqual(["cena"]);
+    expect(day.lunch).toBe("Comida Ana 2");
+  });
+
+  it("un plan ya confirmado no se toca", async () => {
+    const fake = createFakeSupabase(withPlans({ confirmed_at: "2026-09-20T10:00:00Z" }));
+    setFakeAdmin(fake.client);
+    const out = await syncSharedMeals({
+      supabase: fake.client,
+      userId: "ana",
+      month: MONTH,
+      today: TODAY,
+    });
+    expect(out).toEqual({ synced: 0 });
+    expect(fake.calls.some((c) => c.op === "update")).toBe(false);
   });
 });
