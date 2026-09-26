@@ -24,6 +24,7 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedPerfilRouteImport } from './routes/_authenticated/perfil'
 import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/plan'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
 import { Route as ApiPushSubscribeRouteImport } from './routes/api/push/subscribe'
 import { Route as ApiPushUnsubscribeRouteImport } from './routes/api/push/unsubscribe'
@@ -137,6 +138,11 @@ const AuthenticatedPlanRoute = AuthenticatedPlanRouteImport.update({
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCronDispatchRoute = ApiCronDispatchRouteImport.update({
@@ -359,6 +365,7 @@ export interface FileRoutesByFullPath {
   '/perfil': typeof AuthenticatedPerfilRoute
   '/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
@@ -415,6 +422,7 @@ export interface FileRoutesByTo {
   '/perfil': typeof AuthenticatedPerfilRoute
   '/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
@@ -473,6 +481,7 @@ export interface FileRoutesById {
   '/_authenticated/perfil': typeof AuthenticatedPerfilRoute
   '/_authenticated/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
@@ -531,6 +540,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/plan'
     | '/api/chat'
+    | '/api/health'
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
@@ -587,6 +597,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/plan'
     | '/api/chat'
+    | '/api/health'
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
@@ -644,6 +655,7 @@ export interface FileRouteTypes {
     | '/_authenticated/perfil'
     | '/_authenticated/plan'
     | '/api/chat'
+    | '/api/health'
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
@@ -694,6 +706,7 @@ export interface RootRouteChildren {
   PrivacidadRoute: typeof PrivacidadRoute
   RestablecerRoute: typeof RestablecerRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute
   ApiPushSubscribeRoute: typeof ApiPushSubscribeRoute
   ApiPushUnsubscribeRoute: typeof ApiPushUnsubscribeRoute
@@ -841,6 +854,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/cron/dispatch': {
@@ -1159,6 +1179,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadRoute: PrivacidadRoute,
   RestablecerRoute: RestablecerRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiPushSubscribeRoute: ApiPushSubscribeRoute,
   ApiPushUnsubscribeRoute: ApiPushUnsubscribeRoute,
