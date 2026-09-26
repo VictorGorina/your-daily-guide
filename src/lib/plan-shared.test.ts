@@ -48,6 +48,7 @@ import {
   parseMealSlotsLegacy,
   mergeFuturePlan,
   mergeFutureKids,
+  mergeRegeneratedPlan,
   type MonthlyPlan,
   monthCoverage,
   nextMonthISO,
@@ -2002,6 +2003,46 @@ describe("reconstruir el cambio de la IA sobre la versión más reciente", () =>
     expect(out.weeks[1]!.days[2]!.dinner).toBe("Tortilla que pidió la persona");
     expect(out.weeks[1]!.days[3]!.dinner).toBe("Pollo · arroz");
     expect(applied.map((c) => c.date)).toEqual(["2026-09-10"]);
+  });
+
+  it("mergeRegeneratedPlan conserva lo fijado, las marcas y la cadencia que llegaron mientras tanto", () => {
+    const item = (name: string, extra: Partial<ShoppingList[0]["items"][0]> = {}) => ({
+      name,
+      qty: "1 kg",
+      price_eur: 2,
+      trip: 0,
+      perishable: false,
+      unit: "g" as const,
+      weekQty: [250, 250, 250, 250],
+      weekPrice: [0.5, 0.5, 0.5, 0.5],
+      ...extra,
+    });
+    const latestShopping: ShoppingList = [
+      { category: "Verdura", items: [item("Tomates", { ownedTrips: { 1: "store" } })] },
+    ];
+    const freshShopping: ShoppingList = [
+      { category: "Verdura", items: [item("Tomate", { weekQty: [300, 300, 300, 300] })] },
+    ];
+    const freshPlan = plan({
+      weeks: plan().weeks.map((w) => ({
+        ...w,
+        days: w.days.map((d) => day(d.day, `NUEVO ${d.lunch}`, `NUEVO ${d.dinner}`)),
+      })),
+    });
+    const out = mergeRegeneratedPlan(
+      { plan: { ...latest(), cadence: "semanal" }, shopping: latestShopping },
+      { plan: freshPlan, shopping: freshShopping },
+      TODAY,
+      [],
+      { coverage: { fromDay: 1, toDay: 30 }, cadence: "mensual" },
+    );
+    expect(out.plan.weeks[1]!.days[2]!.dinner).toBe("Tortilla que pidió la persona");
+    expect(out.plan.weeks[1]!.days[3]!.dinner).toBe("NUEVO Cena S1D3");
+    expect(out.plan.cadence).toBe("semanal");
+    expect(out.plan.coverage).toEqual({ fromDay: 1, toDay: 30 });
+    // Cantidades de la lista nueva, marca de la versión más reciente.
+    expect(out.shopping[0]!.items[0]!.weekQty).toEqual([300, 300, 300, 300]);
+    expect(out.shopping[0]!.items[0]!.ownedTrips).toEqual({ 1: "store" });
   });
 
   it("addKcalAdjust sobre la versión más reciente conserva un ajuste que llegó mientras tanto", () => {

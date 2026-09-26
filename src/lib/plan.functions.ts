@@ -25,7 +25,6 @@ import {
 import {
   cadenceOf,
   carryOwnedByName,
-  carryOwnedCanonical,
   childPureeGaps,
   cleanPantryExtras,
   cleanPlan,
@@ -52,8 +51,7 @@ import {
   isNextMonthUnlocked,
   isPinned,
   mealsForDate,
-  mergeFuturePlan,
-  mergeFutureKids,
+  mergeRegeneratedPlan,
   monthCoverage,
   nextMonthISO,
   pendingSwapKcal,
@@ -2283,32 +2281,43 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
       constraints,
     });
 
+    // Se aplica sobre la versión más reciente de la fila (ticket 21): generar
+    // tarda ~100 s y entretanto la persona puede fijar un plato, marcar la
+    // compra o cambiar la cadencia.
     const validChildIds = home.children.map((c) => c.id);
-    const mergedPlan = mergeFutureKids(
-      mergeFuturePlan(current, fresh.plan, data.today),
-      fresh.plan,
-      data.today,
-      validChildIds,
-    );
-    const finalPlan: MonthlyPlan = { ...mergedPlan, coverage, cadence };
-    const finalShopping = carryOwnedCanonical(currentShopping, fresh.shopping);
-
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({
-        plan: finalPlan as never,
-        shopping: finalShopping as never,
-        // La compra cambió → el mes deja de estar "cerrado del todo".
-        // `confirmed_trips` se conserva (los tramos ya hechos siguen marcados);
-        // `setTripConfirmed` recalcula el agregado la próxima vez.
-        confirmed_at: null,
-      } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
-    if (error) {
+    let final = null as { plan: MonthlyPlan; shopping: ShoppingList } | null;
+    try {
+      await updatePlanRowCas(
+        context.supabase as never,
+        context.userId,
+        data.month,
+        "plan, shopping",
+        (row) => {
+          const latest = cleanPlan(row.plan);
+          if (!latest) return null;
+          final = mergeRegeneratedPlan(
+            { plan: latest, shopping: cleanShopping(row.shopping) },
+            fresh,
+            data.today,
+            validChildIds,
+            { coverage, cadence },
+          );
+          return {
+            plan: final.plan,
+            shopping: final.shopping,
+            // La compra cambió → el mes deja de estar "cerrado del todo".
+            // `confirmed_trips` se conserva (los tramos ya hechos siguen
+            // marcados); `setTripConfirmed` recalcula el agregado la próxima vez.
+            confirmed_at: null,
+          };
+        },
+      );
+    } catch (error) {
       console.error("reflowMonthlyPlan", error);
       throw new Error("No hemos podido actualizar el plan con los cambios");
     }
+    if (!final) return { skipped: "no-plan" };
+    const { plan: finalPlan, shopping: finalShopping } = final;
 
     const { synced } = await syncSharedMeals({
       supabase: context.supabase as never,

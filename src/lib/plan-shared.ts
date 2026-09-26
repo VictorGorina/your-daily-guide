@@ -1970,6 +1970,41 @@ export const mergeFutureKids = (
   };
 };
 
+/**
+ * Resultado del recálculo completo (`reflowMonthlyPlan` scope "full": cambió la
+ * mesa) aplicado a una versión de la fila: días futuros del plan nuevo
+ * (`mergeFuturePlan` + `mergeFutureKids`, que respetan lo fijado y los platos de
+ * niños puestos a mano), la lista nueva con las marcas de compra traspasadas por
+ * nombre (`carryOwnedCanonical`) y la cadencia y cobertura de esa versión.
+ *
+ * Se aplica a la versión MÁS RECIENTE de la fila (ticket 21): la generación
+ * tarda ~100 s y entretanto la persona puede fijar un plato, marcar la compra o
+ * cambiar la cadencia. `fallback` es lo que se usó al generar, por si la fila no
+ * lo trae.
+ */
+export function mergeRegeneratedPlan(
+  latest: { plan: MonthlyPlan; shopping: ShoppingList },
+  fresh: { plan: MonthlyPlan; shopping: ShoppingList },
+  today: string,
+  keepChildIds: string[],
+  fallback: { coverage: PlanCoverage; cadence: ShoppingCadence },
+): { plan: MonthlyPlan; shopping: ShoppingList } {
+  const merged = mergeFutureKids(
+    mergeFuturePlan(latest.plan, fresh.plan, today),
+    fresh.plan,
+    today,
+    keepChildIds,
+  );
+  return {
+    plan: {
+      ...merged,
+      coverage: latest.plan.coverage ?? fallback.coverage,
+      cadence: latest.plan.cadence ?? fallback.cadence,
+    },
+    shopping: carryOwnedCanonical(latest.shopping, fresh.shopping),
+  };
+}
+
 const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 /** Nombre del día de la semana de una fecha, sin depender del locale del entorno. */
