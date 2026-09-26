@@ -1360,7 +1360,7 @@ const cleanDay = (raw: unknown): PlanDay => {
 /** Tope de `kcalAdjust` por comida: por encima es un dato roto, no una compensación. */
 const KCAL_ADJUST_MAX = 1500;
 
-function cleanKcalAdjust(raw: unknown): PlanDay["kcalAdjust"] | undefined {
+export function cleanKcalAdjust(raw: unknown): PlanDay["kcalAdjust"] | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const out: Partial<Record<MealSlot, number>> = {};
   for (const slot of MEAL_SLOTS) {
@@ -1529,7 +1529,7 @@ export const ingredientNames = (shopping: ShoppingList) =>
 export const eur = (n: number) =>
   new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(n);
 
-const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+export const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 /** Extrae el primer objeto JSON de una respuesta, tolerando ```json, texto alrededor y cortes. */
 export const parseJsonLoose = (raw: string): unknown => {
@@ -1631,7 +1631,7 @@ export const completePlan = (plan: MonthlyPlan | null): MonthlyPlan | null => {
   };
 };
 
-const normDay = (s: string) =>
+export const normDay = (s: string) =>
   s
     .toLowerCase()
     .normalize("NFD")
