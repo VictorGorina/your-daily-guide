@@ -99,6 +99,7 @@ import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
 import { PLAN_STRUCTURE_REMINDER } from "@/lib/nutrition/plan-targets";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import { logEvent } from "@/lib/log.server";
+import { updatePlanRowCas } from "@/lib/plan-rows.server";
 import { RateLimitError } from "@/lib/rate-limit-error";
 import { cleanDaySnacks } from "@/lib/snacks";
 import { zonedTodayISO } from "@/lib/zoned-date";
@@ -982,33 +983,37 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
         (report.seconds ? ` · ${JSON.stringify(report.seconds)} s` : ""),
     );
 
-    // Se relee antes de escribir: la ronda tarda y la persona puede haber
-    // cambiado un plato mientras. Solo entra un cambio cuya celda sigue igual.
-    const { data: fresh } = await ownPlanRow(supabase, context.userId, data.month, "plan");
-    const latest = cleanPlan((fresh as { plan?: unknown } | null)?.plan);
-    if (!latest || latest.fit) return { fit: latest?.fit ?? null };
-    const { plan: applied, applied: stillThere } = applyPlanFitChanges(
-      latest,
-      report.changed,
-      data.today,
-    );
-    const fit: PlanFitMark = {
-      at: new Date().toISOString(),
-      before: report.before,
-      after: report.after,
-      changed: stillThere,
-    };
-    const next: MonthlyPlan = { ...applied, fit };
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({ plan: next as never } as never)
-      .eq("user_id", context.userId)
-      .eq("month", data.month);
-    if (error) {
+    // Se escribe sobre la versión más reciente (ticket 21): la ronda tarda y la
+    // persona puede haber cambiado un plato mientras. Solo entra un cambio cuya
+    // celda sigue igual, y si alguien escribe entre la lectura y la escritura se
+    // vuelve a aplicar sobre lo nuevo.
+    // `as`: sin él TypeScript no ve la asignación dentro de `rebuild` y los da por null.
+    let fit = null as PlanFitMark | null;
+    let existing = null as PlanFitMark | null;
+    try {
+      await updatePlanRowCas(supabase, context.userId, data.month, "plan", (row) => {
+        const latest = cleanPlan(row.plan);
+        existing = latest?.fit ?? null;
+        if (!latest || latest.fit) return null;
+        const { plan: applied, applied: stillThere } = applyPlanFitChanges(
+          latest,
+          report.changed,
+          data.today,
+        );
+        fit = {
+          at: new Date().toISOString(),
+          before: report.before,
+          after: report.after,
+          changed: stillThere,
+        };
+        return { plan: { ...applied, fit } satisfies MonthlyPlan };
+      });
+    } catch (error) {
       console.error("fitMonthlyPlan: guardar", error);
       throw new Error("No hemos podido guardar el plan ajustado. Inténtalo otra vez.");
     }
-    if (stillThere.length && canTouchShared) {
+    if (!fit) return { fit: existing };
+    if (fit.changed.length && canTouchShared) {
       await household.syncSharedMeals({
         supabase: supabase as never,
         userId: context.userId,
@@ -1035,38 +1040,43 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     return { month: input.month, cadence };
   })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
-    const { data: row } = await ownPlanRow(
+    let plan = null as MonthlyPlan | null;
+    let shopping: ShoppingList = [];
+    const write = await updatePlanRowCas(
       context.supabase as never,
       context.userId,
       data.month,
       "plan, shopping",
-    );
-    const typed = row as { plan?: unknown; shopping?: unknown } | null;
-
-    const current = cleanPlan(typed?.plan);
-    if (!current) throw new ValidationError("Todavía no hay plan de este mes");
-    const prevShopping = cleanShopping(typed?.shopping);
-    // Una lista antigua se reparte entre EXACTAMENTE las compras que la
-    // pantalla va a enseñar para esta cobertura: repartir entre más las dejaría
-    // fuera de la vista (ver `repartitionTrips`).
-    const tripCount = tripsForCoverage(
-      data.cadence,
-      current.coverage ?? monthCoverage(data.month, zonedTodayISO()),
-    );
-    const shopping = isCanonicalShopping(prevShopping)
-      ? prevShopping
-      : carryOwnedByName(prevShopping, repartitionTrips(prevShopping, data.cadence, tripCount));
-    const plan: MonthlyPlan = { ...current, cadence: data.cadence };
-
-    const { error } = await context.supabase
-      .from("monthly_plans")
-      .update({ plan: plan as never, shopping: shopping as never } as never)
-      .eq("month", data.month)
-      .eq("user_id", context.userId);
-    if (error) {
+      (row) => {
+        const current = cleanPlan(row.plan);
+        if (!current) throw new ValidationError("Todavía no hay plan de este mes");
+        const prevShopping = cleanShopping(row.shopping);
+        plan = { ...current, cadence: data.cadence };
+        // Una lista canónica no cambia al cambiar de cadencia (la pantalla la
+        // re-proyecta): no se reescribe, para no pisar una marca que llegue a la
+        // vez. Una antigua se reparte entre EXACTAMENTE las compras que la
+        // pantalla va a enseñar para esta cobertura: repartir entre más las
+        // dejaría fuera de la vista (ver `repartitionTrips`).
+        if (isCanonicalShopping(prevShopping)) {
+          shopping = prevShopping;
+          return { plan };
+        }
+        const tripCount = tripsForCoverage(
+          data.cadence,
+          current.coverage ?? monthCoverage(data.month, zonedTodayISO()),
+        );
+        shopping = carryOwnedByName(
+          prevShopping,
+          repartitionTrips(prevShopping, data.cadence, tripCount),
+        );
+        return { plan, shopping };
+      },
+    ).catch((error: unknown) => {
+      if (error instanceof ValidationError) throw error;
       console.error("recadenceMonthlyPlan", error);
       throw new Error("No hemos podido cambiar la frecuencia de la compra");
-    }
+    });
+    if (!write.latest || !plan) throw new ValidationError("Todavía no hay plan de este mes");
 
     return { plan, shopping };
   });
@@ -1873,26 +1883,31 @@ export async function reflowMeals(opts: {
     });
     movedCells = moved?.cells ?? [];
   }
-  const merged: MonthlyPlan = {
-    ...addKcalAdjust(applyPlanChanges(current, reflow.changes, today), movedCells, today),
-    intro: reflow.intro || current.intro,
-  };
-  // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
-  // `current` (congelado) — un no planificador nunca puede acabar
-  // escribiendo, ni por accidente, el plato de una comida de la casa.
-  const sharedComposed = freezeShared
-    ? (composeMonthlyPlanForMember(merged, current, home.sharedSlots) ?? merged)
-    : merged;
-  // Mismo cinturón que en generateMonthlyPlan: si la IA reintrodujo un slot
-  // que la persona no quiere planificar, se vacía aquí también.
-  const final = blankUnselectedSlots(sharedComposed, selectedSlots);
-
-  const { error } = await supabase
-    .from("monthly_plans")
-    .update({ plan: final as never } as never)
-    .eq("month", month)
-    .eq("user_id", userId);
-  if (error) throw error;
+  // Se aplica sobre la versión más reciente de la fila (ticket 21): la IA
+  // tarda y entretanto la persona puede fijar un plato a mano, que
+  // `applyPlanChanges` respeta. `before` es esa misma versión, para que lo que
+  // la tarjeta "Balance de hoy" enseña como movido sea solo lo que movió esto.
+  let final = current;
+  let before = current;
+  await updatePlanRowCas(supabase, userId, month, "plan", (row) => {
+    const latest = cleanPlan(row.plan);
+    if (!latest) throw new ValidationError("Todavía no hay plan de este mes");
+    const merged: MonthlyPlan = {
+      ...addKcalAdjust(applyPlanChanges(latest, reflow.changes, today), movedCells, today),
+      intro: reflow.intro || latest.intro,
+    };
+    // Cinturón: si la IA tocó igualmente un día compartido, se restaura desde
+    // lo leído — un no planificador nunca puede acabar escribiendo, ni por
+    // accidente, el plato de una comida de la casa.
+    const sharedComposed = freezeShared
+      ? (composeMonthlyPlanForMember(merged, latest, home.sharedSlots) ?? merged)
+      : merged;
+    // Mismo cinturón que en generateMonthlyPlan: si la IA reintrodujo un slot
+    // que la persona no quiere planificar, se vacía aquí también.
+    final = blankUnselectedSlots(sharedComposed, selectedSlots);
+    before = latest;
+    return { plan: final };
+  });
 
   // Quien planifica con las compartidas congeladas (`soloOnly`) no ha cambiado
   // nada de la casa: no hay nada que espejar al resto.
@@ -1909,7 +1924,7 @@ export async function reflowMeals(opts: {
         ? `${final.intro} También he ajustado las comidas compartidas de tu hogar.`
         : final.intro;
 
-  return { plan: final, before: current, summary, synced, absorbedKcal: absorbed, partial };
+  return { plan: final, before, summary, synced, absorbedKcal: absorbed, partial };
 }
 
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })
