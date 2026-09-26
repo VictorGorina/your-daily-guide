@@ -67,7 +67,8 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
 ## Invariantes del plan y la compra
 
 Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
-[src/lib/plan-shared.ts](../../src/lib/plan-shared.ts). Romperlos es el fallo clásico.
+[src/lib/plan-shared.ts](../../src/lib/plan-shared.ts) (barrel de `src/lib/plan/` y
+`src/lib/shopping/`). Romperlos es el fallo clásico.
 
 - [ ] **Ninguna escritura ciega de `monthly_plans` ni de `daily_logs.habits`.** Un
       `.update()` nuevo sobre esas filas va por `updatePlanRowCas`
@@ -134,7 +135,7 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
 - [ ] **Cada adulto con cuenta conserva su fila `monthly_plans` (D1).** Las comidas
       compartidas de esa fila son un **espejo de lectura** del planificador
       (`composeDayForUser` / `composeMonthlyPlanForMember` en
-      [plan-shared.ts](../../src/lib/plan-shared.ts) al leer; `syncSharedMeals` al escribir
+      [plan/household.ts](../../src/lib/plan/household.ts) al leer; `syncSharedMeals` al escribir
       hacia adelante). Las no compartidas las genera y edita cada uno.
       `generateMonthlyPlan` tiene modo "solo mis slots" para un no planificador
       (`blankSharedSlots`). Un no planificador que pida cambiar una comida compartida

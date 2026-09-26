@@ -90,7 +90,8 @@ servidor no necesita parámetros para inyectar el cliente.
 
 ## Regla al tocar esta lógica
 
-Si cambias una función en `plan-shared.ts`, `plan.functions.ts`, una de fechas o un parser:
+Si cambias una función en `plan-shared.ts` (o sus módulos de `src/lib/plan/` y
+`src/lib/shopping/`), `plan.functions.ts`, una de fechas o un parser:
 **añade o actualiza su test en el mismo cambio.** Es la defensa contra el bucle "arreglo un
 bug y salen dos". El test debe codificar la intención documentada (el comentario de la
 función), no solo el valor que devuelve hoy.

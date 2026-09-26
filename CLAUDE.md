@@ -190,7 +190,7 @@ omite (PGRST204) y la UI no las enseña (`hasProfileColumn`, `ProfileField.pendi
 
 **Pestaña Hoy — el registro del día se reconcilia al leerlo.** La tira de comidas se pinta desde
 `daily_logs.habits`, que se escribe UNA vez al crear el día y lo crea quien toque el día primero
-(abrir el chat lo crea vacío). `reconcileHabits` ([src/lib/plan-shared.ts](src/lib/plan-shared.ts))
+(abrir el chat lo crea vacío). `reconcileHabits` ([src/lib/plan/habits.ts](src/lib/plan/habits.ts))
 lo casa en cada carga con `mealsForDate(plan, hoy, effectiveMealSlots(perfil))`: descarta la comida
 que ya no se planifica (una merienda descartada en el onboarding dejaba de irse), añade la que
 falte y congela `plannedIdea` — el plato que el plan proponía, que es lo que Hoy tacha bajo el
@@ -282,7 +282,7 @@ Compensar ya no es cosa suya: lo hace `settleDay` con el día entero.
 **Cantidades de la compra — modelo canónico por semana.** `generateMonthlyPlan` guarda `shopping`
 en **forma canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`) + `weekQty` (cuánto
 piden los platos de cada una de las 4 semanas del plan) + `weekPrice`. La IA ya no inventa un `qty`
-de texto ni asigna compras. `projectTrips` ([src/lib/plan-shared.ts](src/lib/plan-shared.ts))
+de texto ni asigna compras. `projectTrips` ([src/lib/shopping/trips.ts](src/lib/shopping/trips.ts))
 deriva la vista por compra: cada compra suma la parte de `weekQty`/`weekPrice` de los días que
 cubre (`tripDayRange` × `weekDayCounts`), así **Σ entre compras = lo que necesita el mes** y
 cambiar de cadencia solo re-trocea el mismo total. `recadenceMonthlyPlan` ya no llama a la IA: solo
@@ -330,7 +330,7 @@ del día (`day-detail-sheet.tsx`). El navegador no baja del mes de `profiles.app
 sube más allá del mes que viene, y este último solo se puede generar/accionar en su última semana
 (`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7`, el mismo del aviso push de
 renovación). `generateMonthlyPlan` rechaza en servidor los meses pasados y el mes que viene aún
-bloqueado. Meses pasados: solo lectura. Helpers de mes en `plan-shared.ts` (`planMonthStatus`,
+bloqueado. Meses pasados: solo lectura. Helpers de mes en `plan/month.ts` (`planMonthStatus`,
 `isMonthActionable`, `planNavBounds`, `addMonths`, `monthTitle`).
 
 **Un plan por mes, tras una conversación con el coach — no se rehace a mano.**
@@ -399,7 +399,7 @@ querer:
   todo el hogar aunque solo el planificador hubiera tocado el plato. Como `guardSharedSlotWrite`
   impide que un no planificador escriba un slot compartido, "lo cambié yo" para ese slot
   equivale a "soy el planificador" — de ahí `dishChangeIsMine`/`isPinnedByViewer`
-  (`plan-shared.ts`), que sí lo distinguen y son los que debe usar cualquier UI nueva que decida
+  (`plan/types.ts`), que sí lo distinguen y son los que debe usar cualquier UI nueva que decida
   algo por "este plato se cambió a mano".
 
 **Notificaciones push:** Web Push real (VAPID) vía `@pushforge/builder`, elegido porque solo usa
@@ -491,6 +491,10 @@ escrituras van del navegador directo a Supabase (ver `.scratch/limites-ia-y-cont
 ## Convenciones de código
 
 - Alias de imports: `@/*` apunta a `src/*` (ver `tsconfig.json` y `components.json`).
+- `src/lib/plan-shared.ts` es un barrel: la lógica pura del plan y la compra vive en
+  `src/lib/plan/*.ts` y `src/lib/shopping/*.ts`, un módulo por tema. Fuera de esas carpetas se
+  importa siempre de `@/lib/plan-shared`; dentro, entre módulos con import relativo y nunca del
+  barrel. Un tipo puede ir en círculo (`import type`), un valor no.
 - Componentes de UI: shadcn/ui, estilo `new-york`, iconos de `lucide-react`, en
   `src/components/ui/`.
 - Formato: Prettier (`printWidth` 100, comillas dobles, `;` siempre) — corre `bun run format`

@@ -52,7 +52,7 @@ Dos caminos distintos, deliberadamente separados:
 
 `generateMonthlyPlan` solo planifica de hoy en adelante: su `.validator` rechaza los meses
 pasados (no se pueden cumplir y gastan tokens) y el mes que viene hasta su última semana
-(`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7` en `plan-shared.ts`, compartido con el
+(`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7` en `plan/month.ts`, compartido con el
 aviso push de renovación). El mes en curso ya arranca en el día de hoy vía `monthCoverage`. La
 pantalla Plan tiene un navegador de meses `‹ mes ›` que gobierna calendario e ingredientes; su
 suelo es `profiles.app_started_on`. La antigua subpestaña Historial se fundió en el calendario del
@@ -60,7 +60,7 @@ mes (semáforo por día + `day-detail-sheet.tsx`).
 
 El plan base deja desayunos y snacks a nivel de semana (una lista que rota por día), así que un
 cambio para un día concreto se guarda en campos propios del día — `breakfast`/`snack` en `PlanDay`
-([plan-shared.ts](src/lib/plan-shared.ts)) — y manda sobre la rotación. `mergeFuturePlan` los
+([plan/types.ts](src/lib/plan/types.ts)) — y manda sobre la rotación. `mergeFuturePlan` los
 conserva: una recolocación automática posterior no pisa lo que se pidió a mano.
 
 **La rejilla del plan no va en orden de calendario.** La semana la marca el día del mes
@@ -86,7 +86,7 @@ inventaba fila a fila, sin que nadie lo sumara ni validara, así que la misma co
 (`repartitionTrips`) movía filas enteras sin tocar la cantidad. Ahora `generateMonthlyPlan` guarda
 `shopping` en forma **canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`), `weekQty`
 (cantidad que piden los platos de cada una de las 4 semanas del plan) y `weekPrice`. La IA no
-asigna compras ni escribe `qty`. `projectTrips` ([plan-shared.ts](src/lib/plan-shared.ts)) deriva
+asigna compras ni escribe `qty`. `projectTrips` ([shopping/trips.ts](src/lib/shopping/trips.ts)) deriva
 la vista por compra: para cada compra suma la parte de `weekQty`/`weekPrice` de los días que cubre
 (`tripDayRange`, repartiendo la cantidad de cada semana entre SUS días reales vía `weekDayCounts` —
 la última semana de un mes de 31 días arrastra 10 días, no 7). Invariante: **Σ de todas las compras
@@ -136,7 +136,7 @@ Plan lo relanza al abrirse si la app se cerró antes de que saltara el debounce
 Cambiar de cadencia (`recadenceMonthlyPlan`) en una lista **canónica** no llama a la IA ni toca
 `shopping`: solo guarda la nueva cadencia y la UI re-proyecta. En una lista **antigua** sí rehace
 el reparto de `trip` (`repartitionTrips`) y puede trocear un perecedero en varias filas;
-`carryOwnedByName` (`plan-shared.ts`) reaplica "en casa"/"comprado" por nombre para que las marcas
+`carryOwnedByName` (`shopping/trips.ts`) reaplica "en casa"/"comprado" por nombre para que las marcas
 no se pierdan. Las listas antiguas se quedan como están: un mes no se regenera (ver "Un plan por
 mes" en CLAUDE.md), así que pasan a canónicas en el plan del mes siguiente.
 
@@ -269,7 +269,7 @@ la edita; el resto la ve en lectura (D2). Los snacks nunca se comparten (D5).
 slots compartidos de esa fila son un **espejo de solo lectura** del planificador, y los no
 compartidos (sus desayunos si el finde no se comparte, sus snacks) los genera y edita él.
 La composición es en vivo al leer — `composeDayForUser` / `composeMonthlyPlanForMember`
-([plan-shared.ts](src/lib/plan-shared.ts)) mezclan las dos filas día a día — y hacia adelante
+([plan/household.ts](src/lib/plan/household.ts)) mezclan las dos filas día a día — y hacia adelante
 al escribir, con `syncSharedMeals` ([household.server.ts](src/lib/household.server.ts)), que
 **siempre** toma como fuente la fila del planificador. `fetchMonthlyPlan`
 ([daily.ts](src/lib/daily.ts)) es el único punto donde se compone: Hoy, el calendario del
