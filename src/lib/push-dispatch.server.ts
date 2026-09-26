@@ -154,7 +154,11 @@ function renewalCopyMember(name: string | null, nextMonthLabel: string) {
  * minutos — ver AGENTS.md para por qué no usamos el `scheduled` nativo de
  * Cloudflare Workers.
  */
-export async function dispatchPush(): Promise<DispatchSummary> {
+export async function dispatchPush(
+  /** Solo para los tests: el envío real por defecto. */
+  deps: { send?: typeof sendPushNotification } = {},
+): Promise<DispatchSummary> {
+  const send = deps.send ?? sendPushNotification;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const summary: DispatchSummary = {
     sent: 0,
@@ -255,7 +259,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
     await Promise.allSettled(
       userSubs.map(async (s) => {
         try {
-          const result = await sendPushNotification(
+          const result = await send(
             { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
             payload,
           );
