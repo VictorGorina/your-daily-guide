@@ -53,10 +53,11 @@ de una sola fruta (52-89 kcal para 160) y desayunos de solo yogur (125 para 333)
 
 ## Pendiente
 
-1. **Ticket 10, `planFit`**: detectar con `closeDay(...).residual` los días que no cierran y UNA
-   ronda de cambio de platos (sobre todo en objetivos bajos). Decidir si se hace al generar (hay
-   que tener las recetas del mes: `getRecipes` en lote) o después, en el precalentado.
-2. Volver a correr `bun run eval:plan-lite` con los arreglos de piezas y aguacate.
+1. **Ticket 10, `planFit`: hecho (2026-09-26), sin commit al escribir esto.** Va tras el
+   precalentado (`fitMonthlyPlan`, `/api/v1/plan/fit`), no al generar: no cabe en 300 s. Detalle y
+   cifras en los comentarios del ticket 10. Falta navegador/simulador y más tipologías en el eval.
+2. `eval:plan-lite` re-corrido: kcal a ±5 % 21/21 sin ronda; con la ronda y las dos redes de
+   proteína, la mujer que pierde pasa de 1/7 a 6/7 días con proteína ≥ 90 %.
 3. Verificación en navegador (perfil demo) y simulador iOS de Hoy con el día cerrado.
 4. Ticket 12: compensar en código escribiendo `kcalAdjust` sin cambiar platos.
 5. Ticket 11: la compra sigue saliendo del modelo, no de las raciones escaladas.

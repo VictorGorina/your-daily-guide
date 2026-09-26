@@ -38,6 +38,9 @@ const RATE_LIMITS = {
   // la persona a mano, y así un bucle accidental no vacía la cuota real de
   // `plan-generate` ni `plan-adjust`.
   "plan-reflow": { limit: 12, windowSeconds: HOUR, action: "actualizar el plan con los cambios" },
+  // La comprobación del plan contra el objetivo (ticket 10): una por plan
+  // generado (la marca `plan.fit` lo garantiza), el bucket frena un bucle.
+  "plan-fit": { limit: 12, windowSeconds: HOUR, action: "ajustar el plan a tu objetivo" },
   "child-meals": { limit: 20, windowSeconds: HOUR, action: "actualizar el menú de los peques" },
   guide: { limit: 30, windowSeconds: HOUR, action: "pedir la guía de hoy" },
   "onboarding-parse": { limit: 30, windowSeconds: HOUR, action: "guardar tus respuestas" },

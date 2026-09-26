@@ -156,6 +156,18 @@ queda sin categoría. Un texto vago ("algo rápido") lo detecta `resolveDish` en
 devuelve kcal y proteína, `MealHabit.swapProteinDelta` lleva la misma contabilidad que
 `swapKcalDelta`, y `settleDay` pasa `balance.proteinPending` a `compensationNeed`.
 
+**El plan se comprueba contra el objetivo — UNA ronda** (ticket 10, `plan-fit.ts` puro +
+`plan-fit.server.ts`). El escalado tiene límites (una merluza con brócoli no llega a 465 kcal), así
+que `planFit` sirve cada día como Hoy (`serveDay`) y marca lo que no cierra (±5 %, proteína < 90 %):
+por kcal la principal que menos se deja estirar; por proteína cualquier comida < 75 % de la suya,
+también desayuno y merienda, que se corrigen como IDEA SEMANAL y solo en semanas enteramente
+futuras. Una petición al modelo, y cada cambio entra solo si baja `dayScore` de sus días. No va al
+generar (el plan tarda ~100 s y las recetas del mes no caben en 300 s): la lanza la pantalla Plan
+cuando el precalentado deja todo calculado (`fitPlanOnce` → `fitMonthlyPlan`). La marca
+`MonthlyPlan.fit` garantiza una ronda por plan (solo con `targetsVersion`), el guardado relee y
+aplica con `applyPlanFitChanges` (solo si la celda no cambió) y `PlanFitNote` enseña lo cambiado.
+Comidas propias primero (D4). La compra no cambia.
+
 **Objetivo energético — una sola cifra** (ticket 07, `src/lib/nutrition/energy.ts`, puro, copia
 en `mobile/lib/energy.ts`). `energyTargets(perfil)` calcula en código kcal, proteína, grasa,
 fibra, hidratos y el reparto por comida (Mifflin-St Jeor × PAL del día a día + rutina neta de

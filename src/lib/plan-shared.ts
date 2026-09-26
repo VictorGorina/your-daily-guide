@@ -206,6 +206,75 @@ export type MonthlyPlan = {
    * plan del mes es anterior y que el que viene cuadrará.
    */
   targetsVersion?: number;
+  /**
+   * La comprobación del plan contra el objetivo ya pasó (ticket 10 de
+   * `precision-nutricional`, `fitMonthlyPlan`): como mucho UNA ronda por plan
+   * generado. Un plan nuevo nace sin ella.
+   */
+  fit?: PlanFitMark;
+};
+
+/**
+ * Un plato que cambió la comprobación del plan para que su día encaje. Comida y
+ * cena son de un día; desayuno y merienda son una idea de la semana (`week`,
+ * `option`: índices en `weeks[].breakfasts`/`snacks`) que usan `days` días
+ * desde `date`.
+ */
+export type PlanFitChange = {
+  date: string;
+  slot: "comida" | "cena" | "desayuno" | "merienda";
+  from: string;
+  to: string;
+  week?: number;
+  option?: number;
+  days?: number;
+};
+
+/**
+ * Aplica los cambios de la comprobación del plan (`fitMonthlyPlan`), cada uno
+ * SOLO si su celda sigue teniendo el plato de antes (`from`): la ronda tarda y
+ * la persona puede haber cambiado algo mientras. Comida y cena por fecha y sin
+ * tocar hoy, el pasado ni un plato puesto a mano (`applyPlanChanges`); una idea
+ * semanal, en su semana.
+ */
+export function applyPlanFitChanges(
+  plan: MonthlyPlan,
+  changes: readonly PlanFitChange[],
+  today: string,
+): { plan: MonthlyPlan; applied: PlanFitChange[] } {
+  let next = plan;
+  const applied: PlanFitChange[] = [];
+  for (const c of changes) {
+    if (c.slot === "comida" || c.slot === "cena") {
+      const key = c.slot === "comida" ? "lunch" : "dinner";
+      if (planDayOf(next, c.date)?.[key] !== c.from) continue;
+      const after = applyPlanChanges(next, [{ date: c.date, [key]: c.to }], today);
+      if (after === next) continue;
+      next = after;
+    } else {
+      const list = c.slot === "desayuno" ? "breakfasts" : "snacks";
+      const week = c.week != null ? next.weeks[c.week] : undefined;
+      if (!week || c.option == null || week[list][c.option] !== c.from) continue;
+      next = {
+        ...next,
+        weeks: next.weeks.map((w, wi) =>
+          wi === c.week
+            ? { ...w, [list]: w[list].map((idea, i) => (i === c.option ? c.to : idea)) }
+            : w,
+        ),
+      };
+    }
+    applied.push(c);
+  }
+  return { plan: next, applied };
+}
+
+export type PlanFitMark = {
+  at: string;
+  /** Días que encajan / días medidos, antes y después de la ronda (0-1). */
+  before: number;
+  after: number;
+  changed: PlanFitChange[];
 };
 
 /** Versión actual de `MonthlyPlan.targetsVersion`. */
@@ -1201,6 +1270,38 @@ const cleanCoverage = (raw: unknown): PlanCoverage | undefined => {
   return { fromDay: from, toDay: to };
 };
 
+const FIT_SLOTS: readonly PlanFitChange["slot"][] = ["comida", "cena", "desayuno", "merienda"];
+
+const cleanFitMark = (raw: unknown): PlanFitMark | undefined => {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const at = String(o.at ?? "");
+  if (!at) return undefined;
+  const share = (n: unknown) => Math.min(1, Math.max(0, Number(n) || 0));
+  const changed = (Array.isArray(o.changed) ? o.changed : [])
+    .map((c) => (c ?? {}) as Record<string, unknown>)
+    .filter((c) => FIT_SLOTS.includes(c.slot as PlanFitChange["slot"]))
+    .map((c) => {
+      const int = (n: unknown) =>
+        Number.isInteger(Number(n)) && Number(n) >= 0 ? Number(n) : null;
+      const week = int(c.week);
+      const option = int(c.option);
+      const days = int(c.days);
+      return {
+        date: String(c.date ?? ""),
+        slot: c.slot as PlanFitChange["slot"],
+        from: String(c.from ?? "").slice(0, 200),
+        to: String(c.to ?? "").slice(0, 200),
+        ...(week != null ? { week } : {}),
+        ...(option != null ? { option } : {}),
+        ...(days ? { days } : {}),
+      };
+    })
+    .filter((c) => /^\d{4}-\d{2}-\d{2}$/.test(c.date) && c.to)
+    .slice(0, 62);
+  return { at, before: share(o.before), after: share(o.after), changed };
+};
+
 const cleanCadence = (raw: unknown): ShoppingCadence | undefined =>
   raw === "semanal" || raw === "bisemanal" || raw === "mensual" ? raw : undefined;
 
@@ -1209,6 +1310,7 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
   if (!plan.weeks?.length) return null;
   const coverage = cleanCoverage(plan.coverage);
   const cadence = cleanCadence(plan.cadence);
+  const fit = cleanFitMark(plan.fit);
   return {
     intro: String(plan.intro ?? ""),
     focus: (plan.focus ?? []).slice(0, 4).map(String),
@@ -1222,6 +1324,7 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
     ...(coverage ? { coverage } : {}),
     ...(cadence ? { cadence } : {}),
     ...(Number(plan.targetsVersion) > 0 ? { targetsVersion: Number(plan.targetsVersion) } : {}),
+    ...(fit ? { fit } : {}),
   };
 };
 

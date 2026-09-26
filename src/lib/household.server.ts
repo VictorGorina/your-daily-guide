@@ -490,27 +490,42 @@ export async function sharedMealPortions(
   userId: string,
   date: string,
 ): Promise<Partial<Record<(typeof MEAL_KEYS)[number], SharedServing>>> {
-  const home = await householdContext(supabase, userId);
-  if (!home.householdId) return {};
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; // 0 = lunes
-  const eaters = new Map<(typeof MEAL_KEYS)[number], string[]>();
-  for (const meal of MEAL_KEYS) {
-    if (!home.sharedSlots[meal].includes(weekday)) continue;
-    const ids = home.members
-      .filter((mb) => mb.userId && mb.usesApp)
-      .filter((mb) => (mb.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday))
-      .map((mb) => mb.userId!);
-    if (ids.length) eaters.set(meal, ids);
-  }
-  if (!eaters.size) return {};
+  return (await sharedMealPortionsByDate(supabase, userId))(date);
+}
 
-  const ids = [...new Set([...eaters.values()].flat())];
+/**
+ * `sharedMealPortions` para cualquier fecha, con UNA lectura del hogar y de los
+ * perfiles: las comidas compartidas dependen solo del día de la semana. Para
+ * recorrer un mes entero (`fitMonthlyPlan`).
+ */
+export async function sharedMealPortionsByDate(
+  supabase: AnyClient,
+  userId: string,
+): Promise<(date: string) => Partial<Record<(typeof MEAL_KEYS)[number], SharedServing>>> {
+  const none = () => ({});
+  const home = await householdContext(supabase, userId);
+  if (!home.householdId) return none;
+  const eatersOn = (weekday: number) => {
+    const eaters = new Map<(typeof MEAL_KEYS)[number], string[]>();
+    for (const meal of MEAL_KEYS) {
+      if (!home.sharedSlots[meal].includes(weekday)) continue;
+      const ids = home.members
+        .filter((mb) => mb.userId && mb.usesApp)
+        .filter((mb) => (mb.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(weekday))
+        .map((mb) => mb.userId!);
+      if (ids.length) eaters.set(meal, ids);
+    }
+    return eaters;
+  };
+  const week = Array.from({ length: 7 }, (_, weekday) => eatersOn(weekday));
+  const ids = [...new Set(week.flatMap((eaters) => [...eaters.values()].flat()))];
+  if (!ids.length) return none;
+
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin.from("profiles").select("*").in("id", ids);
   if (error) {
     console.error("sharedMealPortions", error);
-    return {};
+    return none;
   }
   const { energyTargets } = await import("@/lib/nutrition/energy");
   const { portionFactors, sharedPortion } = await import("@/lib/nutrition/portion");
@@ -521,22 +536,28 @@ export async function sharedMealPortions(
     targetsById.set(p.id, targets);
     planById.set(p.id, portionFactors(targets, p).plan);
   }
-  const out: Partial<Record<(typeof MEAL_KEYS)[number], SharedServing>> = {};
-  for (const [meal, mealIds] of eaters) {
-    const factor = sharedPortion(mealIds.map((id) => planById.get(id) ?? NaN));
-    if (factor == null) continue;
-    const slots = mealIds.map((id) => targetsById.get(id)?.perSlot[meal]).filter((s) => !!s);
-    out[meal] = {
-      factor,
-      target: slots.length
-        ? {
-            kcal: Math.round(slots.reduce((sum, s) => sum + s!.kcal, 0) / slots.length),
-            protein_g: Math.round(slots.reduce((sum, s) => sum + s!.protein_g, 0) / slots.length),
-          }
-        : null,
-    };
-  }
-  return out;
+  const byWeekday = week.map((eaters) => {
+    const out: Partial<Record<(typeof MEAL_KEYS)[number], SharedServing>> = {};
+    for (const [meal, mealIds] of eaters) {
+      const factor = sharedPortion(mealIds.map((id) => planById.get(id) ?? NaN));
+      if (factor == null) continue;
+      const slots = mealIds.map((id) => targetsById.get(id)?.perSlot[meal]).filter((s) => !!s);
+      out[meal] = {
+        factor,
+        target: slots.length
+          ? {
+              kcal: Math.round(slots.reduce((sum, s) => sum + s!.kcal, 0) / slots.length),
+              protein_g: Math.round(slots.reduce((sum, s) => sum + s!.protein_g, 0) / slots.length),
+            }
+          : null,
+      };
+    }
+    return out;
+  });
+  return (date) => {
+    const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+    return byWeekday[(new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7] ?? {}; // 0 = lunes
+  };
 }
 
 /** La ración de una comida compartida (ver `sharedMealPortions`). */

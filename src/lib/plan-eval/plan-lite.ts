@@ -24,6 +24,7 @@
  *
  *     bun run eval:plan-lite                 # todas las tipologías, 7 días
  *     bun run eval:plan-lite --only mujer --days 3
+ *     bun run eval:plan-lite --no-fit        # sin la ronda de `planFit` (ticket 10)
  */
 
 import { parseArgs } from "node:util";
@@ -37,7 +38,7 @@ import { getRecipes } from "@/lib/nutrition/recipes.server";
 import { serveDay } from "@/lib/nutrition/day-close";
 import { plannedMacros } from "@/lib/nutrition/scale";
 import { recipeSlotOfMoment } from "@/lib/nutrition/validate-recipe";
-import { _generatePlanBodyForEval } from "@/lib/plan.functions";
+import { _fitPlanForEval, _generatePlanBodyForEval } from "@/lib/plan.functions";
 import { mealsForDate, MEAL_SLOTS, monthCoverage } from "@/lib/plan-shared";
 
 type Typology = { id: string; label: string; profile: Record<string, unknown> };
@@ -84,7 +85,11 @@ const TYPOLOGIES: Typology[] = [
 
 const { values: args } = parseArgs({
   args: process.argv.slice(2),
-  options: { only: { type: "string" }, days: { type: "string", default: "7" } },
+  options: {
+    only: { type: "string" },
+    days: { type: "string", default: "7" },
+    "no-fit": { type: "boolean", default: false },
+  },
 });
 const days = Math.max(1, Math.min(28, Number(args.days) || 7));
 const key = process.env.OPENROUTER_API_KEY;
@@ -112,7 +117,7 @@ for (const t of TYPOLOGIES.filter((x) => !args.only || x.id === args.only)) {
   console.log(`\n## ${t.label} — objetivo ${targets?.kcal} kcal, ración ×${factor}`);
   const started = performance.now();
   // Sin persona detrás (userId vacío): el gasto del eval no cuenta contra ningún tope.
-  const { plan } = await _generatePlanBodyForEval({
+  const generated = await _generatePlanBodyForEval({
     key,
     userId: "",
     month,
@@ -123,6 +128,31 @@ for (const t of TYPOLOGIES.filter((x) => !args.only || x.id === args.only)) {
     constraints: null,
   });
   console.log(`  plan en ${((performance.now() - started) / 1000).toFixed(0)} s`);
+
+  // La ronda de `planFit` (ticket 10), como `fitMonthlyPlan` en producción,
+  // sobre los días que se miden: el resto del mes solo gastaría recetas.
+  let plan = generated.plan;
+  if (!args["no-fit"]) {
+    const fitStarted = performance.now();
+    const { plan: fitted, report } = await _fitPlanForEval({
+      key,
+      plan: { ...plan, coverage: { fromDay: 1, toDay: days } },
+      shopping: generated.shopping,
+      month,
+      profile,
+    });
+    plan = fitted;
+    const pct = (n: number) => `${Math.round(n * 100)} %`;
+    console.log(
+      `  planFit en ${((performance.now() - fitStarted) / 1000).toFixed(0)} s: ` +
+        `${pct(report.before)} → ${pct(report.after)} de ${report.measuredDays} días; ` +
+        `${report.misfits} a cambiar, ${report.changed.length} cambiados, ${report.discarded} descartados` +
+        (report.seconds
+          ? ` (recetas ${report.seconds.recipes} s · modelo ${report.seconds.ask} s · nuevas ${report.seconds.newRecipes} s)`
+          : ""),
+    );
+    for (const c of report.changed) console.log(`    ${c.date} ${c.slot}: ${c.from} → ${c.to}`);
+  }
 
   const dates = Array.from(
     { length: days },

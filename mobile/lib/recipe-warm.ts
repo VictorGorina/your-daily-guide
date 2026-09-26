@@ -73,7 +73,7 @@ function writeDone(done: Set<string>) {
 
 let progress: WarmProgress = { running: false, done: 0, total: 0 };
 const listeners = new Set<() => void>();
-let inFlight: Promise<void> | null = null;
+let inFlight: Promise<boolean> | null = null;
 
 function setProgress(next: WarmProgress) {
   progress = next;
@@ -83,9 +83,10 @@ function setProgress(next: WarmProgress) {
 /**
  * Calcula los platos que falten. Si ya hay una pasada en marcha, espera a esa
  * (la siguiente llamada, con el plan nuevo, recoge lo que quede). Nunca lanza:
- * un fallo deja esos platos para la próxima vez.
+ * un fallo deja esos platos para la próxima vez. Resuelve `true` si no queda
+ * ningún plato por calcular (lo que espera la comprobación del plan).
  */
-export function warmPlanRecipes(dishes: readonly string[], warm: WarmFn): Promise<void> {
+export function warmPlanRecipes(dishes: readonly string[], warm: WarmFn): Promise<boolean> {
   if (inFlight) return inFlight;
   inFlight = run(dishes, warm).finally(() => {
     inFlight = null;
@@ -94,10 +95,10 @@ export function warmPlanRecipes(dishes: readonly string[], warm: WarmFn): Promis
   return inFlight;
 }
 
-async function run(dishes: readonly string[], warm: WarmFn): Promise<void> {
+async function run(dishes: readonly string[], warm: WarmFn): Promise<boolean> {
   const done = await readDone();
   const pending = dishes.filter((d) => !done.has(dishKey(d)));
-  if (!pending.length) return;
+  if (!pending.length) return true;
 
   const chunks: string[][] = [];
   for (let i = 0; i < pending.length; i += WARM_CHUNK)
@@ -123,6 +124,26 @@ async function run(dishes: readonly string[], warm: WarmFn): Promise<void> {
   };
 
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  return pending.every((d) => done.has(dishKey(d)));
+}
+
+const fitting = new Map<string, Promise<unknown>>();
+
+/**
+ * La comprobación del plan contra el objetivo (`fitMonthlyPlan`, ticket 10 de
+ * `precision-nutricional`), una a la vez por mes: la lanza la pantalla Plan
+ * cuando el precalentado deja todos los platos calculados. Nunca lanza: un
+ * fallo (cuota, red) se retoma la próxima vez que se abra Plan, porque el plan
+ * sigue sin su marca `fit`.
+ */
+export function fitPlanOnce<T>(month: string, fit: () => Promise<T>): Promise<T | null> {
+  const running = fitting.get(month);
+  if (running) return running as Promise<T | null>;
+  const next = fit()
+    .catch(() => null)
+    .finally(() => fitting.delete(month));
+  fitting.set(month, next);
+  return next;
 }
 
 const subscribe = (cb: () => void) => {

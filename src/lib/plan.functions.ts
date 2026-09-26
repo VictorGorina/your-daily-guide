@@ -41,6 +41,7 @@ import {
   effectiveMealSlots,
   addKcalAdjust,
   applyPlanChanges,
+  applyPlanFitChanges,
   awayPlanLine,
   cleanReflowChanges,
   dateOfPlanCell,
@@ -68,6 +69,7 @@ import {
   MEAL_SLOT_LABEL,
   parseJsonLoose,
   planCursor,
+  planDayOf,
   planSlotIndex,
   shoppingTotal,
   normName,
@@ -81,6 +83,7 @@ import {
   PLAN_TARGETS_VERSION,
   type PlanChange,
   type PlanDay,
+  type PlanFitMark,
   type ShoppingList,
   type TripActuals,
   type TripConfirmations,
@@ -98,6 +101,8 @@ import { ValidationError } from "@/lib/validation-error";
 // (ni su cliente de servicio) al bundle del navegador. El runtime de este
 // contexto se carga siempre con `await import("@/lib/household.server")`.
 import type { HouseholdContext } from "@/lib/household.server";
+import type { Misfit, WeeklyIdea } from "@/lib/nutrition/plan-fit";
+import type { RotationMisfit } from "@/lib/nutrition/plan-fit.server";
 
 export type { MonthlyPlan, ShoppingItem, ShoppingList } from "@/lib/plan-shared";
 
@@ -776,6 +781,233 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     });
 
     return { plan, shopping };
+  });
+
+/**
+ * La petición de cambios de la ronda de `planFit` (ticket 10): cada plato que no
+ * encaja, con el objetivo de su comida y el motivo en cifras. Misma forma de
+ * respuesta que `reflowMeals` (`{"cambios": [...]}` + `cleanReflowChanges`), y
+ * solo con los ingredientes de la compra: la lista no cambia al recolocar.
+ */
+function askPlanFit(opts: {
+  key: string;
+  userId: string;
+  profile: unknown;
+  homeText: string;
+  shopping: ShoppingList;
+  pantry: string[];
+}) {
+  return async (
+    misfits: Misfit[],
+    rotations: RotationMisfit[],
+  ): Promise<{ changes: PlanChange[]; ideas: WeeklyIdea[] }> => {
+    const { cleanWeeklyIdeas, misfitReasonText } = await import("@/lib/nutrition/plan-fit");
+    const allowedDates = [...new Set(misfits.map((m) => m.date))];
+    const allowedIdeas = new Set(rotations.map((r) => `${r.week}|${r.slot}|${r.option}`));
+    const goal = (m: Misfit) =>
+      `~${Math.round(m.kcalGoal / 10) * 10} kcal y ${m.proteinGoal} g de proteína`;
+    const dishes = misfits.map((m) => ({
+      fecha: m.date,
+      comida: m.slot,
+      plato: m.dish,
+      objetivo: goal(m),
+      motivo: misfitReasonText(m),
+    }));
+    const weekly = rotations.map((r) => ({
+      semana: r.week + 1,
+      comida: r.slot === "snack" ? "merienda" : "desayuno",
+      opcion: r.option + 1,
+      plato: r.misfit.dish,
+      objetivo: goal(r.misfit),
+      motivo: misfitReasonText(r.misfit),
+    }));
+    return askForJson(
+      {
+        key: opts.key,
+        userId: opts.userId,
+        model: PLAN_MODEL,
+        system: coachSystemPrompt(opts.profile as never, opts.homeText),
+        prompt:
+          "El sistema ajusta la cantidad de cada plato al objetivo de su comida, pero solo hasta " +
+          "un límite para que siga siendo el mismo plato. Estos platos del plan no llegan a su " +
+          "objetivo ni ajustando la cantidad.\n" +
+          (dishes.length ? `Platos de comida y cena:\n${JSON.stringify(dishes)}\n` : "") +
+          (weekly.length
+            ? `Ideas de desayuno y merienda de la semana (cada una se repite varios días):\n${JSON.stringify(weekly)}\n`
+            : "") +
+          "\nPropón para CADA uno otro que sí pueda llegar: si se queda corto, con más energía " +
+          "(legumbre, arroz, pasta, patata o pan, y un postre lácteo o fruta); si se pasa, más " +
+          "ligero; si le falta proteína, con una fuente clara (carne, pescado, huevo, legumbre, " +
+          "yogur griego o skyr, queso fresco). Un desayuno o una merienda nunca es solo fruta o " +
+          `verdura. ${PLAN_STRUCTURE_REMINDER} ` +
+          `Usa SOLO estos ingredientes (más sal, aceite, agua y especias): ${ingredientNames(opts.shopping)}` +
+          (opts.pantry.length ? `, ${opts.pantry.join(", ")}` : "") +
+          ". No repitas el mismo plato en días seguidos. Platos concretos y realistas.\n" +
+          'Devuelve solo JSON válido: {"cambios": [{"fecha": "AAAA-MM-DD", "comida": string, "cena": string}], ' +
+          '"ideas": [{"semana": número, "comida": "desayuno"|"merienda", "opcion": número, "plato": string}]}, ' +
+          'con "comida" o "cena" solo en la que se pide cambiar y la misma "semana" y "opcion" de cada idea. ' +
+          "Listas vacías si no hay nada que cambiar. Sin markdown.",
+      },
+      (parsed) => {
+        const o = (parsed ?? {}) as Record<string, unknown>;
+        if (!Array.isArray(o.cambios) && !Array.isArray(o.ideas)) return null;
+        const changes =
+          cleanReflowChanges({ cambios: Array.isArray(o.cambios) ? o.cambios : [] }, allowedDates)
+            ?.changes ?? [];
+        return { changes, ideas: cleanWeeklyIdeas(o, allowedIdeas) };
+      },
+    );
+  };
+}
+
+/** Solo para `bun run eval:plan-lite`: la misma ronda que producción, sin base de datos. */
+export async function _fitPlanForEval(opts: {
+  key: string;
+  plan: MonthlyPlan;
+  shopping: ShoppingList;
+  month: string;
+  profile: unknown;
+}) {
+  const { fitPlanMeals } = await import("@/lib/nutrition/plan-fit.server");
+  return fitPlanMeals({
+    plan: opts.plan,
+    month: opts.month,
+    after: `${opts.month}-00`,
+    profile: opts.profile,
+    shared: () => ({}),
+    canTouchShared: true,
+    apiKey: opts.key,
+    userId: null,
+    ask: askPlanFit({
+      key: opts.key,
+      userId: "",
+      profile: opts.profile,
+      homeText: "",
+      shopping: opts.shopping,
+      pantry: [],
+    }),
+  });
+}
+
+/**
+ * Comprueba el plan del mes contra el objetivo y corrige lo que no encaja, en
+ * UNA ronda (ticket 10 de `precision-nutricional`, `fitPlanMeals`). La lanza el
+ * cliente cuando termina el precalentado de recetas (`recipe-warm.ts`): con
+ * todas en la caché, medir el mes solo lee. Generar ya tarda ~100 s y las
+ * recetas del mes no caben además en la misma función.
+ *
+ * - Como mucho una vez por plan: la marca `plan.fit` se guarda aunque no cambie
+ *   nada, y un plan regenerado nace sin ella. Solo planes con `targetsVersion`.
+ * - Solo días posteriores a hoy; nunca un plato puesto a mano (`pinned`).
+ * - Comidas propias primero (D4); una compartida solo la cambia quien planifica.
+ * - La compra no cambia: los platos nuevos usan sus ingredientes.
+ *
+ * Devuelve lo que cambió para enseñarlo: un cambio automático del plan tiene
+ * que verse. Ruta espejo: `POST /api/v1/plan/fit`.
+ */
+export const fitMonthlyPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { month: string; today?: string }) => {
+    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+    return { month: input.month, today };
+  })
+  .handler(async ({ data, context }): Promise<{ fit: PlanFitMark | null }> => {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) throw new Error("Falta la clave de IA");
+    const supabase = context.supabase as never as SupabaseClient<never, never, never>;
+
+    const { data: row } = await ownPlanRow(
+      supabase,
+      context.userId,
+      data.month,
+      "plan, shopping, pantry_extras",
+    );
+    const current = cleanPlan((row as { plan?: unknown } | null)?.plan);
+    if (!current) return { fit: null };
+    if (current.fit) return { fit: current.fit };
+    // Un mes pasado es un hecho, no un plan. Un plan anterior al objetivo por
+    // comida (ticket 23) tampoco se corrige: Hoy ya explica que el que viene
+    // cuadrará, y cambiarle media rejilla a mitad de mes no ayuda.
+    if (data.month < data.today.slice(0, 7) || !current.targetsVersion) return { fit: null };
+
+    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "plan-fit");
+
+    const [{ data: profile }, household, { fitPlanMeals }] = await Promise.all([
+      context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
+      import("@/lib/household.server"),
+      import("@/lib/nutrition/plan-fit.server"),
+    ]);
+    const [home, shared] = await Promise.all([
+      household.householdContext(supabase as never, context.userId),
+      household.sharedMealPortionsByDate(supabase as never, context.userId),
+    ]);
+    const canTouchShared = !home.plannerId || home.plannerId === context.userId;
+
+    const { report } = await fitPlanMeals({
+      plan: current,
+      month: data.month,
+      after: data.today,
+      profile,
+      shared,
+      canTouchShared,
+      apiKey: key,
+      userId: context.userId,
+      ask: askPlanFit({
+        key,
+        userId: context.userId,
+        profile,
+        homeText: home.text,
+        shopping: cleanShopping((row as { shopping?: unknown } | null)?.shopping),
+        pantry: cleanPantryExtras((row as { pantry_extras?: unknown } | null)?.pantry_extras).map(
+          (e) => e.name,
+        ),
+      }),
+    });
+    const pct = (n: number) => `${Math.round(n * 100)} %`;
+    console.info(
+      `fitMonthlyPlan ${data.month}: ${pct(report.before)} → ${pct(report.after)} de ` +
+        `${report.measuredDays} días; ${report.misfits} a cambiar, ${report.changed.length} ` +
+        `cambiados, ${report.discarded} descartados${report.skipped ? ` (${report.skipped})` : ""}` +
+        (report.seconds ? ` · ${JSON.stringify(report.seconds)} s` : ""),
+    );
+
+    // Se relee antes de escribir: la ronda tarda y la persona puede haber
+    // cambiado un plato mientras. Solo entra un cambio cuya celda sigue igual.
+    const { data: fresh } = await ownPlanRow(supabase, context.userId, data.month, "plan");
+    const latest = cleanPlan((fresh as { plan?: unknown } | null)?.plan);
+    if (!latest || latest.fit) return { fit: latest?.fit ?? null };
+    const { plan: applied, applied: stillThere } = applyPlanFitChanges(
+      latest,
+      report.changed,
+      data.today,
+    );
+    const fit: PlanFitMark = {
+      at: new Date().toISOString(),
+      before: report.before,
+      after: report.after,
+      changed: stillThere,
+    };
+    const next: MonthlyPlan = { ...applied, fit };
+    const { error } = await context.supabase
+      .from("monthly_plans")
+      .update({ plan: next as never } as never)
+      .eq("user_id", context.userId)
+      .eq("month", data.month);
+    if (error) {
+      console.error("fitMonthlyPlan: guardar", error);
+      throw new Error("No hemos podido guardar el plan ajustado. Inténtalo otra vez.");
+    }
+    if (stillThere.length && canTouchShared) {
+      await household.syncSharedMeals({
+        supabase: supabase as never,
+        userId: context.userId,
+        month: data.month,
+        today: data.today,
+      });
+    }
+    return { fit };
   });
 
 /**

@@ -27,6 +27,16 @@ const SLOT_NAME: Record<MealKey | "snack", string> = {
   snack: "merienda",
 };
 
+/**
+ * Parte de la energía del día que es proteína a partir de la cual desayuno y
+ * merienda también tienen que llevarla (el tope de `energyTargets` es 0,30).
+ */
+export const HIGH_PROTEIN_SHARE = 0.25;
+
+/** Parte de las kcal del objetivo que son proteína (4 kcal/g). */
+export const proteinShare = (t: Pick<EnergyTargets, "kcal" | "protein_g">) =>
+  t.kcal > 0 ? (t.protein_g * 4) / t.kcal : 0;
+
 /** A partir de aquí una comida pide primer y segundo plato. */
 export const TWO_COURSES_KCAL = 800;
 
@@ -91,6 +101,16 @@ export function planTargetsPrompt(opts: {
     if (targets.protein_g / Math.max(1, targets.basis.refWeightKg) >= 1.6) {
       lines.push(
         "Necesita bastante proteína: una fuente de proteína clara en la comida y en la cena.",
+      );
+    }
+    // Con la proteína en un cuarto de la energía o más (perder peso con pocas
+    // kcal), comida y cena solas no llegan: el desayuno y la merienda también
+    // la llevan (ticket 10: una merienda de zanahorias dejaba el día en 73 %).
+    if (proteinShare(targets) >= HIGH_PROTEIN_SHARE) {
+      lines.push(
+        "Su proteína es alta para sus calorías: el desayuno y la merienda también llevan una " +
+          "fuente de proteína (yogur griego o skyr, queso fresco, huevo, pavo, hummus o un " +
+          "puñado de frutos secos con lácteo), nunca solo fruta o verdura.",
       );
     }
   }

@@ -61,4 +61,18 @@ describe("planTargetsPrompt (ticket 23)", () => {
       /compartidas con su casa, el objetivo medio de los adultos: cena ~640 kcal/,
     );
   });
+
+  it("con la proteína alta para sus calorías, también en desayuno y merienda (ticket 10)", () => {
+    // Mujer que pierde: 99 g en ~1.330 kcal, el 30 %.
+    expect(planTargetsPrompt({ targets: person() })).toMatch(/el desayuno y la merienda también/);
+    const keeper = person({
+      sex: "Hombre",
+      age: 40,
+      height_cm: 178,
+      current_weight_kg: 85,
+      target_weight_kg: 85,
+      activity_level: "ligero",
+    });
+    expect(planTargetsPrompt({ targets: keeper })).not.toMatch(/el desayuno y la merienda/);
+  });
 });

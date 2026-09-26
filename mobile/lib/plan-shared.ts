@@ -209,6 +209,35 @@ export type MonthlyPlan = {
   cadence?: ShoppingCadence;
   /** Se generó conociendo el objetivo por comida (ticket 23). */
   targetsVersion?: number;
+  /**
+   * La comprobación del plan contra el objetivo ya pasó (ticket 10 de
+   * `precision-nutricional`, `fitMonthlyPlan`): como mucho UNA ronda por plan
+   * generado. Un plan nuevo nace sin ella.
+   */
+  fit?: PlanFitMark;
+};
+
+/**
+ * Un plato que cambió la comprobación del plan para que su día encaje. Comida y
+ * cena son de un día; desayuno y merienda son una idea de la semana que usan
+ * `days` días desde `date`.
+ */
+export type PlanFitChange = {
+  date: string;
+  slot: "comida" | "cena" | "desayuno" | "merienda";
+  from: string;
+  to: string;
+  week?: number;
+  option?: number;
+  days?: number;
+};
+
+export type PlanFitMark = {
+  at: string;
+  /** Días que encajan / días medidos, antes y después de la ronda (0-1). */
+  before: number;
+  after: number;
+  changed: PlanFitChange[];
 };
 
 /** Versión actual de `MonthlyPlan.targetsVersion`. */

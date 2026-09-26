@@ -92,3 +92,51 @@ comprueba igual que el objetivo.
   reglas del 15 y las tipologías de usuario como perfiles del eval.
 
 - 2026-09-24 — Tras confirmar D7-D13: la parte de prompt (kcal por comida, estructura, schema) pasa al 23; aquí queda `planFit` y la corrección.
+
+- 2026-09-26 — Implementado `planFit` y la ronda de corrección (sin commit todavía):
+  - `src/lib/nutrition/plan-fit.ts` (puro, 10 tests): sirve cada día con `serveDay`; un día no
+    encaja fuera de ±5 % o con proteína < **90 %** (no 80 %: con 80 la ronda nunca podía cumplir
+    el criterio de aceptación). La culpable es la principal que menos se deja estirar (se le pide
+    ±25 % y se mira cuánto sirve). Solo comida y cena; propias primero y compartida solo si no hay
+    propias y quien genera planifica (D4). También marca principales de un componente y, con
+    objetivo ≥ 1,6 g/kg, principales con < 25 g de proteína.
+  - `src/lib/nutrition/plan-fit.server.ts` (`fitPlanMeals`): recetas → `planFit` → UNA petición
+    (`askPlanFit`, formato `{"cambios"}`, solo ingredientes de la compra) → cada día se queda con
+    la mejor variante (las dos, solo comida, solo cena) SOLO si baja `dayScore`; un plato nuevo
+    sin receta no entra (D13).
+  - Dónde: NO al generar (98-111 s de plan + ~2 min por cada ~20 platos nuevos no caben en 300 s).
+    Va tras el precalentado (`recipe-warm.ts` resuelve `true` si no queda nada por calcular →
+    `fitPlanOnce` → `fitMonthlyPlan`, `POST /api/v1/plan/fit`, bucket `plan-fit`). Marca
+    `MonthlyPlan.fit` = una ronda por plan; solo planes con `targetsVersion`. Se relee la fila
+    antes de escribir y solo entra un cambio cuya celda sigue igual. `PlanFitNote` (web + móvil)
+    enseña los platos cambiados en "Cómo enfocamos el mes".
+  - `sharedMealPortionsByDate` (household.server): las 7 variantes de la semana con una lectura.
+  - `eval:plan-lite` con la ronda (`--no-fit` para quitarla), 7 días × 3 tipologías:
+    kcal a ±5 %: 20/21 (el que falla tiene un plato "calculando", no se mide). Hombre y ganar:
+    100 % sin cambiar nada (la ronda no toca lo que cuadra). **Mujer que pierde: 1/7 → 1/7**
+    aunque aceptó 6 cambios que añaden proteína clara; la proteína sube pero queda en 73-91 g de
+    99. Motivo: su objetivo está en el tope del 30 % de la energía (energy.ts) y desayuno
+    (yogur con avena, tostada con aguacate) y merienda ("Zanahorias baby", 41 kcal de 160) no
+    aportan proteína; la ronda no puede tocarlos (rotan por semana).
+  - Tiempo de la ronda en el eval: 400 s en la mujer, pero casi todo es descomponer recetas que en
+    producción ya hace el precalentado. Desglose por fase añadido (`report.seconds`); falta
+    medirlo.
+  - Falta: decidir cómo corregir desayuno/merienda; medir tiempos; navegador y simulador.
+
+- 2026-09-26 (2) — Proteína de objetivos bajos, con las dos redes que eligió el usuario:
+  - Prompt (`planTargetsPrompt`): con proteína ≥ 25 % de la energía (`proteinShare`,
+    `HIGH_PROTEIN_SHARE`), desayuno y merienda también llevan fuente de proteína.
+  - Ronda: `planFit` marca por proteína cualquier comida < 75 % de la suya (`MEAL_PROTEIN_MIN`),
+    también desayuno y merienda; la ronda cambia su IDEA SEMANAL (`"ideas": [{semana, comida,
+    opcion, plato}]`, `cleanWeeklyIdeas`) solo en semanas enteramente futuras (`isPlanWeekAhead`)
+    y se queda con ella si baja la suma de `dayScore` de todos los días que la usan. Desayuno
+    compartido: solo quien planifica. `applyPlanFitChanges` (plan-shared, testeado) aplica ambos
+    tipos al guardar, solo si la celda sigue igual. Tope por ronda: 20 platos y 8 ideas, los días
+    que peor encajan primero.
+  - `eval:plan-lite --only mujer`: proteína ≥ 90 % 1/7 → **6/7**; `planFit` 0 % → 83 %; kcal a
+    ±5 % 5/7 (uno es el cheat day permitido, "un plato libre que te apetezca"; el otro, −6 %, por
+    una merienda nueva con menos kcal que la cena no pudo absorber); principales de un componente
+    0/14. Tiempos de la ronda: recetas 143 s (en producción, el precalentado), modelo 38 s, nuevas
+    57 s.
+  - Falta: navegador (perfil demo, gasta cuota) y simulador; tipologías restantes del spec
+    (embarazada, vegana, diabetes, renal, hogares) en el eval.

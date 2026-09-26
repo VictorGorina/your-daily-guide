@@ -41,15 +41,18 @@ import { DishRecipe } from "../../components/dish-recipe";
 import { GoalWeightSummary } from "../../components/goal-weight-summary";
 import { MonthConstraintsGate } from "../../components/month-constraints-gate";
 import { MonthSpendSummary } from "../../components/month-spend-summary";
+import { PlanFitNote } from "../../components/plan-fit-note";
 import { PlanUpdatedBanner } from "../../components/plan-updated-banner";
 import { Dialog } from "../../components/ui/dialog";
 import { apiPost } from "../../lib/api";
 import {
+  fitPlanOnce,
   planDishesToWarm,
   useRecipeWarmProgress,
   warmPlanRecipes,
   type WarmResult,
 } from "../../lib/recipe-warm";
+import type { PlanFitMark } from "../../lib/plan-shared";
 import {
   fetchLogs,
   fetchLogsForMonth,
@@ -469,13 +472,31 @@ export default function Plan() {
   // Todos los platos del plan, calculados al generarlo o cambiarlo (ticket 06,
   // D13): ninguno llega a Hoy "Calculando…". Solo lo que falte en la caché; si
   // la app se cerró a medias, se retoma aquí.
+  //
+  // Con todos calculados, UNA comprobación del plan contra el objetivo (ticket
+  // 10, `fitMonthlyPlan`): cambia los platos que ni ajustando la cantidad dejan
+  // el día en su objetivo. Una vez por plan (la marca `plan.fit`); lo que
+  // cambió se enseña en "Cómo enfocamos el mes".
   const warmProgress = useRecipeWarmProgress();
+  const [fitting, setFitting] = useState(false);
   useEffect(() => {
     if (!plan || !actionable) return;
+    let alive = true;
     void warmPlanRecipes(planDishesToWarm(plan, month, today), (dishes) =>
       apiPost<WarmResult>("recipes/warm", { dishes }),
-    );
-  }, [plan, actionable, month, today]);
+    ).then(async (complete) => {
+      if (!alive || !complete || plan.fit || !plan.targetsVersion) return;
+      setFitting(true);
+      const res = await fitPlanOnce(month, () =>
+        apiPost<{ fit: PlanFitMark | null }>("plan/fit", { month, today }),
+      );
+      if (alive) setFitting(false);
+      if (res?.fit) qc.invalidateQueries({ queryKey: ["plan", month] });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [plan, actionable, month, today, qc]);
 
   const goToMonth = (target: string) => {
     if (target < bounds.earliest || target > bounds.latest) return;
@@ -771,6 +792,7 @@ export default function Plan() {
                       Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
                       recoloco los siguientes.
                     </Text>
+                    <PlanFitNote fit={plan.fit} fitting={fitting} />
                   </View>
                 ) : null}
 

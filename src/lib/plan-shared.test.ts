@@ -14,6 +14,7 @@ import {
   cleanReflowChanges,
   cleanShopping,
   applyPlanChanges,
+  applyPlanFitChanges,
   planDayOf,
   childMealsForDate,
   childPureeGaps,
@@ -1898,6 +1899,47 @@ describe("applyPlanChanges", () => {
     expect(out.weeks[1]!.days[2]!.breakfast).toBe("Tostadas caseras");
     expect(out.weeks[1]!.days[2]!.kids).toEqual([{ childId: "leo", slot: "cena", dish: "Puré" }]);
     expect(out.weeks[1]!.days[2]!.dinner).toBe("Nueva");
+  });
+});
+
+describe("applyPlanFitChanges (ticket 10)", () => {
+  it("aplica un plato del día y una idea de la semana", () => {
+    const { plan: out, applied } = applyPlanFitChanges(
+      plan(),
+      [
+        { date: "2026-09-09", slot: "cena", from: "Cena S1D2", to: "Merluza · patata · kiwi" },
+        {
+          date: "2026-09-15",
+          slot: "merienda",
+          from: "Fruta",
+          to: "Queso fresco · tomate",
+          week: 2,
+          option: 0,
+          days: 4,
+        },
+      ],
+      "2026-09-07",
+    );
+    expect(applied).toHaveLength(2);
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Merluza · patata · kiwi");
+    expect(out.weeks[2]!.snacks).toEqual(["Queso fresco · tomate", "Frutos secos"]);
+    expect(out.weeks[1]!.snacks).toEqual(["Fruta", "Frutos secos"]); // otras semanas, igual
+  });
+
+  it("no pisa una celda que cambió mientras tanto", () => {
+    const current = plan();
+    current.weeks[1]!.days[2] = day("Miércoles", "Comida S1D2", "La cambió la persona");
+    current.weeks[2]!.snacks = ["Plátano", "Frutos secos"];
+    const { plan: out, applied } = applyPlanFitChanges(
+      current,
+      [
+        { date: "2026-09-09", slot: "cena", from: "Cena S1D2", to: "Otra" },
+        { date: "2026-09-15", slot: "merienda", from: "Fruta", to: "Otra", week: 2, option: 0 },
+      ],
+      "2026-09-07",
+    );
+    expect(applied).toEqual([]);
+    expect(out).toBe(current);
   });
 });
 

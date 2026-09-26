@@ -46,6 +46,7 @@ import { Route as ApiV1PlanChildMealFillRouteImport } from './routes/api/v1/plan
 import { Route as ApiV1PlanCompensateRouteImport } from './routes/api/v1/plan/compensate'
 import { Route as ApiV1PlanCompensateFutureRouteImport } from './routes/api/v1/plan/compensate-future'
 import { Route as ApiV1PlanConstraintsRouteImport } from './routes/api/v1/plan/constraints'
+import { Route as ApiV1PlanFitRouteImport } from './routes/api/v1/plan/fit'
 import { Route as ApiV1PlanGenerateRouteImport } from './routes/api/v1/plan/generate'
 import { Route as ApiV1PlanGoalImpactRouteImport } from './routes/api/v1/plan/goal-impact'
 import { Route as ApiV1PlanMealRouteImport } from './routes/api/v1/plan/meal'
@@ -252,6 +253,11 @@ const ApiV1PlanConstraintsRoute = ApiV1PlanConstraintsRouteImport.update({
   path: '/api/v1/plan/constraints',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlanFitRoute = ApiV1PlanFitRouteImport.update({
+  id: '/api/v1/plan/fit',
+  path: '/api/v1/plan/fit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1PlanGenerateRoute = ApiV1PlanGenerateRouteImport.update({
   id: '/api/v1/plan/generate',
   path: '/api/v1/plan/generate',
@@ -375,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/plan/compensate': typeof ApiV1PlanCompensateRoute
   '/api/v1/plan/compensate-future': typeof ApiV1PlanCompensateFutureRoute
   '/api/v1/plan/constraints': typeof ApiV1PlanConstraintsRoute
+  '/api/v1/plan/fit': typeof ApiV1PlanFitRoute
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
@@ -430,6 +437,7 @@ export interface FileRoutesByTo {
   '/api/v1/plan/compensate': typeof ApiV1PlanCompensateRoute
   '/api/v1/plan/compensate-future': typeof ApiV1PlanCompensateFutureRoute
   '/api/v1/plan/constraints': typeof ApiV1PlanConstraintsRoute
+  '/api/v1/plan/fit': typeof ApiV1PlanFitRoute
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
@@ -487,6 +495,7 @@ export interface FileRoutesById {
   '/api/v1/plan/compensate': typeof ApiV1PlanCompensateRoute
   '/api/v1/plan/compensate-future': typeof ApiV1PlanCompensateFutureRoute
   '/api/v1/plan/constraints': typeof ApiV1PlanConstraintsRoute
+  '/api/v1/plan/fit': typeof ApiV1PlanFitRoute
   '/api/v1/plan/generate': typeof ApiV1PlanGenerateRoute
   '/api/v1/plan/goal-impact': typeof ApiV1PlanGoalImpactRoute
   '/api/v1/plan/meal': typeof ApiV1PlanMealRoute
@@ -544,6 +553,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/compensate'
     | '/api/v1/plan/compensate-future'
     | '/api/v1/plan/constraints'
+    | '/api/v1/plan/fit'
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
@@ -599,6 +609,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/compensate'
     | '/api/v1/plan/compensate-future'
     | '/api/v1/plan/constraints'
+    | '/api/v1/plan/fit'
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
@@ -655,6 +666,7 @@ export interface FileRouteTypes {
     | '/api/v1/plan/compensate'
     | '/api/v1/plan/compensate-future'
     | '/api/v1/plan/constraints'
+    | '/api/v1/plan/fit'
     | '/api/v1/plan/generate'
     | '/api/v1/plan/goal-impact'
     | '/api/v1/plan/meal'
@@ -704,6 +716,7 @@ export interface RootRouteChildren {
   ApiV1PlanCompensateRoute: typeof ApiV1PlanCompensateRoute
   ApiV1PlanCompensateFutureRoute: typeof ApiV1PlanCompensateFutureRoute
   ApiV1PlanConstraintsRoute: typeof ApiV1PlanConstraintsRoute
+  ApiV1PlanFitRoute: typeof ApiV1PlanFitRoute
   ApiV1PlanGenerateRoute: typeof ApiV1PlanGenerateRoute
   ApiV1PlanGoalImpactRoute: typeof ApiV1PlanGoalImpactRoute
   ApiV1PlanMealRoute: typeof ApiV1PlanMealRoute
@@ -984,6 +997,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlanConstraintsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plan/fit': {
+      id: '/api/v1/plan/fit'
+      path: '/api/v1/plan/fit'
+      fullPath: '/api/v1/plan/fit'
+      preLoaderRoute: typeof ApiV1PlanFitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/plan/generate': {
       id: '/api/v1/plan/generate'
       path: '/api/v1/plan/generate'
@@ -1161,6 +1181,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlanCompensateRoute: ApiV1PlanCompensateRoute,
   ApiV1PlanCompensateFutureRoute: ApiV1PlanCompensateFutureRoute,
   ApiV1PlanConstraintsRoute: ApiV1PlanConstraintsRoute,
+  ApiV1PlanFitRoute: ApiV1PlanFitRoute,
   ApiV1PlanGenerateRoute: ApiV1PlanGenerateRoute,
   ApiV1PlanGoalImpactRoute: ApiV1PlanGoalImpactRoute,
   ApiV1PlanMealRoute: ApiV1PlanMealRoute,

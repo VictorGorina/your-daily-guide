@@ -88,7 +88,13 @@ import {
   type TripTiming,
 } from "@/lib/plan-shared";
 import { freshRiskNames, freshRisksForTrip } from "@/lib/perishability";
-import { planDishesToWarm, useRecipeWarmProgress, warmPlanRecipes } from "@/lib/recipe-warm";
+import {
+  fitPlanOnce,
+  planDishesToWarm,
+  useRecipeWarmProgress,
+  warmPlanRecipes,
+} from "@/lib/recipe-warm";
+import { PlanFitNote } from "@/components/plan-fit-note";
 import { warmRecipes } from "@/lib/recipes.functions";
 import {
   clearPlanUpdatedNotice,
@@ -99,6 +105,7 @@ import {
   wirePlanRecalcFlush,
 } from "@/lib/plan-recalc";
 import {
+  fitMonthlyPlan,
   generateMonthlyPlan,
   recadenceMonthlyPlan,
   scanTripReceipt,
@@ -478,14 +485,31 @@ function PlanPage() {
   // Todos los platos del plan, calculados al generarlo o cambiarlo (ticket 06,
   // D13): ninguno llega a Hoy "Calculando…". Solo lo que falte en la caché; si
   // la app se cerró a medias, se retoma aquí.
+  //
+  // Con todos calculados, UNA comprobación del plan contra el objetivo (ticket
+  // 10, `fitMonthlyPlan`): cambia los platos que ni ajustando la cantidad dejan
+  // el día en su objetivo. Una vez por plan (la marca `plan.fit`); lo que
+  // cambió se enseña en "Cómo enfocamos el mes".
   const warmFn = useServerFn(warmRecipes);
+  const fitFn = useServerFn(fitMonthlyPlan);
   const warmProgress = useRecipeWarmProgress();
+  const [fitting, setFitting] = useState(false);
   useEffect(() => {
     if (!plan || !actionable) return;
+    let alive = true;
     void warmPlanRecipes(planDishesToWarm(plan, month, today), (dishes) =>
       warmFn({ data: { dishes } }),
-    );
-  }, [plan, actionable, month, today, warmFn]);
+    ).then(async (complete) => {
+      if (!alive || !complete || plan.fit || !plan.targetsVersion) return;
+      setFitting(true);
+      const res = await fitPlanOnce(month, () => fitFn({ data: { month, today } }));
+      if (alive) setFitting(false);
+      if (res?.fit) qc.invalidateQueries({ queryKey: ["plan", month] });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [plan, actionable, month, today, warmFn, fitFn, qc]);
 
   const goToMonth = (target: string) => {
     if (target < bounds.earliest || target > bounds.latest) return;
@@ -754,6 +778,7 @@ function PlanPage() {
                     Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
                     recoloco los siguientes.
                   </p>
+                  <PlanFitNote fit={plan.fit} fitting={fitting} />
                 </div>
               ) : null}
 
