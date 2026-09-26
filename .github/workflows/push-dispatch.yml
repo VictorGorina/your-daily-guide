@@ -10,6 +10,10 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
+# Solo hace un curl con secretos del repo: el token del workflow no necesita
+# ningún permiso.
+permissions: {}
+
 jobs:
   dispatch:
     runs-on: ubuntu-latest
