@@ -21,6 +21,8 @@
  * - `env_missing` (error): falta una variable de entorno y se usa un respaldo.
  * - `settle_release_failed` (error): `settleDay` no pudo devolver una reserva;
  *   ese desvío queda marcado como compensado sin estarlo (ver ticket 22).
+ * - `settle_outcome_failed` (warn): `settleDay` no pudo guardar `lastOutcome`;
+ *   solo se pierde la nota de la tarjeta "Balance de hoy".
  */
 import { redactFields } from "@/lib/log-redact";
 

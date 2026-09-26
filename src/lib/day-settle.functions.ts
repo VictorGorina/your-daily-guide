@@ -13,6 +13,7 @@ import {
   type DayOutcome,
 } from "@/lib/day-balance";
 import { cleanDayExercise, pendingExerciseKcal, type DayExercise } from "@/lib/exercise";
+import { errorText, logEvent } from "@/lib/log.server";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import {
   compensationWindow,
@@ -262,7 +263,9 @@ export const settleDay = createServerFn({ method: "POST" })
     const recordOutcome = async (outcome: DayOutcome) => {
       await patchDay(supabase, userId, today, (row) => ({
         record: { adjustment: row.record?.adjustment ?? null, lastOutcome: outcome },
-      })).catch((err) => console.error("settleDay: recordOutcome", err));
+      })).catch((err) =>
+        logEvent("warn", "settle_outcome_failed", { userId, date: today, error: errorText(err) }),
+      );
     };
 
     // 1. Los desvíos de los platos cambiados en este lote entran en `habits`
@@ -422,7 +425,11 @@ export const settleDay = createServerFn({ method: "POST" })
               },
             }
           : {}),
-      })).catch((err) => console.error("settleDay: release", err));
+      })).catch((err) =>
+        // La reserva se queda puesta: ese desvío cuenta como compensado sin
+        // estarlo hasta que el ticket 22 le dé caducidad.
+        logEvent("error", "settle_release_failed", { userId, date: today, error: errorText(err) }),
+      );
     };
 
     try {
