@@ -1,4 +1,4 @@
-import type { PlanDay } from "../plan-shared";
+import type { PlanDay } from "./types";
 
 /** Las cuatro comidas que se pueden cambiar una a una desde el chat. */
 export const MEAL_SLOTS = ["desayuno", "comida", "cena", "snack"] as const;
