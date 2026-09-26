@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } fro
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeRow } from "@/test/fake-supabase";
 
+import { cleanPendingReservations } from "./day-balance";
 import { settleDayHandler, type SettleDayDeps } from "./day-settle.functions";
 import type { MealHabit, MonthlyPlan } from "./plan-shared";
 
@@ -117,6 +118,8 @@ const run = (fake: ReturnType<typeof setup>, deps: SettleDayDeps) =>
 
 const dayRow = (fake: ReturnType<typeof setup>) => fake.tables.daily_logs![0]!;
 const habitsOf = (fake: ReturnType<typeof setup>) => dayRow(fake).habits as MealHabit[];
+const pendingOf = (fake: ReturnType<typeof setup>) =>
+  cleanPendingReservations(dayRow(fake).adjustment);
 
 describe("settleDayHandler — un solo asentamiento del día", () => {
   it("por encima del umbral: reserva, recoloca una vez y guarda el resultado", async () => {
@@ -169,5 +172,91 @@ describe("settleDayHandler — un solo asentamiento del día", () => {
     await expect(run(fake, { reflow })).rejects.toThrow("modelo caído");
 
     expect(events()).toContain("settle_release_failed");
+    // La marca se queda: el siguiente asentamiento la devuelve al caducar.
+    expect(pendingOf(fake).map((p) => p.reservation.total)).toEqual([450]);
+  });
+});
+
+describe("settleDayHandler — la reserva caduca (ticket 22)", () => {
+  const reservation = (total: number, labels = ["Comida"]) => ({
+    labels,
+    snackKcal: 0,
+    exerciseKcal: 0,
+    total,
+    protein: 0,
+  });
+  const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
+  const reservedHabit = (label: string, kcal: number): MealHabit => ({
+    ...changed(label, kcal),
+    swapCompensated: true,
+  });
+
+  it("mientras llama al modelo, la marca guarda lo reservado; el resultado la quita", async () => {
+    const fake = setup();
+    let during: ReturnType<typeof pendingOf> = [];
+    const { reflow } = fakeReflow();
+    const spy: SettleDayDeps["reflow"] = async (opts) => {
+      during = pendingOf(fake);
+      return reflow!(opts);
+    };
+
+    await run(fake, { reflow: spy });
+
+    expect(during).toHaveLength(1);
+    expect(during[0]!.reservation).toEqual(reservation(450));
+    expect(during[0]!.since).toBe(NOW.toISOString());
+    expect(pendingOf(fake)).toEqual([]);
+  });
+
+  it("una reserva caducada de otro asentamiento se devuelve y el día se asienta entero", async () => {
+    const fake = setup({
+      habits: [reservedHabit("Comida", 450)],
+      adjustment: {
+        adjustment: null,
+        lastOutcome: null,
+        pending: [{ id: "muerta", since: minutesAgo(6), reservation: reservation(450) }],
+      },
+    });
+    const { reflow, calls } = fakeReflow();
+
+    const result = await run(fake, { reflow });
+
+    expect(calls).toHaveLength(1);
+    expect(result).toMatchObject({ outcome: "adjusted", kcal: 450 });
+    expect(pendingOf(fake)).toEqual([]);
+    expect(events()).toContain("settle_reservation_expired");
+  });
+
+  it("una reserva en vuelo (2 min) no se toca: su desvío ya lo está asentando otro", async () => {
+    const pending = [{ id: "viva", since: minutesAgo(2), reservation: reservation(450) }];
+    const fake = setup({
+      habits: [reservedHabit("Comida", 450)],
+      adjustment: { adjustment: null, lastOutcome: null, pending },
+    });
+    const { reflow, calls } = fakeReflow();
+
+    const result = await run(fake, { reflow });
+
+    expect(calls).toHaveLength(0);
+    expect(result.outcome).toBe("nothing");
+    expect(habitsOf(fake)[0]!.swapCompensated).toBe(true);
+    expect(pendingOf(fake).map((p) => p.id)).toEqual(["viva"]);
+  });
+
+  it("guardar el resultado no borra la reserva en vuelo de otro", async () => {
+    const fake = setup({
+      habits: [reservedHabit("Cena", 300), changed("Comida", 450)],
+      adjustment: {
+        adjustment: null,
+        lastOutcome: null,
+        pending: [{ id: "otra", since: minutesAgo(1), reservation: reservation(300, ["Cena"]) }],
+      },
+    });
+    const { reflow } = fakeReflow();
+
+    const result = await run(fake, { reflow });
+
+    expect(result).toMatchObject({ outcome: "adjusted", kcal: 450 });
+    expect(pendingOf(fake).map((p) => p.id)).toEqual(["otra"]);
   });
 });

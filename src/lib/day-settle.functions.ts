@@ -4,17 +4,22 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import {
+  adjustmentColumn,
   cleanDayAdjustment,
+  cleanPendingReservations,
   dayBalance,
   dayNote,
   dayReversing,
   EMPTY_RESERVATION,
   mergeDayAdjustment,
   releaseDay,
+  releaseReservations,
   reserveDay,
+  staleReservations,
   type DayAdjustmentRecord,
   type DayOutcome,
   type DayReservation,
+  type PendingReservation,
 } from "@/lib/day-balance";
 import { requestDeadline } from "@/lib/deadline";
 import { cleanDayExercise, pendingExerciseKcal, type DayExercise } from "@/lib/exercise";
@@ -90,6 +95,8 @@ type DayRow = {
   snacks: DaySnacks | null;
   exercise: DayExercise | null;
   record: DayAdjustmentRecord | null;
+  /** Reservas en vuelo (ticket 22): viven en la misma columna que `record`. */
+  pending: PendingReservation[];
   updatedAt: string;
 };
 
@@ -99,6 +106,7 @@ type DayPatch = {
   snacks?: DaySnacks | null;
   exercise?: DayExercise | null;
   record?: DayAdjustmentRecord | null;
+  pending?: PendingReservation[];
 };
 
 /**
@@ -109,6 +117,7 @@ type DayPatch = {
  * por delante de la migración no debe dejar la app sin compensar.
  */
 let hasAdjustmentColumn = true;
+let warnedNoAdjustmentColumn = false;
 const DAY_COLUMNS = "habits, snacks, exercise, adjustment, updated_at";
 const DAY_COLUMNS_LEGACY = "habits, snacks, exercise, updated_at";
 
@@ -143,6 +152,7 @@ async function readDayRow(supabase: Client, userId: string, date: string): Promi
     snacks: cleanDaySnacks(row.snacks),
     exercise: cleanDayExercise(row.exercise),
     record: cleanDayAdjustment(row.adjustment),
+    pending: cleanPendingReservations(row.adjustment),
     updatedAt: row.updated_at,
   };
 }
@@ -158,7 +168,15 @@ async function writeDayIfUnchanged(
   if (patch.habits !== undefined) update.habits = patch.habits;
   if (patch.snacks !== undefined) update.snacks = patch.snacks;
   if (patch.exercise !== undefined) update.exercise = patch.exercise;
-  if (patch.record !== undefined && hasAdjustmentColumn) update.adjustment = patch.record;
+  // Registro y reservas comparten columna: se escribe siempre la pareja, con lo
+  // leído en la parte que el parche no cambia (si no, guardar el resultado de
+  // un asentamiento borraría la reserva en vuelo de otro).
+  if ((patch.record !== undefined || patch.pending !== undefined) && hasAdjustmentColumn) {
+    update.adjustment = adjustmentColumn(
+      patch.record !== undefined ? patch.record : row.record,
+      patch.pending ?? row.pending,
+    );
+  }
   if (!Object.keys(update).length) return true;
 
   const { data, error } = await supabase
@@ -206,6 +224,7 @@ async function patchDay(
         ...(patch.snacks !== undefined ? { snacks: patch.snacks } : {}),
         ...(patch.exercise !== undefined ? { exercise: patch.exercise } : {}),
         ...(patch.record !== undefined ? { record: patch.record } : {}),
+        ...(patch.pending !== undefined ? { pending: patch.pending } : {}),
       };
     }
   }
@@ -277,28 +296,47 @@ export async function settleDayHandler(
     );
   };
 
-  // 1. Los desvíos de los platos cambiados en este lote entran en `habits`
-  //    (sobrescriben el de la misma comida si ya se había cambiado hoy), y de
-  //    paso se lee el día entero.
-  const row = changes.length
-    ? await patchDay(supabase, userId, today, (current) => {
-        const byLabel = new Map(changes.map((c) => [c.label, c]));
+  // 1. Una reserva de otro asentamiento que murió a medias (ticket 22) se
+  //    devuelve antes de nada: así su desvío entra en la cuenta de hoy en vez
+  //    de quedarse "compensado" sin estarlo. Los desvíos de los platos
+  //    cambiados en este lote entran en `habits` (sobrescriben el de la misma
+  //    comida si ya se había cambiado hoy), y de paso se lee el día entero.
+  //    Sin nada de eso no se escribe: el parche vacío es solo una lectura.
+  const byLabel = new Map(changes.map((c) => [c.label, c]));
+  let expired: PendingReservation[] = [];
+  const row = await patchDay(supabase, userId, today, (current) => {
+    expired = staleReservations(current.pending);
+    const released: DayPatch = expired.length
+      ? {
+          ...releaseReservations(current, expired),
+          pending: current.pending.filter((p) => !expired.includes(p)),
+        }
+      : {};
+    if (!changes.length) return released;
+    return {
+      ...released,
+      habits: (released.habits ?? current.habits).map((h) => {
+        const c = byLabel.get(h.label);
+        if (!c) return h;
+        const { swapProteinDelta: _previous, ...rest } = h;
         return {
-          habits: current.habits.map((h) => {
-            const c = byLabel.get(h.label);
-            if (!c) return h;
-            const { swapProteinDelta: _previous, ...rest } = h;
-            return {
-              ...rest,
-              swapKcalDelta: c.kcalDelta,
-              ...(c.proteinDelta != null ? { swapProteinDelta: c.proteinDelta } : {}),
-              swapCompensated: false,
-            };
-          }),
+          ...rest,
+          swapKcalDelta: c.kcalDelta,
+          ...(c.proteinDelta != null ? { swapProteinDelta: c.proteinDelta } : {}),
+          swapCompensated: false,
         };
-      })
-    : await readDayRow(supabase, userId, today);
+      }),
+    };
+  });
   if (!row) return { outcome: "no-plan", kcal: 0 };
+  if (expired.length) {
+    logEvent("warn", "settle_reservation_expired", {
+      userId,
+      date: today,
+      count: expired.length,
+      kcal: expired.reduce((sum, p) => sum + p.reservation.total, 0),
+    });
+  }
 
   // 2. El día entero, de una pieza.
   const balance = dayBalance(row.habits, row.snacks, row.exercise);
@@ -363,27 +401,42 @@ export async function settleDayHandler(
 
   // 4. Reserva: los tres libros se marcan como compensados ANTES de llamar a
   //    la IA, releyendo lo último, para que un asentamiento simultáneo no
-  //    compense lo mismo dos veces.
+  //    compense lo mismo dos veces. En la misma escritura va la marca de la
+  //    reserva (`pending`, ticket 22): si esta petición muere antes de dejar el
+  //    resultado, la siguiente la encuentra caducada y la devuelve.
   let reservation: DayReservation = EMPTY_RESERVATION;
+  const pendingId = crypto.randomUUID();
   const reserved = await patchDay(supabase, userId, today, (current) => {
     const reserve = reserveDay(current);
     reservation = reserve.reservation;
-    return reserve.patch;
+    if (!reservation.total && !reservation.protein) return reserve.patch;
+    const mark = { id: pendingId, since: new Date().toISOString(), reservation };
+    return { ...reserve.patch, pending: [...current.pending, mark] };
   });
   if (!reserved || (!reservation.total && !reservation.protein)) {
     return { outcome: "nothing", kcal: 0 };
   }
+  if (!hasAdjustmentColumn && !warnedNoAdjustmentColumn) {
+    // Sin la columna no hay dónde dejar la marca: la reserva no caduca.
+    warnedNoAdjustmentColumn = true;
+    logEvent("warn", "settle_no_adjustment_column", {});
+  }
+  /** Quita la marca de esta reserva (el resto de reservas en vuelo se queda). */
+  const withoutMine = (current: DayRow) => current.pending.filter((p) => p.id !== pendingId);
 
   const release = async () => {
-    await patchDay(supabase, userId, today, (current) => releaseDay(current, reservation)).catch(
-      (err) =>
-        // La reserva se queda puesta: ese desvío cuenta como compensado sin
-        // estarlo hasta que el ticket 22 le dé caducidad.
-        logEvent("error", "settle_release_failed", {
-          userId,
-          date: today,
-          error: errorText(err),
-        }),
+    await patchDay(supabase, userId, today, (current) => {
+      // Ya devuelta por otro asentamiento (caducada): devolverla otra vez
+      // restaría el picoteo y el deporte dos veces.
+      if (hasAdjustmentColumn && !current.pending.some((p) => p.id === pendingId)) return {};
+      return { ...releaseDay(current, reservation), pending: withoutMine(current) };
+    }).catch((err) =>
+      // La marca se queda: el siguiente asentamiento la devuelve al caducar.
+      logEvent("error", "settle_release_failed", {
+        userId,
+        date: today,
+        error: errorText(err),
+      }),
     );
   };
 
@@ -435,6 +488,7 @@ export async function settleDayHandler(
     if (!futureChanges.length) throw new Error("El reajuste no ha cambiado ningún plato");
 
     await patchDay(supabase, userId, today, (current) => ({
+      pending: withoutMine(current),
       record: {
         adjustment: mergeDayAdjustment(current.record?.adjustment, {
           changes: futureChanges,

@@ -572,3 +572,88 @@ export function releaseDay(current: DayBooks, reservation: DayReservation): DayB
       : {}),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Reservas con caducidad (ticket 22 de la auditoría, CAL-09)
+// ---------------------------------------------------------------------------
+
+/**
+ * Una reserva en vuelo, guardada en `daily_logs.adjustment.pending` en la MISMA
+ * escritura que marca los libros. Si la petición muere entre la reserva y el
+ * resultado (Vercel la corta, o la liberación falla), el día se quedaría
+ * "compensado" sin que nada se moviera; con esto, el siguiente asentamiento la
+ * encuentra caducada y la devuelve. Guarda lo reservado porque quien la libera
+ * es otra petición, que no lo tiene en memoria. Es una lista: dos asentamientos
+ * seguidos no se pisan la marca.
+ */
+export type PendingReservation = { id: string; since: string; reservation: DayReservation };
+
+/**
+ * Más que el `maxDuration` de la función (300 s, `vite.config.ts`): la reserva
+ * se escribe después de empezar la petición, así que pasado esto quien la hizo
+ * ya no existe. Si se sube `maxDuration`, hay que subir esto.
+ */
+export const RESERVATION_TTL_MS = 5 * 60_000;
+
+const cleanReservation = (raw: unknown): DayReservation | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  return {
+    labels: Array.isArray(o.labels)
+      ? o.labels.filter((l): l is string => typeof l === "string")
+      : [],
+    snackKcal: num(o.snackKcal),
+    exerciseKcal: num(o.exerciseKcal),
+    total: num(o.total),
+    protein: num(o.protein),
+  };
+};
+
+/** Lectura defensiva de las reservas en vuelo de la columna `adjustment`. */
+export function cleanPendingReservations(adjustment: unknown): PendingReservation[] {
+  const list = (adjustment as { pending?: unknown } | null)?.pending;
+  if (!Array.isArray(list)) return [];
+  return list.flatMap((raw) => {
+    const o = (raw ?? {}) as Record<string, unknown>;
+    const reservation = cleanReservation(o.reservation);
+    return typeof o.id === "string" && typeof o.since === "string" && reservation
+      ? [{ id: o.id, since: o.since, reservation }]
+      : [];
+  });
+}
+
+/** Las que llevan más de `RESERVATION_TTL_MS`. Una fecha ilegible cuenta como caducada. */
+export function staleReservations(
+  list: readonly PendingReservation[],
+  now = Date.now(),
+): PendingReservation[] {
+  return list.filter((p) => {
+    const since = Date.parse(p.since);
+    return !Number.isFinite(since) || now - since > RESERVATION_TTL_MS;
+  });
+}
+
+/** Devuelve varias reservas seguidas sobre la fila actual (`releaseDay` encadenado). */
+export function releaseReservations(
+  current: DayBooks,
+  list: readonly PendingReservation[],
+): DayBooksPatch {
+  let books = current;
+  for (const p of list) books = { ...books, ...releaseDay(books, p.reservation) };
+  return { habits: books.habits, snacks: books.snacks, exercise: books.exercise };
+}
+
+/**
+ * El valor de la columna `adjustment`: el registro del día y, si hay, las
+ * reservas en vuelo. `null` si no queda nada.
+ */
+export function adjustmentColumn(
+  record: DayAdjustmentRecord | null,
+  pending: readonly PendingReservation[],
+): (DayAdjustmentRecord & { pending?: PendingReservation[] }) | null {
+  if (!record && !pending.length) return null;
+  return {
+    ...(record ?? { adjustment: null, lastOutcome: null }),
+    ...(pending.length ? { pending: [...pending] } : {}),
+  };
+}

@@ -19,8 +19,14 @@
  *   permitidas y se descartaron.
  * - `email_send_failed` (error): Resend rechazó un correo.
  * - `env_missing` (error): falta una variable de entorno y se usa un respaldo.
- * - `settle_release_failed` (error): `settleDay` no pudo devolver una reserva;
- *   ese desvío queda marcado como compensado sin estarlo (ver ticket 22).
+ * - `settle_release_failed` (error): `settleDay` no pudo devolver una reserva.
+ *   Su marca (`adjustment.pending`) se queda y el siguiente asentamiento la
+ *   devuelve cuando caduca (5 min).
+ * - `settle_reservation_expired` (warn): un asentamiento encontró la reserva
+ *   caducada de otro que murió a medias y la devolvió. Suelto es una función
+ *   cortada; repetido, `settleDay` se pasa de tiempo.
+ * - `settle_no_adjustment_column` (warn): falta la columna `daily_logs.adjustment`
+ *   (migración pendiente); las reservas no caducan. Una vez por proceso.
  * - `settle_outcome_failed` (warn): `settleDay` no pudo guardar `lastOutcome`;
  *   solo se pierde la nota de la tarjeta "Balance de hoy".
  * - `plan_cas_exhausted` (warn): tres escrituras seguidas de la fila del mes

@@ -4,7 +4,9 @@ import {
   absorbedKcal,
   absorbedNote,
   absorbsTooLittle,
+  adjustmentColumn,
   balanceNote,
+  cleanPendingReservations,
   cleanDayAdjustment,
   changedMealsKcal,
   dayBalance,
@@ -12,8 +14,12 @@ import {
   dayReversing,
   mergeDayAdjustment,
   releaseDay,
+  releaseReservations,
   reserveDay,
+  RESERVATION_TTL_MS,
+  staleReservations,
   type DayBalance,
+  type PendingReservation,
 } from "./day-balance";
 import type { DayExercise, ExerciseEntry } from "./exercise";
 import { compensationNeed } from "./nutrition/compensation";
@@ -538,5 +544,83 @@ describe("reserveDay / releaseDay", () => {
     };
     const released = apply(meanwhile, releaseDay(meanwhile, reservation));
     expect(pendingOf(released).kcal).toBe(pendingOf(row).kcal + 150);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("reservas con caducidad (ticket 22)", () => {
+  const NOW = Date.parse("2026-09-21T12:00:00.000Z");
+  const at = (msAgo: number) => new Date(NOW - msAgo).toISOString();
+  const pending = (id: string, since: string, over = {}): PendingReservation => ({
+    id,
+    since,
+    reservation: { labels: [], snackKcal: 0, exerciseKcal: 0, total: 0, protein: 0, ...over },
+  });
+
+  it("caduca pasados 5 minutos (más que los 300 s de la función), no antes", () => {
+    const list = [
+      pending("justo", at(RESERVATION_TTL_MS)),
+      pending("pasada", at(RESERVATION_TTL_MS + 1)),
+      pending("reciente", at(60_000)),
+      pending("ilegible", "ayer"),
+    ];
+    expect(staleReservations(list, NOW).map((p) => p.id)).toEqual(["pasada", "ilegible"]);
+  });
+
+  it("devuelve varias reservas seguidas sin pisarse", () => {
+    const day = {
+      habits: [changed("Comida", 250, true), changed("Cena", 120, true), habit("Desayuno")],
+      snacks: snacks(300, 300),
+      exercise: exercise(200, 200),
+    };
+    const patch = releaseReservations(day, [
+      pending("a", at(0), { labels: ["Comida"], snackKcal: 100, total: 350 }),
+      pending("b", at(0), { labels: ["Cena"], snackKcal: 200, exerciseKcal: 200, total: 120 }),
+    ]);
+    expect(patch.habits?.map((h) => [h.label, h.swapCompensated])).toEqual([
+      ["Comida", false],
+      ["Cena", false],
+      ["Desayuno", undefined],
+    ]);
+    expect(patch.snacks?.compensatedKcal).toBe(0);
+    expect(patch.exercise?.compensatedKcal).toBe(0);
+  });
+
+  it("lee la columna a la defensiva y descarta lo que no es una reserva", () => {
+    expect(cleanPendingReservations(null)).toEqual([]);
+    expect(cleanPendingReservations({ pending: "x" })).toEqual([]);
+    expect(
+      cleanPendingReservations({
+        pending: [
+          {
+            id: "ok",
+            since: "2026-09-21T12:00:00Z",
+            reservation: { labels: ["Cena", 3], total: "40" },
+          },
+          { id: "sin-reserva", since: "2026-09-21T12:00:00Z" },
+          { since: "2026-09-21T12:00:00Z", reservation: {} },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: "ok",
+        since: "2026-09-21T12:00:00Z",
+        reservation: { labels: ["Cena"], snackKcal: 0, exerciseKcal: 0, total: 40, protein: 0 },
+      },
+    ]);
+  });
+
+  it("la columna junta registro y reservas, y queda en null sin ninguno", () => {
+    const record = { adjustment: null, lastOutcome: "nothing" as const };
+    expect(adjustmentColumn(null, [])).toBeNull();
+    expect(adjustmentColumn(record, [])).toEqual(record);
+    expect(adjustmentColumn(null, [pending("a", at(0))])).toEqual({
+      adjustment: null,
+      lastOutcome: null,
+      pending: [pending("a", at(0))],
+    });
+    // Una columna con reservas sigue leyéndose igual que antes para la tarjeta.
+    expect(cleanDayAdjustment(adjustmentColumn(record, [pending("a", at(0))]))).toEqual(record);
   });
 });
