@@ -1,4 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, setSystemTime } from "bun:test";
+
+import { deadlineIn } from "@/lib/deadline";
 
 import {
   DecomposeError,
@@ -152,6 +154,69 @@ describe("runDecomposeChain — todo plato se calcula (D13)", () => {
       timeouts: fast,
     });
     expect(calls.map((c) => c.model)).toEqual([PRIMARY, PRIMARY]);
+  });
+});
+
+describe("runDecomposeChain — presupuesto de la petición (ticket 22)", () => {
+  const T0 = new Date("2026-09-26T12:00:00Z").getTime();
+  afterEach(() => setSystemTime());
+
+  /** `ask` que tarda `ms` (adelanta el reloj) y no contesta nada. */
+  const slowEmpty =
+    (ms: number, calls: { model: string; timeoutMs: number }[]): AskModel =>
+    async (_dishes, model, timeoutMs) => {
+      calls.push({ model, timeoutMs });
+      setSystemTime(new Date(Date.now() + ms));
+      return new Map();
+    };
+
+  it("sin tiempo para el uno a uno ni el respaldo: no los llama y el plato sale sin-tiempo", async () => {
+    setSystemTime(new Date(T0));
+    const calls: { model: string; timeoutMs: number }[] = [];
+    const result = await runDecomposeChain({
+      dishes: ["Lentejas", "Pisto"],
+      ask: slowEmpty(95_000, calls),
+      model: PRIMARY,
+      fallbackModel: FALLBACK,
+      deadline: deadlineIn(100_000, T0),
+    });
+
+    expect(calls.map((c) => c.model)).toEqual([PRIMARY]);
+    expect(result.raws.size).toBe(0);
+    expect(result.failures.get("Lentejas")).toBe("sin-tiempo");
+    expect(result.failures.get("Pisto")).toBe("sin-tiempo");
+  });
+
+  it("cada paso se acorta a lo que queda menos el margen", async () => {
+    setSystemTime(new Date(T0));
+    const calls: { model: string; timeoutMs: number }[] = [];
+    await runDecomposeChain({
+      dishes: ["Lentejas"],
+      ask: slowEmpty(40_000, calls),
+      model: PRIMARY,
+      fallbackModel: FALLBACK,
+      deadline: deadlineIn(100_000, T0),
+    });
+
+    // Lote: sus 120 s no caben → 95 s. Uno a uno (t = 40 s): 55 s. Respaldo
+    // (t = 80 s): 15 s, que aún pasa del mínimo de 10.
+    expect(calls).toEqual([
+      { model: PRIMARY, timeoutMs: 95_000 },
+      { model: PRIMARY, timeoutMs: 55_000 },
+      { model: FALLBACK, timeoutMs: 15_000 },
+    ]);
+  });
+
+  it("sin presupuesto, los timeouts de siempre", async () => {
+    const calls: { model: string; timeoutMs: number }[] = [];
+    await runDecomposeChain({
+      dishes: ["Lentejas"],
+      ask: slowEmpty(0, calls),
+      model: PRIMARY,
+      fallbackModel: FALLBACK,
+      timeouts: fast,
+    });
+    expect(calls.map((c) => c.timeoutMs)).toEqual([10, 10, 10]);
   });
 });
 

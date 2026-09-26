@@ -3,6 +3,7 @@ import { generateText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
+import { requestDeadline, stepTimeout, type Deadline } from "@/lib/deadline";
 import { parsePortionSize, type PortionSize } from "@/lib/nutrition/portion";
 import type { ResolvedServing } from "@/lib/nutrition/planned-serving.server";
 import type { PlannedServing } from "@/lib/nutrition/scale";
@@ -198,6 +199,7 @@ async function macrosFromLookup(
     planned: (moment: string | undefined) => ResolvedServing;
     eaten: (moment: string | undefined) => PlannedServing;
   },
+  deadline?: Deadline,
 ): Promise<{
   macroEstimate: MacroEstimate | null;
   mealMacros: MealMacroEstimate[];
@@ -228,7 +230,7 @@ async function macrosFromLookup(
       ...todayMeals.flatMap((m) => (m.planned ? [m.planned] : [])),
       ...extraDishes.map((d) => d.dish),
     ],
-    { apiKey, userId, slots },
+    { apiKey, userId, slots, deadline },
   );
 
   // El día cerrado (`alignSoloMeals`, ticket 08): lo que no alcanza una comida
@@ -365,6 +367,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context }): Promise<GeneratedGuide> => {
+    const deadline = requestDeadline();
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) return fallback;
 
@@ -418,6 +421,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
             key,
             context.userId,
             servings,
+            deadline,
           ).catch((error) => {
             console.error("macrosFromLookup", error);
             return null;
@@ -455,6 +459,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     // cuenta y se devuelve lo que sí haya salido.
     const textPromise = generateText({
       model: ai(COACH_MODEL),
+      abortSignal: AbortSignal.timeout(stepTimeout(Infinity, deadline)),
       system: coachSystemPrompt(profile as never),
       prompt:
         "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +

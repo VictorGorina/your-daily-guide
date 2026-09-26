@@ -26,6 +26,9 @@
  * - `plan_cas_exhausted` (warn): tres escrituras seguidas de la fila del mes
  *   chocaron con otra (`updatePlanRowCas`) y se devolvió un error. Suelto es una
  *   carrera normal; repetido, algo reescribe el plan en bucle.
+ * - `ai_step_no_time` (warn): una llamada al modelo no se hizo (o no se
+ *   reintentó) porque no quedaba presupuesto en la petición (`deadline.ts`).
+ *   Suelto es una petición lenta; repetido, un paso tarda más de lo previsto.
  */
 import { redactFields } from "@/lib/log-redact";
 

@@ -97,6 +97,7 @@ import {
 } from "@/lib/plan-shared";
 import { cleanIntakeText, monthIntakeNotes, type IntakeAnswers } from "@/lib/month-intake";
 import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
+import { hasTimeFor, requestDeadline, stepTimeout, type Deadline } from "@/lib/deadline";
 import { PLAN_STRUCTURE_REMINDER } from "@/lib/nutrition/plan-targets";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import { logEvent } from "@/lib/log.server";
@@ -342,7 +343,18 @@ function blankUnselectedSlots(plan: MonthlyPlan, selected: readonly MealSlot[]):
 
 /** Pide el JSON al modelo en streaming (evita cortes por timeout) y lo intenta varias veces. */
 async function askForJson<T>(
-  opts: { key: string; userId: string; system: string; prompt: string; model?: string },
+  opts: {
+    key: string;
+    userId: string;
+    system: string;
+    prompt: string;
+    model?: string;
+    /**
+     * Presupuesto de la petición (ticket 22): cada intento se corta a lo que
+     * queda y, si no queda lo bastante, no se hace otro. Sin él, sin límite.
+     */
+    deadline?: Deadline;
+  },
   extract: (parsed: unknown) => T | null,
   attempts = 3,
 ): Promise<T> {
@@ -350,12 +362,18 @@ async function askForJson<T>(
   let lastError: unknown = null;
 
   for (let i = 0; i < attempts; i++) {
+    const timeoutMs = stepTimeout(Infinity, opts.deadline);
+    if (opts.deadline && !hasTimeFor(timeoutMs)) {
+      logEvent("warn", "ai_step_no_time", { step: "ask_for_json", attempt: i });
+      break;
+    }
     // Un error del modelo en streaming no llega tal cual a `result.text` (que
     // rechaza con un genérico "No output generated"), solo a `onError`.
     let streamError: unknown = null;
     try {
       const result = streamText({
         model: ai(opts.model ?? COACH_MODEL),
+        ...(Number.isFinite(timeoutMs) ? { abortSignal: AbortSignal.timeout(timeoutMs) } : {}),
         system: opts.system,
         prompt:
           i === 0
@@ -400,14 +418,19 @@ async function enforceBudget(
   target: number,
   sym = "€",
   model = COACH_MODEL,
+  deadline?: Deadline,
 ): Promise<ShoppingList> {
   if (!(target > 0) || shoppingTotal(shopping) <= target * 1.02) return shopping;
 
   let result = shopping;
+  // Sin tiempo para el recorte con IA, el escalado de abajo cumple el tope igual.
+  const timeoutMs = stepTimeout(Infinity, deadline);
   try {
+    if (deadline && !hasTimeFor(timeoutMs)) throw new Error("sin tiempo para el recorte con IA");
     const ai = createAiProvider(key, userId);
     const { text } = await generateText({
       model: ai(model),
+      ...(Number.isFinite(timeoutMs) ? { abortSignal: AbortSignal.timeout(timeoutMs) } : {}),
       system,
       temperature: 0.2,
       prompt:
@@ -483,6 +506,8 @@ async function generatePlanBody(opts: {
   sharedTargets?: Awaited<
     ReturnType<(typeof import("@/lib/household.server"))["householdMealTargets"]>
   >;
+  /** Presupuesto de la petición (ticket 22, `deadline.ts`). */
+  deadline?: Deadline;
 }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> {
   const { key, userId, month, cadence, coverage, home, profile, constraints } = opts;
 
@@ -634,6 +659,7 @@ async function generatePlanBody(opts: {
       key,
       userId,
       model: PLAN_MODEL,
+      deadline: opts.deadline,
       system: coachSystemPrompt(profile as never, home.text),
       prompt:
         `Crea el plan del mes ${month} y su lista de la compra. Devuelve solo JSON válido:\n` +
@@ -679,6 +705,7 @@ async function generatePlanBody(opts: {
     proratedBudget,
     sym,
     PLAN_MODEL,
+    opts.deadline,
   );
   // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
   // una comida compartida, se vacía aquí — la fila de un no planificador
@@ -729,6 +756,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       data,
       context,
     }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList; firstPlan: boolean }> => {
+      const deadline = requestDeadline();
       const key = process.env.OPENROUTER_API_KEY;
       if (!key) throw new Error("Falta la clave de IA");
 
@@ -773,6 +801,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
 
       const { plan, shopping } = await generatePlanBody({
         sharedTargets,
+        deadline,
         key,
         userId: context.userId,
         month: data.month,
@@ -826,6 +855,7 @@ function askPlanFit(opts: {
   homeText: string;
   shopping: ShoppingList;
   pantry: string[];
+  deadline?: Deadline;
 }) {
   return async (
     misfits: Misfit[],
@@ -856,6 +886,7 @@ function askPlanFit(opts: {
         key: opts.key,
         userId: opts.userId,
         model: PLAN_MODEL,
+        deadline: opts.deadline,
         system: coachSystemPrompt(opts.profile as never, opts.homeText),
         prompt:
           "El sistema ajusta la cantidad de cada plato al objetivo de su comida, pero solo hasta " +
@@ -943,6 +974,7 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
     return { month: input.month, today };
   })
   .handler(async ({ data, context }): Promise<{ fit: PlanFitMark | null }> => {
+    const deadline = requestDeadline();
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
     const supabase = context.supabase as never as SupabaseClient<never, never, never>;
@@ -984,9 +1016,11 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
       canTouchShared,
       apiKey: key,
       userId: context.userId,
+      deadline,
       ask: askPlanFit({
         key,
         userId: context.userId,
+        deadline,
         profile,
         homeText: home.text,
         shopping: cleanShopping((row as { shopping?: unknown } | null)?.shopping),
@@ -1609,6 +1643,8 @@ export async function reflowMeals(opts: {
    * insistir UNA vez con los números (ticket 18). Lo usa `settleDay`.
    */
   measure?: boolean;
+  /** Presupuesto de la petición (ticket 22, `deadline.ts`). */
+  deadline?: Deadline;
 }): Promise<{
   plan: MonthlyPlan;
   before: MonthlyPlan;
@@ -1774,6 +1810,7 @@ export async function reflowMeals(opts: {
         key,
         userId,
         model: PLAN_MODEL,
+        deadline: opts.deadline,
         system: coachSystemPrompt(profile as never, home.text),
         prompt:
           insist +
@@ -1847,7 +1884,7 @@ export async function reflowMeals(opts: {
     const factor = portionFactors(energyTargets(profile as never), profile as never).plan;
     const recipes = await getRecipes(
       cells.flatMap((c) => [c.before, c.after]),
-      { apiKey: key, userId },
+      { apiKey: key, userId, deadline: opts.deadline },
     );
     const kcalOf = (dish: string) => {
       const recipe = recipes.get(dish.trim())?.recipe;
@@ -1981,6 +2018,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; summary: string }> => {
+    const deadline = requestDeadline();
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
@@ -1991,6 +2029,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
       supabase: context.supabase as never,
       userId: context.userId,
       key,
+      deadline,
       month: data.month,
       today: data.today,
       note: data.note,
@@ -2069,6 +2108,7 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       const { today, date, label, dish, plannedDish } = data;
       const month = today.slice(0, 7);
 
+      const deadline = requestDeadline();
       const key = process.env.OPENROUTER_API_KEY;
       if (!key) throw new Error("Falta la clave de IA");
 
@@ -2106,7 +2146,11 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
         { moment: label },
       ];
       const [recipes, servings] = await Promise.all([
-        getRecipes([plannedDish, dish, ...others.map((m) => m.idea)], { apiKey: key, userId }),
+        getRecipes([plannedDish, dish, ...others.map((m) => m.idea)], {
+          apiKey: key,
+          userId,
+          deadline,
+        }),
         plannedServingsFor({ supabase: supabase as never, userId, profile, date }),
       ]);
       const fromRecipe = recipes.get(plannedDish.trim())?.recipe;
@@ -2149,6 +2193,7 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
         supabase,
         userId,
         key,
+        deadline,
         month,
         today,
         note,
@@ -2197,6 +2242,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     return { month: input.month, today, scope };
   })
   .handler(async ({ data, context }): Promise<ReflowResult> => {
+    const deadline = requestDeadline();
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
@@ -2224,6 +2270,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
         supabase: context.supabase as never,
         userId: context.userId,
         key,
+        deadline,
         month: data.month,
         today: data.today,
         note: "Ha cambiado lo que hay en la despensa de casa: alguien ha añadido o quitado un ingrediente que ya se tiene. Recoloca SOLO los días posteriores a hoy para aprovechar mejor lo que hay en casa y lo ya comprado. La lista de la compra no cambia.",
@@ -2248,6 +2295,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     const sharedTargets = await householdMealTargets(context.supabase as never, context.userId);
     const fresh = await generatePlanBody({
       sharedTargets,
+      deadline,
       key,
       userId: context.userId,
       month: data.month,
@@ -2757,6 +2805,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
       data,
       context,
     }): Promise<{ plan: MonthlyPlan; filled: number; children: string[] }> => {
+      const deadline = requestDeadline();
       const key = process.env.OPENROUTER_API_KEY;
       if (!key) throw new Error("Falta la clave de IA");
 
@@ -2835,6 +2884,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
         {
           key,
           userId: context.userId,
+          deadline,
           model: PLAN_MODEL,
           system: coachSystemPrompt(profile as never, home.text),
           prompt:
@@ -2945,6 +2995,7 @@ export const goalImpact = createServerFn({ method: "POST" })
   }))
   .handler(
     async ({ data, context }): Promise<{ text: string; suggested_target_date: string | null }> => {
+      const deadline = requestDeadline();
       const key = process.env.OPENROUTER_API_KEY;
       if (!key) throw new Error("Falta la clave de IA");
 
@@ -2966,6 +3017,7 @@ export const goalImpact = createServerFn({ method: "POST" })
         {
           key,
           userId: context.userId,
+          deadline,
           system: coachSystemPrompt(profile as never),
           prompt:
             `Perfil: ${JSON.stringify(profile ?? {})}\n` +
@@ -3065,6 +3117,7 @@ export const dishRecipe = createServerFn({ method: "POST" })
     return { dish, month };
   })
   .handler(async ({ data, context }): Promise<DishRecipe> => {
+    const deadline = requestDeadline();
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
@@ -3086,6 +3139,7 @@ export const dishRecipe = createServerFn({ method: "POST" })
       {
         key,
         userId: context.userId,
+        deadline,
         system:
           "Eres un cocinero que explica recetas caseras muy simples, en español, con frases cortas y claras, siempre dentro de la dieta mediterránea (verdura, fruta, legumbre, cereal integral, pescado y aceite de oliva virgen extra por delante; carne roja/procesada y ultraprocesados solo de forma ocasional).",
         prompt:

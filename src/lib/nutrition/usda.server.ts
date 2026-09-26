@@ -29,6 +29,12 @@ type Provider = ReturnType<typeof createAiProvider>;
 const SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 const TIMEOUT_MS = 15_000;
 
+/**
+ * Lo que puede tardar una búsqueda en USDA (traducir, buscar y elegir, en
+ * serie): con un presupuesto de petición (ticket 22) no se empieza sin esto.
+ */
+export const USDA_LOOKUP_MS = 3 * TIMEOUT_MS;
+
 const isMissingTable = (error: unknown) => {
   const code = (error as { code?: string } | null)?.code;
   return code === "PGRST205" || code === "42P01";

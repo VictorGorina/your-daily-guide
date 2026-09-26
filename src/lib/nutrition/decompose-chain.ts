@@ -14,6 +14,7 @@
  *  4. Lo que queda sin calcular sale con su motivo; nunca con un promedio.
  */
 
+import { hasTimeFor, stepTimeout, type Deadline } from "@/lib/deadline";
 import { normName } from "@/lib/plan-shared";
 
 export type DecomposeFailure =
@@ -21,6 +22,8 @@ export type DecomposeFailure =
   | "json-invalido"
   | "sin-respuesta"
   | "tiempo"
+  /** No se intentó: no quedaba presupuesto en la petición (ticket 22). */
+  | "sin-tiempo"
   | "tope-gasto"
   | "error-modelo"
   /** Descompuesto, pero con ingredientes sin identificar que pesan (ticket 05 §5). */
@@ -163,10 +166,11 @@ export type AskModel = (
 ) => Promise<Map<string, RawDish>>;
 
 /**
- * Presupuesto de tiempo de cada paso. La cadena entera cabe por debajo del
- * `maxDuration` de la función (300 s, `vite.config.ts`) con margen para el
- * resto de la petición: un lote de 8 platos con `DISH_MODEL` tarda ~60 s
+ * Timeout de cada paso: un lote de 8 platos con `DISH_MODEL` tarda ~60 s
  * medidos, uno solo ~15-25 s, y el modelo de respaldo es mucho más rápido.
+ * Sumados (225 s) y con lo que va detrás (reintento con pista, USDA,
+ * desambiguación) pasan de los 300 s de la función: con un `Deadline`
+ * (ticket 22) cada paso se acorta a lo que queda de la petición.
  */
 export const CHAIN_TIMEOUTS = { batch: 120_000, single: 60_000, fallback: 45_000 } as const;
 
@@ -186,6 +190,8 @@ export async function runDecomposeChain(opts: {
   fallbackModel: string;
   noFallback?: boolean;
   timeouts?: { batch: number; single: number; fallback: number };
+  /** Presupuesto de la petición: un paso sin tiempo no empieza (`"sin-tiempo"`). */
+  deadline?: Deadline;
 }): Promise<ChainResult> {
   const { dishes, ask, model, fallbackModel } = opts;
   const timeouts = opts.timeouts ?? CHAIN_TIMEOUTS;
@@ -194,8 +200,15 @@ export async function runDecomposeChain(opts: {
   let capped = false;
 
   const missing = () => dishes.filter((d) => !raws.has(d));
-  const step = async (asked: string[], stepModel: string, timeoutMs: number) => {
+  const step = async (asked: string[], stepModel: string, own: number) => {
     if (capped || !asked.length) return;
+    const timeoutMs = stepTimeout(own, opts.deadline);
+    if (opts.deadline && !hasTimeFor(timeoutMs)) {
+      // Lo que no dio tiempo a intentar sale "Calculando…" y lo recoge el
+      // reintento de Hoy (D13); mejor eso que perder la petición entera.
+      for (const dish of asked) failures.set(dish, "sin-tiempo");
+      return;
+    }
     try {
       const answer = matchAnswer(asked, await ask(asked, stepModel, timeoutMs));
       for (const dish of asked) {

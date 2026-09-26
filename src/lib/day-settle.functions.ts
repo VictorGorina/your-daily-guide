@@ -16,6 +16,7 @@ import {
   type DayOutcome,
   type DayReservation,
 } from "@/lib/day-balance";
+import { requestDeadline } from "@/lib/deadline";
 import { cleanDayExercise, pendingExerciseKcal, type DayExercise } from "@/lib/exercise";
 import { errorText, logEvent } from "@/lib/log.server";
 import { compensationNeed } from "@/lib/nutrition/compensation";
@@ -262,6 +263,7 @@ export async function settleDayHandler(
   { data, context }: { data: SettleDayInput; context: { supabase: unknown; userId: string } },
   deps: SettleDayDeps = {},
 ): Promise<SettleDayResult> {
+  const deadline = requestDeadline();
   const supabase = context.supabase as never as Client;
   const { userId } = context;
   const { today, changes } = data;
@@ -415,6 +417,7 @@ export async function settleDayHandler(
       soloOnly: true,
       // Ticket 18: lo que la tarjeta dice haber movido es lo que se midió.
       measure: true,
+      deadline,
     });
     const futureChanges = diffFutureMeals(before, plan, today);
     // Solo la proteína disparaba y el modelo no ha movido nada: se devuelve la

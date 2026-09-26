@@ -18,6 +18,7 @@
  * Server-only.
  */
 
+import type { Deadline } from "@/lib/deadline";
 import { errorText, logEvent } from "@/lib/log.server";
 
 import type { RecipeSlot } from "./validate-recipe";
@@ -152,6 +153,8 @@ export async function getRecipes(
     slots?: ReadonlyMap<string, RecipeSlot>;
     model?: string;
     noCache?: boolean;
+    /** Presupuesto de la petición (ticket 22): lo que no quepa vuelve sin receta. */
+    deadline?: Deadline;
     /** Quién descompone lo que falta; solo lo cambian los tests (sin red). */
     decompose?: typeof import("./resolve-dish.server").decomposeDishes;
   },
@@ -231,6 +234,7 @@ export async function getRecipes(
     userId: opts.userId,
     model: opts.model,
     slots: opts.slots,
+    deadline: opts.deadline,
   });
 
   const rows: Record<string, unknown>[] = [];

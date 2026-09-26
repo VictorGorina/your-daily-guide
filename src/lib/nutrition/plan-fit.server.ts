@@ -15,6 +15,7 @@
  * (`fitMonthlyPlan`) y el eval con el mismo generador. Solo en servidor.
  */
 
+import type { Deadline } from "@/lib/deadline";
 import type { SharedServing } from "@/lib/household.server";
 import {
   applyPlanChanges,
@@ -94,6 +95,8 @@ export async function fitPlanMeals(opts: {
   canTouchShared: boolean;
   apiKey: string;
   userId: string | null;
+  /** Presupuesto de la petición (ticket 22): lo que no se calcule no se mide. */
+  deadline?: Deadline;
   /**
    * Pide los cambios al modelo: platos de comida y cena (lista ya limpia de
    * `cleanReflowChanges`) e ideas semanales de desayuno y merienda.
@@ -135,6 +138,7 @@ export async function fitPlanMeals(opts: {
       {
         apiKey: opts.apiKey,
         userId: opts.userId,
+        deadline: opts.deadline,
         slots: new Map(missing.map((meal) => [meal.idea.trim(), recipeSlotOfMoment(meal.moment)])),
       },
     );

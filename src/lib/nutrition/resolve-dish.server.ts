@@ -31,6 +31,7 @@ import {
   DISH_FALLBACK_MODEL,
   DISH_MODEL,
 } from "@/lib/ai-provider.server";
+import { hasTimeFor, stepTimeout, type Deadline } from "@/lib/deadline";
 import { parseJsonLoose } from "@/lib/plan-shared";
 
 import { COOKING_METHODS, parseCookingMethods, type CookingMethod } from "./cooking";
@@ -268,6 +269,7 @@ const DISAMBIGUATION_TIMEOUT_MS = 20_000;
 async function pickClosestFoods(
   ai: Provider,
   items: { name: string; category: FoodCategory }[],
+  timeoutMs: number,
 ): Promise<(Food | null)[]> {
   const lists = new Map<FoodCategory, Food[]>();
   for (const it of items) {
@@ -276,7 +278,7 @@ async function pickClosestFoods(
   const { text } = await generateText({
     model: ai(DISAMBIGUATION_MODEL),
     temperature: 0,
-    abortSignal: AbortSignal.timeout(DISAMBIGUATION_TIMEOUT_MS),
+    abortSignal: AbortSignal.timeout(timeoutMs),
     prompt:
       "Para cada ingrediente, elige de SU lista el alimento más parecido en composición " +
       "nutricional (energía, grasa, proteína e hidratos por 100 g), no en el nombre.\n\n" +
@@ -353,9 +355,16 @@ const flagsWeight = (d: Draft) => (d.retryHint ? 1 : 0);
  *  2. Lo que siga dudoso: el alimento más parecido de su categoría (ticket 13).
  *  3. Si con eso la calidad no llega, también lo dudoso ligero.
  *
+ * Con `deadline`, cada paso que no quepa se salta: lo que se quede dudoso baja
+ * la calidad y, si no llega al mínimo, el plato sale "Calculando…" (D13).
+ *
  * Muta los drafts.
  */
-async function resolveUnsure(ai: Provider, drafts: Map<string, Draft>): Promise<void> {
+async function resolveUnsure(
+  ai: Provider,
+  drafts: Map<string, Draft>,
+  deadline?: Deadline,
+): Promise<void> {
   // 1. USDA para lo que no casó con nada (sin clave, no hace nada).
   const unmatched: { dish: string; index: number; name: string; category: FoodCategory }[] = [];
   for (const [dish, draft] of drafts) {
@@ -366,8 +375,8 @@ async function resolveUnsure(ai: Provider, drafts: Map<string, Draft>): Promise<
       }
     }
   }
-  if (unmatched.length) {
-    const { resolveWithUsda } = await import("./usda.server");
+  const { resolveWithUsda, USDA_LOOKUP_MS } = await import("./usda.server");
+  if (unmatched.length && (!deadline || stepTimeout(USDA_LOOKUP_MS, deadline) >= USDA_LOOKUP_MS)) {
     const foods = await resolveWithUsda(ai, unmatched.slice(0, 6));
     foods.forEach((food, i) => {
       const it = unmatched[i]!;
@@ -399,8 +408,10 @@ async function resolveUnsure(ai: Provider, drafts: Map<string, Draft>): Promise<
   };
   const apply = async (items: ReturnType<typeof collect>) => {
     if (!items.length) return;
+    const timeoutMs = stepTimeout(DISAMBIGUATION_TIMEOUT_MS, deadline);
+    if (deadline && !hasTimeFor(timeoutMs)) return;
     try {
-      const picks = await pickClosestFoods(ai, items);
+      const picks = await pickClosestFoods(ai, items, timeoutMs);
       items.forEach((it, i) => {
         const food = picks[i];
         const list = drafts.get(it.dish)?.ingredients;
@@ -460,6 +471,8 @@ export async function decomposeDishes(
     slot?: RecipeSlot;
     /** Comida de cada plato, si se sabe (gana a `slot`). */
     slots?: ReadonlyMap<string, RecipeSlot>;
+    /** Presupuesto de la petición (ticket 22): lo que no quepa sale "Calculando…". */
+    deadline?: Deadline;
   },
 ): Promise<Map<string, DishBreakdown>> {
   const unique = Array.from(new Set(dishes.map((d) => d.trim()).filter(Boolean)));
@@ -486,6 +499,7 @@ export async function decomposeDishes(
     fallbackModel: DISH_FALLBACK_MODEL,
     noFallback: opts.noFallback,
     timeouts: CHAIN_TIMEOUTS,
+    deadline: opts.deadline,
   });
 
   // Receta casada, con grasa por método y validada.
@@ -497,11 +511,12 @@ export async function decomposeDishes(
 
   // UN reintento con pista para las que lo piden. Se queda la que valida mejor.
   const retries = [...drafts].filter(([, d]) => d.retryHint);
-  if (retries.length && !capped) {
+  const retryTimeout = stepTimeout(CHAIN_TIMEOUTS.single, opts.deadline);
+  if (retries.length && !capped && (!opts.deadline || hasTimeFor(retryTimeout))) {
     await Promise.all(
       retries.map(async ([dish, draft]) => {
         try {
-          const answer = await askModel(ai, model, [dish], CHAIN_TIMEOUTS.single, draft.retryHint);
+          const answer = await askModel(ai, model, [dish], retryTimeout, draft.retryHint);
           // Igual que la cadena: tolera la etiqueta con el número de la lista.
           const raw = matchAnswer([dish], answer).get(dish);
           if (!raw || !raw.ingredientes.length) return;
@@ -514,7 +529,7 @@ export async function decomposeDishes(
     );
   }
 
-  if (!capped) await resolveUnsure(ai, drafts);
+  if (!capped) await resolveUnsure(ai, drafts, opts.deadline);
 
   const unresolved: DecomposeFailure[] = [];
   for (const dish of pending) {
@@ -570,7 +585,7 @@ export async function decomposeDishes(
 /** Un solo plato. Azúcar sobre `decomposeDishes`. */
 export async function dishToIngredients(
   dish: string,
-  opts: { apiKey?: string; userId: string | null; slot?: RecipeSlot },
+  opts: { apiKey?: string; userId: string | null; slot?: RecipeSlot; deadline?: Deadline },
 ): Promise<DishBreakdown> {
   const map = await decomposeDishes([dish], opts);
   return map.get(dish.trim()) ?? empty(dish);

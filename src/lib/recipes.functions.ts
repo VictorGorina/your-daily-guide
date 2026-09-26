@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { isCleanFood } from "@/lib/content-guard";
+import { requestDeadline } from "@/lib/deadline";
 
 /**
  * Precalentamiento de la caché de recetas (ticket 06 de `precision-nutricional`,
@@ -40,6 +41,7 @@ export const warmRecipes = createServerFn({ method: "POST" })
   .handler(
     async ({ data, context }): Promise<{ results: { dish: string; status: WarmStatus }[] }> => {
       if (!data.dishes.length) return { results: [] };
+      const deadline = requestDeadline();
       const key = process.env.OPENROUTER_API_KEY;
       if (!key) throw new Error("Falta la clave de IA");
 
@@ -49,7 +51,11 @@ export const warmRecipes = createServerFn({ method: "POST" })
       await enforceUserRateLimit(context.userId, "recipe-warm", "month");
 
       const { getRecipes } = await import("@/lib/nutrition/recipes.server");
-      const found = await getRecipes(data.dishes, { apiKey: key, userId: context.userId });
+      const found = await getRecipes(data.dishes, {
+        apiKey: key,
+        userId: context.userId,
+        deadline,
+      });
       return {
         results: data.dishes.map((dish) => {
           const f = found.get(dish);

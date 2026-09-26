@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertCleanFood } from "@/lib/content-guard";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { requestDeadline } from "@/lib/deadline";
 import type { MacroEstimate } from "@/lib/guide.functions";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import {
@@ -175,6 +176,7 @@ export const estimateSnack = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { text: string }) => ({ text: cleanText(input?.text) }))
   .handler(async ({ data, context }): Promise<SnackEstimate> => {
+    const deadline = requestDeadline();
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new Error("Falta la clave de IA");
 
@@ -184,9 +186,9 @@ export const estimateSnack = createServerFn({ method: "POST" })
     // De la caché global (ticket 06): el mismo picoteo da siempre la misma cifra.
     const { getRecipes } = await import("@/lib/nutrition/recipes.server");
     const { macrosOfRecipe } = await import("@/lib/nutrition/recipe");
-    const found = (await getRecipes([data.text], { apiKey: key, userId: context.userId })).get(
-      data.text.trim(),
-    );
+    const found = (
+      await getRecipes([data.text], { apiKey: key, userId: context.userId, deadline })
+    ).get(data.text.trim());
     const recipe = found?.recipe ?? null;
     // Un refresco sin azúcar da 0 kcal de verdad: lo que decide es si se
     // entendió lo descrito, no que la cifra sea positiva. Por debajo de la
