@@ -72,7 +72,7 @@ No es Postgres: ni RLS ni joins embebidos. Una policy se prueba contra la BD.
 test que lo tocara hablaría con producción con la clave de servicio. El preload
 ([src/test/setup.ts](../../src/test/setup.ts), en `bunfig.toml`) sustituye
 `@/integrations/supabase/client.server` en toda la suite por un Proxy que **lanza** si nadie lo
-ha apuntado a un doble; un test lo apunta con `useFakeAdmin(fake.client)`
+ha apuntado a un doble; un test lo apunta con `setFakeAdmin(fake.client)`
 ([src/test/admin.ts](../../src/test/admin.ts)) y un `afterEach` lo suelta. Así el código de
 servidor no necesita parámetros para inyectar el cliente.
 

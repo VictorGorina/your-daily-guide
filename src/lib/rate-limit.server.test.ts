@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } from "bun:test";
 
-import { useFakeAdmin } from "@/test/admin";
+import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeTables } from "@/test/fake-supabase";
 
 import { RateLimitError } from "./rate-limit-error";
@@ -55,7 +55,7 @@ function fakeWith(
       },
     },
   );
-  useFakeAdmin(fake.client);
+  setFakeAdmin(fake.client);
   return fake;
 }
 

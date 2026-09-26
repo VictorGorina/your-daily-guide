@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } from "bun:test";
 
-import { useFakeAdmin } from "@/test/admin";
+import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeRow } from "@/test/fake-supabase";
 
 import { dispatchPush } from "./push-dispatch.server";
@@ -46,7 +46,7 @@ function setup(
     household_members: [],
     ...tables,
   });
-  useFakeAdmin(fake.client);
+  setFakeAdmin(fake.client);
   const sent: Sent[] = [];
   const send = async (s: { endpoint: string }, payload: PushPayload) => {
     sent.push({ endpoint: s.endpoint, payload });

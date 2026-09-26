@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { testAdmin, useFakeAdmin } from "./admin";
+import { testAdmin, setFakeAdmin } from "./admin";
 import { createFakeSupabase, type FakeTables } from "./fake-supabase";
 
 // El doble es la base de los tests de servidor: si miente, mienten todos.
@@ -242,15 +242,15 @@ describe("rpc, auth y registro", () => {
 });
 
 describe("supabaseAdmin en los tests", () => {
-  it("sin useFakeAdmin, tocarlo lanza (nunca llega a producción)", async () => {
+  it("sin setFakeAdmin, tocarlo lanza (nunca llega a producción)", async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    expect(() => supabaseAdmin.from("profiles")).toThrow("useFakeAdmin");
+    expect(() => supabaseAdmin.from("profiles")).toThrow("setFakeAdmin");
     expect(testAdmin).toBe(supabaseAdmin as object);
   });
 
-  it("con useFakeAdmin, lee del doble", async () => {
+  it("con setFakeAdmin, lee del doble", async () => {
     const fake = createFakeSupabase(seed());
-    useFakeAdmin(fake.client);
+    setFakeAdmin(fake.client);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data } = await (supabaseAdmin as unknown as typeof fake.db)
       .from("members")
