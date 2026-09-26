@@ -263,4 +263,17 @@ describe("scheduleTarget", () => {
       memberId: "other",
     });
   });
+
+  it("mi propio memberId es el horario propio, planifique o no", () => {
+    expect(scheduleTarget({ ...base, memberId: "me" })).toEqual({ kind: "self" });
+    expect(scheduleTarget({ ...base, memberId: "me", isPlanner: true })).toEqual({
+      kind: "self",
+    });
+  });
+
+  it("sin fila propia conocida, un memberId nunca cuenta como propio", () => {
+    expect(() => scheduleTarget({ ...base, memberId: "me", ownMemberId: null })).toThrow(
+      /de otra persona/,
+    );
+  });
 });

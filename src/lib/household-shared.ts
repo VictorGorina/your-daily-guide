@@ -158,6 +158,9 @@ export function scheduleTarget(input: {
     return { kind: "child", childId: input.childId };
   }
   if (input.memberId) {
+    // Las pantallas de Familia mandan el `memberId` de cualquier adulto, también
+    // el de la fila propia: eso es el horario propio, planifique o no.
+    if (input.memberId === input.ownMemberId) return { kind: "self" };
     if (!input.isPlanner) {
       throw new ValidationError(
         "Solo quien lleva la cocina puede cambiar el horario de otra persona",

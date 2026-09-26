@@ -213,15 +213,28 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
     const ctx = await householdContext(context.supabase as never, context.userId);
     if (!ctx.householdId) throw new ValidationError("No estás en ningún hogar");
 
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const session = context.supabase as never as typeof supabaseAdmin;
+
+    // `householdContext` no trae el `id` de cada fila; la propia solo hace falta
+    // para reconocer "mi memberId" (una persona tiene como mucho una fila).
+    let ownMemberId: string | null = null;
+    if (data.memberId) {
+      const { data: own } = await session
+        .from("household_members")
+        .select("id")
+        .eq("user_id", context.userId)
+        .maybeSingle();
+      ownMemberId = (own as { id: string } | null)?.id ?? null;
+    }
+
     const meInCtx = ctx.members.find((m) => m.userId === context.userId);
     const target = scheduleTarget({
       memberId: data.memberId,
       childId: data.childId,
       isPlanner: meInCtx?.isPlanner ?? false,
-      ownMemberId: null,
+      ownMemberId,
     });
-
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     if (target.kind === "child") {
       const { error } = await supabaseAdmin
@@ -242,7 +255,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
     }
 
     // Propio horario: siempre permitido.
-    const { error } = await (context.supabase as never as typeof supabaseAdmin)
+    const { error } = await session
       .from("household_members")
       .update({ home_schedule: data.schedule as never } as never)
       .eq("user_id", context.userId);
