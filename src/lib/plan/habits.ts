@@ -1,4 +1,4 @@
-import type { MealChange } from "../plan-shared";
+import type { MealChange } from "./compensation";
 import { planCursor, planForDate } from "./grid";
 import { MEAL_SLOT_LABEL, type MealSlot } from "./slots";
 import type { MonthlyPlan } from "./types";
