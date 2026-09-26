@@ -8,9 +8,13 @@ import {
   dayBalance,
   dayNote,
   dayReversing,
+  EMPTY_RESERVATION,
   mergeDayAdjustment,
+  releaseDay,
+  reserveDay,
   type DayAdjustmentRecord,
   type DayOutcome,
+  type DayReservation,
 } from "@/lib/day-balance";
 import { cleanDayExercise, pendingExerciseKcal, type DayExercise } from "@/lib/exercise";
 import { errorText, logEvent } from "@/lib/log.server";
@@ -218,15 +222,6 @@ function goalOf(p: Record<string, unknown>): string | null {
 }
 
 /** Lo reservado en cada libro de cuentas, para poder devolverlo si algo falla. */
-type Reservation = {
-  labels: string[];
-  snackKcal: number;
-  exerciseKcal: number;
-  total: number;
-  /** Proteína pendiente (g, con signo) que se reservó con las comidas. */
-  protein: number;
-};
-
 export type SettleDayResult = {
   outcome: DayOutcome;
   /** Desvío pendiente que se analizó, con signo. */
@@ -355,80 +350,26 @@ export const settleDay = createServerFn({ method: "POST" })
     // 4. Reserva: los tres libros se marcan como compensados ANTES de llamar a
     //    la IA, releyendo lo último, para que un asentamiento simultáneo no
     //    compense lo mismo dos veces.
-    let reservation: Reservation = {
-      labels: [],
-      snackKcal: 0,
-      exerciseKcal: 0,
-      total: 0,
-      protein: 0,
-    };
+    let reservation: DayReservation = EMPTY_RESERVATION;
     const reserved = await patchDay(supabase, userId, today, (current) => {
-      const now = dayBalance(current.habits, current.snacks, current.exercise);
-      const labels = current.habits
-        .filter(
-          (h) => (h.swapKcalDelta != null || h.swapProteinDelta != null) && !h.swapCompensated,
-        )
-        .map((h) => h.label);
-      const pendingSnacks = pendingSnackKcal(current.snacks);
-      const pendingExercise = pendingExerciseKcal(current.exercise);
-      reservation = {
-        labels,
-        snackKcal: pendingSnacks,
-        exerciseKcal: pendingExercise,
-        total: now.pending,
-        protein: now.proteinPending,
-      };
-      return {
-        habits: current.habits.map((h) =>
-          labels.includes(h.label) ? { ...h, swapCompensated: true } : h,
-        ),
-        ...(pendingSnacks && current.snacks
-          ? {
-              snacks: {
-                ...current.snacks,
-                compensatedKcal: current.snacks.compensatedKcal + pendingSnacks,
-              },
-            }
-          : {}),
-        ...(pendingExercise && current.exercise
-          ? {
-              exercise: {
-                ...current.exercise,
-                compensatedKcal: current.exercise.compensatedKcal + pendingExercise,
-              },
-            }
-          : {}),
-      };
+      const reserve = reserveDay(current);
+      reservation = reserve.reservation;
+      return reserve.patch;
     });
     if (!reserved || (!reservation.total && !reservation.protein)) {
       return { outcome: "nothing", kcal: 0 };
     }
 
     const release = async () => {
-      await patchDay(supabase, userId, today, (current) => ({
-        habits: current.habits.map((h) =>
-          reservation.labels.includes(h.label) ? { ...h, swapCompensated: false } : h,
-        ),
-        ...(reservation.snackKcal && current.snacks
-          ? {
-              snacks: {
-                ...current.snacks,
-                compensatedKcal: current.snacks.compensatedKcal - reservation.snackKcal,
-              },
-            }
-          : {}),
-        ...(reservation.exerciseKcal && current.exercise
-          ? {
-              exercise: {
-                ...current.exercise,
-                compensatedKcal: current.exercise.compensatedKcal - reservation.exerciseKcal,
-              },
-            }
-          : {}),
-      })).catch((err) =>
-        // La reserva se queda puesta: ese desvío cuenta como compensado sin
-        // estarlo hasta que el ticket 22 le dé caducidad.
-        logEvent("error", "settle_release_failed", { userId, date: today, error: errorText(err) }),
+      await patchDay(supabase, userId, today, (current) => releaseDay(current, reservation)).catch(
+        (err) =>
+          // La reserva se queda puesta: ese desvío cuenta como compensado sin
+          // estarlo hasta que el ticket 22 le dé caducidad.
+          logEvent("error", "settle_release_failed", {
+            userId,
+            date: today,
+            error: errorText(err),
+          }),
       );
     };
 

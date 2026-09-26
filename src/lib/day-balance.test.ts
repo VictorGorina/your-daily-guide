@@ -11,6 +11,8 @@ import {
   dayNote,
   dayReversing,
   mergeDayAdjustment,
+  releaseDay,
+  reserveDay,
   type DayBalance,
 } from "./day-balance";
 import type { DayExercise, ExerciseEntry } from "./exercise";
@@ -445,5 +447,96 @@ describe("absorbedKcal (ticket 18)", () => {
       "He ajustado una parte; el resto no lo persigo.",
     );
     expect(absorbedNote({ kcal: 400 }, true)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reserva y liberación (`settleDay`): la garantía de no compensar dos veces
+// ---------------------------------------------------------------------------
+
+describe("reserveDay / releaseDay", () => {
+  type Books = Parameters<typeof reserveDay>[0];
+  const apply = (row: Books, patch: Partial<Books>): Books => ({ ...row, ...patch });
+  const pendingOf = (row: Books) => {
+    const b = dayBalance(row.habits, row.snacks, row.exercise);
+    return { kcal: b.pending, protein: b.proteinPending };
+  };
+  const day = (): Books => ({
+    habits: [
+      habit("Desayuno"),
+      changed("Comida", 250),
+      changed("Cena", 120, true), // ya compensada en una pasada anterior
+      habit("Merienda", { status: "distinto", swapProteinDelta: -25, swapCompensated: false }),
+    ],
+    snacks: snacks(300, 100),
+    exercise: exercise(200),
+  });
+
+  it("reserva los tres libros: tras aplicarla no queda nada pendiente", () => {
+    const row = day();
+    const before = pendingOf(row);
+    const { patch, reservation } = reserveDay(row);
+    expect(reservation).toEqual({
+      labels: ["Comida", "Merienda"],
+      snackKcal: 200,
+      exerciseKcal: 200,
+      total: before.kcal,
+      protein: before.protein,
+    });
+    expect(pendingOf(apply(row, patch))).toEqual({ kcal: 0, protein: 0 });
+  });
+
+  it("marca solo las comidas cambiadas sin compensar (también las de solo proteína)", () => {
+    const { patch } = reserveDay(day());
+    expect(patch.habits?.map((h) => [h.label, h.swapCompensated])).toEqual([
+      ["Desayuno", undefined],
+      ["Comida", true],
+      ["Cena", true],
+      ["Merienda", true],
+    ]);
+  });
+
+  it("sin nada pendiente: reserva vacía y ni picoteo ni deporte en el parche", () => {
+    const row: Books = { habits: [habit("Comida")], snacks: snacks(300, 300), exercise: null };
+    const { patch, reservation } = reserveDay(row);
+    expect(reservation).toEqual({
+      labels: [],
+      snackKcal: 0,
+      exerciseKcal: 0,
+      total: 0,
+      protein: 0,
+    });
+    expect(Object.keys(patch)).toEqual(["habits"]);
+  });
+
+  it("liberar devuelve el día a lo que estaba pendiente antes de reservar", () => {
+    const row = day();
+    const { patch, reservation } = reserveDay(row);
+    const reserved = apply(row, patch);
+    const released = apply(reserved, releaseDay(reserved, reservation));
+    expect(pendingOf(released)).toEqual(pendingOf(row));
+    expect(released.snacks?.compensatedKcal).toBe(100);
+    expect(released.exercise?.compensatedKcal).toBe(0);
+    // La cena ya compensada antes no formaba parte de la reserva: sigue compensada.
+    expect(released.habits.find((h) => h.label === "Cena")?.swapCompensated).toBe(true);
+  });
+
+  it("liberar sobre la fila releída devuelve solo lo reservado: lo apuntado entre medias sigue pendiente", () => {
+    const row = day();
+    const { patch, reservation } = reserveDay(row);
+    const reserved = apply(row, patch);
+    // Mientras la IA trabajaba, se apuntan 150 kcal más de picoteo.
+    const meanwhile: Books = {
+      ...reserved,
+      snacks: {
+        entries: [
+          ...(reserved.snacks?.entries ?? []),
+          { ...(snacks(150).entries[0] as SnackEntry), id: "s2" },
+        ],
+        compensatedKcal: reserved.snacks?.compensatedKcal ?? 0,
+      },
+    };
+    const released = apply(meanwhile, releaseDay(meanwhile, reservation));
+    expect(pendingOf(released).kcal).toBe(pendingOf(row).kcal + 150);
   });
 });

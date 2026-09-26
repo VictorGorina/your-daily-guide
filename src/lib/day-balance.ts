@@ -468,3 +468,107 @@ export function dayMovedChanges(log: {
     a.date === b.date ? a.slot.localeCompare(b.slot) : a.date.localeCompare(b.date),
   );
 }
+
+// ---------------------------------------------------------------------------
+// Reserva y liberación de los tres libros (`settleDay`)
+// ---------------------------------------------------------------------------
+
+/** Lo que `settleDay` marcó como compensado antes de llamar a la IA. */
+export type DayReservation = {
+  labels: string[];
+  snackKcal: number;
+  exerciseKcal: number;
+  total: number;
+  /** Proteína pendiente (g, con signo) que se reservó con las comidas. */
+  protein: number;
+};
+
+export const EMPTY_RESERVATION: DayReservation = {
+  labels: [],
+  snackKcal: 0,
+  exerciseKcal: 0,
+  total: 0,
+  protein: 0,
+};
+
+/** Los tres libros de cuentas del día, tal como están en `daily_logs`. */
+type DayBooks = {
+  habits: MealHabit[];
+  snacks: DaySnacks | null;
+  exercise: DayExercise | null;
+};
+
+type DayBooksPatch = Partial<DayBooks>;
+
+/**
+ * Reserva: marca los tres libros como compensados (comidas cambiadas con
+ * `swapCompensated`, picoteo y deporte sumando a su `compensatedKcal`) sobre la
+ * fila recién leída, para que un asentamiento simultáneo no compense lo mismo
+ * dos veces. Devuelve el parche y lo reservado, que es lo que `releaseDay`
+ * devuelve si la compensación no llega a aplicarse.
+ */
+export function reserveDay(current: DayBooks): {
+  patch: DayBooksPatch;
+  reservation: DayReservation;
+} {
+  const now = dayBalance(current.habits, current.snacks, current.exercise);
+  const labels = current.habits
+    .filter((h) => (h.swapKcalDelta != null || h.swapProteinDelta != null) && !h.swapCompensated)
+    .map((h) => h.label);
+  const pendingSnacks = pendingSnackKcal(current.snacks);
+  const pendingExercise = pendingExerciseKcal(current.exercise);
+  const reservation: DayReservation = {
+    labels,
+    snackKcal: pendingSnacks,
+    exerciseKcal: pendingExercise,
+    total: now.pending,
+    protein: now.proteinPending,
+  };
+  const patch: DayBooksPatch = {
+    habits: current.habits.map((h) =>
+      labels.includes(h.label) ? { ...h, swapCompensated: true } : h,
+    ),
+    ...(pendingSnacks && current.snacks
+      ? {
+          snacks: {
+            ...current.snacks,
+            compensatedKcal: current.snacks.compensatedKcal + pendingSnacks,
+          },
+        }
+      : {}),
+    ...(pendingExercise && current.exercise
+      ? {
+          exercise: {
+            ...current.exercise,
+            compensatedKcal: current.exercise.compensatedKcal + pendingExercise,
+          },
+        }
+      : {}),
+  };
+  return { patch, reservation };
+}
+
+/** Devuelve una reserva de `reserveDay` sobre la fila actual (releída). */
+export function releaseDay(current: DayBooks, reservation: DayReservation): DayBooksPatch {
+  return {
+    habits: current.habits.map((h) =>
+      reservation.labels.includes(h.label) ? { ...h, swapCompensated: false } : h,
+    ),
+    ...(reservation.snackKcal && current.snacks
+      ? {
+          snacks: {
+            ...current.snacks,
+            compensatedKcal: current.snacks.compensatedKcal - reservation.snackKcal,
+          },
+        }
+      : {}),
+    ...(reservation.exerciseKcal && current.exercise
+      ? {
+          exercise: {
+            ...current.exercise,
+            compensatedKcal: current.exercise.compensatedKcal - reservation.exerciseKcal,
+          },
+        }
+      : {}),
+  };
+}
