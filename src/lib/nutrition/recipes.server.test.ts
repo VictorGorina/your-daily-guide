@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeRow } from "@/test/fake-supabase";
@@ -86,18 +86,57 @@ describe("getRecipes — caché global de recetas", () => {
     expect(out.get("Lentejas estofadas")?.recipe?.ingredients[0]?.foodKey).toBe("lentejas-secas");
   });
 
-  it("apunta un uso de cada receta servida de la caché", async () => {
+  it("apunta los usos por muestreo: uno de cada diez, sumando diez", async () => {
     const hits: unknown[] = [];
     const fake = createFakeSupabase(
       { dish_recipes: [cachedRow("cocido", "Cocido")] },
       { rpc: { increment_dish_recipe_hits: (args) => void hits.push(args) } },
     );
     setFakeAdmin(fake.client);
+    const random = spyOn(Math, "random");
+    const read = async (draw: number) => {
+      random.mockReturnValue(draw);
+      await getRecipes(["Cocido"], { userId: "u1", decompose: fakeDecompose({}).decompose });
+      await new Promise((resolve) => setTimeout(resolve, 0)); // el contador va sin esperar
+    };
 
-    await getRecipes(["Cocido"], { userId: "u1", decompose: fakeDecompose({}).decompose });
-    await new Promise((resolve) => setTimeout(resolve, 0)); // el contador va sin esperar
+    try {
+      await read(0.5);
+      await read(0.05);
+    } finally {
+      random.mockRestore();
+    }
 
-    expect(hits).toEqual([{ _keys: ["cocido"] }]);
+    expect(hits).toEqual([{ _keys: ["cocido"], _by: 10 }]);
+  });
+
+  it("dos peticiones a la vez del mismo plato lo descomponen una sola vez", async () => {
+    const fake = createFakeSupabase({ dish_recipes: [] });
+    setFakeAdmin(fake.client);
+    let release!: () => void;
+    const slow = new Promise<void>((resolve) => (release = resolve));
+    const asked: string[][] = [];
+    const decompose: Decompose = async (dishes) => {
+      asked.push([...dishes]);
+      await slow;
+      return new Map(dishes.map((d) => [d, calculated(d, "garbanzos", 60)]));
+    };
+
+    const first = getRecipes(["Potaje de vigilia"], { userId: "u1", decompose });
+    // La segunda pide el mismo plato (con otro texto que da la misma clave) y otro nuevo.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = getRecipes(["potaje de vigilia", "Crema de calabaza"], {
+      userId: "u2",
+      decompose,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(asked).toEqual([["Potaje de vigilia"], ["Crema de calabaza"]]);
+    expect(a.get("Potaje de vigilia")?.recipe).not.toBeNull();
+    expect(b.get("potaje de vigilia")?.recipe?.dishKey).toBe(a.get("Potaje de vigilia")?.key);
+    expect(b.get("Crema de calabaza")?.recipe).not.toBeNull();
   });
 
   it("guarda lo calculado y no guarda lo que se quedó sin calcular", async () => {

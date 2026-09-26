@@ -85,6 +85,32 @@ const warnMissing = () => {
 /** Recetas de este proceso: sustituyen a la tabla mientras no exista. */
 const processCache = new Map<string, RecipeLookup>();
 
+type Lookup = Omit<RecipeLookup, "dish" | "key">;
+
+/**
+ * Platos que alguna petición de esta instancia está descomponiendo ahora mismo
+ * (ticket 22, PERF-13): otra que pida el mismo espera a esa en vez de pagarlo
+ * dos veces. Entre instancias no hay deduplicación; no merece una tabla de
+ * bloqueos, y dos recetas del mismo plato son igual de válidas.
+ */
+const inFlight = new Map<string, Promise<Lookup>>();
+
+const UNRESOLVED: Lookup = {
+  recipe: null,
+  textQuantity: null,
+  vague: false,
+  isFood: true,
+  failure: "error-modelo",
+  fromCache: false,
+};
+
+/**
+ * Un uso de cada `HITS_SAMPLE` se apunta, sumando `HITS_SAMPLE` (ticket 22):
+ * antes era una escritura por lectura sobre las filas más leídas. El recuento
+ * queda aproximado, que es para lo que se usa (qué platos revisar primero).
+ */
+const HITS_SAMPLE = 10;
+
 const numberOr = (v: unknown, fallback: number | null) => {
   const n = Number(v);
   return v != null && Number.isFinite(n) ? n : fallback;
@@ -157,6 +183,99 @@ async function adminClient(): Promise<Admin | null> {
   }
 }
 
+type GetRecipesOptions = {
+  apiKey?: string;
+  userId: string | null;
+  slots?: ReadonlyMap<string, RecipeSlot>;
+  model?: string;
+  noCache?: boolean;
+  /** Presupuesto de la petición (ticket 22): lo que no quepa vuelve sin receta. */
+  deadline?: Deadline;
+  /** Quién descompone lo que falta; solo lo cambian los tests (sin red). */
+  decompose?: typeof import("./resolve-dish.server").decomposeDishes;
+};
+
+/**
+ * Descompone los platos que faltan (`texts`: clave → texto) y guarda sus
+ * recetas en `db` en cuanto las hay (ticket 22): si la función se corta
+ * después (tiempo, un paso que lanza), lo ya pagado queda guardado. Si dos
+ * personas piden el mismo plato a la vez, las dos recetas son igual de
+ * válidas: gana la última. Una fila revisada a mano nunca se pisa (no llega
+ * aquí: una revisada siempre se sirve de la caché).
+ *
+ * Devuelve lo que se sabe de cada clave. Solo lanza si lanza `decompose` (el
+ * de verdad nunca lo hace).
+ */
+async function decomposeAndSave(
+  texts: ReadonlyMap<string, string>,
+  opts: GetRecipesOptions,
+  db: Admin | null,
+): Promise<Map<string, Lookup>> {
+  const { decomposeDishes, isCalculated } = await import("./resolve-dish.server");
+  const keyOfText = new Map([...texts].map(([key, text]) => [text, key]));
+
+  const saved = new Set<string>();
+  const saveRecipes = async (list: readonly DishBreakdown[]) => {
+    const rows = list.flatMap((b) => {
+      const key = keyOfText.get(b.dish);
+      if (!key || saved.has(key)) return [];
+      saved.add(key);
+      return [recipeRow(key, b)];
+    });
+    if (!db || !rows.length) return;
+    try {
+      const { error } = await db
+        .from("dish_recipes" as never)
+        .upsert(rows as never, { onConflict: "dish_key" });
+      if (error && !isMissingTable(error)) console.error("dish_recipes: escritura", error);
+    } catch (error) {
+      console.error("dish_recipes: escritura", error);
+    }
+  };
+
+  const breakdowns = await (opts.decompose ?? decomposeDishes)([...texts.values()], {
+    apiKey: opts.apiKey,
+    userId: opts.userId,
+    model: opts.model,
+    slots: opts.slots,
+    deadline: opts.deadline,
+    onCalculated: saveRecipes,
+  });
+
+  const found = new Map<string, Lookup>();
+  const calculatedList: DishBreakdown[] = [];
+  for (const [key, text] of texts) {
+    const b: DishBreakdown | undefined = breakdowns.get(text);
+    // En un booleano, sin estrechar `b`: en la rama de "sin calcular" hace falta
+    // leer si era vago o no era comida.
+    const calculated = (isCalculated as (x: unknown) => boolean)(b);
+    if (!b || !calculated) {
+      found.set(key, {
+        recipe: null,
+        textQuantity: null,
+        vague: b?.vague === true,
+        isFood: b ? b.isFood : true,
+        ...(b?.failure ? { failure: b.failure } : {}),
+        fromCache: false,
+      });
+      continue;
+    }
+    found.set(key, {
+      recipe: recipeFromBreakdown(key, b),
+      textQuantity: b.textQuantity,
+      vague: false,
+      isFood: true,
+      fromCache: false,
+    });
+    calculatedList.push(b);
+  }
+
+  // Lo que necesitó los pasos de después de la cadena (y lo de un `decompose`
+  // que no avise por el camino).
+  await saveRecipes(calculatedList);
+  return found;
+}
+
 /**
  * Las recetas de varios platos, de la caché o calculándolas. Nunca lanza.
  *
@@ -166,17 +285,7 @@ async function adminClient(): Promise<Admin | null> {
  */
 export async function getRecipes(
   dishes: readonly string[],
-  opts: {
-    apiKey?: string;
-    userId: string | null;
-    slots?: ReadonlyMap<string, RecipeSlot>;
-    model?: string;
-    noCache?: boolean;
-    /** Presupuesto de la petición (ticket 22): lo que no quepa vuelve sin receta. */
-    deadline?: Deadline;
-    /** Quién descompone lo que falta; solo lo cambian los tests (sin red). */
-    decompose?: typeof import("./resolve-dish.server").decomposeDishes;
-  },
+  opts: GetRecipesOptions,
 ): Promise<Map<string, RecipeLookup>> {
   const out = new Map<string, RecipeLookup>();
   const byKey = new Map<string, string[]>();
@@ -230,11 +339,15 @@ export async function getRecipes(
     }
   }
 
-  // Un uso más de cada receta servida, sin esperar: prioriza la revisión manual.
-  if (admin && tableOk && cachedKeys.length) {
+  // Los usos de cada receta servida, por muestreo y sin esperar: priorizan la
+  // revisión manual.
+  if (admin && tableOk && cachedKeys.length && Math.random() < 1 / HITS_SAMPLE) {
     // `rpc` casi nunca rechaza: el fallo llega como `{ error }`, así que se mira también.
     void Promise.resolve(
-      admin.rpc("increment_dish_recipe_hits" as never, { _keys: cachedKeys } as never),
+      admin.rpc(
+        "increment_dish_recipe_hits" as never,
+        { _keys: cachedKeys, _by: HITS_SAMPLE } as never,
+      ),
     )
       .then(({ error }) => {
         if (error) logEvent("warn", "recipe_hits_failed", { error: errorText(error) });
@@ -242,79 +355,39 @@ export async function getRecipes(
       .catch((error) => logEvent("warn", "recipe_hits_failed", { error: errorText(error) }));
   }
 
-  // 3. Lo que falta, con el pipeline del ticket 05.
-  const missingKeys = [...byKey.keys()].filter((key) => !out.has(byKey.get(key)![0]!));
-  if (!missingKeys.length) return out;
-
-  const { decomposeDishes, isCalculated } = await import("./resolve-dish.server");
-  const texts = missingKeys.map((key) => byKey.get(key)![0]!);
-  const keyOfText = new Map(missingKeys.map((key) => [byKey.get(key)![0]!, key]));
-
-  // Guardar en cuanto hay recetas (ticket 22): si la función se corta después
-  // (tiempo, un paso que lanza), lo ya pagado queda guardado. Si dos personas
-  // piden el mismo plato a la vez, las dos recetas son igual de válidas: gana
-  // la última. Una fila revisada a mano nunca se pisa (no llega aquí: una
-  // revisada siempre se sirve de la caché). Nunca lanza.
-  const saved = new Set<string>();
-  const saveRecipes = async (list: readonly DishBreakdown[]) => {
-    const rows = list.flatMap((b) => {
-      const key = keyOfText.get(b.dish);
-      if (!key || saved.has(key)) return [];
-      saved.add(key);
-      return [recipeRow(key, b)];
-    });
-    if (!admin || !tableOk || !rows.length) return;
-    try {
-      const { error } = await admin
-        .from("dish_recipes" as never)
-        .upsert(rows as never, { onConflict: "dish_key" });
-      if (error && !isMissingTable(error)) console.error("dish_recipes: escritura", error);
-    } catch (error) {
-      console.error("dish_recipes: escritura", error);
+  // 3. Lo que falta, con el pipeline del ticket 05. Lo que ya descompone otra
+  //    petición de esta instancia se espera; lo demás se registra en vuelo.
+  const missing = [...byKey.keys()].filter((key) => !out.has(byKey.get(key)![0]!));
+  if (!missing.length) return out;
+  const shared = opts.noCache ? [] : missing.filter((key) => inFlight.has(key));
+  const waited = Promise.all(
+    shared.map(async (key) => fill(key, { ...(await inFlight.get(key)!), fromCache: false })),
+  );
+  const texts = new Map(
+    missing.filter((key) => !shared.includes(key)).map((key) => [key, byKey.get(key)![0]!]),
+  );
+  const done = new Map<string, (lookup: Lookup) => void>();
+  if (!opts.noCache) {
+    for (const key of texts.keys()) {
+      inFlight.set(key, new Promise((resolve) => done.set(key, resolve)));
     }
-  };
-
-  const breakdowns = await (opts.decompose ?? decomposeDishes)(texts, {
-    apiKey: opts.apiKey,
-    userId: opts.userId,
-    model: opts.model,
-    slots: opts.slots,
-    deadline: opts.deadline,
-    onCalculated: saveRecipes,
-  });
-
-  const calculatedList: DishBreakdown[] = [];
-  for (const key of missingKeys) {
-    const text = byKey.get(key)![0]!;
-    const b: DishBreakdown | undefined = breakdowns.get(text);
-    // En un booleano, sin estrechar `b`: en la rama de "sin calcular" hace falta
-    // leer si era vago o no era comida.
-    const calculated = (isCalculated as (x: unknown) => boolean)(b);
-    if (!b || !calculated) {
-      fill(key, {
-        recipe: null,
-        textQuantity: null,
-        vague: b?.vague === true,
-        isFood: b ? b.isFood : true,
-        ...(b?.failure ? { failure: b.failure } : {}),
-        fromCache: false,
-      });
-      continue;
-    }
-    const lookup = {
-      recipe: recipeFromBreakdown(key, b),
-      textQuantity: b.textQuantity,
-      vague: false,
-      isFood: true,
-      fromCache: false,
-    };
-    fill(key, lookup);
-    if (!opts.noCache) processCache.set(key, { ...lookup, dish: text, key });
-    calculatedList.push(b);
   }
-
-  // Lo que necesitó los pasos de después de la cadena (y lo de un `decompose`
-  // que no avise por el camino).
-  await saveRecipes(calculatedList);
+  let found = new Map<string, Lookup>();
+  try {
+    if (texts.size) found = await decomposeAndSave(texts, opts, admin && tableOk ? admin : null);
+  } finally {
+    // También si `decompose` lanza: quien espera no se queda colgado.
+    for (const [key, resolve] of done) {
+      resolve(found.get(key) ?? UNRESOLVED);
+      inFlight.delete(key);
+    }
+  }
+  for (const [key, lookup] of found) {
+    fill(key, lookup);
+    if (lookup.recipe && !opts.noCache) {
+      processCache.set(key, { ...lookup, dish: texts.get(key)!, key });
+    }
+  }
+  await waited;
   return out;
 }
