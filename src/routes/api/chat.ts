@@ -11,7 +11,8 @@ import { z } from "zod";
 
 import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
 import { supabaseFromRequest, unauthorized } from "@/lib/api-auth.server";
-import { offTopicMessage, offTopicReason } from "@/lib/coach-scope";
+import { chatPreflight, lastUserMessage } from "@/lib/chat-preflight";
+import { offTopicMessage } from "@/lib/coach-scope";
 import { EXERCISE_ACK_PREFIX, loggedAckKind, SNACK_ACK_PREFIX } from "@/lib/day-log-ack";
 import {
   EXERCISE_ACTIVITIES,
@@ -23,7 +24,6 @@ import { describeSharedSlots } from "@/lib/household-shared";
 import { householdContext, type HouseholdContext } from "@/lib/household.server";
 import { addDays, weekdayName } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS } from "@/lib/profile-fields";
-import { RateLimitError } from "@/lib/rate-limit-error";
 import { enforceUserRateLimit } from "@/lib/rate-limit.server";
 import { zonedTodayISO } from "@/lib/zoned-date";
 
@@ -178,21 +178,6 @@ const actionTools = {
   }),
 } as const;
 
-/** El último mensaje de la persona, que es sobre el que se decide. */
-function lastUserMessage(messages: UIMessage[]): UIMessage | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === "user") return messages[i]!;
-  }
-  return null;
-}
-
-function lastUserText(messages: UIMessage[]): string {
-  return (lastUserMessage(messages)?.parts ?? [])
-    .map((part) => (part.type === "text" ? part.text : ""))
-    .join(" ")
-    .trim();
-}
-
 /**
  * Contesta el mensaje fijo de "solo me dedico a la alimentación" como un turno
  * normal del asistente, sin pasar por el modelo. Va como stream de UI-message
@@ -233,43 +218,36 @@ export const Route = createFileRoute("/api/chat")({
           despensa_extra?: string[];
           proximos?: Record<string, string>[];
         };
-        if (!Array.isArray(body.messages)) {
-          return new Response("Faltan mensajes", { status: 400 });
+        // Mensajes, alcance, clave y cuota, en ese orden: fuera de alcance no
+        // cuesta ni cupo ni dinero (ver `chatPreflight`). Esta ruta no pasa por
+        // `apiPost`, así que traduce ella misma la cuota agotada a un 429 en vez
+        // de dejar que suba como error del servidor.
+        const pre = await chatPreflight(body, {
+          readKey: () => process.env.OPENROUTER_API_KEY,
+          consumeQuota: () => enforceUserRateLimit(userId, "chat"),
+        });
+        if (pre.kind === "no-messages") return new Response("Faltan mensajes", { status: 400 });
+        if (pre.kind === "off-topic") {
+          console.warn("chat off-topic", { userId, reason: pre.reason });
+          return offTopicResponse(pre.messages, pre.locale);
         }
-
-        // Fuera de alcance: se corta ANTES de la clave, de la cuota y del
-        // modelo, así que un intento no cuesta ni cupo ni dinero. La regla de
-        // verdad sobre qué es tema del coach vive en `coachSystemPrompt`; esto
-        // solo adelanta el caso más común (ver `coach-scope.ts`).
-        const locale = (body.profile as { locale?: string | null } | null)?.locale ?? null;
-        const offTopic = offTopicReason(lastUserText(body.messages));
-        if (offTopic) {
-          console.warn("chat off-topic", { userId, reason: offTopic });
-          return offTopicResponse(body.messages, locale);
+        if (pre.kind === "no-key") {
+          return new Response("Falta OPENROUTER_API_KEY", { status: 500 });
         }
-        const key = process.env.OPENROUTER_API_KEY;
-        if (!key) return new Response("Falta OPENROUTER_API_KEY", { status: 500 });
-
-        // Esta ruta no pasa por `apiPost`, así que traduce ella misma la cuota
-        // agotada a un 429 en vez de dejar que suba como error del servidor.
-        try {
-          await enforceUserRateLimit(userId, "chat");
-        } catch (error) {
-          if (error instanceof RateLimitError) {
-            return new Response(error.message, {
-              status: 429,
-              headers: { "retry-after": String(error.retryAfterSeconds) },
-            });
-          }
-          throw error;
+        if (pre.kind === "rate-limited") {
+          return new Response(pre.error.message, {
+            status: 429,
+            headers: { "retry-after": String(pre.error.retryAfterSeconds) },
+          });
         }
+        const { key, messages } = pre;
 
         // Deporte o picoteo recién apuntado desde el registro guiado: ya está
         // guardado y entra en el asentamiento del día (`settleDay`), que suma el
         // día entero. El coach solo acusa recibo, y ESTE turno va sin
         // herramientas para que no pueda compensarlo otra vez por su cuenta con
         // `ajustar_plan_mensual` (ver `day-log-ack.ts`).
-        const loggedAck = loggedAckKind(lastUserMessage(body.messages)?.metadata);
+        const loggedAck = loggedAckKind(lastUserMessage(messages)?.metadata);
         const withTools = !!body.actions && !loggedAck;
 
         const ai = createAiProvider(key, userId);
@@ -328,11 +306,11 @@ export const Route = createFileRoute("/api/chat")({
         const result = streamText({
           model: ai(COACH_MODEL),
           system,
-          messages: await convertToModelMessages(body.messages),
+          messages: await convertToModelMessages(messages),
           ...(withTools ? { tools: actionTools } : {}),
         });
 
-        return result.toUIMessageStreamResponse({ originalMessages: body.messages });
+        return result.toUIMessageStreamResponse({ originalMessages: messages });
       },
     },
   },
