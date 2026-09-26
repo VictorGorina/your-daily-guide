@@ -95,6 +95,7 @@ import { cleanIntakeText, monthIntakeNotes, type IntakeAnswers } from "@/lib/mon
 import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
 import { PLAN_STRUCTURE_REMINDER } from "@/lib/nutrition/plan-targets";
 import { compensationNeed } from "@/lib/nutrition/compensation";
+import { logEvent } from "@/lib/log.server";
 import { RateLimitError } from "@/lib/rate-limit-error";
 import { cleanDaySnacks } from "@/lib/snacks";
 import { zonedTodayISO } from "@/lib/zoned-date";
@@ -1797,7 +1798,10 @@ export async function reflowMeals(opts: {
         if (clean && Array.isArray(raw) && raw.length > clean.changes.length) {
           // Cambios que la IA propuso fuera de las fechas permitidas: se
           // descartan, pero conviene verlo (un "ajuste" que no cambia nada).
-          console.warn("reflowMeals: cambios descartados", JSON.stringify(raw).slice(0, 600));
+          logEvent("warn", "reflow_changes_discarded", {
+            proposed: raw.length,
+            kept: clean.changes.length,
+          });
         }
         return clean;
       },

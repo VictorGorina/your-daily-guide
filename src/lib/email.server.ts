@@ -5,11 +5,13 @@
  * `unexpected_failure` genérico ("Error sending recovery email") y se traga el
  * motivo real del proveedor, así que no hay forma de saber si fue el dominio sin
  * verificar, la clave caducada o la cuota. Enviando nosotros vemos la respuesta
- * de Resend tal cual y podemos registrarla.
+ * de Resend y registramos su código de error (`email_send_failed`).
  *
  * Es HTTP, no SMTP, a propósito: el runtime de despliegue no tiene sockets TCP
  * crudos, igual que pasaba con las notificaciones push (ver web-push.server.ts).
  */
+import { logEvent } from "@/lib/log.server";
+
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 /**
@@ -27,9 +29,10 @@ export type EmailMessage = {
 };
 
 /**
- * Envía un correo. Lanza con el motivo textual de Resend si lo rechaza, para que
- * quien llama pueda registrarlo (nunca para enseñarlo en pantalla: viene en
- * inglés y puede filtrar detalles de configuración).
+ * Envía un correo. Si Resend lo rechaza, deja `email_send_failed` con el código
+ * HTTP y el código de error de Resend (`name`, p. ej. `validation_error`) y
+ * lanza solo con el código HTTP: el cuerpo de la respuesta puede traer la
+ * dirección de correo, y eso no va a los logs.
  */
 export async function sendEmail({ to, subject, html }: EmailMessage): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -50,8 +53,12 @@ export async function sendEmail({ to, subject, html }: EmailMessage): Promise<vo
   });
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`Resend ${response.status}: ${detail}`);
+    const detail = (await response.json().catch(() => null)) as { name?: unknown } | null;
+    logEvent("error", "email_send_failed", {
+      status: response.status,
+      resendError: typeof detail?.name === "string" ? detail.name : undefined,
+    });
+    throw new Error(`Resend ${response.status}`);
   }
 }
 
