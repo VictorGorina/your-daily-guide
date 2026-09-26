@@ -49,6 +49,33 @@ Qué hay cubierto hoy:
 | `plan-eval/accuracy.test.ts`        | métricas de exactitud del eval (`precision-nutricional`, ticket 02): error de kcal con signo, densidad independiente del tamaño de ración, suelo de macros para valores diminutos, ingredientes principales por kcal **o** masa, identidad agrupada (dos filas del mismo ingrediente no son un invento), media de pasadas con unión de omisiones, CV entre pasadas, percentil, `ingredientDiff`                                                                                      |
 | `plan-eval/golden.test.ts`          | golden set: la conversión de la referencia a la base de la tabla coincide con la del pipeline (`wasRaw`), seco → fila cocida conservando kcal, validación (pesar en crudo una fila solo cocida, fuentes), las 75 recetas son válidas y con el reparto por momento del día, `tableErrorOf` (fila equivocada, fila que falta → genérico)                                                                                                                                               |
 
+## Tests de servidor: el doble de Supabase
+
+Lo que lee o escribe en la base de datos se prueba con un doble en memoria,
+[src/test/fake-supabase.ts](../../src/test/fake-supabase.ts) (su propio test,
+`fake-supabase.test.ts`, fija cómo se comporta cada operación frente a PostgREST):
+
+```ts
+const fake = createFakeSupabase({ household_members: [...] }, { failOn, rpc });
+await householdContext(fake.client, "u1"); // client: el AnyClient que esperan las funciones
+fake.calls;  // cada operación en orden: tabla, op, columnas, filtros, payload
+fake.tables; // el estado tras las escrituras
+fake.db;     // el mismo objeto con su tipo real, para consultar o sembrar desde el test
+```
+
+Proyecta las columnas pedidas (un campo que no se pidió sale `undefined`, como en producción),
+devuelve el `PGRST116` real en `single`/`maybeSingle`, avanza `updated_at` en cada `update`
+(estrictamente creciente, para probar CAS) y `failOn` hace fallar la operación que se quiera.
+No es Postgres: ni RLS ni joins embebidos. Una policy se prueba contra la BD.
+
+**`supabaseAdmin` nunca es el real en un test.** En local `bun test` carga el `.env`, así que un
+test que lo tocara hablaría con producción con la clave de servicio. El preload
+([src/test/setup.ts](../../src/test/setup.ts), en `bunfig.toml`) sustituye
+`@/integrations/supabase/client.server` en toda la suite por un Proxy que **lanza** si nadie lo
+ha apuntado a un doble; un test lo apunta con `useFakeAdmin(fake.client)`
+([src/test/admin.ts](../../src/test/admin.ts)) y un `afterEach` lo suelta. Así el código de
+servidor no necesita parámetros para inyectar el cliente.
+
 ## Regla al tocar esta lógica
 
 Si cambias una función en `plan-shared.ts`, `plan.functions.ts`, una de fechas o un parser:

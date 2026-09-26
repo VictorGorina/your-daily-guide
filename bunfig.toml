@@ -11,3 +11,6 @@ minimumReleaseAgeExcludes = []
 # find them — including mobile/ios (Pods, builds: >1 GB) — which was ~70% of
 # every local run, even when passing a single file.
 root = "src"
+# Sustituye supabaseAdmin por un doble en toda la suite: en local bun test carga
+# el .env, y un test que tocara el cliente real hablaría con producción.
+preload = ["./src/test/setup.ts"]
