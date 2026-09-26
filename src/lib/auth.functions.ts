@@ -82,7 +82,7 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
     // Un `redirectTo` libre convertiría esto en un redirector abierto con un
     // token de sesión en la URL — justo lo que evita `safeInternalPath` en las
     // rutas de la web.
-    const publicUrl = process.env.PUBLIC_URL || "http://localhost:8080";
+    const publicUrl = (await import("@/lib/env.server")).publicUrl();
     const redirectTo =
       platform === "mobile" ? "dailyguide://restablecer" : `${publicUrl}/restablecer`;
 
@@ -156,7 +156,7 @@ export const requestSignupConfirmation = createServerFn({ method: "POST" })
     // El destino lo decide el servidor, nunca el cliente: un `redirectTo` libre
     // sería un redirector abierto con el token de confirmación en la URL. `next`
     // sí viene del cliente, pero solo se acepta si es una ruta interna.
-    const publicUrl = process.env.PUBLIC_URL || "http://localhost:8080";
+    const publicUrl = (await import("@/lib/env.server")).publicUrl();
     const redirectTo =
       platform === "mobile"
         ? "dailyguide://confirmado"

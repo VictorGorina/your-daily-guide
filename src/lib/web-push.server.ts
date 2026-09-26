@@ -1,5 +1,6 @@
 import { buildPushHTTPRequest, type PushSubscription } from "@pushforge/builder";
 
+import { vapidContact } from "@/lib/env.server";
 import { logEvent } from "@/lib/log.server";
 import { classifyPushResponse } from "@/lib/push-response";
 
@@ -34,7 +35,7 @@ export async function sendPushNotification(
     subscription,
     message: {
       payload,
-      adminContact: "mailto:vgorinam@gmail.com",
+      adminContact: vapidContact(),
       options: { ttl: 3600, urgency: "normal" },
     },
   });
