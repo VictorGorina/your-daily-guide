@@ -1,5 +1,5 @@
 import { isSharedSlot, type SharedSlots } from "@/lib/household-shared";
-import type { PlanFitMark } from "../plan-shared";
+import type { PlanFitMark } from "./fit-mark";
 import type { ShoppingCadence } from "../shopping/model";
 import type { MealSlot } from "./slots";
 

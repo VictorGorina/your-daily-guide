@@ -1,5 +1,5 @@
 import { MEAL_KEYS, type MealKey } from "@/lib/household-shared";
-import type { PlanFitChange, PlanFitMark } from "../plan-shared";
+import type { PlanFitChange, PlanFitMark } from "./fit-mark";
 import type { ShoppingCadence } from "../shopping/model";
 import { DAY_NAMES } from "./grid";
 import { MEAL_SLOTS, type MealSlot } from "./slots";
