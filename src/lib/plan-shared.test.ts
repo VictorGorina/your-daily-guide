@@ -75,6 +75,8 @@ import {
   tripsForCoverage,
   weekDayCounts,
   withPlanMeal,
+  assertShoppingStateColumns,
+  withOwnedMark,
 } from "./plan-shared";
 
 // --- helpers ---------------------------------------------------------------
@@ -2393,5 +2395,114 @@ describe("addKcalAdjust (puente hasta el ticket 12)", () => {
     const raw = JSON.parse(JSON.stringify(plan()));
     raw.weeks[1].days[2].kcalAdjust = { cena: "x", comida: 99999, merienda: -50, snack: -40 };
     expect(cleanPlan(raw)!.weeks[1]!.days[2]!.kcalAdjust).toEqual({ snack: -40 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Estado de compra: qué columnas puede escribir un miembro y cómo se marca
+// ---------------------------------------------------------------------------
+
+describe("assertShoppingStateColumns", () => {
+  it("deja pasar solo columnas de estado de compra", () => {
+    expect(() =>
+      assertShoppingStateColumns({
+        shopping: [],
+        pantry_extras: [],
+        trip_actuals: {},
+        trip_receipts: {},
+        confirmed_trips: [],
+        confirmed_at: null,
+      }),
+    ).not.toThrow();
+  });
+
+  it("platos, cantidades o cadencia nunca: se escriben con supabaseAdmin (issue 06)", () => {
+    expect(() => assertShoppingStateColumns({ shopping: [], plan: {} })).toThrow(
+      "writeShoppingState: columna no permitida (plan)",
+    );
+    expect(() => assertShoppingStateColumns({ cadence: "weekly", user_id: "x" })).toThrow(
+      "(cadence, user_id)",
+    );
+  });
+});
+
+describe("withOwnedMark", () => {
+  const canonical = (): ShoppingList => [
+    {
+      category: "Verdura",
+      items: [
+        {
+          name: "Tomate",
+          qty: "1 kg",
+          price_eur: 3,
+          trip: 0,
+          perishable: true,
+          unit: "g",
+          weekQty: [250, 250, 250, 250],
+          weekPrice: [0.75, 0.75, 0.75, 0.75],
+          ownedTrips: { 0: "store" },
+        },
+        {
+          name: "Cebolla",
+          qty: "500 g",
+          price_eur: 1,
+          trip: 0,
+          perishable: false,
+          unit: "g",
+          weekQty: [125, 125, 125, 125],
+          weekPrice: [0.25, 0.25, 0.25, 0.25],
+        },
+      ],
+    },
+  ];
+  // Lista antigua: una fila por nombre + compra, la marca en `owned`.
+  const legacy = (): ShoppingList => [
+    {
+      category: "Verdura",
+      items: [
+        { name: "Tomate", qty: "500 g", price_eur: 1.5, trip: 0, perishable: true },
+        {
+          name: "Tomate",
+          qty: "500 g",
+          price_eur: 1.5,
+          trip: 1,
+          perishable: true,
+          owned: "fridge",
+        },
+      ],
+    },
+  ];
+
+  it("canónica: marca en ownedTrips de esa compra, sin tocar las demás", () => {
+    const out = withOwnedMark(canonical(), "Tomate", 2, "fridge");
+    expect(out[0].items[0].ownedTrips).toEqual({ 0: "store", 2: "fridge" });
+    expect(out[0].items[1]).toEqual(canonical()[0].items[1]);
+  });
+
+  it("canónica: desmarcar la última compra quita ownedTrips entero", () => {
+    const out = withOwnedMark(canonical(), "Tomate", 0, null);
+    expect("ownedTrips" in out[0].items[0]).toBe(false);
+    // Cantidades y precio no cambian nunca.
+    expect(out[0].items[0].weekQty).toEqual([250, 250, 250, 250]);
+    expect(out[0].items[0].price_eur).toBe(3);
+  });
+
+  it("antigua: casa por nombre Y compra, nunca solo por nombre", () => {
+    const out = withOwnedMark(legacy(), "Tomate", 0, "store");
+    expect(out[0].items[0].owned).toBe("store");
+    expect(out[0].items[1].owned).toBe("fridge");
+  });
+
+  it("antigua: desmarcar quita owned solo de esa fila", () => {
+    const out = withOwnedMark(legacy(), "Tomate", 1, null);
+    expect("owned" in out[0].items[1]).toBe(false);
+    expect(out[0].items[0]).toEqual(legacy()[0].items[0]);
+  });
+
+  it("un ingrediente que no está deja la lista igual, y la entrada no se muta", () => {
+    const input = canonical();
+    expect(withOwnedMark(input, "Ajo", 0, "store")).toEqual(canonical());
+    withOwnedMark(input, "Tomate", 3, "store");
+    expect(input).toEqual(canonical());
   });
 });

@@ -90,6 +90,8 @@ import {
   type TripReceipts,
   withPlanMeal,
   monthTitle,
+  assertShoppingStateColumns,
+  withOwnedMark,
 } from "@/lib/plan-shared";
 import { cleanIntakeText, monthIntakeNotes, type IntakeAnswers } from "@/lib/month-intake";
 import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
@@ -208,18 +210,6 @@ async function readShoppingRow<T>(
   return (data as T | null) ?? null;
 }
 
-/** Las únicas columnas que `writeShoppingState` puede tocar: el estado de la
- *  compra, que es del hogar. Los platos (`plan`), las cantidades y la cadencia
- *  son solo del planificador (issue 06). */
-const SHOPPING_STATE_COLUMNS: readonly string[] = [
-  "shopping",
-  "pantry_extras",
-  "trip_actuals",
-  "trip_receipts",
-  "confirmed_trips",
-  "confirmed_at",
-];
-
 /** Escribe SOLO columnas de estado de compra en la fila objetivo. El `patch`
  *  nunca incluye `plan` ni `weekQty`: un no planificador jamás toca los platos
  *  ni las cantidades de la lista de la casa (issue 06). */
@@ -232,10 +222,7 @@ async function writeShoppingState(
   // Barandilla, no comentario: cuando la fila es de otra persona esto escribe
   // con `supabaseAdmin`, que se salta RLS. Se comprueba aquí en vez de confiar
   // en que cada sitio que llama respete la lista.
-  const forbidden = Object.keys(patch).filter((c) => !SHOPPING_STATE_COLUMNS.includes(c));
-  if (forbidden.length) {
-    throw new Error(`writeShoppingState: columna no permitida (${forbidden.join(", ")})`);
-  }
+  assertShoppingStateColumns(patch);
   if (target.isMine) {
     const { error } = await (supabase as SupabaseClient<never, never, never>)
       .from("monthly_plans")
@@ -1137,25 +1124,7 @@ export const toggleShoppingOwned = createServerFn({ method: "POST" })
     const current = cleanShopping(row?.shopping);
     if (!current.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
 
-    const shopping: ShoppingList = current.map((group) => ({
-      category: group.category,
-      items: group.items.map((item) => {
-        if (item.name !== data.itemName) return item;
-        if (Array.isArray(item.weekQty)) {
-          const ownedTrips = { ...(item.ownedTrips ?? {}) };
-          if (data.source) ownedTrips[data.trip] = data.source;
-          else delete ownedTrips[data.trip];
-          const { ownedTrips: _drop, ...rest } = item;
-          return Object.keys(ownedTrips).length ? { ...rest, ownedTrips } : rest;
-        }
-        if (item.trip !== data.trip) return item;
-        if (!data.source) {
-          const { owned: _owned, ...rest } = item;
-          return rest;
-        }
-        return { ...item, owned: data.source };
-      }),
-    }));
+    const shopping = withOwnedMark(current, data.itemName, data.trip, data.source);
 
     const { error } = await writeShoppingState(context.supabase, target, data.month, {
       shopping: shopping as never,

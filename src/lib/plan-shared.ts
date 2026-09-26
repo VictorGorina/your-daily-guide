@@ -359,6 +359,59 @@ export type ShoppingItem = {
 };
 export type ShoppingList = { category: string; items: ShoppingItem[] }[];
 
+/** Las únicas columnas que `writeShoppingState` puede tocar: el estado de la
+ *  compra, que es del hogar. Los platos (`plan`), las cantidades y la cadencia
+ *  son solo del planificador (issue 06). */
+export const SHOPPING_STATE_COLUMNS: readonly string[] = [
+  "shopping",
+  "pantry_extras",
+  "trip_actuals",
+  "trip_receipts",
+  "confirmed_trips",
+  "confirmed_at",
+];
+
+/** Lanza si `patch` toca algo que no sea estado de compra (`SHOPPING_STATE_COLUMNS`). */
+export function assertShoppingStateColumns(patch: Record<string, unknown>): void {
+  const forbidden = Object.keys(patch).filter((c) => !SHOPPING_STATE_COLUMNS.includes(c));
+  if (forbidden.length) {
+    throw new Error(`writeShoppingState: columna no permitida (${forbidden.join(", ")})`);
+  }
+}
+
+/**
+ * Pone (`source`) o quita (`null`) la marca de un ingrediente en una compra. La
+ * marca es por ingrediente Y compra: en la lista canónica vive en
+ * `ownedTrips[trip]`; en una antigua, en el `owned` de la fila de ese `trip`.
+ * La lista en sí (cantidades, precio) no cambia.
+ */
+export function withOwnedMark(
+  shopping: ShoppingList,
+  itemName: string,
+  trip: number,
+  source: "fridge" | "store" | null,
+): ShoppingList {
+  return shopping.map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => {
+      if (item.name !== itemName) return item;
+      if (Array.isArray(item.weekQty)) {
+        const ownedTrips = { ...(item.ownedTrips ?? {}) };
+        if (source) ownedTrips[trip] = source;
+        else delete ownedTrips[trip];
+        const { ownedTrips: _drop, ...rest } = item;
+        return Object.keys(ownedTrips).length ? { ...rest, ownedTrips } : rest;
+      }
+      if (item.trip !== trip) return item;
+      if (!source) {
+        const { owned: _owned, ...rest } = item;
+        return rest;
+      }
+      return { ...item, owned: source };
+    }),
+  }));
+}
+
 /** Una lista es canónica si sus artículos traen el desglose por semana (`weekQty`). */
 export const isCanonicalShopping = (shopping: ShoppingList | null | undefined): boolean =>
   !!shopping && shopping.some((g) => g.items.some((i) => Array.isArray(i.weekQty)));
