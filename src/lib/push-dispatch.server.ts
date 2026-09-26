@@ -6,6 +6,8 @@ import { DEFAULT_TZ, zonedMinutesNow, zonedTodayISO } from "@/lib/zoned-date";
 export type DispatchSummary = {
   sent: number;
   gone: number;
+  // El servicio de push rechazó el envío (no 404/410): ver `push_failed` en el log.
+  failed: number;
   skippedNoSubscription: number;
   // Tono "relajado" con el día ya completo: un push más sería ruido, así que
   // se contacta menos en vez de más. Ver propagación del tono en AGENTS.md.
@@ -157,6 +159,7 @@ export async function dispatchPush(): Promise<DispatchSummary> {
   const summary: DispatchSummary = {
     sent: 0,
     gone: 0,
+    failed: 0,
     skippedNoSubscription: 0,
     skippedLowNeed: 0,
     errors: 0,
@@ -259,6 +262,8 @@ export async function dispatchPush(): Promise<DispatchSummary> {
           if (result === "gone") {
             summary.gone++;
             await supabaseAdmin.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
+          } else if (result === "failed") {
+            summary.failed++;
           } else {
             summary.sent++;
           }
