@@ -156,7 +156,11 @@ export default function Hogar() {
   const lookup = useMutation({
     mutationFn: () => openSlots(code),
     onSuccess: (found) => setSlots(found),
-    onError: () => Alert.alert("No hemos podido buscar tu familia"),
+    // La búsqueda cuenta los códigos malos: al llegar al límite, que lo diga.
+    onError: (e: Error) =>
+      Alert.alert(
+        e.message.includes("Demasiados") ? e.message : "No hemos podido buscar tu familia",
+      ),
   });
 
   const claim = useMutation({

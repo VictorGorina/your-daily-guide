@@ -238,13 +238,11 @@ export async function claimSlot(code: string, memberId: string): Promise<string>
   if (error) {
     throw new Error(error.message.includes("Código") ? "Código no válido" : error.message);
   }
+  // Desde 20260926120000 un código o un hueco inválidos devuelven NULL en vez de
+  // lanzar: una excepción deshacía también el intento fallido y el límite nunca
+  // contaba (NUEVO-07). El error de arriba cubre la función anterior.
+  if (!data) throw new Error("Ese código no es válido o ese sitio ya está ocupado");
   return data as string;
-}
-
-/** @deprecated El alta ahora es en dos pasos: `openSlots` y luego `claimSlot`. */
-export async function joinHousehold(code: string) {
-  const { error } = await supabase.rpc("join_household", { _invite_code: code.trim() });
-  if (error) throw new Error(error.message);
 }
 
 /** El creador o quien planifica añade a alguien a la mesa (hueco sin reclamar). */
