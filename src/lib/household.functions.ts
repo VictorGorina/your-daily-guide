@@ -197,7 +197,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
     (input: {
-      /** Id del hueco de la mesa cuyo horario se cambia (null = el del llamante). */
+      /** Id del hueco de la mesa cuyo horario se cambia (null o el propio = el del llamante). */
       memberId?: string | null;
       /** Id del niño cuyo horario se cambia (mutually exclusive con memberId). */
       childId?: string | null;
@@ -236,21 +236,34 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
       ownMemberId,
     });
 
+    // `supabaseAdmin` se salta la RLS: el hogar y el "sin cuenta" van en el filtro,
+    // o bastaría conocer un UUID ajeno para cambiarle el horario a otra casa.
     if (target.kind === "child") {
-      const { error } = await supabaseAdmin
+      const { data: rows, error } = await supabaseAdmin
         .from("household_children")
         .update({ home_schedule: data.schedule as never } as never)
-        .eq("id", target.childId);
+        .eq("id", target.childId)
+        .eq("household_id", ctx.householdId)
+        .select("id");
       if (error) throw new Error("No hemos podido guardar el horario");
+      if (!rows?.length) throw new ValidationError("Ese peque no es de tu casa");
       return { saved: true };
     }
 
     if (target.kind === "member") {
-      const { error } = await supabaseAdmin
+      const { data: rows, error } = await supabaseAdmin
         .from("household_members")
         .update({ home_schedule: data.schedule as never } as never)
-        .eq("id", target.memberId);
+        .eq("id", target.memberId)
+        .eq("household_id", ctx.householdId)
+        .is("user_id", null)
+        .select("id");
       if (error) throw new Error("No hemos podido guardar el horario");
+      if (!rows?.length) {
+        throw new ValidationError(
+          "Solo puedes cambiar el horario de alguien de tu casa que no use la app",
+        );
+      }
       return { saved: true };
     }
 
