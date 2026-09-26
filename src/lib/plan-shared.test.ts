@@ -1947,6 +1947,76 @@ describe("applyPlanFitChanges (ticket 10)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Reconstruir sobre la versión más reciente (ticket 21 de la auditoría, CAS)
+// ---------------------------------------------------------------------------
+
+describe("reconstruir el cambio de la IA sobre la versión más reciente", () => {
+  // Una escritura larga (10-100 s de IA) lee `before`; mientras tanto la persona
+  // fija a mano la cena del miércoles 9 y la fila pasa a ser `latest`. La
+  // escritura condicional falla, se relee y se vuelve a aplicar el resultado de
+  // la IA sobre `latest`: estas funciones tienen que respetar lo fijado.
+  const TODAY = "2026-09-07";
+  const PINNED = "2026-09-09"; // miércoles de la semana 1 → celda (1, 2)
+  const before = () => plan();
+  const latest = () => withPlanMeal(before(), PINNED, "cena", "Tortilla que pidió la persona")!;
+
+  it("applyPlanChanges conserva lo fijado mientras tanto y aplica el resto", () => {
+    const changes = [
+      { date: PINNED, lunch: "Lentejas", dinner: "Merluza de la IA" },
+      { date: "2026-09-10", dinner: "Pollo de la IA" },
+    ];
+    const out = applyPlanChanges(latest(), changes, TODAY);
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Tortilla que pidió la persona");
+    expect(out.weeks[1]!.days[2]!.pinned).toEqual(["cena"]);
+    expect(out.weeks[1]!.days[2]!.lunch).toBe("Lentejas"); // la comida no estaba fijada
+    expect(out.weeks[1]!.days[3]!.dinner).toBe("Pollo de la IA");
+    // Aplicado sobre lo leído al principio, el plato de la persona desaparecía.
+    expect(applyPlanChanges(before(), changes, TODAY).weeks[1]!.days[2]!.dinner).toBe(
+      "Merluza de la IA",
+    );
+  });
+
+  it("mergeFuturePlan conserva lo fijado mientras tanto y adopta el resto del plan nuevo", () => {
+    const fresh = plan({
+      weeks: plan().weeks.map((w) => ({
+        ...w,
+        days: w.days.map((d) => day(d.day, `NUEVO ${d.lunch}`, `NUEVO ${d.dinner}`)),
+      })),
+    });
+    const out = mergeFuturePlan(latest(), fresh, TODAY);
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Tortilla que pidió la persona");
+    expect(out.weeks[1]!.days[2]!.pinned).toEqual(["cena"]);
+    expect(out.weeks[1]!.days[2]!.lunch).toBe("NUEVO Comida S1D2");
+    expect(out.weeks[1]!.days[3]!.dinner).toBe("NUEVO Cena S1D3");
+  });
+
+  it("applyPlanFitChanges descarta el cambio de una celda fijada mientras tanto", () => {
+    const { plan: out, applied } = applyPlanFitChanges(
+      latest(),
+      [
+        { date: PINNED, slot: "cena", from: "Cena S1D2", to: "Merluza · patata" },
+        { date: "2026-09-10", slot: "cena", from: "Cena S1D3", to: "Pollo · arroz" },
+      ],
+      TODAY,
+    );
+    expect(out.weeks[1]!.days[2]!.dinner).toBe("Tortilla que pidió la persona");
+    expect(out.weeks[1]!.days[3]!.dinner).toBe("Pollo · arroz");
+    expect(applied.map((c) => c.date)).toEqual(["2026-09-10"]);
+  });
+
+  it("addKcalAdjust sobre la versión más reciente conserva un ajuste que llegó mientras tanto", () => {
+    const withOther = addKcalAdjust(
+      latest(),
+      [{ date: "2026-09-10", slot: "cena", kcal: -80 }],
+      TODAY,
+    );
+    const out = addKcalAdjust(withOther, [{ date: "2026-09-10", slot: "cena", kcal: -50 }], TODAY);
+    expect(out.weeks[1]!.days[3]!.kcalAdjust).toEqual({ cena: -130 });
+    expect(out.weeks[1]!.days[2]!.pinned).toEqual(["cena"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // withPlanMeal / pinned — un plato elegido a mano no lo pisa ningún reajuste
 // ---------------------------------------------------------------------------
 
@@ -2505,6 +2575,17 @@ describe("withOwnedMark", () => {
     expect(withOwnedMark(input, "Ajo", 0, "store")).toEqual(canonical());
     withOwnedMark(input, "Tomate", 3, "store");
     expect(input).toEqual(canonical());
+  });
+
+  it("dos marcas seguidas sobre la versión más reciente conservan las dos (ticket 21)", () => {
+    // Dos toques (o dos miembros del hogar) a la vez: el segundo se reconstruye
+    // sobre lo que dejó el primero, no sobre la lista que leyó al empezar.
+    const first = withOwnedMark(canonical(), "Cebolla", 1, "fridge");
+    const second = withOwnedMark(first, "Tomate", 2, "store");
+    expect(second[0].items[0].ownedTrips).toEqual({ 0: "store", 2: "store" });
+    expect(second[0].items[1].ownedTrips).toEqual({ 1: "fridge" });
+    // Reintentar la misma marca no la invierte: fijar, no alternar.
+    expect(withOwnedMark(second, "Tomate", 2, "store")).toEqual(second);
   });
 });
 
