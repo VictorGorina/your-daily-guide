@@ -9,11 +9,13 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  * `ON DELETE CASCADE` hacia `auth.users`, así que borrar el usuario en Auth
  * arrastra el resto de sus datos.
  */
+export async function deleteAccountHandler({ context }: { context: { userId: string } }) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(context.userId);
+  if (error) throw new Error(error.message);
+  return { ok: true as const };
+}
+
 export const deleteAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(context.userId);
-    if (error) throw new Error(error.message);
-    return { ok: true as const };
-  });
+  .handler(deleteAccountHandler);
