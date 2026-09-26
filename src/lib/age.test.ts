@@ -30,4 +30,10 @@ describe("dobFromAge", () => {
     expect(dobFromAge(35)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(ageFromDOB(dobFromAge(35))).toBe(35);
   });
+
+  it("es coherente con ageFromDOB a última hora del día (fecha local, no UTC)", () => {
+    // 03:00 UTC del 16 = 21:00 del 15 en México: toISOString() ya daba el 16.
+    setSystemTime(new Date("2026-06-16T03:00:00Z"));
+    expect(ageFromDOB(dobFromAge(35))).toBe(35);
+  });
 });
