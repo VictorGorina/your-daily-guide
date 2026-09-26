@@ -14,7 +14,6 @@ import {
   Lock,
   Plus,
   Receipt,
-  RefreshCw,
   ShoppingBasket,
   ShoppingCart,
   Sparkles,
@@ -23,23 +22,14 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Animated, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
 import { DayDetailSheet } from "../../components/day-detail-sheet";
 import { DishRecipe } from "../../components/dish-recipe";
 import { GoalWeightSummary } from "../../components/goal-weight-summary";
-import { MonthConstraintsGate } from "../../components/month-constraints-gate";
+import { MonthIntakeChat } from "../../components/month-intake-chat";
 import { MonthSpendSummary } from "../../components/month-spend-summary";
 import { PlanFitNote } from "../../components/plan-fit-note";
 import { PlanUpdatedBanner } from "../../components/plan-updated-banner";
@@ -56,7 +46,7 @@ import type { PlanFitMark } from "../../lib/plan-shared";
 import {
   fetchLogs,
   fetchLogsForMonth,
-  fetchMonthConstraints,
+  addMessage,
   fetchMonthlyPlan,
   fetchPlannerShopping,
   fetchProfile,
@@ -118,7 +108,7 @@ import {
   wirePlanRecalcFlush,
 } from "../../lib/plan-recalc";
 
-type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList };
+type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList; firstPlan?: boolean };
 
 type ReceiptScanResult = {
   trip_actuals: TripActuals;
@@ -273,18 +263,16 @@ export default function Plan() {
   const bounds = planNavBounds(today, appStartedOn);
   const [openDay, setOpenDay] = useState<string | null>(null);
 
-  // Preguntas rápidas (viaje/ausencia, notas) antes de crear el plan del mes
-  // que viene — solo en la ventana en la que se desbloquea (empuje del push
-  // de renovación). `null` = todavía no se le preguntó; una fila vacía cuenta
-  // como "ya preguntado y pasó de largo".
-  const constraintsQ = useQuery({
-    queryKey: ["month-constraints", month],
-    queryFn: () => fetchMonthConstraints(month),
-    enabled: monthStatus === "next-unlocked",
-  });
-  const needsConstraints =
-    monthStatus === "next-unlocked" && !constraintsQ.isLoading && !constraintsQ.data;
-
+  // Un mes se genera UNA vez, y siempre tras la conversación con el coach
+  // (`MonthIntakeChat`): "Crear plan" abre las cinco preguntas y la última
+  // genera. El primer plan de la persona (`firstPlan`) trae además el
+  // mensaje de bienvenida del coach, que antes pedía el onboarding.
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  // Cada paso de la conversación añade una pregunta abajo: se baja hasta ella
+  // para que no quede tapada por la barra (la web lo hace con scrollIntoView).
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollToEnd = () =>
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
   const generate = useMutation({
     mutationFn: (nextCadence?: ShoppingCadence) =>
       apiPost<GenerateResult>("plan/generate", {
@@ -292,7 +280,15 @@ export default function Plan() {
         cadence: nextCadence ?? "mensual",
         today,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
+    onSuccess: (res) => {
+      setIntakeOpen(false);
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      if (res.firstPlan) {
+        void apiPost<{ text?: string }>("plan/welcome", { month })
+          .then(({ text }) => (text ? addMessage("assistant", text) : undefined))
+          .catch(() => undefined);
+      }
+    },
     onError: (e) =>
       Alert.alert(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
   });
@@ -587,7 +583,15 @@ export default function Plan() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-52 pt-6">
+      <ScrollView
+        ref={scrollRef}
+        // Los campos de texto (conversación del mes, despensa) no deben quedar
+        // bajo el teclado; y un toque en "Siguiente" con el teclado abierto
+        // tiene que pulsar el botón, no solo cerrar el teclado.
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-52 pt-6"
+      >
         <View className="relative flex-row justify-center">
           <View className="items-center">
             <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
@@ -638,35 +642,6 @@ export default function Plan() {
               </Pressable>
             </View>
           </View>
-          {plan && actionable ? (
-            <Pressable
-              onPress={() =>
-                Alert.alert(
-                  `¿Rehacer el plan de ${monthTitle(month)}?`,
-                  isSoloPlanner
-                    ? "Se genera de cero tu plan en solitario: pierdes los platos que hayas cambiado a mano este mes."
-                    : "Se genera de cero: pierdes los platos que hayas cambiado a mano, lo que ya tengas marcado en la compra y los platos aparte de los peques.",
-                  [
-                    { text: "Cancelar", style: "cancel" },
-                    {
-                      text: "Sí, rehacer",
-                      style: "destructive",
-                      onPress: () => generate.mutate(undefined),
-                    },
-                  ],
-                )
-              }
-              disabled={generate.isPending}
-              className="absolute right-0 top-0 h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-70"
-              style={generate.isPending ? { opacity: 0.6 } : undefined}
-            >
-              {generate.isPending ? (
-                <ActivityIndicator size="small" color="#83796c" />
-              ) : (
-                <RefreshCw size={18} color="#83796c" />
-              )}
-            </Pressable>
-          ) : null}
         </View>
 
         {warmProgress.running ? (
@@ -675,10 +650,13 @@ export default function Plan() {
           </Text>
         ) : null}
 
-        {showCreateTakeover && needsConstraints ? (
-          <MonthConstraintsGate
+        {showCreateTakeover && intakeOpen ? (
+          <MonthIntakeChat
             month={month}
-            onDone={() => qc.invalidateQueries({ queryKey: ["month-constraints", month] })}
+            generating={generate.isPending}
+            onGenerate={() => generate.mutate(undefined)}
+            onCancel={() => setIntakeOpen(false)}
+            onAdvance={scrollToEnd}
           />
         ) : showCreateTakeover ? (
           <View className="mt-8 items-center rounded-3xl bg-surface p-6">
@@ -694,11 +672,11 @@ export default function Plan() {
               {isSoloPlanner
                 ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, meriendas y los días que no compartís).`
                 : monthStatus === "next-unlocked"
-                  ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
-                  : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
+                  ? "Cuéntame en cinco preguntas cómo será tu mes y tendrás el plan y la compra antes de que empiece."
+                  : "Cuéntame en cinco preguntas cómo será tu mes y te preparo sus comidas y la compra, ajustadas a tu presupuesto."}
             </Text>
             <Pressable
-              onPress={() => generate.mutate(undefined)}
+              onPress={() => setIntakeOpen(true)}
               disabled={generate.isPending || planQ.isLoading}
               className="mt-5 w-full items-center rounded-full bg-primary py-4 active:opacity-90"
               style={generate.isPending || planQ.isLoading ? { opacity: 0.6 } : undefined}
@@ -906,6 +884,14 @@ export default function Plan() {
                         setShopMode(true);
                       }}
                     />
+                  ) : intakeOpen && actionable ? (
+                    <MonthIntakeChat
+                      month={month}
+                      generating={generate.isPending}
+                      onGenerate={() => generate.mutate(undefined)}
+                      onCancel={() => setIntakeOpen(false)}
+                      onAdvance={scrollToEnd}
+                    />
                   ) : (
                     <View className="items-center rounded-3xl bg-surface p-5">
                       <Text className="text-center text-sm text-muted-foreground">
@@ -914,7 +900,7 @@ export default function Plan() {
                       </Text>
                       {actionable ? (
                         <Pressable
-                          onPress={() => generate.mutate(undefined)}
+                          onPress={() => setIntakeOpen(true)}
                           disabled={generate.isPending}
                           className="mt-4 w-full items-center rounded-full bg-primary py-3.5 active:opacity-90"
                           style={generate.isPending ? { opacity: 0.6 } : undefined}

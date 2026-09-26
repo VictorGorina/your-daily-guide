@@ -14,7 +14,6 @@ import {
   Lock,
   Plus,
   Receipt,
-  RefreshCw,
   ShoppingBasket,
   ShoppingCart,
   Sparkle,
@@ -28,26 +27,15 @@ import { toast } from "sonner";
 import { BottomNav } from "@/components/bottom-nav";
 import { DayDetailSheet } from "@/components/day-detail-sheet";
 import { GoalWeightSummary } from "@/components/goal-weight-summary";
-import { MonthConstraintsGate } from "@/components/month-constraints-gate";
+import { MonthIntakeChat } from "@/components/month-intake-chat";
 import { MonthSpendSummary } from "@/components/month-spend-summary";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
 import { PlanUpdatedBanner } from "@/components/plan-updated-banner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import {
   fetchLogs,
   fetchLogsForMonth,
-  fetchMonthConstraints,
+  addMessage,
   fetchMonthlyPlan,
   fetchPlannerShopping,
   fetchProfile,
@@ -113,6 +101,7 @@ import {
   setTripActual,
   setTripConfirmed,
   toggleShoppingOwned,
+  welcomeBriefing,
 } from "@/lib/plan.functions";
 
 export const Route = createFileRoute("/_authenticated/plan")({
@@ -223,25 +212,27 @@ function PlanPage() {
   const monthStatus = planMonthStatus(month, today);
   const actionable = isMonthActionable(month, today);
 
-  // Preguntas rápidas (viaje/ausencia, notas) antes de crear el plan del mes
-  // que viene — solo en la ventana en la que se desbloquea (empuje del push
-  // de renovación). `null` = todavía no se le preguntó; una fila vacía cuenta
-  // como "ya preguntado y pasó de largo".
-  const constraintsQ = useQuery({
-    queryKey: ["month-constraints", month],
-    queryFn: () => fetchMonthConstraints(month),
-    enabled: monthStatus === "next-unlocked",
-  });
-  const needsConstraints =
-    monthStatus === "next-unlocked" && !constraintsQ.isLoading && !constraintsQ.data;
-
   const bounds = planNavBounds(today, appStartedOn);
   const [openDay, setOpenDay] = useState<string | null>(null);
 
+  // Un mes se genera UNA vez, y siempre tras la conversación con el coach
+  // (`MonthIntakeChat`): "Crear plan" abre las cinco preguntas y la última
+  // genera. El primer plan de la persona (`firstPlan`) trae además el
+  // mensaje de bienvenida del coach, que antes pedía el onboarding.
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const briefFn = useServerFn(welcomeBriefing);
   const generate = useMutation({
     mutationFn: (nextCadence?: ShoppingCadence) =>
       make({ data: { month, cadence: nextCadence ?? "mensual", today } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
+    onSuccess: (res) => {
+      setIntakeOpen(false);
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      if (res.firstPlan) {
+        void briefFn({ data: { month } })
+          .then(({ text }) => (text ? addMessage("assistant", text) : undefined))
+          .catch(() => undefined);
+      }
+    },
     onError: (e) =>
       toast.error(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
   });
@@ -641,43 +632,14 @@ function PlanPage() {
             Calculando tus platos {warmProgress.done}/{warmProgress.total}…
           </p>
         ) : null}
-        {plan && actionable ? (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <button
-                disabled={generate.isPending}
-                aria-label={
-                  isSoloPlanner ? "Volver a planificar mis comidas en solitario" : "Regenerar plan"
-                }
-                className="absolute right-0 top-1 rounded-full bg-surface p-2.5 text-muted-foreground disabled:opacity-60"
-              >
-                <RefreshCw className={`h-4 w-4 ${generate.isPending ? "animate-spin" : ""}`} />
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="rounded-3xl">
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Rehacer el plan de {monthTitle(month)}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {isSoloPlanner
-                    ? "Se genera de cero tu plan en solitario: pierdes los platos que hayas cambiado a mano este mes."
-                    : "Se genera de cero: pierdes los platos que hayas cambiado a mano, lo que ya tengas marcado en la compra y los platos aparte de los peques."}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => generate.mutate(undefined)}>
-                  Sí, rehacer
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        ) : null}
       </header>
 
-      {showCreateTakeover && needsConstraints ? (
-        <MonthConstraintsGate
+      {showCreateTakeover && intakeOpen ? (
+        <MonthIntakeChat
           month={month}
-          onDone={() => qc.invalidateQueries({ queryKey: ["month-constraints", month] })}
+          generating={generate.isPending}
+          onGenerate={() => generate.mutate(undefined)}
+          onCancel={() => setIntakeOpen(false)}
         />
       ) : showCreateTakeover ? (
         <section className="surface-card animate-rise mt-8 p-6 text-center">
@@ -693,11 +655,11 @@ function PlanPage() {
             {isSoloPlanner
               ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, meriendas y los días que no compartís).`
               : monthStatus === "next-unlocked"
-                ? "Créalo ya y tendrás la lista de la compra lista antes de que empiece el mes."
-                : "Un mes de comidas flexibles y sus ingredientes del mes con precios, ajustada a tu presupuesto."}
+                ? "Cuéntame en cinco preguntas cómo será tu mes y tendrás el plan y la compra antes de que empiece."
+                : "Cuéntame en cinco preguntas cómo será tu mes y te preparo sus comidas y la compra, ajustadas a tu presupuesto."}
           </p>
           <button
-            onClick={() => generate.mutate(undefined)}
+            onClick={() => setIntakeOpen(true)}
             disabled={generate.isPending || planQ.isLoading}
             className="mt-5 w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
           >
@@ -911,6 +873,13 @@ function PlanPage() {
                     overBudget={overBudget}
                     inlineCta
                   />
+                ) : intakeOpen && actionable ? (
+                  <MonthIntakeChat
+                    month={month}
+                    generating={generate.isPending}
+                    onGenerate={() => generate.mutate(undefined)}
+                    onCancel={() => setIntakeOpen(false)}
+                  />
                 ) : (
                   <div className="surface-card p-5 text-center">
                     <p className="text-sm text-muted-foreground">
@@ -919,7 +888,7 @@ function PlanPage() {
                     </p>
                     {actionable ? (
                       <button
-                        onClick={() => generate.mutate(undefined)}
+                        onClick={() => setIntakeOpen(true)}
                         disabled={generate.isPending}
                         className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
                       >

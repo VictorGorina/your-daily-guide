@@ -111,26 +111,23 @@ function eveningCopy(tone: Tone, name: string | null, pendingCount: number) {
 }
 
 // Aviso de que quedan pocos días de mes y todavía no hay plan del siguiente.
-// Al abrir la app desde este push, la generación automática de la pantalla
-// Hoy se encarga de crearlo en cuanto entre el nuevo mes.
+// Lleva a Plan del mes que viene, donde la conversación con el coach (cinco
+// preguntas, `MonthIntakeChat`) va antes de generarlo. Nada se genera solo: un
+// mes se genera una vez y tras esa conversación.
 function renewalCopy(tone: Tone, name: string | null, nextMonthLabel: string) {
-  const title = name ? `${name}, se acaba el mes` : "Se acaba el mes";
+  const title = name
+    ? `${name}, es hora de preparar tu plan de ${nextMonthLabel}`
+    : `Es hora de preparar tu plan de ${nextMonthLabel}`;
   if (tone === "relajado") {
-    return {
-      title,
-      body: `Cuando quieras, abre la app para preparar tu plan de ${nextMonthLabel}.`,
-    };
+    return { title, body: "Cuando quieras: cinco preguntas sobre tu mes y te lo preparo." };
   }
   if (tone === "exigente") {
     return {
       title,
-      body: `Quedan pocos días: prepara ya tu plan de ${nextMonthLabel} y su lista de la compra.`,
+      body: "Quedan pocos días: responde cinco preguntas y ten la compra lista antes de que empiece.",
     };
   }
-  return {
-    title,
-    body: `Tu plan de ${nextMonthLabel} está al caer. Ábrelo y te lo preparo.`,
-  };
+  return { title, body: "Cuéntame en cinco preguntas cómo será tu mes y te lo preparo." };
 }
 
 // Variante para un miembro del hogar que NO planifica (D1): el menú y la compra
@@ -138,10 +135,12 @@ function renewalCopy(tone: Tone, name: string | null, nextMonthLabel: string) {
 // ella solo le toca planificar sus comidas en solitario. Sin variar por tono:
 // el aviso es informativo, no una llamada a la acción.
 function renewalCopyMember(name: string | null, nextMonthLabel: string) {
-  const title = name ? `${name}, se acaba el mes` : "Se acaba el mes";
+  const title = name
+    ? `${name}, es hora de preparar tus comidas de ${nextMonthLabel}`
+    : `Es hora de preparar tus comidas de ${nextMonthLabel}`;
   return {
     title,
-    body: `El menú de tu casa lo renueva quien planifica. Abre la app para preparar tus comidas en solitario de ${nextMonthLabel}.`,
+    body: "El menú de tu casa lo renueva quien planifica. Tú prepara tus comidas en solitario: son cinco preguntas.",
   };
 }
 
@@ -190,8 +189,8 @@ export async function dispatchPush(): Promise<DispatchSummary> {
 
   // A `RENEWAL_DAYS_LEFT` días o menos de fin de mes, si todavía no hay plan del
   // mes siguiente (y no se avisó ya hoy), se avisa una vez al día hasta que lo
-  // generen — a mano desde Plan (donde ese mismo umbral desbloquea el mes que
-  // viene) o solo al entrar el día 1 (ver auto-generación en Hoy).
+  // generen desde Plan (donde ese mismo umbral desbloquea el mes que viene y la
+  // barra de abajo marca la pestaña con un punto).
   const renewalCandidates = rows.filter((p) => {
     const { today } = clockOf(p);
     return daysLeftInMonth(today) <= RENEWAL_DAYS_LEFT && p.plan_renewal_push_sent_on !== today;

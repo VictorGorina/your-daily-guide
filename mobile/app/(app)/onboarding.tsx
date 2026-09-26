@@ -35,11 +35,9 @@ import { RegionStep } from "../../components/region-step";
 import { apiPost } from "../../lib/api";
 import { ageFromDOB } from "../../lib/age";
 import {
-  addMessage,
   deriveGoalType,
   fetchProfile,
   hasProfileColumn,
-  monthISO,
   saveProfile,
   todayISO,
 } from "../../lib/daily";
@@ -500,14 +498,6 @@ const GAP_LABEL: Record<GapKey, { label: string; help: string; type: "number" | 
 
 const KEY_FIELDS: GapKey[] = ["current_weight_kg", "height_cm", "morning_time", "evening_time"];
 
-const GENERATING_MESSAGES = [
-  "Leyendo todo lo que me has contado...",
-  "Ajustando las cantidades a ti...",
-  "Pensando en tus gustos y tu ritmo de vida...",
-  "Encajando las comidas en tu semana...",
-  "Dando los últimos retoques a tu plan...",
-];
-
 // --- Modelo plano y navegable -------------------------------------------------
 // Igual que la web: aplanamos SCREENS a una lista de nodos con clave estable para
 // poder saltar a cualquier pregunta. Los follow-ups condicionales (embarazo,
@@ -590,8 +580,6 @@ export default function Onboarding() {
   const qc = useQueryClient();
 
   const parse = (transcript: string) => apiPost<Draft>("onboarding/parse", { transcript });
-  const makePlan = (month: string) => apiPost("plan/generate", { month, today: todayISO() });
-  const brief = (month: string) => apiPost<{ text?: string }>("plan/welcome", { month });
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const [regionDone, setRegionDone] = useState(false);
@@ -608,9 +596,6 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
-  const [finishing, setFinishing] = useState(false);
-  const [done, setDone] = useState(false);
-  const [welcomeText, setWelcomeText] = useState<string | null>(null);
 
   const [gapValues, setGapValues] = useState<Record<string, string>>({});
   const [gapMissing, setGapMissing] = useState<GapKey[]>([]);
@@ -662,14 +647,14 @@ export default function Onboarding() {
 
   // Persistencia del progreso: se borra al completar el onboarding con éxito.
   useEffect(() => {
-    if (!hydrated || done) return;
+    if (!hydrated) return;
     AsyncStorage.setItem(
       DRAFT_STORAGE_KEY,
       JSON.stringify({ answers, skipped, curKey, dob, introDismissed }),
     ).catch(() => {
       /* almacenamiento bloqueado: no es crítico */
     });
-  }, [answers, skipped, curKey, dob, introDismissed, hydrated, done]);
+  }, [answers, skipped, curKey, dob, introDismissed, hydrated]);
 
   // --- Derivados ---------------------------------------------------------------
 
@@ -941,28 +926,14 @@ export default function Onboarding() {
       qc.removeQueries({ queryKey: ["logs"] });
       AsyncStorage.removeItem(DRAFT_STORAGE_KEY).catch(() => {});
 
-      const month = monthISO();
-      try {
-        await makePlan(month);
-        const { text } = await brief(month);
-        if (text) {
-          setWelcomeText(text);
-          void addMessage("assistant", text);
-        }
-        setDone(true);
-        setSaving(false);
-        setFinishing(false);
-        return;
-      } catch {
-        Alert.alert("He guardado tus datos, el plan del mes lo creamos en la pestaña Plan");
-      }
+      // El plan no se genera aquí: un mes se genera una vez y tras la
+      // conversación con el coach (`MonthIntakeChat` en Plan), también el
+      // primero. La bienvenida del coach llega al generarlo.
       setSaving(false);
-      setFinishing(false);
-      router.replace("/hoy");
+      router.replace("/plan");
     } catch (err) {
       Alert.alert(err instanceof Error ? err.message : "No hemos podido guardar");
       setSaving(false);
-      setFinishing(false);
     }
   };
 
@@ -1019,7 +990,6 @@ export default function Onboarding() {
       return;
     }
     setView("chat");
-    setFinishing(true);
     await saveAll(draft, extra);
   };
 
@@ -1048,37 +1018,6 @@ export default function Onboarding() {
           >
             <Text className="text-sm font-sans-semibold text-primary-foreground">Empezar</Text>
             <ArrowRight size={16} color={C.onPrimary} />
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (finishing && !done) return <PlanGeneratingScreen />;
-
-  if (done) {
-    return (
-      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-        <View className="flex-1 items-center justify-center gap-7 px-8">
-          <View className="h-24 w-24 items-center justify-center">
-            <View className="absolute h-24 w-24 rounded-full bg-primary/10" />
-            <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
-              <Check size={24} color={C.primary} />
-            </View>
-          </View>
-          <Text className="font-display text-2xl text-foreground">Tu plan está listo</Text>
-          {welcomeText ? (
-            <Text className="max-w-[320px] text-center text-sm leading-relaxed text-muted-foreground">
-              {welcomeText}
-            </Text>
-          ) : null}
-          <Pressable
-            onPress={() => router.replace("/hoy")}
-            className="w-full max-w-[320px] items-center rounded-full bg-primary py-4 active:opacity-90"
-          >
-            <Text className="text-sm font-sans-semibold text-primary-foreground">
-              Empezar mi primer día
-            </Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -1608,35 +1547,5 @@ function OverlayHeader({
         <X size={18} color={C.fg} />
       </Pressable>
     </View>
-  );
-}
-
-function PlanGeneratingScreen() {
-  const [i, setI] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setI((n) => (n + 1) % GENERATING_MESSAGES.length), 2400);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <SafeAreaView className="flex-1 items-center justify-center gap-10 bg-background px-8">
-      <View className="h-40 w-40 items-center justify-center">
-        <View className="absolute h-32 w-32 rounded-full bg-primary/10" />
-        <View className="absolute h-24 w-24 rounded-full bg-primary/15" />
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-primary">
-          <Sparkles size={28} color={C.onPrimary} />
-        </View>
-      </View>
-
-      <View className="items-center gap-2.5">
-        <Text className="font-heading text-xl text-foreground">Estoy preparando tu plan</Text>
-        <Text className="min-h-[20px] text-center text-sm text-muted-foreground">
-          {GENERATING_MESSAGES[i]}
-        </Text>
-      </View>
-
-      <ActivityIndicator color={C.primary} />
-    </SafeAreaView>
   );
 }

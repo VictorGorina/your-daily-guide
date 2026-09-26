@@ -89,7 +89,9 @@ import {
   type TripConfirmations,
   type TripReceipts,
   withPlanMeal,
+  monthTitle,
 } from "@/lib/plan-shared";
+import { cleanIntakeText, monthIntakeNotes, type IntakeAnswers } from "@/lib/month-intake";
 import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
 import { PLAN_STRUCTURE_REMINDER } from "@/lib/nutrition/plan-targets";
 import { compensationNeed } from "@/lib/nutrition/compensation";
@@ -727,61 +729,93 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
     return { month: input.month, cadence, today };
   })
-  .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList; firstPlan: boolean }> => {
+      const key = process.env.OPENROUTER_API_KEY;
+      if (!key) throw new Error("Falta la clave de IA");
 
-    const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
-    await enforceUserRateLimit(context.userId, "plan-generate");
+      // Un mes se genera UNA vez: rehacerlo a mano no es un camino (gasta IA y
+      // pierde los cambios de la persona). Lo que sí cambia el plan después —el
+      // hogar, la despensa— lo recoloca `reflowMonthlyPlan` sin pasar por aquí, y
+      // lo que la persona tenga que contar del mes se pregunta ANTES de generar
+      // (`MonthIntakeChat`). Va antes de la cuota: un rechazo no la gasta.
+      const { data: existing } = await ownPlanRow(
+        context.supabase as never,
+        context.userId,
+        data.month,
+        "id",
+      );
+      if (existing) {
+        const title = monthTitle(data.month);
+        throw new ValidationError(
+          `${title.charAt(0).toUpperCase()}${title.slice(1)} ya tiene su plan. Si cambia tu hogar se recalcula solo.`,
+        );
+      }
 
-    const [{ data: profile }, constraints] = await Promise.all([
-      context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-      fetchMonthConstraints(context.supabase as never, context.userId, data.month),
-    ]);
+      // ¿Es el primer plan de la persona? Entonces el cliente pide además la
+      // bienvenida del coach (`welcomeBriefing`). Se mira aquí y no por
+      // `app_started_on`: quien se da de alta el día 28 puede preparar primero
+      // el mes que viene, y un perfil demo trae ese campo en el pasado.
+      const { count: earlierPlans } = await context.supabase
+        .from("monthly_plans")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", context.userId);
 
-    const { householdContext, householdMealTargets, syncSharedMeals } =
-      await import("@/lib/household.server");
-    const [home, sharedTargets] = await Promise.all([
-      householdContext(context.supabase as never, context.userId),
-      householdMealTargets(context.supabase as never, context.userId),
-    ]);
+      const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
+      await enforceUserRateLimit(context.userId, "plan-generate");
 
-    const { plan, shopping } = await generatePlanBody({
-      sharedTargets,
-      key,
-      userId: context.userId,
-      month: data.month,
-      cadence: data.cadence,
-      coverage: monthCoverage(data.month, data.today),
-      home,
-      profile,
-      constraints,
-    });
+      const [{ data: profile }, constraints] = await Promise.all([
+        context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
+        fetchMonthConstraints(context.supabase as never, context.userId, data.month),
+      ]);
 
-    const { error } = await context.supabase.from("monthly_plans").upsert(
-      {
-        user_id: context.userId,
+      const { householdContext, householdMealTargets, syncSharedMeals } =
+        await import("@/lib/household.server");
+      const [home, sharedTargets] = await Promise.all([
+        householdContext(context.supabase as never, context.userId),
+        householdMealTargets(context.supabase as never, context.userId),
+      ]);
+
+      const { plan, shopping } = await generatePlanBody({
+        sharedTargets,
+        key,
+        userId: context.userId,
         month: data.month,
-        plan: plan as never,
-        shopping: shopping as never,
-        confirmed_at: null,
-      } as never,
-      { onConflict: "user_id,month" },
-    );
-    if (error) {
-      console.error("saveMonthlyPlan", error);
-      throw new Error("No hemos podido guardar el plan del mes. Inténtalo otra vez.");
-    }
+        cadence: data.cadence,
+        coverage: monthCoverage(data.month, data.today),
+        home,
+        profile,
+        constraints,
+      });
 
-    await syncSharedMeals({
-      supabase: context.supabase as never,
-      userId: context.userId,
-      month: data.month,
-      today: data.today,
-    });
+      const { error } = await context.supabase.from("monthly_plans").upsert(
+        {
+          user_id: context.userId,
+          month: data.month,
+          plan: plan as never,
+          shopping: shopping as never,
+          confirmed_at: null,
+        } as never,
+        { onConflict: "user_id,month" },
+      );
+      if (error) {
+        console.error("saveMonthlyPlan", error);
+        throw new Error("No hemos podido guardar el plan del mes. Inténtalo otra vez.");
+      }
 
-    return { plan, shopping };
-  });
+      await syncSharedMeals({
+        supabase: context.supabase as never,
+        userId: context.userId,
+        month: data.month,
+        today: data.today,
+      });
+
+      return { plan, shopping, firstPlan: !earlierPlans };
+    },
+  );
 
 /**
  * La petición de cambios de la ronda de `planFit` (ticket 10): cada plato que no
@@ -2548,12 +2582,12 @@ export const setPlanMeal = createServerFn({ method: "POST" })
   );
 
 /**
- * Guarda lo que la persona contó antes de generar el plan de un mes: si va a
- * estar fuera de casa un tramo (viaje, etc.) y cualquier nota libre. Se
- * pregunta una vez, en la ventana en la que se desbloquea el mes que viene
- * (ver `MonthConstraintsGate`); la fila en sí — aunque quede toda a `null`
- * porque la persona pasó de largo — es la marca de que ya se preguntó, así no
- * vuelve a aparecer. Dato personal: no se comparte con el resto del hogar
+ * Guarda lo que la persona contó antes de generar el plan de un mes, en la
+ * conversación con el coach que va SIEMPRE antes de generar (`MonthIntakeChat`,
+ * `month-intake.ts`): si va a estar fuera de casa un tramo (fechas) y las
+ * otras cuatro respuestas (eventos, rutina, ingredientes, notas), que se
+ * guardan juntas en `notes` con su etiqueta. Como un mes se genera una sola
+ * vez, esto es lo que lo personaliza. Dato personal: no se comparte con el resto del hogar
  * (`generatePlanBody` solo lo aplica a las comidas propias de quien lo
  * guardó, nunca a las compartidas).
  */
@@ -2565,6 +2599,8 @@ export const setMonthConstraints = createServerFn({ method: "POST" })
       awayStart?: string | null;
       awayEnd?: string | null;
       notes?: string | null;
+      /** Respuestas de la conversación previa al plan (`MonthIntakeChat`). */
+      answers?: IntakeAnswers | null;
     }) => {
       if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
       const hasStart = input?.awayStart != null && input.awayStart !== "";
@@ -2578,9 +2614,13 @@ export const setMonthConstraints = createServerFn({ method: "POST" })
       ) {
         throw new ValidationError("Rango de fechas no válido");
       }
-      const notes = String(input?.notes ?? "")
-        .trim()
-        .slice(0, 300);
+      // Las respuestas se arman aquí (nunca un texto ya compuesto por el
+      // cliente): etiqueta por pregunta, chips solo de su lista, cada una
+      // limpia para entrar al prompt como dato. `notes` a pelo sigue valiendo
+      // para un cliente antiguo.
+      const notes = input?.answers
+        ? (monthIntakeNotes(input.answers) ?? "")
+        : cleanIntakeText(input?.notes);
       return {
         month: input.month,
         awayStart: hasStart ? input.awayStart! : null,

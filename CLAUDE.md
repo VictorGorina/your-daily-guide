@@ -319,6 +319,24 @@ renovación). `generateMonthlyPlan` rechaza en servidor los meses pasados y el m
 bloqueado. Meses pasados: solo lectura. Helpers de mes en `plan-shared.ts` (`planMonthStatus`,
 `isMonthActionable`, `planNavBounds`, `addMonths`, `monthTitle`).
 
+**Un plan por mes, tras una conversación con el coach — no se rehace a mano.**
+`generateMonthlyPlan` rechaza (400, antes de gastar cuota) un mes que ya tiene fila en
+`monthly_plans`, y no hay botón de regenerar. Nada genera un plan por su cuenta: ni Hoy (que sin
+plan enseña "Prepara tu plan del mes" y lleva a Plan) ni el onboarding (que acaba en Plan). El
+único camino es "Crear plan" → `MonthIntakeChat` (web y móvil): cinco preguntas con chips y texto
+libre (`month-intake.ts`, copia en `mobile/lib/`: ausencia con fechas, eventos o comidas fuera,
+horario o rutina, ingredientes a usar o evitar, notas). `setMonthConstraints` arma las respuestas
+en servidor (`monthIntakeNotes`: etiqueta por pregunta, solo chips de su lista, cada respuesta
+limpia con `cleanIntakeText`) y `awayPlanLine` las mete en el prompt entre «» como DATO. Al
+generar el primer plan de la persona (`firstPlan`, que devuelve el servidor; no `app_started_on`,
+que un demo trae en el pasado) llega la bienvenida del coach (`welcomeBriefing`). Cuándo toca: la
+última semana del mes (`isNextMonthUnlocked`) la barra de abajo marca Plan con un punto
+(`usePlanNeedsAction`, también con el mes en curso sin plan) y llega un push diario "Es hora de
+preparar tu plan de …" hasta que se genere. Después, el plan solo cambia por el coach, por los
+desajustes de Hoy (`settleDay`) o por `reflowMonthlyPlan` (hogar, despensa). Motivo: cada
+generación + precalentado + ronda de ajuste ronda los 0,7 USD contra un tope diario de 0,75, y
+regenerar dejaba sin ajuste el plan nuevo.
+
 **Familia — hogar compartido (`/hogar`).** Modelo de la feature `familia-comidas-compartidas`
 (spec y decisiones D1–D5 en `.scratch/familia-comidas-compartidas/`; explicación larga en la
 sección "Familia — hogar compartido" de AGENTS.md). Invariantes que un cambio suele romper sin

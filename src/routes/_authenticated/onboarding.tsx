@@ -22,18 +22,9 @@ import { toast } from "sonner";
 import { DictateButton } from "@/components/dictate-button";
 import { RegionStep } from "@/components/region-step";
 import { ageFromDOB } from "@/lib/age";
-import {
-  addMessage,
-  deriveGoalType,
-  fetchProfile,
-  hasProfileColumn,
-  monthISO,
-  saveProfile,
-  todayISO,
-} from "@/lib/daily";
+import { deriveGoalType, fetchProfile, hasProfileColumn, saveProfile, todayISO } from "@/lib/daily";
 import { parseOnboarding } from "@/lib/onboarding.functions";
 import { type MealSlot } from "@/lib/plan-shared";
-import { generateMonthlyPlan, welcomeBriefing } from "@/lib/plan.functions";
 import { resolveDeviceTimeZone } from "@/lib/zoned-date";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -565,8 +556,6 @@ function Onboarding() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const parse = useServerFn(parseOnboarding);
-  const makePlan = useServerFn(generateMonthlyPlan);
-  const brief = useServerFn(welcomeBriefing);
 
   // País e idioma van antes del chat guionizado: mientras `profile.country` no
   // esté fijado, se muestra el RegionStep en lugar del onboarding conversacional.
@@ -590,9 +579,6 @@ function Onboarding() {
   // Se activa al confirmar el resumen: mientras esté en true (y aún no haya
   // terminado), sustituimos toda la pantalla por la animación de "generando tu
   // plan" en vez del formulario de chat deshabilitado.
-  const [finishing, setFinishing] = useState(false);
-  const [done, setDone] = useState(false);
-  const [welcomeText, setWelcomeText] = useState<string | null>(null);
 
   const [gapValues, setGapValues] = useState<Record<string, string>>({});
   const [gapMissing, setGapMissing] = useState<GapKey[]>([]);
@@ -644,7 +630,7 @@ function Onboarding() {
   // Persistencia del progreso: cualquier cambio en respuestas/saltos/posición se
   // guarda en local. Se borra al completar el onboarding con éxito.
   useEffect(() => {
-    if (!hydrated.current || done) return;
+    if (!hydrated.current) return;
     try {
       localStorage.setItem(
         DRAFT_STORAGE_KEY,
@@ -653,12 +639,12 @@ function Onboarding() {
     } catch {
       /* almacenamiento lleno o bloqueado: no es crítico */
     }
-  }, [answers, skipped, curKey, dob, introDismissed, done]);
+  }, [answers, skipped, curKey, dob, introDismissed]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-    if (view === "chat" && !saving && !stageEnd && !done) inputRef.current?.focus();
-  }, [flat, curKey, view, saving, stageEnd, done]);
+    if (view === "chat" && !saving && !stageEnd) inputRef.current?.focus();
+  }, [flat, curKey, view, saving, stageEnd]);
 
   // Si la pareja no va a usar la app, no hay quien más registre su parte del
   // gasto: pedimos el presupuesto total de la casa en vez del personal.
@@ -937,28 +923,14 @@ function Onboarding() {
         /* nada que limpiar */
       }
 
-      const month = monthISO();
-      try {
-        await makePlan({ data: { month, today: todayISO() } });
-        const { text } = await brief({ data: { month } });
-        if (text) {
-          setWelcomeText(text);
-          void addMessage("assistant", text);
-        }
-        setDone(true);
-        setSaving(false);
-        setFinishing(false);
-        return;
-      } catch {
-        toast.error("He guardado tus datos, el plan del mes lo creamos en la pestaña Plan");
-      }
+      // El plan no se genera aquí: un mes se genera una vez y tras la
+      // conversación con el coach (`MonthIntakeChat` en Plan), también el
+      // primero. La bienvenida del coach llega al generarlo.
       setSaving(false);
-      setFinishing(false);
-      navigate({ to: "/hoy", replace: true });
+      navigate({ to: "/plan", replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No hemos podido guardar");
       setSaving(false);
-      setFinishing(false);
     }
   };
 
@@ -1017,7 +989,6 @@ function Onboarding() {
       return;
     }
     setView("chat");
-    setFinishing(true);
     await saveAll(draft, extra);
   };
 
@@ -1048,36 +1019,6 @@ function Onboarding() {
             Empezar <ArrowRight className="h-4 w-4" />
           </button>
         </div>
-      </main>
-    );
-  }
-
-  if (finishing && !done) return <PlanGeneratingScreen />;
-
-  if (done) {
-    return (
-      <main className="mx-auto flex h-[100dvh] max-w-lg flex-col items-center justify-center gap-8 px-8 text-center">
-        <span className="relative grid h-24 w-24 place-items-center">
-          <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/12" />
-          <span className="relative grid h-14 w-14 place-items-center rounded-full bg-primary-soft text-primary">
-            <Check className="h-6 w-6" strokeWidth={2.6} />
-          </span>
-        </span>
-        <div className="space-y-2.5">
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Tu plan está listo</h1>
-          {welcomeText ? (
-            <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">
-              {welcomeText}
-            </p>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate({ to: "/hoy", replace: true })}
-          className="w-full max-w-xs rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
-        >
-          Empezar mi primer día
-        </button>
       </main>
     );
   }
@@ -1576,55 +1517,5 @@ function OverlayHeader({
         <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
       </button>
     </div>
-  );
-}
-
-const GENERATING_MESSAGES = [
-  "Leyendo todo lo que me has contado...",
-  "Ajustando las cantidades a ti...",
-  "Pensando en tus gustos y tu ritmo de vida...",
-  "Encajando las comidas en tu semana...",
-  "Dando los últimos retoques a tu plan...",
-];
-
-/**
- * Pantalla que sustituye al chat mientras se guarda el perfil y se genera el plan
- * mensual (tras confirmar la revisión final). Sin esta pantalla, el usuario solo
- * veía un textarea deshabilitado; aquí le damos algo vivo a lo que mirar mientras
- * espera, con mensajes rotativos para que la espera se note más corta.
- */
-function PlanGeneratingScreen() {
-  const [i, setI] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setI((n) => (n + 1) % GENERATING_MESSAGES.length), 2400);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <main className="mx-auto flex h-[100dvh] max-w-lg flex-col items-center justify-center gap-10 px-8 text-center">
-      <div className="relative grid h-40 w-40 place-items-center">
-        <span className="animate-coach-pulse absolute h-32 w-32 rounded-full bg-primary/10" />
-        <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/15 [animation-delay:0.6s]" />
-        <span className="animate-breathe relative grid h-16 w-16 place-items-center rounded-full bg-primary text-primary-foreground">
-          <Sparkles className="h-7 w-7" />
-        </span>
-      </div>
-
-      <div className="space-y-2.5">
-        <h1 className="font-title text-xl font-semibold tracking-[-0.02em]">
-          Estoy preparando tu plan
-        </h1>
-        <p key={i} className="animate-rise min-h-[1.25rem] text-sm text-muted-foreground">
-          {GENERATING_MESSAGES[i]}
-        </p>
-      </div>
-
-      <span className="flex items-center gap-1.5" aria-hidden>
-        <span className="animate-coach-dot h-2 w-2 rounded-full bg-primary" />
-        <span className="animate-coach-dot h-2 w-2 rounded-full bg-primary/70 [animation-delay:0.15s]" />
-        <span className="animate-coach-dot h-2 w-2 rounded-full bg-primary/50 [animation-delay:0.3s]" />
-      </span>
-    </main>
   );
 }

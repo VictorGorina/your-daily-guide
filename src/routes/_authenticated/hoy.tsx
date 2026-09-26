@@ -1,12 +1,14 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Briefcase,
+  CalendarRange,
   Check,
   ChevronDown,
+  ChevronRight,
   Cookie,
   Home,
   Info,
@@ -95,7 +97,7 @@ import {
   type MealSlot,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
-import { fillChildMeals, generateMonthlyPlan } from "@/lib/plan.functions";
+import { fillChildMeals } from "@/lib/plan.functions";
 import { cleanDayAdjustment, dayBalance } from "@/lib/day-balance";
 import { scheduleDaySettle, useDaySettle } from "@/lib/day-settle";
 import { cleanDayExercise, onlyRoutineExercise } from "@/lib/exercise";
@@ -171,44 +173,13 @@ function onAccent(hex: string) {
   return lum > 0.45 ? "#3e3d39" : "#fbfaf7";
 }
 
-// Ventana mínima entre intentos automáticos de generar el plan del mes,
-// persistida en localStorage (a diferencia de `autoPlanTriedRef`, que solo
-// protege dentro de un mismo montaje) para que sobreviva a que la persona
-// cierre y reabra la app. Sin esto, cerrar y reabrir varias veces por
-// impaciencia mientras la IA todavía está generando el plan anterior podría
-// lanzar una llamada a IA nueva en cada apertura. Es una heurística, no una
-// garantía: la generación real puede tardar más o menos que esta ventana.
-const AUTO_PLAN_MIN_INTERVAL_MS = 60_000;
-const autoPlanAttemptKey = (month: string) => `ydg:autoPlanAttempt:${month}`;
-
-/** ms desde el último intento (de cualquier apertura de la app), o null si no hay uno registrado. */
-function msSinceLastAutoPlanAttempt(month: string): number | null {
-  try {
-    const raw = localStorage.getItem(autoPlanAttemptKey(month));
-    const at = raw ? Number(raw) : NaN;
-    return Number.isFinite(at) ? Date.now() - at : null;
-  } catch {
-    return null;
-  }
-}
-
-function markAutoPlanAttempt(month: string) {
-  try {
-    localStorage.setItem(autoPlanAttemptKey(month), String(Date.now()));
-  } catch {
-    // Modo privado u otro bloqueo de storage: sin memoria entre relanzamientos,
-    // pero no bloquea la generación de este montaje.
-  }
-}
-
 // La guía del día se pide sola al abrir Hoy si falta o está incompleta. Dos
 // salvaguardas para que ese reintento automático no se convierta en spam:
 //   1. Si falla, no se avisa (`silent`): el toast de error solo sale al pulsar
 //      "Generar" a mano. Si no, cada fallo mientras Hoy se re-monta (el backend
 //      caído un rato, volver a la pantalla) deja un toast tras otro.
 //   2. No se relanza sola más de una vez por minuto entre montajes (variable a
-//      nivel de módulo, no por montaje), para no martillear la IA. Mismo
-//      criterio que `AUTO_PLAN_MIN_INTERVAL_MS`.
+//      nivel de módulo, no por montaje), para no martillear la IA.
 const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
 const AUTO_GUIDE_BACKOFF_MS = 600_000;
 let lastAutoGuideAttempt = 0;
@@ -229,7 +200,6 @@ function Hoy() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const makeGuide = useServerFn(generateDailyGuide);
-  const makePlan = useServerFn(generateMonthlyPlan);
   const fillKids = useServerFn(fillChildMeals);
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -241,8 +211,6 @@ function Hoy() {
   const [balanceInfoOpen, setBalanceInfoOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
-  const autoPlanTriedRef = useRef(false);
-  const [autoPlanThrottled, setAutoPlanThrottled] = useState(false);
   // ---- Cambio de plato directo (sin pasar por el chat del coach) ----
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
 
@@ -252,40 +220,10 @@ function Hoy() {
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
   const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
-  // Si al entrar no hay plan del mes en curso, se genera solo: la persona no
-  // tiene que ir a la pestaña Plan a pulsar el botón. `ensureTodayLog` espera
-  // a que esto termine (ver `enabled` de `todayQ` más abajo) para no crear el
-  // registro de hoy con comidas vacías mientras se genera.
+  // Sin plan del mes en curso, Hoy no lo genera por su cuenta: un mes se
+  // genera UNA vez y tras la conversación con el coach (pantalla Plan,
+  // `MonthIntakeChat`). Aquí solo se invita a ir a prepararlo.
   const noPlanYet = planQ.isFetched && !planQ.data;
-  const autoPlan = useMutation({
-    mutationFn: () => makePlan({ data: { month, today: todayISO() } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["plan", month] }),
-    onError: (e) => {
-      toast.error(
-        e instanceof Error
-          ? e.message
-          : "No hemos podido crear tu plan del mes. Puedes crearlo desde la pestaña Plan.",
-      );
-    },
-  });
-  useEffect(() => {
-    if (!profileQ.data?.onboarding_completed || !noPlanYet || autoPlanTriedRef.current) return;
-    autoPlanTriedRef.current = true;
-    // Si ya hay una marca reciente (de otra apertura de la app), se espera el
-    // resto de la ventana en vez de lanzar otra generación en paralelo. Solo se
-    // marca en el primer intento para que relanzamientos de en medio no alarguen
-    // la espera indefinidamente.
-    const elapsed = msSinceLastAutoPlanAttempt(month);
-    if (elapsed == null) markAutoPlanAttempt(month);
-    const wait = elapsed == null ? 0 : Math.max(0, AUTO_PLAN_MIN_INTERVAL_MS - elapsed);
-    if (wait > 0) setAutoPlanThrottled(true);
-    const timer = setTimeout(() => {
-      setAutoPlanThrottled(false);
-      autoPlan.mutate();
-    }, wait);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileQ.data?.onboarding_completed, noPlanYet]);
 
   const today0 = todayISO();
   const [visibleWeek, setVisibleWeek] = useState(() => weekStartOf(today0));
@@ -460,14 +398,9 @@ function Hoy() {
   const todayQ = useQuery({
     queryKey: ["today"],
     queryFn: () => ensureTodayLog(todayMeals.map((m) => m.moment)),
-    // Espera a que el plan mensual haya terminado de cargar. Si no hay plan
-    // todavía, espera además a que termine (con éxito o no) la generación
-    // automática de arriba, para no crear el registro de hoy con comidas
-    // vacías mientras el plan se está preparando.
-    enabled:
-      !!profileQ.data?.onboarding_completed &&
-      planQ.isFetched &&
-      (!!planQ.data || autoPlan.isError),
+    // Solo con plan: sin él, el registro de hoy nacería con comidas vacías.
+    // Hoy invita a prepararlo (ver `noPlanYet`) y se crea al volver.
+    enabled: !!profileQ.data?.onboarding_completed && planQ.isFetched && !!planQ.data,
   });
 
   const profile = profileQ.data;
@@ -981,26 +914,35 @@ function Hoy() {
         />
 
         {!habits.length ? (
-          autoPlan.isError || todayQ.isError ? (
-            // Mismo patrón que el fallback de "Guía del coach": si la generación
-            // falla (o el registro de hoy no carga), se ofrece un reintento en vez
-            // de dejar el texto de "preparando" colgado para siempre.
+          noPlanYet ? (
+            // Un mes se genera una vez, tras la conversación con el coach en
+            // Plan: aquí no se genera nada, solo se lleva allí.
+            <Link
+              to="/plan"
+              className="surface-card mt-3.5 flex items-center gap-3 p-4 transition-transform active:scale-[0.99]"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+                <CalendarRange className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Prepara tu plan del mes</span>
+                <span className="block text-xs text-muted-foreground">
+                  Cinco preguntas sobre tu mes y te preparo las comidas y la compra.
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </Link>
+          ) : todayQ.isError ? (
             <button
               type="button"
-              onClick={() => (autoPlan.isError ? autoPlan.mutate() : todayQ.refetch())}
+              onClick={() => todayQ.refetch()}
               className="mt-3.5 text-sm font-medium text-primary"
             >
-              {autoPlan.isError
-                ? "No hemos podido preparar tu menú del mes. Reintentar"
-                : "No hemos podido preparar las comidas de hoy. Reintentar"}
+              No hemos podido preparar las comidas de hoy. Reintentar
             </button>
           ) : (
             <p className="mt-3.5 animate-pulse text-sm text-muted-foreground">
-              {autoPlanThrottled
-                ? "Ya se está preparando tu menú del mes..."
-                : autoPlan.isPending
-                  ? "Preparando tu menú del mes..."
-                  : "Preparando las comidas de hoy..."}
+              Preparando las comidas de hoy...
             </p>
           )
         ) : (

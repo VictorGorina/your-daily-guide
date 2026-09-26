@@ -137,7 +137,8 @@ Cambiar de cadencia (`recadenceMonthlyPlan`) en una lista **canónica** no llama
 `shopping`: solo guarda la nueva cadencia y la UI re-proyecta. En una lista **antigua** sí rehace
 el reparto de `trip` (`repartitionTrips`) y puede trocear un perecedero en varias filas;
 `carryOwnedByName` (`plan-shared.ts`) reaplica "en casa"/"comprado" por nombre para que las marcas
-no se pierdan. Las listas antiguas se convierten a canónicas al regenerar el plan.
+no se pierdan. Las listas antiguas se quedan como están: un mes no se regenera (ver "Un plan por
+mes" en CLAUDE.md), así que pasan a canónicas en el plan del mes siguiente.
 
 Para que el coach pueda proponer platos con lo ya comprado, cada mensaje del chat lleva la lista de
 ingredientes, la despensa extra y el menú de los próximos días (`coachPlanContext`), además de la
