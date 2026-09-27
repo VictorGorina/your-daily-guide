@@ -47,7 +47,11 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
       // acabe colándose en el bundle del cliente.
       importProtection: {
         behavior: "error",
-        client: { files: ["**/server/**"], specifiers: ["server-only"] },
+        // `files` sustituye al valor por defecto de TanStack (`**/*.server.*`), no se
+        // suma (`pick(user, fallback)` en el plugin.js de start-plugin-core; los
+        // `specifiers` sí se suman): hay que repetirlo aquí o los *.server.ts quedan
+        // sin proteger.
+        client: { files: ["**/*.server.*", "**/server/**"], specifiers: ["server-only"] },
       },
       // src/server.ts es nuestro wrapper de errores SSR; ver ese archivo.
       server: { entry: "server" },
