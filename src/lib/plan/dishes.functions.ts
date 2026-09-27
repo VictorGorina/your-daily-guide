@@ -4,6 +4,7 @@ import {
   coachSystemPrompt,
   createAiProvider,
   PLAN_MODEL,
+  requireAiKey,
 } from "@/lib/ai-provider.server";
 import { assertCleanFood, BLOCKED_FOOD_MESSAGE, VAGUE_DISH_MESSAGE } from "@/lib/content-guard";
 import { requestDeadline } from "@/lib/deadline";
@@ -421,8 +422,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
       context,
     }): Promise<{ plan: MonthlyPlan; filled: number; children: string[] }> => {
       const deadline = requestDeadline();
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error("Falta la clave de IA");
+      const key = requireAiKey();
 
       const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
       await enforceUserRateLimit(context.userId, "child-meals");
@@ -620,8 +620,7 @@ export const dishRecipe = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }): Promise<DishRecipe> => {
     const deadline = requestDeadline();
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
 
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "recipe");
