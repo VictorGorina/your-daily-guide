@@ -29,6 +29,7 @@ import {
   type MealHabit,
 } from "@/lib/plan-shared";
 import { cleanDaySnacks, type DaySnacks } from "@/lib/snacks";
+import { requireAiKey } from "@/lib/ai-provider.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SettleDayDeps, SettleDayResult } from "./day-settle.functions";
 
@@ -315,8 +316,7 @@ export async function settleDayHandler(
     return { outcome: window.reason, kcal: balance.pending };
   }
 
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("Falta la clave de IA");
+  const key = requireAiKey();
   const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
   await enforceUserRateLimit(userId, "plan-adjust");
 
