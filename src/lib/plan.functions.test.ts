@@ -4,7 +4,7 @@ import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOp, type FakeTables } from "@/test/fake-supabase";
 
 import type { ShoppingList } from "./plan-shared";
-import { toggleShoppingOwnedHandler } from "./plan.functions";
+import { toggleShoppingOwnedHandler } from "./shopping/state.server";
 
 const MONTH = "2026-10";
 

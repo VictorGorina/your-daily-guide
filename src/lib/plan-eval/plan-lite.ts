@@ -38,7 +38,8 @@ import { getRecipes } from "@/lib/nutrition/recipes.server";
 import { serveDay } from "@/lib/nutrition/day-close";
 import { plannedMacros } from "@/lib/nutrition/scale";
 import { recipeSlotOfMoment } from "@/lib/nutrition/validate-recipe";
-import { _fitPlanForEval, _generatePlanBodyForEval } from "@/lib/plan.functions";
+import { _fitPlanForEval } from "@/lib/plan/fit.server";
+import { _generatePlanBodyForEval } from "@/lib/plan/generate.server";
 import { mealsForDate, MEAL_SLOTS, monthCoverage } from "@/lib/plan-shared";
 
 type Typology = { id: string; label: string; profile: Record<string, unknown> };

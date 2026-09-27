@@ -252,7 +252,7 @@ export type SettleDayResult = {
 
 type SettleDayInput = { today: string; changes: DishChange[] };
 
-type ReflowMeals = typeof import("@/lib/plan.functions").reflowMeals;
+type ReflowMeals = typeof import("@/lib/plan/reflow.server").reflowMeals;
 
 /** Lo que el handler recibe de fuera; los tests cambian `reflow` (sin IA). */
 export type SettleDayDeps = { reflow?: ReflowMeals };
@@ -441,7 +441,7 @@ export async function settleDayHandler(
   };
 
   try {
-    const reflowMeals = deps.reflow ?? (await import("@/lib/plan.functions")).reflowMeals;
+    const reflowMeals = deps.reflow ?? (await import("@/lib/plan/reflow.server")).reflowMeals;
     const changedMeals = row.habits
       .filter((h) => h.status === "distinto" && h.swapKcalDelta != null)
       .map((h) => ({
