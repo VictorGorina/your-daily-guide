@@ -1,4 +1,5 @@
 import type { PlanCoverage } from "../plan/types";
+import { daysInMonth } from "@/lib/dates";
 
 export type ShoppingCadence = "semanal" | "bisemanal" | "mensual";
 
@@ -387,11 +388,7 @@ export const tripsForCoverage = (
   return Math.max(1, Math.round(days / period));
 };
 
-/** Número de días de un mes "YYYY-MM". */
-export const daysInMonth = (month: string) => {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(y ?? 1970, m ?? 1, 0).getDate();
-};
+export { daysInMonth };
 
 /**
  * Días del mes que cubre un plan según cuándo se crea: de hoy a fin de mes si
