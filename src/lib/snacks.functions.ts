@@ -3,7 +3,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertCleanFood } from "@/lib/content-guard";
-import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
 import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import { requestDeadline } from "@/lib/deadline";
 import type { MacroEstimate } from "@/lib/guide.functions";
