@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { COACH_MODEL, createAiProvider } from "@/lib/ai-provider.server";
+import { COACH_MODEL, createAiProvider, requireAiKey } from "@/lib/ai-provider.server";
 import { DAILY_ACTIVITIES, type DailyActivity } from "@/lib/nutrition/energy";
 import { formatTraining, parseTraining } from "@/lib/nutrition/exercise-energy";
 
@@ -96,8 +96,7 @@ export const parseOnboarding = createServerFn({ method: "POST" })
     transcript: String(input?.transcript ?? "").slice(0, 12000),
   }))
   .handler(async ({ data, context }): Promise<OnboardingDraft> => {
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
 
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "onboarding-parse");
