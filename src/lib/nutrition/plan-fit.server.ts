@@ -45,6 +45,7 @@ import { resolveServing, type ServingContext } from "./planned-serving.server";
 import { portionFactors } from "./portion";
 import { getRecipes, type RecipeLookup } from "./recipes.server";
 import { recipeSlotOfMoment } from "./validate-recipe";
+import { dateInMonth, daysInMonth } from "@/lib/dates";
 
 type MealKey = "desayuno" | "comida" | "cena";
 
@@ -120,13 +121,11 @@ export async function fitPlanMeals(opts: {
     highProtein: energy.protein_g / Math.max(1, energy.basis.refWeightKg) >= 1.6,
   };
 
-  const [y, m] = month.split("-").map(Number) as [number, number];
-  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const last = daysInMonth(month);
   const from = plan.coverage?.fromDay ?? 1;
   const to = Math.min(plan.coverage?.toDay ?? last, last);
-  const dates = Array.from(
-    { length: Math.max(0, to - from + 1) },
-    (_, i) => `${month}-${String(from + i).padStart(2, "0")}`,
+  const dates = Array.from({ length: Math.max(0, to - from + 1) }, (_, i) =>
+    dateInMonth(month, from + i),
   ).filter((date) => date > after);
 
   const recipes = new Map<string, RecipeLookup>();

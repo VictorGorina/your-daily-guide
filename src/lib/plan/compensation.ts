@@ -5,6 +5,7 @@ import { dateOfPlanCell, planCursor, weekdayName } from "./grid";
 import { mealsForDate } from "./habits";
 import { MEAL_SLOT_LABEL, type MealSlot } from "./slots";
 import type { MonthlyPlan } from "./types";
+import { dateInMonth } from "@/lib/dates";
 
 // ---------------------------------------------------------------------------
 // Diff de platos futuros tras un ajuste del plan
@@ -40,7 +41,7 @@ export function diffFutureMeals(
   const totalDays = daysInMonth(month);
 
   for (let d = 1; d <= totalDays; d++) {
-    const date = `${month}-${String(d).padStart(2, "0")}`;
+    const date = dateInMonth(month, d);
     if (date <= today) continue; // solo días futuros
 
     const mealsBefore = mealsForDate(before, date);

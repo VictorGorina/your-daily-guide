@@ -3,6 +3,7 @@ import { cleanIntakeText } from "@/lib/month-intake";
 import { planCursor } from "./grid";
 import type { MealSlot } from "./slots";
 import type { PlanCoverage } from "./types";
+import { dateInMonth } from "@/lib/dates";
 
 /**
  * Lo que la persona contó antes de que se genere el plan de un mes: si va a
@@ -54,7 +55,7 @@ export function awayPlanLine(input: {
 
   const awayDays: { date: string; weekIndex: number; dayIndex: number; dayName: string }[] = [];
   for (let dom = coverage.fromDay; dom <= coverage.toDay; dom++) {
-    const date = `${month}-${String(dom).padStart(2, "0")}`;
+    const date = dateInMonth(month, dom);
     if (date < awayStart || date > awayEnd) continue;
     awayDays.push({ date, ...planCursor(date) });
   }

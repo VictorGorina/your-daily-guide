@@ -12,6 +12,7 @@ import {
   type MealStatus,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
+import { dateInMonth, daysInMonth } from "@/lib/dates";
 
 export type Profile = {
   id: string;
@@ -399,13 +400,11 @@ export async function fetchLogs(): Promise<DailyLog[]> {
  * 120 días de `fetchLogs` (que solo cubre ~4 meses hacia atrás).
  */
 export async function fetchLogsForMonth(month: string): Promise<DailyLog[]> {
-  const [y, m] = month.split("-").map(Number);
-  const lastDay = new Date(y ?? 1970, m ?? 1, 0).getDate();
   const { data, error } = await supabase
     .from("daily_logs")
     .select("*")
     .gte("log_date", `${month}-01`)
-    .lte("log_date", `${month}-${String(lastDay).padStart(2, "0")}`)
+    .lte("log_date", dateInMonth(month, daysInMonth(month)))
     .order("log_date", { ascending: true });
   if (error) throw error;
   return (data ?? []) as unknown as DailyLog[];

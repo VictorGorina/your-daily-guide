@@ -19,6 +19,7 @@ import {
   type MonthlyPlan,
   type PlanMonthStatus,
 } from "@/lib/plan-shared";
+import { dateInMonth, daysInMonth } from "@/lib/dates";
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 
@@ -70,9 +71,9 @@ export function PlanMonthCalendar({
   const [year, m] = month.split("-").map(Number);
   const monthIdx = (m ?? 1) - 1;
   const y = year ?? new Date().getFullYear();
-  const daysInMonth = new Date(y, monthIdx + 1, 0).getDate();
+  const totalDays = daysInMonth(month);
   const firstOffset = (new Date(y, monthIdx, 1).getDay() + 6) % 7;
-  const iso = (d: number) => `${month}-${String(d).padStart(2, "0")}`;
+  const iso = (d: number) => dateInMonth(month, d);
   // Un plan creado a media de mes no cubre los días previos: sin menú, se
   // muestran apagados (salvo que haya registro de ese día).
   const fromDay = plan?.coverage?.fromDay ?? 1;
@@ -81,7 +82,7 @@ export function PlanMonthCalendar({
 
   const cells: (string | null)[] = [
     ...Array.from({ length: firstOffset }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => iso(i + 1)),
+    ...Array.from({ length: totalDays }, (_, i) => iso(i + 1)),
   ];
 
   const detail = selected ? planForDate(plan, selected) : null;

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import { dishKey } from "@/lib/nutrition/dish-key";
 import { MEAL_SLOTS, mealsForDate, type MonthlyPlan } from "@/lib/plan-shared";
+import { dateInMonth, daysInMonth } from "@/lib/dates";
 
 /**
  * Precalentamiento de las recetas del plan en el cliente (ticket 06 de
@@ -37,11 +38,10 @@ export function planDishesToWarm(
   today: string,
 ) {
   if (!plan) return [];
-  const [y, m] = month.split("-").map(Number) as [number, number];
-  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const last = daysInMonth(month);
   const seen = new Map<string, string>();
   for (let day = 1; day <= last; day++) {
-    const date = `${month}-${String(day).padStart(2, "0")}`;
+    const date = dateInMonth(month, day);
     if (date < today) continue;
     for (const meal of mealsForDate(plan, date, MEAL_SLOTS)) {
       const idea = meal.idea?.trim();

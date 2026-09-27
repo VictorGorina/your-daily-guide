@@ -13,7 +13,8 @@ import {
   type IntakeAnswers,
   type IntakeTextAnswer,
 } from "@/lib/month-intake";
-import { daysInMonth, monthTitle } from "@/lib/plan-shared";
+import { dateInMonth, daysInMonth } from "@/lib/dates";
+import { monthTitle } from "@/lib/plan-shared";
 import { setMonthConstraints } from "@/lib/plan.functions";
 
 /** Paso 0: ausencia. 1..4: preguntas de texto. 5: resumen y generar. */
@@ -69,7 +70,7 @@ export function MonthIntakeChat({
   const busy = submit.isPending || generating;
 
   const minDate = `${month}-01`;
-  const maxDate = `${month}-${String(daysInMonth(month)).padStart(2, "0")}`;
+  const maxDate = dateInMonth(month, daysInMonth(month));
   const hasRange = preset != null && preset !== "no";
   const awayReady = preset === "no" || (hasRange && awayStart && awayEnd && awayStart <= awayEnd);
 

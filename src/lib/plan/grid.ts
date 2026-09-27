@@ -1,5 +1,6 @@
 import { daysInMonth } from "../shopping/model";
 import type { MonthlyPlan, PlanDay } from "./types";
+import { dateInMonth } from "@/lib/dates";
 
 export const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
@@ -40,7 +41,7 @@ export function dateOfPlanCell(month: string, weekIndex: number, dayIndex: numbe
   const total = daysInMonth(month);
   const from = weekIndex * 7 + 1;
   for (let dom = from; dom <= Math.min(from + 6, total); dom++) {
-    const date = `${month}-${String(dom).padStart(2, "0")}`;
+    const date = dateInMonth(month, dom);
     if ((new Date(`${date}T00:00:00`).getDay() + 6) % 7 === dayIndex) return date;
   }
   return null;
