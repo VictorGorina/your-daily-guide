@@ -4,6 +4,7 @@ import {
   coachSystemPrompt,
   createAiProvider,
   currencySymbol,
+  requireAiKey,
 } from "@/lib/ai-provider.server";
 import { requestDeadline } from "@/lib/deadline";
 import { showsNutritionNumbers } from "@/lib/macros";
@@ -24,8 +25,7 @@ export const goalImpact = createServerFn({ method: "POST" })
   .handler(
     async ({ data, context }): Promise<{ text: string; suggested_target_date: string | null }> => {
       const deadline = requestDeadline();
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error("Falta la clave de IA");
+      const key = requireAiKey();
 
       const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
       await enforceUserRateLimit(context.userId, "coach-aux");
@@ -81,8 +81,7 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string }) => ({ month: String(input?.month ?? "") }))
   .handler(async ({ data, context }): Promise<{ text: string }> => {
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
 
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "coach-aux");
