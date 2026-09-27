@@ -1,4 +1,5 @@
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import {
   adjustmentColumn,
   cleanDayAdjustment,
@@ -61,9 +62,6 @@ import type { SettleDayDeps, SettleDayResult } from "./day-settle.functions";
 
 type Client = SupabaseClient<never, never, never>;
 
-/** Veces que se relee y reintenta una escritura que se cruzó con otra. */
-const WRITE_ATTEMPTS = 3;
-
 export type DishChange = {
   label: string;
   slot: string;
@@ -81,7 +79,6 @@ type DayRow = {
   record: DayAdjustmentRecord | null;
   /** Reservas en vuelo (ticket 22): viven en la misma columna que `record`. */
   pending: PendingReservation[];
-  updatedAt: string;
 };
 
 /** Lo que una pasada puede cambiar de la fila del día. */
@@ -107,47 +104,18 @@ const DAY_COLUMNS_LEGACY = "habits, snacks, exercise, updated_at";
 
 const isMissingColumn = (error: unknown) => (error as { code?: string } | null)?.code === "42703";
 
-async function readDayRow(supabase: Client, userId: string, date: string): Promise<DayRow | null> {
-  const query = () =>
-    supabase
-      .from("daily_logs")
-      .select(hasAdjustmentColumn ? DAY_COLUMNS : DAY_COLUMNS_LEGACY)
-      .eq("user_id", userId)
-      .eq("log_date", date)
-      .maybeSingle();
-
-  let { data, error } = await query();
-  if (error && hasAdjustmentColumn && isMissingColumn(error)) {
-    hasAdjustmentColumn = false;
-    ({ data, error } = await query());
-  }
-  if (error) throw error;
-  if (!data) return null;
-
-  const row = data as {
-    habits?: unknown;
-    snacks?: unknown;
-    exercise?: unknown;
-    adjustment?: unknown;
-    updated_at: string;
-  };
+function toDayRow(row: Record<string, unknown>): DayRow {
   return {
     habits: (Array.isArray(row.habits) ? row.habits : []) as MealHabit[],
     snacks: cleanDaySnacks(row.snacks),
     exercise: cleanDayExercise(row.exercise),
     record: cleanDayAdjustment(row.adjustment),
     pending: cleanPendingReservations(row.adjustment),
-    updatedAt: row.updated_at,
   };
 }
 
-async function writeDayIfUnchanged(
-  supabase: Client,
-  userId: string,
-  date: string,
-  row: DayRow,
-  patch: DayPatch,
-): Promise<boolean> {
+/** Las columnas que escribe `patch`; `null` si no cambia ninguna. */
+function dayColumns(row: DayRow, patch: DayPatch): Record<string, unknown> | null {
   const update: Record<string, unknown> = {};
   if (patch.habits !== undefined) update.habits = patch.habits;
   if (patch.snacks !== undefined) update.snacks = patch.snacks;
@@ -161,27 +129,12 @@ async function writeDayIfUnchanged(
       patch.pending ?? row.pending,
     );
   }
-  if (!Object.keys(update).length) return true;
-
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .update(update as never)
-    .eq("user_id", userId)
-    .eq("log_date", date)
-    .eq("updated_at", row.updatedAt)
-    .select("id");
-  if (error && isMissingColumn(error) && hasAdjustmentColumn) {
-    // La migración todavía no está: se reintenta sin la columna nueva.
-    hasAdjustmentColumn = false;
-    return false;
-  }
-  if (error) throw error;
-  return !!data?.length;
+  return Object.keys(update).length ? update : null;
 }
 
 /**
- * Lee, transforma y escribe la fila del día entera, reintentando si otra
- * escritura se cruzó.
+ * Lee, transforma y escribe la fila del día entera con `updateDailyLogCas`,
+ * reintentando si otra escritura se cruzó.
  *
  * Que sea UNA lectura y UNA escritura de las cuatro columnas es parte del
  * arreglo: antes los tres asentamientos patcheaban columnas distintas de la
@@ -197,22 +150,41 @@ async function patchDay(
   date: string,
   update: (row: DayRow) => DayPatch,
 ): Promise<DayRow | null> {
-  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
-    const row = await readDayRow(supabase, userId, date);
-    if (!row) return null;
-    const patch = update(row);
-    if (await writeDayIfUnchanged(supabase, userId, date, row, patch)) {
-      return {
-        ...row,
-        ...(patch.habits !== undefined ? { habits: patch.habits } : {}),
-        ...(patch.snacks !== undefined ? { snacks: patch.snacks } : {}),
-        ...(patch.exercise !== undefined ? { exercise: patch.exercise } : {}),
-        ...(patch.record !== undefined ? { record: patch.record } : {}),
-        ...(patch.pending !== undefined ? { pending: patch.pending } : {}),
-      };
-    }
+  // Lo que se leyó y se aplicó en el último intento (el que escribió).
+  const last: { row?: DayRow; patch: DayPatch } = { patch: {} };
+  const write = () =>
+    updateDailyLogCas(
+      supabase,
+      userId,
+      date,
+      hasAdjustmentColumn ? DAY_COLUMNS : DAY_COLUMNS_LEGACY,
+      (latest) => {
+        last.row = toDayRow(latest);
+        last.patch = update(last.row);
+        return dayColumns(last.row, last.patch);
+      },
+      { exhaustedMessage: "No hemos podido guardar el ajuste del día. Inténtalo de nuevo." },
+    );
+
+  try {
+    await write();
+  } catch (error) {
+    // La migración todavía no está: se repite sin la columna nueva.
+    if (!hasAdjustmentColumn || !isMissingColumn(error)) throw error;
+    hasAdjustmentColumn = false;
+    last.row = undefined;
+    await write();
   }
-  throw new Error("No hemos podido guardar el ajuste del día. Inténtalo de nuevo.");
+  const { row, patch } = last;
+  if (!row) return null;
+  return {
+    ...row,
+    ...(patch.habits !== undefined ? { habits: patch.habits } : {}),
+    ...(patch.snacks !== undefined ? { snacks: patch.snacks } : {}),
+    ...(patch.exercise !== undefined ? { exercise: patch.exercise } : {}),
+    ...(patch.record !== undefined ? { record: patch.record } : {}),
+    ...(patch.pending !== undefined ? { pending: patch.pending } : {}),
+  };
 }
 
 /** Dirección del objetivo, con el mismo criterio que `reflowMeals`. */
