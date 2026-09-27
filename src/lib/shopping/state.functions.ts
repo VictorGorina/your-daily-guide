@@ -1,5 +1,10 @@
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
+import {
+  COACH_MODEL,
+  coachSystemPrompt,
+  createAiProvider,
+  requireAiKey,
+} from "@/lib/ai-provider.server";
 import { assertCleanFood } from "@/lib/content-guard";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";
 import {
@@ -252,8 +257,7 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
     return { month: input.month, trip: Math.round(trip), imageBase64, mime };
   })
   .handler(async ({ data, context }): Promise<ReceiptScan> => {
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
 
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "receipt");
