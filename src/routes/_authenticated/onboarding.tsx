@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { DictateButton } from "@/components/dictate-button";
 import { RegionStep } from "@/components/region-step";
 import { ageFromDOB } from "@/lib/age";
+import { localISODate } from "@/lib/dates";
 import { deriveGoalType, fetchProfile, hasProfileColumn, saveProfile, todayISO } from "@/lib/daily";
 import { parseOnboarding } from "@/lib/onboarding.functions";
 import { type MealSlot } from "@/lib/plan-shared";
@@ -143,11 +144,12 @@ const parseDatePretty = (pretty: string): string | null => {
   return `${y}-${mo}-${d}`;
 };
 
-const DOB_MAX = new Date().toISOString().slice(0, 10);
+// Fechas locales: `toISOString()` es la de UTC, y por la noche en América ya es mañana.
+const DOB_MAX = localISODate(new Date());
 const DOB_MIN = (() => {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 110);
-  return d.toISOString().slice(0, 10);
+  return localISODate(d);
 })();
 
 // --- Preguntas "hoja" (sin follow-up propio) usadas como follow-up de otras o
