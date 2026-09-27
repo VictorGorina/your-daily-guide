@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertCleanFood } from "@/lib/content-guard";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import { requestDeadline } from "@/lib/deadline";
 import type { MacroEstimate } from "@/lib/guide.functions";
 import { compensationNeed } from "@/lib/nutrition/compensation";
@@ -53,50 +54,10 @@ const todayOf = (raw: unknown) => {
   return ISO_DATE.test(value) ? value : zonedTodayISO();
 };
 
-/** Veces que se relee y reintenta una escritura que se cruzó con otra. */
-const WRITE_ATTEMPTS = 3;
-
-type SnackRow = { snacks: DaySnacks | null; updatedAt: string } | null;
-
-async function readSnackRow(supabase: Client, userId: string, date: string): Promise<SnackRow> {
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .select("snacks, updated_at")
-    .eq("user_id", userId)
-    .eq("log_date", date)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  const row = data as { snacks?: unknown; updated_at: string };
-  return { snacks: cleanDaySnacks(row.snacks), updatedAt: row.updated_at };
-}
-
 /**
- * Escribe la columna solo si nadie la ha tocado desde que se leyó
- * (`updated_at`). Devuelve false si se cruzó otra escritura.
- */
-async function writeSnacksIfUnchanged(
-  supabase: Client,
-  userId: string,
-  date: string,
-  row: NonNullable<SnackRow>,
-  snacks: DaySnacks,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .update({ snacks } as never)
-    .eq("user_id", userId)
-    .eq("log_date", date)
-    .eq("updated_at", row.updatedAt)
-    .select("id");
-  if (error) throw error;
-  return !!data?.length;
-}
-
-/**
- * Lee, transforma y escribe la columna de hoy, reintentando si otra escritura
- * se cruzó. Crea la fila del día si todavía no existe (la policy "insert recent
- * own log" lo permite para hoy). `update` recibe `null` si no había picoteo.
+ * Lee, transforma y escribe la columna de hoy con `updateDailyLogCas`,
+ * reintentando si otra escritura se cruzó. Crea la fila del día si todavía no
+ * existe. `update` recibe `null` si no había picoteo.
  */
 async function patchSnacks(
   supabase: Client,
@@ -104,21 +65,15 @@ async function patchSnacks(
   date: string,
   update: (current: DaySnacks | null) => DaySnacks,
 ): Promise<DaySnacks> {
-  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
-    const row = await readSnackRow(supabase, userId, date);
-    const next = update(row?.snacks ?? null);
-    if (!row) {
-      const { error } = await supabase
-        .from("daily_logs")
-        .insert({ user_id: userId, log_date: date, snacks: next } as never);
-      if (!error) return next;
-      // 23505: el cliente creó la fila a la vez. Se relee y se actualiza.
-      if ((error as { code?: string }).code !== "23505") throw error;
-      continue;
-    }
-    if (await writeSnacksIfUnchanged(supabase, userId, date, row, next)) return next;
-  }
-  throw new Error("No hemos podido guardar el picoteo. Inténtalo de nuevo.");
+  const { patch } = await updateDailyLogCas(
+    supabase,
+    userId,
+    date,
+    "snacks",
+    (row) => ({ snacks: update(row ? cleanDaySnacks(row.snacks) : null) }),
+    { create: true, exhaustedMessage: "No hemos podido guardar el picoteo. Inténtalo de nuevo." },
+  );
+  return patch!.snacks as DaySnacks;
 }
 
 const cleanMacros = (raw: unknown): MacroEstimate => {
