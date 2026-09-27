@@ -11,6 +11,7 @@ import {
 } from "@/lib/plan-shared";
 import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
+import { requireAiKey } from "@/lib/ai-provider.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerFn } from "@tanstack/react-start";
 import { askPlanFit } from "./fit.server";
@@ -41,8 +42,7 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }): Promise<{ fit: PlanFitMark | null }> => {
     const deadline = requestDeadline();
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
     const supabase = context.supabase as never as SupabaseClient<never, never, never>;
 
     const { data: row } = await ownPlanRow(
