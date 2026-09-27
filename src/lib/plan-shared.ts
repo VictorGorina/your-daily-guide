@@ -2,7 +2,10 @@
 // `src/lib/shopping/`, un módulo por tema (ticket 26 de la auditoría). Este
 // archivo solo los reexporta para que el resto de la app siga importando de
 // `@/lib/plan-shared`. Los módulos no importan de aquí, sino entre ellos: así no
-// hay ciclos en ejecución (`bunx madge --circular src/lib/plan src/lib/shopping`).
+// hay ciclos de valores en ejecución (los de `import type` se borran al compilar).
+// Para comprobarlo, madge necesita un `.madgerc` con `"fileExtensions": ["ts"]` y
+// `"detectiveOptions": { "ts": { "skipTypeImports": true } }`: sin él no analiza
+// ningún archivo y dice que no hay ciclos igualmente.
 export * from "./plan/slots";
 export * from "./plan/types";
 export * from "./shopping/model";
