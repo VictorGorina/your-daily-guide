@@ -28,6 +28,7 @@ import {
 } from "@/lib/snacks";
 import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
+import { requireAiKey } from "@/lib/ai-provider.server";
 
 /**
  * Picoteo de Hoy (feature `picoteo-hoy`, spec en `.scratch/picoteo-hoy/`).
@@ -132,8 +133,7 @@ export const estimateSnack = createServerFn({ method: "POST" })
   .validator((input: { text: string }) => ({ text: cleanText(input?.text) }))
   .handler(async ({ data, context }): Promise<SnackEstimate> => {
     const deadline = requestDeadline();
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
 
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "snack-estimate");
