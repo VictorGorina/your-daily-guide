@@ -773,22 +773,6 @@ export function goalProgress(profile: Profile | null): GoalProgress {
   return ZERO;
 }
 
-export type RatioSignal = "success" | "warning" | "muted" | "none";
-
-/**
- * Semáforo de cumplimiento diario, compartido por WeekPager, MonthCalendar y
- * el mapa de calor de Historial. Deliberadamente sin rojo: un día flojo se
- * marca "muted" (gris neutro), nunca como fallo — ver área 5 del roadmap UX
- * ("motivación y retención"). "none" es solo para días sin ningún registro.
- */
-export function ratioSignal(done: number, total: number): RatioSignal {
-  if (!total) return "none";
-  const ratio = done / total;
-  if (ratio >= 1) return "success";
-  if (ratio > 0) return "warning";
-  return "muted";
-}
-
 function dailyRatio(log: DailyLog | undefined) {
   const habits = log?.habits ?? [];
   return habits.length ? habits.filter((h) => h.done).length / habits.length : 0;

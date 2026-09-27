@@ -331,15 +331,15 @@ app se cerró antes. `reflowMonthlyPlan` tiene dos modos:
   `skipped: "not-planner"` para un no planificador. Bucket de cuota propio (`plan-reflow`, 12/h).
 
 **Pantalla Plan — navegación de meses y unificación de Historial.** La pantalla tiene dos
-subpestañas (Plan e Ingredientes; ya no hay "Historial") y un selector `‹ mes ›` en la cabecera
-que gobierna toda la pantalla. El calendario del mes es el navegador del historial: los días
-pasados llevan el semáforo de cumplimiento (`ratioSignal`, sin rojo) y abren un detalle reducido
-del día (`day-detail-sheet.tsx`). El navegador no baja del mes de `profiles.app_started_on` ni
-sube más allá del mes que viene, y este último solo se puede generar/accionar en su última semana
-(`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7`, el mismo del aviso push de
-renovación). `generateMonthlyPlan` rechaza en servidor los meses pasados y el mes que viene aún
-bloqueado. Meses pasados: solo lectura. Helpers de mes en `plan/month.ts` (`planMonthStatus`,
-`isMonthActionable`, `planNavBounds`, `addMonths`, `monthTitle`).
+subpestañas (Plan e Ingredientes; ya no hay "Historial") y un selector `‹ mes ›` en la cabecera que
+gobierna toda la pantalla. El calendario del mes es el navegador del historial: los días pasados
+llevan el semáforo del día (`daySignal`: kcal contra el objetivo; rojo solo al pasarse de largo) y
+abren un detalle reducido del día (`day-detail-sheet.tsx`). El navegador no baja del mes de
+`profiles.app_started_on` ni sube más allá del mes que viene, y este último solo se puede
+generar/accionar en su última semana (`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7`, el
+mismo del aviso push de renovación). `generateMonthlyPlan` rechaza en servidor los meses pasados y
+el mes que viene aún bloqueado. Meses pasados: solo lectura. Helpers de mes en `plan/month.ts`
+(`planMonthStatus`, `isMonthActionable`, `planNavBounds`, `addMonths`, `monthTitle`).
 
 **Un plan por mes, tras una conversación con el coach — no se rehace a mano.**
 `generateMonthlyPlan` rechaza (400, antes de gastar cuota) un mes que ya tiene fila en
