@@ -12,8 +12,6 @@ import { zonedTodayISO } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { propagateLogToFamilyHandler } from "./household-propagate.server";
 
-export { propagateLogToFamilyHandler } from "./household-propagate.server";
-
 /** El "comí otra cosa" que se propaga a la mesa: opcional, pero si viene tiene que ser comida. */
 function cleanSharedActual(raw: string | undefined): string | undefined {
   const value = raw?.trim();

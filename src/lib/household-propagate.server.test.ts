@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeTables } from "@/test/fake-supabase";
 
-import { propagateLogToFamilyHandler } from "./household.functions";
+import { propagateLogToFamilyHandler } from "./household-propagate.server";
 
 // Ana y Bea comparten la comida todos los días. El lunes 21 ya pasó.
 const DATE = "2026-09-21";

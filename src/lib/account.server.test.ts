@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase } from "@/test/fake-supabase";
 
-import { deleteAccountHandler } from "./account.functions";
+import { deleteAccountHandler } from "./account.server";
 
 describe("deleteAccount", () => {
   it("borra en Auth el usuario de la sesión", async () => {
