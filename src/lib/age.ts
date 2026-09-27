@@ -1,3 +1,5 @@
+import { localISODate } from "@/lib/dates";
+
 /**
  * Fecha de nacimiento como fecha LOCAL. `new Date("1996-06-16")` la lee como medianoche UTC,
  * que al oeste de Greenwich (México, UTC−6) es aún el día 15: el cumpleaños se contaba un día
@@ -28,7 +30,5 @@ export function ageFromDOB(dob: string | null | undefined): number | null {
 export function dobFromAge(age: number): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - age);
-  // Fecha local, no `toISOString()` (UTC): por la noche en América daría ya mañana.
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return localISODate(d);
 }

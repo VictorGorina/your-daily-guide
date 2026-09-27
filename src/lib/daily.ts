@@ -12,7 +12,7 @@ import {
   type MealStatus,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
-import { dateInMonth, daysInMonth } from "@/lib/dates";
+import { addDaysISO, dateInMonth, daysInMonth } from "@/lib/dates";
 
 export type Profile = {
   id: string;
@@ -826,14 +826,10 @@ export function weeklyTrendFrom(logs: DailyLog[]): WeeklyTrend | null {
   const todayStr = todayISO();
   const byDate = new Map(logs.map((l) => [l.log_date, l]));
   const avgRatioFor = (offsetStart: number, offsetEnd: number) => {
-    const d = new Date(`${todayStr}T00:00:00`);
     let sum = 0;
     let counted = 0;
     for (let i = offsetStart; i < offsetEnd; i++) {
-      const day = new Date(d);
-      day.setDate(d.getDate() - i);
-      const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-      const log = byDate.get(iso);
+      const log = byDate.get(addDaysISO(todayStr, -i));
       if (!log || !(log.habits ?? []).length) continue;
       sum += dailyRatio(log);
       counted += 1;
