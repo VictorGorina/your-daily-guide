@@ -1,3 +1,4 @@
+import { addDaysISO as addDays } from "@/lib/dates";
 import { isSharedSlot, type SharedSlots } from "@/lib/household-shared";
 import { daysInMonth } from "../shopping/model";
 import { dateOfPlanCell, planCursor, weekdayName } from "./grid";
@@ -63,11 +64,7 @@ export function diffFutureMeals(
   return changes;
 }
 
-export const addDays = (date: string, days: number) => {
-  const d = new Date(`${date}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+export { addDays };
 
 /** Días hacia delante en los que se reparte una compensación. */
 export const COMPENSATION_WINDOW_DAYS = 6;
