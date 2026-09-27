@@ -46,6 +46,33 @@ export function deriveGoalType(
   return "mantener";
 }
 
+export type GoalDirection = "perder" | "ganar" | "mantener";
+
+/**
+ * Hacia dónde va el objetivo de la persona: el peso objetivo contra el actual
+ * (o el de partida) si lo hay; si no, el `goal_type` legacy normalizado. Un
+ * objetivo que no es de peso ("habitos", "energia") o ninguno → `null`.
+ *
+ * Lo usan la decisión de compensar (`compensationNeed`, que con `null` usa la
+ * fila de mantener) y el objetivo energético. `nutrition/energy.ts` tiene su
+ * propia copia (`goalOf`) porque el drift check la compara con la de
+ * `mobile/lib/energy.ts`: se unifica cuando el móvil tenga su `goal.ts`.
+ * Acepta una fila de `profiles` sin tipar, por eso los campos son `unknown`.
+ */
+export function goalDirection(p: {
+  target_weight_kg?: unknown;
+  current_weight_kg?: unknown;
+  start_weight_kg?: unknown;
+  goal_type?: unknown;
+}): GoalDirection | null {
+  if (p.target_weight_kg != null) {
+    const current = p.current_weight_kg ?? p.start_weight_kg ?? p.target_weight_kg;
+    return deriveGoalType(Number(current), Number(p.target_weight_kg));
+  }
+  const legacy = p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
+  return legacy === "perder" || legacy === "ganar" || legacy === "mantener" ? legacy : null;
+}
+
 export type GoalProgress = {
   pct: number;
   /** Progreso con signo en la dirección del objetivo, en kg (negativo = va al revés). */

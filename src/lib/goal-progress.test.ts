@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { deriveGoalType, goalProgress, normalizeGoalType } from "./goal";
+import { deriveGoalType, goalDirection, goalProgress, normalizeGoalType } from "./goal";
+import { compensationNeed } from "./nutrition/compensation";
 import { chipToValue, PROFILE_SECTIONS, valueToChip } from "./profile-fields";
 
 // ---------------------------------------------------------------------------
@@ -345,6 +346,82 @@ describe("goalProgress legacy (sin target_weight_kg)", () => {
     expect(r.pct).toBe(0);
     expect(r.done).toBe(-1);
     expect(r.regressing).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// goalDirection — la dirección del objetivo a partir del perfil
+// ---------------------------------------------------------------------------
+
+describe("goalDirection", () => {
+  it("con peso objetivo, compara con el actual", () => {
+    expect(goalDirection({ target_weight_kg: 70, current_weight_kg: 80 })).toBe("perder");
+    expect(goalDirection({ target_weight_kg: 70, current_weight_kg: 60 })).toBe("ganar");
+    expect(goalDirection({ target_weight_kg: 70, current_weight_kg: 70.5 })).toBe("mantener");
+  });
+
+  it("sin peso actual usa el de partida, y sin ninguno se queda donde está", () => {
+    expect(goalDirection({ target_weight_kg: 70, start_weight_kg: 80 })).toBe("perder");
+    expect(goalDirection({ target_weight_kg: 70 })).toBe("mantener");
+  });
+
+  it("el peso objetivo manda sobre el goal_type legacy", () => {
+    expect(goalDirection({ target_weight_kg: 70, current_weight_kg: 80, goal_type: "ganar" })).toBe(
+      "perder",
+    );
+  });
+
+  it("sin peso objetivo, el goal_type legacy normalizado", () => {
+    expect(goalDirection({ goal_type: "Perder peso" })).toBe("perder");
+    expect(goalDirection({ goal_type: "mantener" })).toBe("mantener");
+  });
+
+  it("un objetivo que no es de peso, o ninguno, no tiene dirección", () => {
+    expect(goalDirection({ goal_type: "habitos" })).toBeNull();
+    expect(goalDirection({ goal_type: "salud" })).toBeNull();
+    expect(goalDirection({ goal_type: "energia" })).toBeNull();
+    expect(goalDirection({})).toBeNull();
+  });
+
+  it("compensa igual que la regla que tenían settleDay y compensateFutureDishChange", () => {
+    // Copia literal de `goalOf` (day-settle.server.ts) y
+    // `resolveCompensationGoal` (reflow.functions.ts) antes del ticket 26: la
+    // diferencia es que devolvían "habitos" o "energia" tal cual, y
+    // `compensationNeed` los trata igual que `null` (fila de mantener).
+    const before = (p: Record<string, unknown>) =>
+      p.target_weight_kg != null
+        ? deriveGoalType(
+            Number(p.current_weight_kg ?? p.start_weight_kg ?? p.target_weight_kg),
+            Number(p.target_weight_kg),
+          )
+        : p.goal_type
+          ? normalizeGoalType(String(p.goal_type))
+          : null;
+    const weights = [null, 60, 69.5, 70, 71, 85];
+    const goalTypes = [null, "perder peso", "ganar", "mantener", "habitos", "salud", "energia"];
+    const profiles: Record<string, unknown>[] = [];
+    for (const target of weights)
+      for (const current of weights)
+        for (const start of [null, 80])
+          for (const goal_type of goalTypes)
+            profiles.push({
+              target_weight_kg: target,
+              current_weight_kg: current,
+              start_weight_kg: start,
+              goal_type,
+            });
+    let compared = 0;
+    for (const p of profiles)
+      for (let deltaKcal = -600; deltaKcal <= 600; deltaKcal += 25)
+        for (const deltaProtein of [null, -30, 0])
+          for (const reversing of [false, true]) {
+            const input = { deltaKcal, deltaProtein, reversing, pregnancyStatus: null };
+            expect(compensationNeed({ ...input, goal: goalDirection(p) })).toEqual(
+              compensationNeed({ ...input, goal: before(p) }),
+            );
+            compared++;
+          }
+    expect(compared).toBeGreaterThan(100_000);
   });
 });
 

@@ -1,5 +1,5 @@
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
+import { goalDirection } from "@/lib/goal";
 import { requestDeadline } from "@/lib/deadline";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";
@@ -67,19 +67,6 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
 // Compensación de un cambio de plato de un día FUTURO
 // ---------------------------------------------------------------------------
 
-/** `goal` que pide `compensationNeed`, a partir del perfil — mismo criterio que
- * usa el prompt del coach (peso objetivo si existe, si no el legacy `goal_type`). */
-function resolveCompensationGoal(profile: Record<string, unknown>) {
-  return profile.target_weight_kg != null
-    ? deriveGoalType(
-        Number(profile.current_weight_kg ?? profile.start_weight_kg ?? profile.target_weight_kg),
-        Number(profile.target_weight_kg),
-      )
-    : profile.goal_type
-      ? normalizeGoalType(String(profile.goal_type))
-      : null;
-}
-
 /**
  * Compensación de un cambio de plato de un día FUTURO (ticket 10 de
  * `hoy-semanas-editables`: el coach cambia un plato que no es el de hoy, p.
@@ -145,7 +132,7 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
         .eq("id", userId)
         .maybeSingle();
       const profile = (profileRow ?? {}) as Record<string, unknown>;
-      const goal = resolveCompensationGoal(profile);
+      const goal = goalDirection(profile);
 
       // El día entero servido como plan, con un plato y con el otro: cada plato
       // al objetivo de su comida (`plannedMacros`) y el día cerrado

@@ -1,4 +1,4 @@
-import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
+import { goalDirection } from "@/lib/goal";
 import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import {
   adjustmentColumn,
@@ -188,16 +188,6 @@ async function patchDay(
   };
 }
 
-/** Dirección del objetivo, con el mismo criterio que `reflowMeals`. */
-function goalOf(p: Record<string, unknown>): string | null {
-  if (p.target_weight_kg != null) {
-    const target = Number(p.target_weight_kg);
-    const current = Number(p.current_weight_kg ?? p.start_weight_kg ?? target);
-    return deriveGoalType(current, target);
-  }
-  return p.goal_type ? normalizeGoalType(String(p.goal_type)) : null;
-}
-
 export type SettleDayInput = { today: string; changes: DishChange[] };
 
 export async function settleDayHandler(
@@ -285,7 +275,7 @@ export async function settleDayHandler(
   //    el ticket 13, proteína (una bajada de ≥ 20 g se compensa siempre).
   const needInput = {
     deltaKcal: balance.pending,
-    goal: goalOf(profile),
+    goal: goalDirection(profile),
     pregnancyStatus: (profile.pregnancy_status as string | null) ?? null,
     reversing: dayReversing(balance),
   };
