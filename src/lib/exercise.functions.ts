@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import {
   compensationWindow,
@@ -61,55 +62,10 @@ const todayOf = (raw: unknown) => {
   return ISO_DATE.test(value) ? value : zonedTodayISO();
 };
 
-/** Veces que se relee y reintenta una escritura que se cruzó con otra. */
-const WRITE_ATTEMPTS = 3;
-
-type ExerciseRow = { exercise: DayExercise | null; updatedAt: string } | null;
-
-async function readExerciseRow(
-  supabase: Client,
-  userId: string,
-  date: string,
-): Promise<ExerciseRow> {
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .select("exercise, updated_at")
-    .eq("user_id", userId)
-    .eq("log_date", date)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  const row = data as { exercise?: unknown; updated_at: string };
-  return { exercise: cleanDayExercise(row.exercise), updatedAt: row.updated_at };
-}
-
 /**
- * Escribe la columna solo si nadie la ha tocado desde que se leyó
- * (`updated_at`). Devuelve false si se cruzó otra escritura.
- */
-async function writeExerciseIfUnchanged(
-  supabase: Client,
-  userId: string,
-  date: string,
-  row: NonNullable<ExerciseRow>,
-  exercise: DayExercise,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .update({ exercise } as never)
-    .eq("user_id", userId)
-    .eq("log_date", date)
-    .eq("updated_at", row.updatedAt)
-    .select("id");
-  if (error) throw error;
-  return !!data?.length;
-}
-
-/**
- * Lee, transforma y escribe la columna de hoy, reintentando si otra escritura
- * se cruzó. Crea la fila del día si todavía no existe (la policy "insert
- * recent own log" lo permite para hoy). `update` recibe `null` si no había
- * deporte.
+ * Lee, transforma y escribe la columna de hoy con `updateDailyLogCas`,
+ * reintentando si otra escritura se cruzó. Crea la fila del día si todavía no
+ * existe. `update` recibe `null` si no había deporte.
  */
 async function patchExercise(
   supabase: Client,
@@ -117,21 +73,15 @@ async function patchExercise(
   date: string,
   update: (current: DayExercise | null) => DayExercise,
 ): Promise<DayExercise> {
-  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
-    const row = await readExerciseRow(supabase, userId, date);
-    const next = update(row?.exercise ?? null);
-    if (!row) {
-      const { error } = await supabase
-        .from("daily_logs")
-        .insert({ user_id: userId, log_date: date, exercise: next } as never);
-      if (!error) return next;
-      // 23505: el cliente creó la fila a la vez. Se relee y se actualiza.
-      if ((error as { code?: string }).code !== "23505") throw error;
-      continue;
-    }
-    if (await writeExerciseIfUnchanged(supabase, userId, date, row, next)) return next;
-  }
-  throw new Error("No hemos podido guardar el deporte. Inténtalo de nuevo.");
+  const { patch } = await updateDailyLogCas(
+    supabase,
+    userId,
+    date,
+    "exercise",
+    (row) => ({ exercise: update(row ? cleanDayExercise(row.exercise) : null) }),
+    { create: true, exhaustedMessage: "No hemos podido guardar el deporte. Inténtalo de nuevo." },
+  );
+  return patch!.exercise as DayExercise;
 }
 
 const cleanActivityInput = (raw: unknown) => {
