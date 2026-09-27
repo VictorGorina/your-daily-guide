@@ -25,6 +25,12 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
 - [ ] Lógica que solo debe correr en servidor → módulo `*.server.ts`, nunca importado desde
       cliente. El lint prohíbe el paquete `server-only` de Next; la alternativa es el sufijo
       o `@tanstack/react-start/server-only`.
+- [ ] Un `*.functions.ts` solo exporta `createServerFn` y tipos. Un helper o un `xxxHandler`
+      exportado (p. ej. para un test) conserva su cuerpo en el bundle del cliente y arrastra
+      sus imports `.server`: la protección de imports rompe el build, y `bun run dev` también
+      con un `await import()` (el build solo mira los estáticos). Va en un `*.server.ts` que
+      el `.functions.ts` usa dentro de `.handler()`; el test lo importa de ahí. Un barrel de
+      server functions (`plan.functions.ts`) solo reexporta `.functions.ts` (ticket 26).
 - [ ] Solo llegan al bundle del cliente las variables con prefijo `VITE_`. Ningún secreto
       (service role, `OPENROUTER_API_KEY`, VAPID privada, `CRON_SECRET`) fuera del servidor.
 - [ ] Se usa el cliente de usuario de Supabase donde las políticas RLS bastan; la service
@@ -66,7 +72,8 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
 
 ## Invariantes del plan y la compra
 
-Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
+Definidos en las server functions de `src/lib/plan/` y `src/lib/shopping/` (barrel
+[src/lib/plan.functions.ts](../../src/lib/plan.functions.ts)) y
 [src/lib/plan-shared.ts](../../src/lib/plan-shared.ts) (barrel de `src/lib/plan/` y
 `src/lib/shopping/`). Romperlos es el fallo clásico.
 
@@ -111,7 +118,7 @@ Definidos en [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts) y
 - [ ] El **estado de compra** (marcas "en casa"/"comprado", gasto real, tiquets, despensa
       extra, cierre de tramos) SÍ es del hogar: cualquier miembro con cuenta lo edita sobre
       la lista del planificador (`resolveShoppingRow` → `updateShoppingState`
-      en [plan.functions.ts](../../src/lib/plan.functions.ts)). Un no planificador escribe la
+      en [rows.server.ts](../../src/lib/plan/rows.server.ts)). Un no planificador escribe la
       fila del planificador con `supabaseAdmin` (RLS solo le deja LEERla) y **solo** columnas
       de estado — nunca `plan` ni `weekQty`. Los platos, las cantidades y la cadencia siguen
       siendo exclusivos del planificador.
@@ -183,7 +190,7 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
       Familia hay una policy de SELECT permisiva (un miembro del hogar ve también la fila
       del planificador), así que un `.maybeSingle()` sin ese filtro devuelve 2 filas y
       lanza `PGRST116` para un no planificador. En server functions se usa el helper
-      `ownPlanRow` de [src/lib/plan.functions.ts](../../src/lib/plan.functions.ts).
+      `ownPlanRow` de [src/lib/plan/rows.server.ts](../../src/lib/plan/rows.server.ts).
 - [ ] Parámetros de redirect validados con `safeInternalPath`
       ([src/lib/safe-next.ts](../../src/lib/safe-next.ts)) — rechaza `//host`, `/\host` y
       URLs absolutas.

@@ -63,7 +63,13 @@ las de Next.js/Remix) — están explicadas en [src/routes/README.md](src/routes
 
 **Server-only:** los módulos que solo deben ejecutarse en el servidor se nombran `*.server.ts`
 (TanStack Start no usa el paquete `server-only` de Next.js; un lint en
-[eslint.config.js](eslint.config.js) prohíbe importarlo y explica la alternativa).
+[eslint.config.js](eslint.config.js) prohíbe importarlo y explica la alternativa). La protección
+de imports de [vite.config.ts](vite.config.ts) rompe el build (y `bun run dev`) si un `.server`
+llega al grafo del cliente. Por eso un `*.functions.ts` solo exporta `createServerFn` (y tipos):
+el compilador borra el cuerpo de cada `.handler()` en el cliente, pero un export cualquiera
+—un helper, o un `xxxHandler` exportado para probarlo— conserva el suyo y arrastra sus imports
+de servidor. Ese código va en un `*.server.ts` que el `.functions.ts` importa y solo usa dentro
+de `.handler()` (ticket 26 de la auditoría).
 
 **API HTTP espejo (`/api/v1/*`):** cada server function de la web tiene también una ruta HTTP en
 [src/routes/api/v1/](src/routes/api/v1), porque la app móvil no puede llamar server functions de
@@ -81,7 +87,8 @@ y, vía cabecera `Authorization`, también las peticiones de `/api/v1/*`). Las m
 en `supabase/migrations/`.
 
 **Plan de comidas — dos caminos deliberadamente separados** (ver
-[src/lib/plan.functions.ts](src/lib/plan.functions.ts) y
+[src/lib/plan/dishes.functions.ts](src/lib/plan/dishes.functions.ts),
+[src/lib/plan/reflow.server.ts](src/lib/plan/reflow.server.ts) y
 [src/lib/plan-shared.ts](src/lib/plan-shared.ts)):
 
 - `setPlanMeal` cambia un plato de un día concreto tal cual lo pide la persona, sin IA de por
@@ -495,6 +502,13 @@ escrituras van del navegador directo a Supabase (ver `.scratch/limites-ia-y-cont
   `src/lib/plan/*.ts` y `src/lib/shopping/*.ts`, un módulo por tema. Fuera de esas carpetas se
   importa siempre de `@/lib/plan-shared`; dentro, entre módulos con import relativo y nunca del
   barrel. Un tipo puede ir en círculo (`import type`), un valor no.
+- `src/lib/plan.functions.ts` es otro barrel, el de las server functions del plan y la compra:
+  un `*.functions.ts` por tema en `src/lib/plan/` y `src/lib/shopping/` (generar, ajustar al
+  objetivo, recolocar, platos, coach, estado de la compra), y los helpers que comparten en
+  `*.server.ts` de las mismas carpetas (`rows.server.ts`: `ownPlanRow`, `resolveShoppingRow`,
+  `updateShoppingState`, `guardSharedSlotWrite`…; `ai.server.ts`: `askForJson`,
+  `enforceBudget`; `reflow.server.ts`: `reflowMeals`). El barrel solo reexporta los
+  `.functions.ts`; quien necesite un helper lo importa de su `.server.ts`.
 - Componentes de UI: shadcn/ui, estilo `new-york`, iconos de `lucide-react`, en
   `src/components/ui/`.
 - Formato: Prettier (`printWidth` 100, comillas dobles, `;` siempre) — corre `bun run format`

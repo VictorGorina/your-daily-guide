@@ -33,7 +33,7 @@ guiarse por el campo `error` y no por el código.
 
 Dos caminos distintos, deliberadamente separados:
 
-- `setPlanMeal` ([plan.functions.ts](src/lib/plan.functions.ts), herramienta `cambiar_plato` del
+- `setPlanMeal` ([dishes.functions.ts](src/lib/plan/dishes.functions.ts), herramienta `cambiar_plato` del
   coach) cambia **un** plato de **un** día, de hoy en adelante, escribiendo literalmente lo que ha
   pedido la persona: sin IA de por medio, así "cámbiame el desayuno de mañana" se aplica de verdad
   y es verificable.
@@ -281,7 +281,7 @@ aviso y no se toca nada (`guardSharedSlotWrite`).
 
 **El estado de la compra sí es de todos.** Marcas "en casa"/"comprado", gasto real, tiquets,
 despensa extra y cierre de tramos los edita cualquier miembro con cuenta sobre la lista del
-planificador. En `plan.functions.ts`, `resolveShoppingRow` decide la fila objetivo
+planificador. En `src/lib/plan/rows.server.ts`, `resolveShoppingRow` decide la fila objetivo
 (`householdPlannerId`, una sola consulta) y `updateShoppingState` la lee y escribe sobre su
 versión más reciente (CAS con `updated_at`, ticket 21): si el que llama no es el
 planificador, con `supabaseAdmin` (RLS solo le deja LEER esa fila) y **solo** columnas de
