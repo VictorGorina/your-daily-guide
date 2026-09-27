@@ -4,7 +4,8 @@ import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeRow } from "@/test/fake-supabase";
 
 import { cleanPendingReservations } from "./day-balance";
-import { settleDayHandler, type SettleDayDeps } from "./day-settle.functions";
+import type { SettleDayDeps } from "./day-settle.functions";
+import { settleDayHandler } from "./day-settle.server";
 import type { MealHabit, MonthlyPlan } from "./plan-shared";
 
 const TODAY = "2026-09-10";

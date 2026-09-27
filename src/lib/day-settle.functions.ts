@@ -5,8 +5,6 @@ import { zonedTodayISO } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { type DishChange, settleDayHandler, type SettleDayInput } from "./day-settle.server";
 
-export { settleDayHandler } from "./day-settle.server";
-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const todayOf = (raw: unknown) => {
   const value = String(raw ?? "");
