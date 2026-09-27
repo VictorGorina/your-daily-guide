@@ -19,7 +19,7 @@ import {
   type MonthlyPlan,
   type PlanMonthStatus,
 } from "@/lib/plan-shared";
-import { dateInMonth, daysInMonth } from "@/lib/dates";
+import { dateInMonth, daysInMonth, weekdayIndex } from "@/lib/dates";
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 
@@ -68,11 +68,8 @@ export function PlanMonthCalendar({
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
 
-  const [year, m] = month.split("-").map(Number);
-  const monthIdx = (m ?? 1) - 1;
-  const y = year ?? new Date().getFullYear();
   const totalDays = daysInMonth(month);
-  const firstOffset = (new Date(y, monthIdx, 1).getDay() + 6) % 7;
+  const firstOffset = weekdayIndex(dateInMonth(month, 1));
   const iso = (d: number) => dateInMonth(month, d);
   // Un plan creado a media de mes no cubre los días previos: sin menú, se
   // muestran apagados (salvo que haya registro de ese día).
@@ -88,9 +85,7 @@ export function PlanMonthCalendar({
   const detail = selected ? planForDate(plan, selected) : null;
   const meals = selected ? mealsForDate(plan, selected, selectedMealSlots) : [];
   const homeCtx: HouseholdPinContext | null =
-    selected && homePlanner
-      ? { ...homePlanner, weekday: (new Date(`${selected}T00:00:00`).getDay() + 6) % 7 }
-      : null;
+    selected && homePlanner ? { ...homePlanner, weekday: weekdayIndex(selected) } : null;
   // Platos aparte de los niños ese día (issue 07), por slot, para colgarlos bajo
   // el plato compartido correspondiente.
   const kidMealsBySlot = new Map<string, { name: string; dish: string; off: string[] }[]>();

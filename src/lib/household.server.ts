@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { weekdayIndex } from "@/lib/dates";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";
 
 import {
@@ -558,8 +559,7 @@ export async function sharedMealPortionsByDate(
     return out;
   });
   return (date) => {
-    const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-    return byWeekday[(new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7] ?? {}; // 0 = lunes
+    return byWeekday[weekdayIndex(date)] ?? {}; // 0 = lunes
   };
 }
 

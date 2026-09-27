@@ -2,6 +2,7 @@ import type { MealStatus } from "@/lib/daily";
 import { isSharedSlot } from "@/lib/household-shared";
 import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
+import { weekdayIndex } from "@/lib/dates";
 
 type PropagatedHabit = { label: string; done: boolean; status?: string; actual?: string };
 
@@ -35,7 +36,7 @@ export async function propagateLogToFamilyHandler({
     return { propagated: 0 };
   }
 
-  const weekday = (new Date(`${data.date}T00:00:00`).getDay() + 6) % 7;
+  const weekday = weekdayIndex(data.date);
   if (!isSharedSlot(ctx.sharedSlots, mealKey as "desayuno" | "comida" | "cena", weekday)) {
     return { propagated: 0 };
   }

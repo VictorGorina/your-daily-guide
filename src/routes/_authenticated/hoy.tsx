@@ -70,6 +70,7 @@ import {
   sumDoneMacros,
   ZERO_MACROS,
 } from "@/lib/macros";
+import { weekdayIndex } from "@/lib/dates";
 import { fetchHousehold } from "@/lib/household";
 import {
   EMPTY_SCHEDULE,
@@ -290,7 +291,7 @@ function Hoy() {
   // esta persona no planifica ese slot.
   const mySlots = effectiveMealSlots(profileQ.data ?? {});
   const todayMeals = mealsForDate(planQ.data?.plan ?? null, today0, mySlots);
-  const todayWeekday = (new Date(`${today0}T00:00:00`).getDay() + 6) % 7;
+  const todayWeekday = weekdayIndex(today0);
   // Base para `dishChangeIsMine`/`isPinnedByViewer` (issue: en un hogar
   // compartido, un plato fijado o cambiado por quien planifica se veía como
   // "cambiado a mano" también para el resto, y les ocultaba "Ver receta" sin
@@ -1453,7 +1454,7 @@ function DayMenu({
   // gastaría una llamada a la IA sin aportar nada — salvo que el cambio lo
   // haya hecho otra persona del hogar (`isPinnedByViewer`).
   const day = planForDate(plan, date)?.day ?? null;
-  const weekday = (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+  const weekday = weekdayIndex(date);
   const homeCtx: HouseholdPinContext | null = homePlanner ? { ...homePlanner, weekday } : null;
   const label = capitalizeFirst(
     new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {

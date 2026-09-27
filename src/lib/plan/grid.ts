@@ -1,6 +1,6 @@
 import { daysInMonth } from "../shopping/model";
 import type { MonthlyPlan, PlanDay } from "./types";
-import { dateInMonth } from "@/lib/dates";
+import { dateInMonth, weekdayIndex } from "@/lib/dates";
 
 export const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
@@ -15,8 +15,7 @@ export const normDay = (s: string) =>
 export const planCursor = (date: string) => {
   const dayOfMonth = Number(date.slice(8, 10));
   const weekIndex = Math.min(Math.max(Math.floor((dayOfMonth - 1) / 7), 0), 3);
-  const jsDay = new Date(`${date}T00:00:00`).getDay();
-  const dayIndex = (jsDay + 6) % 7;
+  const dayIndex = weekdayIndex(date);
   return { weekIndex, dayIndex, dayName: DAY_NAMES[dayIndex] ?? "Lunes" };
 };
 
@@ -42,7 +41,7 @@ export function dateOfPlanCell(month: string, weekIndex: number, dayIndex: numbe
   const from = weekIndex * 7 + 1;
   for (let dom = from; dom <= Math.min(from + 6, total); dom++) {
     const date = dateInMonth(month, dom);
-    if ((new Date(`${date}T00:00:00`).getDay() + 6) % 7 === dayIndex) return date;
+    if (weekdayIndex(date) === dayIndex) return date;
   }
   return null;
 }
@@ -82,11 +81,10 @@ export function isPlanWeekAhead(month: string, weekIndex: number, today: string)
   );
 }
 
-const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const DIA_NOMBRES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
 
 /** Nombre del día de la semana de una fecha, sin depender del locale del entorno. */
-export const weekdayName = (date: string) =>
-  DIA_NOMBRES[new Date(`${date}T00:00:00`).getDay()] ?? "";
+export const weekdayName = (date: string) => DIA_NOMBRES[weekdayIndex(date)] ?? "";
 
 /**
  * Posición exacta (semana, día) que ocupa una fecha dentro del plan. Es la que
@@ -104,7 +102,7 @@ export function planSlotIndex(
   if (!week) return null;
   const target = normDay(weekdayName(date));
   const byName = week.days.findIndex((d) => normDay(d.day).includes(target));
-  const dayIndex = byName >= 0 ? byName : (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+  const dayIndex = byName >= 0 ? byName : weekdayIndex(date);
   return week.days[dayIndex] ? { weekIndex, dayIndex } : null;
 }
 

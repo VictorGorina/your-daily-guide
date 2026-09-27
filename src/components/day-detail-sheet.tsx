@@ -43,6 +43,7 @@ import {
 } from "@/lib/plan-shared";
 import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
+import { weekdayIndex } from "@/lib/dates";
 
 const longDate = (date: string) =>
   capitalizeFirst(
@@ -229,7 +230,7 @@ export function DayDetailBody({
     };
     const mealKey = labelToKey[label.toLowerCase()];
     if (!mealKey) return false;
-    const weekday = (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+    const weekday = weekdayIndex(date);
     return isSharedSlot(household.sharedSlots, mealKey, weekday);
   };
 

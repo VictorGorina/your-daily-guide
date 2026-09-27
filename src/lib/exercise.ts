@@ -1,5 +1,6 @@
 import { exerciseNetKcal, type TrainingRoutine } from "@/lib/nutrition/exercise-energy";
 import type { MealChange } from "@/lib/plan-shared";
+import { addDaysISO, weekdayIndex } from "@/lib/dates";
 
 /**
  * Deporte de un día (`daily_logs.exercise`, mismo patrón que `picoteo-hoy` en
@@ -131,14 +132,8 @@ export function routineSessionsIn(days: readonly (DayExercise | null | undefined
 
 /** Lunes de la semana ISO de una fecha (YYYY-MM-DD) y los días de lunes a esa fecha. */
 export function isoWeekDaysUntil(date: string): string[] {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const day = new Date(Date.UTC(y, m - 1, d));
-  const weekday = (day.getUTCDay() + 6) % 7; // lunes = 0
-  const out: string[] = [];
-  for (let i = weekday; i >= 0; i--) {
-    out.push(new Date(day.getTime() - i * 86_400_000).toISOString().slice(0, 10));
-  }
-  return out;
+  const weekday = weekdayIndex(date);
+  return Array.from({ length: weekday + 1 }, (_, i) => addDaysISO(date, i - weekday));
 }
 
 export type ExerciseEntry = {
