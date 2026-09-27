@@ -10,7 +10,7 @@ import { logEvent } from "@/lib/log.server";
  * entero: si entretanto la persona fija un plato a mano o marca algo en la
  * compra, una escritura ciega lo deshace. Aquí se escribe con CAS sobre
  * `updated_at` (lo mueve el trigger `monthly_plans_updated_at` en cada update),
- * el mismo patrón que `patchDailyHabits` usa en `daily_logs`: leer la fila,
+ * el mismo patrón que `updateDailyLogCas` usa en `daily_logs`: leer la fila,
  * reconstruir el cambio sobre lo leído y escribir con
  * `.eq("updated_at", leído)`. Si no cambia ninguna fila, alguien escribió
  * antes: se relee y se reconstruye sobre la versión nueva.

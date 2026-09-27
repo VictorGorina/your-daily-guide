@@ -256,14 +256,15 @@ instante y sin IA, y el estado es por comida, no global. Cada escritura de `habi
 pasa por `patchTodayHabits`, que escribe con CAS sobre `updated_at` (ver el párrafo siguiente).
 
 **Escrituras concurrentes — siempre sobre la versión más reciente** (ticket 21 de la auditoría).
-La fila `monthly_plans` del mes y `daily_logs.habits` las escriben varios caminos a la vez (la IA
+La fila `monthly_plans` del mes y la fila `daily_logs` del día las escriben varios caminos a la vez (la IA
 tarda 10-100 s, dos miembros del hogar, dos toques seguidos). Ninguna escritura es ciega: se lee la
 fila con su `updated_at`, se **reconstruye** el cambio sobre lo leído con una función pura
 (`applyPlanChanges`, `mergeRegeneratedPlan`, `withPlanMeal`, `withChildMeal`, `withOwnedMark`…) y
 se escribe con `.eq("updated_at", leído)`; si no cambia ninguna fila, se relee y se reintenta
 (hasta 3). Helpers: `updatePlanRowCas` (`plan-rows.server.ts`), `updateShoppingState` (estado de
-compra, con la lista blanca de columnas), `patchDailyHabits` (`daily-rows.server.ts`) y
-`patchTodayHabits` en el cliente. El trabajo caro no se repite: solo se vuelve a aplicar su
+compra, con la lista blanca de columnas), `updateDailyLogCas` (`daily-rows.server.ts`, el mismo
+contrato para cualquier columna de la fila del día; con `create: true` crea la fila, como picoteo y
+deporte; `patchDailyHabits` es su atajo para `habits`) y `patchTodayHabits` en el cliente. El trabajo caro no se repite: solo se vuelve a aplicar su
 resultado. En la pantalla, el estado de la compra va con `useShoppingMutation` (optimista con esas
 mismas funciones y en serie por mes, copia en `mobile/lib/`). `generateMonthlyPlan` usa `insert`:
 la restricción única es la guarda contra dos generaciones a la vez.

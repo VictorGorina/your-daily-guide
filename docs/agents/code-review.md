@@ -77,10 +77,11 @@ Definidos en las server functions de `src/lib/plan/` y `src/lib/shopping/` (barr
 [src/lib/plan-shared.ts](../../src/lib/plan-shared.ts) (barrel de `src/lib/plan/` y
 `src/lib/shopping/`). Romperlos es el fallo clásico.
 
-- [ ] **Ninguna escritura ciega de `monthly_plans` ni de `daily_logs.habits`.** Un
+- [ ] **Ninguna escritura ciega de `monthly_plans` ni de `daily_logs`.** Un
       `.update()` nuevo sobre esas filas va por `updatePlanRowCas`
       ([plan-rows.server.ts](../../src/lib/plan-rows.server.ts)), `updateShoppingState`,
-      `patchDailyHabits` o `patchTodayHabits`, con el cambio expresado como función pura de la
+      `updateDailyLogCas` ([daily-rows.server.ts](../../src/lib/daily-rows.server.ts), o su
+      atajo `patchDailyHabits`) o `patchTodayHabits`, con el cambio expresado como función pura de la
       versión más reciente. Leer, esperar a la IA y escribir lo leído deshace lo que otro
       escribió entretanto (ticket 21 de la auditoría).
 
