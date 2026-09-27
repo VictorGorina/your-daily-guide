@@ -644,13 +644,17 @@ export default function Plan() {
               </Pressable>
             </View>
           </View>
+          {/* Fuera del flujo, como en la web: no mueve la pantalla al aparecer
+              y desaparecer. Cabe en el hueco (mt-6) hasta las subpestañas. */}
+          {warmProgress.running ? (
+            <Text
+              className="absolute right-0 mt-1 text-xs text-muted-foreground"
+              style={{ top: "100%" }}
+            >
+              Calculando macros…
+            </Text>
+          ) : null}
         </View>
-
-        {warmProgress.running ? (
-          <Text className="mt-2 text-center text-xs text-muted-foreground">
-            Calculando tus platos {warmProgress.done}/{warmProgress.total}…
-          </Text>
-        ) : null}
 
         {showCreateTakeover && intakeOpen ? (
           <MonthIntakeChat

@@ -629,9 +629,15 @@ function PlanPage() {
             </button>
           </div>
         </div>
+        {/* Fuera del flujo: dentro de la fila del header empujaba el mes a la
+            izquierda, y debajo movía la pantalla al aparecer y desaparecer.
+            Cabe en el hueco (mt-6) hasta las subpestañas. */}
         {warmProgress.running ? (
-          <p className="mt-2 text-center text-xs text-muted-foreground" aria-live="polite">
-            Calculando tus platos {warmProgress.done}/{warmProgress.total}…
+          <p
+            className="absolute right-0 top-full mt-1 text-xs text-muted-foreground"
+            aria-live="polite"
+          >
+            Calculando macros…
           </p>
         ) : null}
       </header>
