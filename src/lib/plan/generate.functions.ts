@@ -13,6 +13,7 @@ import {
 } from "@/lib/plan-shared";
 import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
+import { requireAiKey } from "@/lib/ai-provider.server";
 import { createServerFn } from "@tanstack/react-start";
 import { fetchMonthConstraints, generatePlanBody } from "./generate.server";
 import { ownPlanRow } from "./rows.server";
@@ -53,8 +54,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       context,
     }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList; firstPlan: boolean }> => {
       const deadline = requestDeadline();
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error("Falta la clave de IA");
+      const key = requireAiKey();
 
       // Un mes se genera UNA vez: rehacerlo a mano no es un camino (gasta IA y
       // pierde los cambios de la persona). Lo que sí cambia el plan después —el
