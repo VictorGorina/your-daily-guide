@@ -3,8 +3,8 @@ import { describe, expect, it, spyOn } from "bun:test";
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOp, type FakeTables } from "@/test/fake-supabase";
 
-import type { ShoppingList } from "./plan-shared";
-import { toggleShoppingOwnedHandler } from "./shopping/state.server";
+import type { ShoppingList } from "./model";
+import { toggleShoppingOwnedHandler } from "./state.server";
 
 const MONTH = "2026-10";
 
