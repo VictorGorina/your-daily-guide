@@ -21,6 +21,7 @@ import {
 } from "@/lib/plan-shared";
 import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
+import { requireAiKey } from "@/lib/ai-provider.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerFn } from "@tanstack/react-start";
 import { fetchMonthConstraints, generatePlanBody } from "./generate.server";
@@ -44,8 +45,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; summary: string }> => {
     const deadline = requestDeadline();
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
 
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "plan-adjust");
@@ -134,8 +134,7 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       const month = today.slice(0, 7);
 
       const deadline = requestDeadline();
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error("Falta la clave de IA");
+      const key = requireAiKey();
 
       const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
       await enforceUserRateLimit(userId, "plan-adjust");
@@ -268,8 +267,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }): Promise<ReflowResult> => {
     const deadline = requestDeadline();
-    const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Falta la clave de IA");
+    const key = requireAiKey();
 
     // Un mes pasado no se recalcula: no se puede cumplir y gastaría tokens.
     if (data.month < data.today.slice(0, 7)) return { skipped: "past" };
