@@ -1,5 +1,5 @@
 import { coachSystemPrompt, PLAN_MODEL } from "@/lib/ai-provider.server";
-import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
 import type { Deadline } from "@/lib/deadline";
 import { describeSharedSlots, MEAL_KEYS as HOUSEHOLD_MEAL_KEYS } from "@/lib/household-shared";

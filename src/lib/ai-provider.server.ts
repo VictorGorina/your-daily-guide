@@ -3,7 +3,7 @@ import { wrapLanguageModel, type LanguageModelMiddleware } from "ai";
 
 import { ageFromDOB } from "@/lib/age";
 import { abortedCallCostUsd, callCostUsd, type SpendCapScope } from "@/lib/ai-spend";
-import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { showsNutritionNumbers } from "@/lib/macros";
 import { energyTargets } from "@/lib/nutrition/energy";
 

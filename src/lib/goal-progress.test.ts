@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { deriveGoalType, goalProgress, normalizeGoalType } from "./daily";
+import { deriveGoalType, goalProgress, normalizeGoalType } from "./goal";
 import { chipToValue, PROFILE_SECTIONS, valueToChip } from "./profile-fields";
 
 // ---------------------------------------------------------------------------

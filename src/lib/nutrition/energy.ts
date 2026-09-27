@@ -12,7 +12,7 @@
  */
 
 import { ageFromDOB } from "@/lib/age";
-import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { effectiveMealSlots, type MealSlot } from "@/lib/plan-shared";
 
 import { parseTraining, routineDailyKcal, type TrainingRoutine } from "./exercise-energy";

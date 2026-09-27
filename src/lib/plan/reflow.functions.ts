@@ -1,5 +1,5 @@
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { requestDeadline } from "@/lib/deadline";
 import { compensationNeed } from "@/lib/nutrition/compensation";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";

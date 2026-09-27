@@ -5,13 +5,8 @@ import { toast } from "sonner";
 
 import { ProgressBar } from "@/components/progress-bar";
 import { WeightGauge } from "@/components/weight-gauge";
-import {
-  goalProgress,
-  logTodayWeight,
-  normalizeGoalType,
-  type DailyLog,
-  type Profile,
-} from "@/lib/daily";
+import { logTodayWeight, type DailyLog, type Profile } from "@/lib/daily";
+import { goalProgress, normalizeGoalType } from "@/lib/goal";
 
 // "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
 const formatMetaDate = (isoDate: string) => {

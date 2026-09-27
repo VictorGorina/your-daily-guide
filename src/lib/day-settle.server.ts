@@ -1,4 +1,4 @@
-import { deriveGoalType, normalizeGoalType } from "@/lib/daily";
+import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import {
   adjustmentColumn,
