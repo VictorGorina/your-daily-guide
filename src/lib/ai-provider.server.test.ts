@@ -1,6 +1,26 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 
-import { asPromptData } from "./ai-provider.server";
+import { asPromptData, requireAiKey } from "./ai-provider.server";
+
+describe("requireAiKey", () => {
+  const saved = process.env.OPENROUTER_API_KEY;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = saved;
+  });
+
+  it("devuelve la clave", () => {
+    process.env.OPENROUTER_API_KEY = "sk-test";
+    expect(requireAiKey()).toBe("sk-test");
+  });
+
+  it("sin clave (o vacía) lanza el mensaje que enseña la app", () => {
+    delete process.env.OPENROUTER_API_KEY;
+    expect(() => requireAiKey()).toThrow("Falta la clave de IA");
+    process.env.OPENROUTER_API_KEY = "";
+    expect(() => requireAiKey()).toThrow("Falta la clave de IA");
+  });
+});
 
 // Todo el texto libre del perfil entra al prompt por aquí, envuelto en «» y
 // declarado como dato: es la barrera contra instrucciones inyectadas desde

@@ -62,6 +62,18 @@ export const DISH_FALLBACK_MODEL = "google/gemini-2.5-flash";
 export const DISAMBIGUATION_MODEL = "google/gemini-2.5-flash-lite";
 
 /**
+ * La clave de OpenRouter, o un `Error` si falta. Para las server functions que
+ * no pueden hacer nada sin la IA; las que tienen un camino sin ella (la guía
+ * de respaldo, `resolveDish`, `decomposeDishes`, el chat) leen la variable y
+ * deciden ellas.
+ */
+export function requireAiKey(): string {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("Falta la clave de IA");
+  return key;
+}
+
+/**
  * Modelos de OpenRouter que cuentan su gasto contra el tope de la persona.
  *
  * `userId` es obligatorio a propósito: toda llamada a la IA tiene que decir a
