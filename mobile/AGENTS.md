@@ -50,6 +50,12 @@ fallo duro, no un aviso.
 `Unable to resolve module <x>` aunque el módulo esté instalado y el pod compilado. Reinicia
 Metro con `npx expo start --clear` (mata antes el Metro que deja `expo run:ios` en el 8081).
 
+**Sentry (`@sentry/react-native`) sin subir source maps ni símbolos:** su plugin añade al build de
+Xcode una fase que llama a `sentry-cli`, que falla sin token (y npm bloquea el postinstall que
+baja el binario). Compila con `SENTRY_DISABLE_AUTO_UPLOAD=true` delante (también está en los
+perfiles de `eas.json`): `SENTRY_DISABLE_AUTO_UPLOAD=true LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+npx expo run:ios`. Sin `EXPO_PUBLIC_SENTRY_DSN`, la app no inicia Sentry (`lib/sentry.ts`).
+
 **`expo-image-picker` / `expo-image-manipulator`** (escaneo del tiquet de la compra en
 `app/(app)/plan.tsx`, `ShopModeView`) están en `package.json` y en `plugins` de `app.json`, pero
 **necesitan un prebuild + build nativo** para funcionar: hasta entonces el botón "Escanear tiquet"

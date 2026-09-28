@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import {
   focusManager,
   QueryClient,
@@ -34,6 +35,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 import { authCacheAction } from "../lib/auth-cache";
 import { AuthProvider } from "../lib/auth-context";
+import { initSentry, sentryEnabled } from "../lib/sentry";
 import i18n from "../lib/i18n";
 import { supabase } from "../lib/supabase";
 import { useLocale } from "../lib/use-locale";
@@ -41,6 +43,9 @@ import { useLocale } from "../lib/use-locale";
 // antes de cualquier navegación, para que /restablecer no se pierda el
 // fragmento del enlace de recuperación. Ver lib/deep-link.ts.
 import "../lib/deep-link";
+
+// Lo antes posible, para no perder un error del arranque.
+initSentry();
 
 // Un único QueryClient para toda la app, igual que la web: las pantallas
 // comparten caché por `queryKey` (["profile"], ["today"], ["logs"]...) para no
@@ -81,7 +86,7 @@ function LocaleSync() {
   return null;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   // React Native no sintetiza negrita sobre una tipografía cargada: cada peso
   // que se usa en la app (ver tailwind.config.js `fontFamily`) necesita su
   // propio archivo. Fraunces solo hace falta en el peso de los títulos (600).
@@ -122,3 +127,6 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+// Sentry envuelve la raíz (captura los errores de render) solo si está activo.
+export default sentryEnabled ? Sentry.wrap(RootLayout) : RootLayout;

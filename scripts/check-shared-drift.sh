@@ -20,7 +20,7 @@ cd "$(git rev-parse --show-toplevel)"
 fail=0
 
 # --- Archivos que deben ser 100 % idénticos ---
-for f in age.ts food-categories.ts dates.ts auth-cache.ts; do
+for f in age.ts food-categories.ts dates.ts auth-cache.ts log-redact.ts; do
   if ! diff -q "src/lib/$f" "mobile/lib/$f" > /dev/null 2>&1; then
     echo "DRIFT (idéntico): $f"
     diff --unified=2 "src/lib/$f" "mobile/lib/$f" || true
@@ -53,7 +53,7 @@ strip_portable() {
 
 for f in perishability.ts quotes.ts profile-fields.ts day-log-ack.ts auth-errors.ts \
   demo-profile.ts regions.ts snacks.ts week-nav.ts content-guard.ts day-balance.ts \
-  month-intake.ts use-shopping-mutation.ts; do
+  month-intake.ts use-shopping-mutation.ts sentry-scrub.ts; do
   a=$(strip_portable "src/lib/$f")
   b=$(strip_portable "mobile/lib/$f")
   if [ "$a" != "$b" ]; then

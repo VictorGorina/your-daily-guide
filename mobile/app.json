@@ -55,7 +55,8 @@
           "cameraPermission": "Peppers usa la cámara para escanear el tiquet de la compra."
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "@sentry/react-native"
     ],
     "scheme": "dailyguide",
     "extra": {
