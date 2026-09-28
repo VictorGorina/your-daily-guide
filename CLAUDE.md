@@ -110,10 +110,17 @@ viaja con el plato del planificador (`mirrorPinned`). **Ojo con la rejilla del p
 (`floor((día-1)/7)`) y la posición dentro de la fila es el día de la semana, así que el orden de la
 fila no es el del calendario — un lunes 7 es la última fecha de la semana 0 pero la posición 0.
 Qué fecha ocupa cada celda lo dice `dateOfPlanCell`, y es lo que decide qué se puede reescribir;
-compararlo por posición hacía que la recolocación pisara días pasados y no tocara ninguno futuro. Al recolocar platos (`adjustMonthlyPlan`, `setPlanMeal`, recálculo por
+compararlo por posición hacía que la recolocación pisara días pasados y no tocara ninguno futuro.
+El plan tiene **5 filas** (`PLAN_ROWS`): las 4 semanas que genera la IA y una con los días 29-31.
+Antes esos días compartían celda con el mismo día de la semana 3 (el martes 29 ERA el martes 22):
+lo cambiado una semana salía la siguiente, y cambiar el 29 reescribía el 22. `withOverflowWeek`
+añade la fila como copia de la semana 3 (sin sus comidas fijadas a mano) en `cleanPlan`,
+`completePlan` y las lecturas del cliente (`withPlanRows` en `daily.ts`, web y móvil); se guarda
+en la siguiente escritura. La compra sigue en 4 semanas: pasa `WEEK_COUNT`, nunca
+`plan.weeks.length`, a `projectTrips`. Al recolocar platos (`adjustMonthlyPlan`, `setPlanMeal`, recálculo por
 despensa) la lista de la compra nunca cambia — si un plato pide algo no comprado, se guarda igual y
-aparece como aviso en `PlanDay.extras`. La única excepción es un cambio en la mesa del hogar, que
-sí re-dimensiona las cantidades (ver "Recálculo automático del plan" más abajo).
+aparece como aviso en `PlanDay.extras`. La única excepción es rehacer el plan con la mesa del
+hogar, que sí re-dimensiona las cantidades (ver "Recálculo del plan" más abajo).
 
 **Macros y kcal — receta canónica, no del modelo** (`precision-nutricional`, fase 2;
 `src/lib/nutrition/`, explicación larga en AGENTS.md). El modelo solo propone la COMPOSICIÓN de un
@@ -313,20 +320,26 @@ real del tiquet va a `trip_actuals`; la tarjeta "Gasto en comida" del historial 
 (`MonthSpendSummary`). Cambiar de cadencia en una lista antigua conserva las marcas
 "en casa"/"comprado" por nombre de ingrediente (`carryOwnedByName`), no por `name`+`trip`.
 
-**Recálculo automático del plan (`reflowMonthlyPlan` + [src/lib/plan-recalc.ts](src/lib/plan-recalc.ts)).**
-Un cambio en la despensa extra o en la mesa del hogar dispara un recálculo **silencioso** del plan
-(issue 05: el usuario revirtió el "sin disparar regeneración" de antes). El disparo es por evento,
-nunca por tiempo. El cliente (`schedulePlanRecalc`) agrupa varios cambios seguidos con un debounce
-de ~6 s → **una** llamada a `POST /api/v1/plan/reflow`; persiste un "pendiente" en
-`localStorage`/`AsyncStorage` y la pantalla Plan lo relanza al abrirse (`flushPlanRecalc`) si la
-app se cerró antes. `reflowMonthlyPlan` tiene dos modos:
+**Recálculo del plan (`reflowMonthlyPlan` + [src/lib/plan-recalc.ts](src/lib/plan-recalc.ts)).**
+Nunca por tiempo. Dos modos, con disparos distintos:
 
-- `scope: "meals"` (cambió la despensa) → recoloca platos futuros con `reflowMeals` (núcleo
-  compartido con `adjustMonthlyPlan`). La lista de la compra **no** cambia.
-- `scope: "full"` (entra/sale alguien, cambia ración/alergia/etapa) → regenera plan **y** cantidades
-  con el hogar nuevo (`generatePlanBody`) y hace merge: `mergeFuturePlan` + `mergeFutureKids`
-  conservan hoy/pasado y un plato puesto a mano; `carryOwnedCanonical` traspasa las marcas de compra
-  por nombre; `confirmed_at` se limpia.
+- `scope: "meals"` (cambió la despensa extra) → **automático y silencioso** (issue 05). El cliente
+  (`schedulePlanRecalc`) agrupa varios cambios seguidos con un debounce de ~6 s → **una** llamada a
+  `POST /api/v1/plan/reflow`; persiste un "pendiente" en `localStorage`/`AsyncStorage` y la
+  pantalla Plan lo relanza al abrirse (`flushPlanRecalc`) si la app se cerró antes. Recoloca
+  platos futuros con `reflowMeals` (núcleo compartido con `adjustMonthlyPlan`). La lista de la
+  compra **no** cambia.
+- `scope: "full"` (entra/sale alguien, cambia ración/alergia/etapa/horario) → **lo pide quien
+  planifica** con "Rehacer plan con la familia" en Familia (`rebuildPlanWithHousehold`); el cambio
+  en la mesa ya no lo dispara solo (decisión del usuario, 2026-09-28: es la llamada de IA más cara
+  y con disparo automático + botón se pagaba dos veces), solo deja un aviso en la pantalla.
+  Regenera plan **y** cantidades con el hogar nuevo (`generatePlanBody`) y hace merge:
+  `mergeFuturePlan` + `mergeFutureKids` conservan hoy/pasado y un plato puesto a mano;
+  `carryOwnedCanonical` traspasa las marcas de compra por nombre; `confirmed_at` se limpia. Al
+  acabar copia las comidas compartidas a quien tiene la app (`syncSharedMeals`, devuelve
+  `synced`); quien no la tiene solo cuenta como raciones. Ya no hay botón "Sincronizar": esa
+  copia también se hace sola al guardar un horario. No mira la despensa extra, así que no
+  sustituye a un `"meals"` pendiente.
   Solo lo ejecuta quien planifica en casa (o quien va en solitario): el servidor devuelve
   `skipped: "not-planner"` para un no planificador. Bucket de cuota propio (`plan-reflow`, 12/h).
 

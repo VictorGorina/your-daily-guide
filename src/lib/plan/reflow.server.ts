@@ -195,7 +195,7 @@ export async function reflowMeals(opts: {
           .join(", ")}: esos campos se quedan vacíos.\n`
       : "";
 
-  // El plan guardado no tiene fechas: es una rejilla de 4 semanas × Lunes…
+  // El plan guardado no tiene fechas: es una rejilla de filas × Lunes…
   // Domingo, y qué fecha es cada celda lo decide `dateOfPlanCell` (la semana la
   // marca el día del mes, no el orden natural). Sin esa anotación el modelo
   // entendía "posterior a hoy" como "más abajo en la fila", y en un lunes eso
@@ -203,15 +203,20 @@ export async function reflowMeals(opts: {
   // días que no se podían tocar, y el ajuste no aparecía por ningún lado.
   // Las comidas elegidas a mano van como "fijo": el modelo no debe proponer
   // cambiarlas (y si lo hace, `applyPlanChanges` las ignora igualmente).
+  // Una celda sin fecha (la fila de los días 29-31 tiene siete posiciones y
+  // el mes, como mucho, tres de esas fechas) no se le enseña: no se puede
+  // recolocar y solo añadiría platos repetidos al prompt.
   const dated = {
     ...current,
     weeks: current.weeks.map((week, wi) => ({
       ...week,
-      days: week.days.map(({ pinned, ...d }, di) => ({
-        fecha: dateOfPlanCell(month, wi, di),
-        ...d,
-        ...(pinned?.length ? { fijo: pinned } : {}),
-      })),
+      days: week.days
+        .map(({ pinned, ...d }, di) => ({
+          fecha: dateOfPlanCell(month, wi, di),
+          ...d,
+          ...(pinned?.length ? { fijo: pinned } : {}),
+        }))
+        .filter((d) => d.fecha),
     })),
   };
   // Fechas que sí se pueden recolocar, dichas de forma explícita: es más difícil

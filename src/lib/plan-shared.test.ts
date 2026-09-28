@@ -65,6 +65,9 @@ import {
   dateOfPlanCell,
   planForDate,
   planSlotIndex,
+  planCursor,
+  completePlan,
+  withOverflowWeek,
   projectTrips,
   repartitionTrips,
   shoppingTotal,
@@ -869,6 +872,86 @@ describe("dateOfPlanCell", () => {
     // (sábado), así que no hay ningún día del mes más allá de esa fila.
     expect(dateOfPlanCell("2026-02", 3, 5)).toBe("2026-02-28");
     expect(dateOfPlanCell("2026-02", 4, 0)).toBeNull();
+  });
+});
+
+describe("withOverflowWeek — los días 29-31 tienen su propia fila", () => {
+  // Septiembre de 2026: la fila 3 va del martes 22 al lunes 28, y el martes 29
+  // y el miércoles 30 caían en la MISMA celda que el 22 y el 23. Lo que se
+  // cambiaba una semana aparecía la siguiente (y al revés, pisaba el pasado).
+  const edited = () => {
+    const p = plan();
+    p.weeks[3]!.days[1] = day("Martes", "Paella editada", "Cena S3D1", {
+      pinned: ["comida"],
+      extras: { comida: ["gambas"] },
+      kids: [{ childId: "leo", slot: "comida", dish: "Arroz blanco" }],
+    });
+    return p;
+  };
+
+  it("un plan de 4 filas gana una 5.ª, copia de la semana 3", () => {
+    const out = withOverflowWeek(plan());
+    expect(out.weeks).toHaveLength(5);
+    expect(out.weeks[4]!.days.map((d) => d.lunch)).toEqual(
+      plan().weeks[3]!.days.map((d) => d.lunch),
+    );
+    expect(out.weeks[4]!.breakfasts).toEqual(plan().weeks[3]!.breakfasts);
+  });
+
+  it("una comida fijada a mano en la semana 3 no se copia: va la del plan de la fila anterior", () => {
+    const row = withOverflowWeek(edited()).weeks[4]!.days[1]!;
+    expect(row.lunch).toBe("Comida S2D1");
+    expect(row.dinner).toBe("Cena S3D1");
+    expect(row.pinned).toBeUndefined();
+    expect(row.extras?.comida).toBeUndefined();
+    expect(row.kids ?? []).toEqual([]);
+  });
+
+  it("si esa comida está fijada en todas las filas, se copia la de la semana 3 sin marca", () => {
+    const p = edited();
+    for (const wi of [0, 1, 2]) p.weeks[wi]!.days[1]!.pinned = ["comida"];
+    const row = withOverflowWeek(p).weeks[4]!.days[1]!;
+    expect(row.lunch).toBe("Paella editada");
+    expect(row.pinned).toBeUndefined();
+  });
+
+  it("no toca un plan que ya tiene 5 filas ni uno con menos de 4", () => {
+    const five = withOverflowWeek(plan());
+    expect(withOverflowWeek(five)).toBe(five);
+    const short = { ...plan(), weeks: plan().weeks.slice(0, 2) };
+    expect(withOverflowWeek(short)).toBe(short);
+  });
+
+  it("cleanPlan y completePlan devuelven siempre las 5 filas", () => {
+    expect(cleanPlan(plan())!.weeks).toHaveLength(5);
+    expect(
+      completePlan(cleanPlan({ ...plan(), weeks: plan().weeks.slice(0, 2) }))!.weeks,
+    ).toHaveLength(5);
+  });
+
+  it("el 29 y el 30 ya no leen la celda del 22 y el 23", () => {
+    const p = cleanPlan(edited())!;
+    expect(planSlotIndex(p, "2026-09-29")).toEqual({ weekIndex: 4, dayIndex: 1 });
+    expect(planForDate(p, "2026-09-22")!.day!.lunch).toBe("Paella editada");
+    expect(planForDate(p, "2026-09-29")!.day!.lunch).toBe("Comida S2D1");
+    for (const date of ["2026-09-29", "2026-09-30"]) {
+      const at = planSlotIndex(p, date)!;
+      expect(dateOfPlanCell("2026-09", at.weekIndex, at.dayIndex)).toBe(date);
+    }
+  });
+
+  it("cambiar el plato del 29 no reescribe el del 22", () => {
+    const p = withPlanMeal(cleanPlan(plan())!, "2026-09-29", "cena", "Tortilla")!;
+    expect(planForDate(p, "2026-09-29")!.day!.dinner).toBe("Tortilla");
+    expect(planForDate(p, "2026-09-22")!.day!.dinner).toBe("Cena S3D1");
+  });
+
+  it("planCursor coincide con planSlotIndex también en los días 29-31", () => {
+    const p = cleanPlan(plan())!;
+    for (const date of ["2026-08-29", "2026-08-31", "2026-09-28", "2026-09-30", "2026-10-31"]) {
+      const { weekIndex, dayIndex } = planCursor(date);
+      expect({ weekIndex, dayIndex }).toEqual(planSlotIndex(p, date)!);
+    }
   });
 });
 
@@ -2324,16 +2407,22 @@ describe("compensationWindow", () => {
     });
   });
 
-  it("no cruza de mes y salta los días que comparten celda con la semana 3", () => {
-    // 29 y 30 caen en la fila de la semana 3 (22–28): una recolocación ahí se descarta.
+  it("no cruza de mes, y los días 29-31 cuentan: tienen su propia fila", () => {
+    // Antes 29 y 30 compartían celda con el 22 y el 23 y se saltaban.
     expect(
       compensationWindow({ today: "2026-09-27", sharedSlots: solo, selectedSlots: all }),
     ).toEqual({
-      dates: ["2026-09-28"],
+      dates: ["2026-09-28", "2026-09-29", "2026-09-30"],
       reason: null,
     });
     expect(
       compensationWindow({ today: "2026-09-28", sharedSlots: solo, selectedSlots: all }),
+    ).toEqual({
+      dates: ["2026-09-29", "2026-09-30"],
+      reason: null,
+    });
+    expect(
+      compensationWindow({ today: "2026-09-30", sharedSlots: solo, selectedSlots: all }),
     ).toEqual({
       dates: [],
       reason: "no-days",

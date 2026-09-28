@@ -1,9 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Recálculo automático y silencioso del plan del mes cuando cambia algo que lo
- * invalida (issue 05): la despensa extra (`"meals"`) o la mesa del hogar
- * (`"full"` — entra/sale alguien, cambia una ración, alergia o etapa).
+ * Recálculo del plan del mes cuando cambia algo que lo invalida (issue 05):
+ *  - la despensa extra (`"meals"`): automático y silencioso, con el debounce de
+ *    abajo;
+ *  - la mesa del hogar (`"full"` — entra/sale alguien, cambia una ración,
+ *    alergia o etapa): lo pide quien planifica con "Rehacer plan con la
+ *    familia" (`rebuildPlanWithHousehold`). Un cambio en la mesa ya no lo
+ *    dispara solo: es la operación de IA más cara de la app, y con el disparo
+ *    automático y el botón a la vez se pagaba dos veces.
  *
  * El disparo es SIEMPRE por evento, nunca por tiempo. Para no lanzar una llamada
  * de IA por cada gesto (añadir 4 ingredientes seguidos serían 4), se agrupa con
@@ -64,10 +69,13 @@ function clearPersisted(month: string) {
   }
 }
 
-async function postReflow(p: Pending): Promise<void> {
+/** Lo que devuelve `POST /api/v1/plan/reflow` y le importa al cliente. */
+export type ReflowOutcome = { skipped?: string; scope?: string; synced?: number } | null;
+
+async function postReflow(p: Pending): Promise<ReflowOutcome> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) return;
+  if (!token) return null;
   const res = await fetch("/api/v1/plan/reflow", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -78,11 +86,9 @@ async function postReflow(p: Pending): Promise<void> {
   // rehace también las CANTIDADES de la compra. Eso hay que decirlo: se deja
   // una marca que sobrevive a navegar de Hogar a Plan, que es justo el camino
   // que hace la persona. Un `skipped` (no planificador, mes pasado) no cuenta.
-  const result = (await res.json().catch(() => null)) as {
-    skipped?: string;
-    scope?: string;
-  } | null;
+  const result = (await res.json().catch(() => null)) as ReflowOutcome;
   if (result && !result.skipped && result.scope === "full") markPlanUpdated(p.month);
+  return result;
 }
 
 const NOTICE_PREFIX = "plan-updated-notice:";
@@ -132,13 +138,42 @@ async function run(): Promise<void> {
   } finally {
     clearPersisted(job.month);
     running = false;
-    for (const cb of listeners) {
-      try {
-        cb(job.month);
-      } catch {
-        /* no-op */
-      }
+    notifyDone(job.month);
+  }
+}
+
+function notifyDone(month: string) {
+  for (const cb of listeners) {
+    try {
+      cb(month);
+    } catch {
+      /* no-op */
     }
+  }
+}
+
+/**
+ * "Rehacer plan con la familia": regenera ya el plan y las cantidades del mes
+ * con la mesa actual y copia las comidas compartidas a quien tiene la app
+ * (`reflowMonthlyPlan` con `scope: "full"`). Un `"full"` que quedara pendiente de
+ * antes queda cubierto por este y se descarta; un `"meals"` (despensa) no, porque
+ * el recálculo completo no mira la despensa extra. Lanza si falla, para que la
+ * pantalla lo diga.
+ */
+export async function rebuildPlanWithHousehold(
+  month: string,
+  today: string,
+): Promise<ReflowOutcome> {
+  if (pending?.month === month && pending.scope === "full") {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    pending = null;
+  }
+  if (readPersisted(month)?.scope === "full") clearPersisted(month);
+  try {
+    return await postReflow({ month, today, scope: "full" });
+  } finally {
+    notifyDone(month);
   }
 }
 

@@ -1,7 +1,7 @@
 import { MEAL_KEYS, type MealKey } from "@/lib/household-shared";
 import type { PlanFitChange, PlanFitMark } from "./fit-mark";
 import type { ShoppingCadence } from "../shopping/model";
-import { DAY_NAMES } from "./grid";
+import { DAY_NAMES, PLAN_ROWS, withOverflowWeek } from "./grid";
 import { MEAL_SLOTS, type MealSlot } from "./slots";
 import type { ChildMeal, MonthlyPlan, PlanCoverage, PlanDay } from "./types";
 
@@ -137,10 +137,10 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
   const coverage = cleanCoverage(plan.coverage);
   const cadence = cleanCadence(plan.cadence);
   const fit = cleanFitMark(plan.fit);
-  return {
+  return withOverflowWeek({
     intro: String(plan.intro ?? ""),
     focus: (plan.focus ?? []).slice(0, 4).map(String),
-    weeks: plan.weeks.slice(0, 5).map((w) => ({
+    weeks: plan.weeks.slice(0, PLAN_ROWS).map((w) => ({
       label: String(w?.label ?? ""),
       focus: String(w?.focus ?? ""),
       breakfasts: (w?.breakfasts ?? []).slice(0, 3).map(String),
@@ -151,7 +151,7 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
     ...(cadence ? { cadence } : {}),
     ...(Number(plan.targetsVersion) > 0 ? { targetsVersion: Number(plan.targetsVersion) } : {}),
     ...(fit ? { fit } : {}),
-  };
+  });
 };
 
 /** Extrae el primer objeto JSON de una respuesta, tolerando ```json, texto alrededor y cortes. */
@@ -208,17 +208,25 @@ export const parseJsonLoose = (raw: string): unknown => {
   return repaired === undefined ? null : repaired;
 };
 
-/** Rellena huecos del plan (semanas y días que falten) reutilizando lo que sí generó la IA. */
+/**
+ * Rellena huecos del plan (semanas y días que falten) reutilizando lo que sí
+ * generó la IA. La IA genera las 4 semanas; la fila de los días 29-31 se añade
+ * al final como copia de la última (`withOverflowWeek`).
+ */
 export const completePlan = (plan: MonthlyPlan | null): MonthlyPlan | null => {
   if (!plan) return null;
-  const sourceDays = plan.weeks.flatMap((w) => w.days).filter((d) => d.lunch || d.dinner);
+  const sourceDays = plan.weeks
+    .slice(0, PLAN_ROWS - 1)
+    .flatMap((w) => w.days)
+    .filter((d) => d.lunch || d.dinner);
   if (!sourceDays.length) return null;
 
   const pick = (i: number) => sourceDays[i % sourceDays.length]!;
   let cursor = 0;
 
-  const weeks = Array.from({ length: 4 }, (_, wi) => {
-    const base = plan.weeks[wi] ?? plan.weeks[plan.weeks.length - 1]!;
+  const generated = plan.weeks.slice(0, PLAN_ROWS - 1);
+  const weeks = Array.from({ length: PLAN_ROWS - 1 }, (_, wi) => {
+    const base = generated[wi] ?? generated[generated.length - 1]!;
     const days = DAY_NAMES.map((name, di) => {
       const existing = base.days[di];
       if (existing && existing.lunch && existing.dinner) {
@@ -232,8 +240,8 @@ export const completePlan = (plan: MonthlyPlan | null): MonthlyPlan | null => {
         dinner: existing?.dinner || fill.dinner || fill.lunch,
       };
     });
-    const fallbackBreakfasts = plan.weeks.flatMap((w) => w.breakfasts).filter(Boolean);
-    const fallbackSnacks = plan.weeks.flatMap((w) => w.snacks).filter(Boolean);
+    const fallbackBreakfasts = generated.flatMap((w) => w.breakfasts).filter(Boolean);
+    const fallbackSnacks = generated.flatMap((w) => w.snacks).filter(Boolean);
     return {
       label: base.label || `Semana ${wi + 1}`,
       focus: base.focus || plan.focus[0] || "",
@@ -243,7 +251,7 @@ export const completePlan = (plan: MonthlyPlan | null): MonthlyPlan | null => {
     };
   });
 
-  return {
+  return withOverflowWeek({
     intro: plan.intro || "Este mes vamos paso a paso, con comidas sencillas y sin presiones.",
     focus: plan.focus.length
       ? plan.focus
@@ -251,5 +259,5 @@ export const completePlan = (plan: MonthlyPlan | null): MonthlyPlan | null => {
     weeks,
     ...(plan.coverage ? { coverage: plan.coverage } : {}),
     ...(plan.cadence ? { cadence: plan.cadence } : {}),
-  };
+  });
 };

@@ -78,9 +78,10 @@ export const COMPENSATION_WINDOW_DAYS = 6;
  * Solo quedan las fechas con al menos una comida o cena PROPIA ese día: un
  * desvío personal se corrige en las comidas no compartidas de esa persona,
  * nunca cambiando la mesa de toda la casa. Y solo las que son la fecha real de
- * su celda (`dateOfPlanCell`): los días 29 en adelante comparten celda con la
- * semana 3 y una recolocación sobre ellos se descarta, así que ofrecerlos
- * gastaría una llamada a la IA que no puede cambiar nada.
+ * su celda (`dateOfPlanCell`): en un plan sin la fila de los días 29-31
+ * (`withOverflowWeek`) esos días comparten celda con la semana 3, una
+ * recolocación sobre ellos se descartaría y ofrecerlos gastaría una llamada a
+ * la IA que no puede cambiar nada.
  *
  * `reason` explica una ventana vacía: `no-meals` (no planifica comidas ni
  * cenas), `no-days` (se acaba el mes) o `shared-only` (quedan días, pero todas

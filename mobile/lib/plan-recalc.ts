@@ -4,13 +4,14 @@ import { AppState } from "react-native";
 import { apiPost } from "./api";
 
 /**
- * Recálculo automático y silencioso del plan del mes cuando cambia la despensa
- * extra (`"meals"`) o la mesa del hogar (`"full"`). Copia de `src/lib/plan-recalc.ts`
- * de la web (este repo no es un monorepo). El disparo es por evento, nunca por
- * tiempo; el debounce de ~6 s agrupa varios cambios seguidos en una sola llamada
- * a `POST /api/v1/plan/reflow`. Si la app pasa a segundo plano se fuerza el
- * envío, y el "pendiente" en AsyncStorage deja que la pantalla Plan lo reintente
- * al volver a abrirse.
+ * Recálculo del plan del mes. Copia de `src/lib/plan-recalc.ts` de la web (este
+ * repo no es un monorepo). La despensa extra (`"meals"`) lo dispara sola, por
+ * evento y nunca por tiempo: el debounce de ~6 s agrupa varios cambios seguidos
+ * en una sola llamada a `POST /api/v1/plan/reflow`. Si la app pasa a segundo
+ * plano se fuerza el envío, y el "pendiente" en AsyncStorage deja que la
+ * pantalla Plan lo reintente al volver a abrirse. La mesa del hogar (`"full"`)
+ * ya no lo dispara sola: lo pide quien planifica con "Rehacer plan con la
+ * familia" (`rebuildPlanWithHousehold`).
  */
 export type RecalcScope = "meals" | "full";
 
@@ -60,28 +61,65 @@ async function run(): Promise<void> {
   running = true;
   pending = null;
   try {
-    const result = await apiPost<{ skipped?: string; scope?: string }>("plan/reflow", {
-      month: job.month,
-      today: job.today,
-      scope: job.scope,
-    });
-    // Un recálculo "full" (entró o salió alguien de la mesa, cambió una ración)
-    // rehace también las CANTIDADES de la compra. Eso hay que decirlo: se deja
-    // una marca que sobrevive a navegar de Familia a Plan, que es justo el
-    // camino que hace la persona. Un `skipped` no cuenta.
-    if (result && !result.skipped && result.scope === "full") await markPlanUpdated(job.month);
+    await postReflow(job);
   } catch (err) {
     console.warn("plan-recalc: no se pudo actualizar el plan", err);
   } finally {
     clearPersisted(job.month);
     running = false;
-    for (const cb of listeners) {
-      try {
-        cb(job.month);
-      } catch {
-        /* no-op */
-      }
+    notifyDone(job.month);
+  }
+}
+
+/** Lo que devuelve `POST /api/v1/plan/reflow` y le importa al cliente. */
+export type ReflowOutcome = { skipped?: string; scope?: string; synced?: number } | null;
+
+async function postReflow(p: Pending): Promise<ReflowOutcome> {
+  const result = await apiPost<ReflowOutcome>("plan/reflow", {
+    month: p.month,
+    today: p.today,
+    scope: p.scope,
+  });
+  // Un recálculo "full" (entró o salió alguien de la mesa, cambió una ración)
+  // rehace también las CANTIDADES de la compra. Eso hay que decirlo: se deja
+  // una marca que sobrevive a navegar de Familia a Plan, que es justo el
+  // camino que hace la persona. Un `skipped` no cuenta.
+  if (result && !result.skipped && result.scope === "full") await markPlanUpdated(p.month);
+  return result;
+}
+
+function notifyDone(month: string) {
+  for (const cb of listeners) {
+    try {
+      cb(month);
+    } catch {
+      /* no-op */
     }
+  }
+}
+
+/**
+ * "Rehacer plan con la familia": regenera ya el plan y las cantidades del mes
+ * con la mesa actual y copia las comidas compartidas a quien tiene la app
+ * (`reflowMonthlyPlan` con `scope: "full"`). Un `"full"` que quedara pendiente de
+ * antes queda cubierto por este y se descarta; un `"meals"` (despensa) no, porque
+ * el recálculo completo no mira la despensa extra. Lanza si falla, para que la
+ * pantalla lo diga.
+ */
+export async function rebuildPlanWithHousehold(
+  month: string,
+  today: string,
+): Promise<ReflowOutcome> {
+  if (pending?.month === month && pending.scope === "full") {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    pending = null;
+  }
+  if ((await readPersisted(month))?.scope === "full") clearPersisted(month);
+  try {
+    return await postReflow({ month, today, scope: "full" });
+  } finally {
+    notifyDone(month);
   }
 }
 

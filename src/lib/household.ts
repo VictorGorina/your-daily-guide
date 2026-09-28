@@ -25,17 +25,12 @@ function assertCleanName(name: string | undefined): void {
   if (name && !isCleanFood(name)) throw new Error(BLOCKED_NAME_MESSAGE);
 }
 
-export type HouseholdGoalType = "comportamiento" | "presupuesto";
-
 export type Household = {
   id: string;
   name: string;
   invite_code: string;
   /** `null` si quien lo creó ya borró su cuenta (el hogar sigue: ticket 36). */
   created_by: string | null;
-  goal_type: HouseholdGoalType | null;
-  goal_text: string | null;
-  goal_budget_eur: number | null;
   /** Comidas compartidas del hogar: mismo plato para todos. La fija el planificador. */
   shared_slots: SharedSlots;
 };
@@ -310,29 +305,6 @@ export async function renameHousehold(id: string, name: string) {
   const { error } = await supabase
     .from("households")
     .update({ name: name.trim() || "Mi casa" } as never)
-    .eq("id", id);
-  if (error) throw error;
-}
-
-export async function saveHouseholdGoal(
-  id: string,
-  goal: { goal_type: HouseholdGoalType; goal_text: string | null; goal_budget_eur: number | null },
-) {
-  const { error } = await supabase
-    .from("households")
-    .update({
-      goal_type: goal.goal_type,
-      goal_text: goal.goal_type === "comportamiento" ? goal.goal_text?.trim() || null : null,
-      goal_budget_eur: goal.goal_type === "presupuesto" ? goal.goal_budget_eur : null,
-    } as never)
-    .eq("id", id);
-  if (error) throw error;
-}
-
-export async function clearHouseholdGoal(id: string) {
-  const { error } = await supabase
-    .from("households")
-    .update({ goal_type: null, goal_text: null, goal_budget_eur: null } as never)
     .eq("id", id);
   if (error) throw error;
 }

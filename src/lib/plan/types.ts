@@ -26,8 +26,8 @@ export type ChildMeal = { childId: string; slot: MealSlot; dish: string; off?: s
  * (`setPlanMeal`). Ninguna recolocación automática las pisa (`applyPlanChanges`,
  * `mergeFuturePlan`): sin esta marca, una comida o cena cambiada a mano se
  * perdía en el siguiente reajuste, porque se guarda en el mismo campo que
- * escribe la IA. Los días 29-31 comparten celda con los de la semana 3 (el plan
- * tiene 4 filas), así que la marca vale para las dos fechas de esa celda.
+ * escribe la IA. Cada fecha tiene su celda: los días 29-31 van en su propia
+ * fila (`PLAN_ROWS`, `withOverflowWeek`).
  */
 export type PlanDay = {
   day: string;

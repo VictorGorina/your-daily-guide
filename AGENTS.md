@@ -70,9 +70,12 @@ fecha de esa semana pero ocupa la posición 0. Qué fecha ocupa cada celda lo di
 (la inversa de `planSlotIndex`), y es lo único con lo que se puede decidir si una celda se puede
 reescribir. `mergeFuturePlan`/`mergeFutureKids` lo comparaban por posición y en un lunes eso
 reescribía los días 1 al 6 —ya pasados— sin tocar ninguno futuro: el ajuste se aplicaba donde no se
-veía, y parecía que el coach no hacía nada. Los días 29 en adelante comparten celda con la semana
-3; `dateOfPlanCell` devuelve la primera fecha de la fila, de forma que el empate se resuelve a
-favor de no tocar nada.
+veía, y parecía que el coach no hacía nada. Los días 29-31 van en una 5.ª fila (`PLAN_ROWS`,
+`withOverflowWeek`): antes compartían celda con el mismo día de la semana 3, así que un plato
+cambiado el martes 22 salía también el martes 29 y cambiar el 29 reescribía el 22. La IA sigue
+generando 4 semanas y la compra sigue en 4 (`WEEK_COUNT`, días 29-31 en la última): la fila nueva
+nace como copia de la semana 3, sin sus comidas fijadas a mano, que se sustituyen por el plato del
+plan del mismo día en la fila anterior.
 
 La lista de la compra **nunca** cambia. Si el plato pide algo que no se compró, se guarda igual y
 los ingredientes que faltan quedan en `PlanDay.extras[comida]`, que se pintan como aviso ("Fuera de
@@ -112,12 +115,16 @@ tratan como también disponible al recolocar. El importe real del tiquet se guar
 en comida" del historial (`MonthSpendSummary`). La foto del tiquet no se guarda: se manda al modelo
 de visión y se descarta.
 
-**Recálculo automático del plan (issue 05).** Antes un cambio en la despensa extra o en la mesa no
-tocaba el plan ("no dispara regeneración"); el usuario lo revirtió el 2026-09-07. Ahora
+**Recálculo del plan (issue 05).** Antes un cambio en la despensa extra o en la mesa no tocaba el
+plan ("no dispara regeneración"); el usuario lo revirtió el 2026-09-07. Ahora
 `schedulePlanRecalc` ([src/lib/plan-recalc.ts](src/lib/plan-recalc.ts), copia en
 `mobile/lib/plan-recalc.ts`) programa un recálculo **silencioso** tras un cambio de despensa
-(`onSuccess` de `pantry`/`receipt` en la pantalla Plan) o de mesa (`addAdult` / `dropMember` /
-`setMemberPortion` / `ChildSheet` en Familia). Es por evento, nunca por tiempo. Un debounce de ~6 s
+(`onSuccess` de `pantry`/`receipt` en la pantalla Plan). Un cambio de mesa (`addAdult` /
+`dropMember` / `setMemberPortion` / `ChildSheet` / horario en Familia) ya **no** lo programa: desde
+el 2026-09-28 quien planifica lo pide con "Rehacer plan con la familia"
+(`rebuildPlanWithHousehold`, `scope: "full"` sin debounce) y la pantalla solo avisa de que la mesa
+cambió. Motivo: es la operación de IA más cara de la app y con disparo automático + botón se
+pagaba dos veces. Es por evento, nunca por tiempo. Un debounce de ~6 s
 en el cliente agrupa varios cambios seguidos en **una** llamada a `POST /api/v1/plan/reflow`
 (`reflowMonthlyPlan`), para no vaciar la cuota; se persiste un "pendiente" en storage y la pantalla
 Plan lo relanza al abrirse si la app se cerró antes de que saltara el debounce
@@ -129,6 +136,8 @@ Plan lo relanza al abrirse si la app se cerró antes de que saltara el debounce
   `mergeFuturePlan` + `mergeFutureKids` (conservan hoy/pasado, un plato a mano y adoptan los purés de
   un bebé nuevo) y `carryOwnedCanonical` (traspasa "en casa"/"comprado" por nombre). `confirmed_at`
   se limpia. Esta es la única vía por la que un cambio del sistema mueve las cantidades de la compra.
+  Al acabar, `syncSharedMeals` copia las comidas compartidas a los miembros con la app (`synced`
+  en la respuesta); sustituye al antiguo botón "Sincronizar el plan del mes".
   Guardas: solo el planificador (o quien va en solitario) ejecuta el recálculo — para un no
   planificador `reflowMonthlyPlan` devuelve `skipped: "not-planner"` sin gastar cuota. Bucket propio
   `plan-reflow` (12/h) en `RATE_LIMITS`.

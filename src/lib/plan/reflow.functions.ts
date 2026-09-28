@@ -225,20 +225,25 @@ export type ReflowResult = {
   plan?: MonthlyPlan;
   shopping?: ShoppingList;
   summary?: string;
+  /** Con `scope: "full"`: a cuántos miembros con la app se copiaron las comidas compartidas. */
+  synced?: number;
 };
 
 /**
- * Recálculo automático y silencioso del plan cuando cambia algo que lo invalida
- * (issue 05). Lo dispara el cliente con un debounce tras un cambio de despensa o
- * de mesa — nunca la persona a mano, nunca por tiempo.
+ * Recálculo del plan cuando cambia algo que lo invalida (issue 05). Nunca por
+ * tiempo:
  *
- *  - `scope: "meals"` (cambió la despensa extra): recoloca los platos de los días
- *    futuros con `reflowMeals`. La lista de la compra NO se toca (la despensa
- *    extra nunca entra en la lista).
+ *  - `scope: "meals"` (cambió la despensa extra): automático y silencioso, lo
+ *    dispara el cliente con un debounce. Recoloca los platos de los días futuros
+ *    con `reflowMeals`. La lista de la compra NO se toca (la despensa extra
+ *    nunca entra en la lista).
  *  - `scope: "full"` (entró o salió alguien de la mesa, cambió una ración,
- *    alergia o etapa): regenera plan Y cantidades con el hogar nuevo y luego hace
+ *    alergia o etapa): lo pide quien planifica con "Rehacer plan con la familia"
+ *    (Familia). Regenera plan Y cantidades con el hogar nuevo y luego hace
  *    merge — hoy y el pasado se conservan, y las marcas "en casa"/"comprado"
- *    viajan por nombre de ingrediente a la lista nueva.
+ *    viajan por nombre de ingrediente a la lista nueva. Al acabar copia las
+ *    comidas compartidas a quien tiene la app (`syncSharedMeals`); quien no la
+ *    tiene solo cuenta como raciones y no hay nada que copiarle.
  *
  * Solo lo ejecuta quien planifica en casa (o quien va en solitario): un no
  * planificador que toca la despensa compartida (issue 06) no dispara la
@@ -363,6 +368,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
 
     return {
       scope: "full",
+      synced,
       plan: finalPlan,
       shopping: finalShopping,
       summary: synced

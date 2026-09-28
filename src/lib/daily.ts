@@ -11,6 +11,7 @@ import {
   type MealSlot,
   type MealStatus,
   type MonthlyPlan,
+  withOverflowWeek,
 } from "@/lib/plan-shared";
 import { addDaysISO, dateInMonth, daysInMonth } from "@/lib/dates";
 
@@ -139,6 +140,16 @@ export type MonthlyPlanRow = {
 
 export const monthISO = () => todayISO().slice(0, 7);
 
+/**
+ * El plan tal cual lo leen las pantallas: con la fila de los días 29-31
+ * (`withOverflowWeek`). La fila se lee sin `cleanPlan`, y un plan guardado antes
+ * de esa fila solo tiene 4 semanas: sin esto, el 29 enseñaría el plato del 22.
+ */
+const withPlanRows = (plan: unknown): MonthlyPlan | null => {
+  const p = (plan ?? null) as MonthlyPlan | null;
+  return p && Array.isArray(p.weeks) ? withOverflowWeek(p) : p;
+};
+
 async function fetchOwnMonthlyPlan(
   month: string,
   userId: string | null,
@@ -176,13 +187,15 @@ async function fetchOwnMonthlyPlan(
     return retry.data
       ? {
           ...(retry.data as unknown as MonthlyPlanRow),
+          plan: withPlanRows(retry.data.plan),
           confirmed_trips: null,
           pantry_extras: null,
           trip_receipts: null,
         }
       : null;
   }
-  return (data as unknown as MonthlyPlanRow | null) ?? null;
+  const row = (data as unknown as MonthlyPlanRow | null) ?? null;
+  return row ? { ...row, plan: withPlanRows(row.plan) } : null;
 }
 
 /**
@@ -227,8 +240,7 @@ export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | 
   ]);
   const sharedSlots = householdSharedSlots(home);
   if (!sharedSlots) return row;
-  const plannerPlan =
-    ((plannerRow as { plan: unknown } | null)?.plan as MonthlyPlan | null) ?? null;
+  const plannerPlan = withPlanRows((plannerRow as { plan: unknown } | null)?.plan);
   const composed = composeMonthlyPlanForMember(row?.plan ?? null, plannerPlan, sharedSlots);
   if (!composed) return row;
   return row
@@ -282,7 +294,7 @@ export async function fetchPlannerShopping(month: string): Promise<PlannerShoppi
   if (error || !data) return null;
 
   const row = data as unknown as Omit<PlannerShoppingRow, "plannerId">;
-  return { plannerId: info.plannerId, ...row };
+  return { plannerId: info.plannerId, ...row, plan: withPlanRows(row.plan) };
 }
 
 export type { MealHabit, MealStatus } from "@/lib/plan-shared";

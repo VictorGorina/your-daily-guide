@@ -12,7 +12,6 @@ import {
   Pencil,
   RefreshCw,
   ShieldCheck,
-  Target,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -41,23 +40,20 @@ import {
 import {
   addAdultSlot,
   claimSlot,
-  clearHouseholdGoal,
   createHousehold,
   fetchHousehold,
   leaveHousehold,
   openSlots,
   removeMember,
   renameHousehold,
-  saveHouseholdGoal,
   setPlanner,
   updateMember,
   type HouseholdChild,
-  type HouseholdGoalType,
   type OpenSlot,
 } from "@/lib/household";
 import { saveHomeSchedule, syncHouseholdPlan } from "@/lib/household.functions";
-import { childPureeGaps, eur, shoppingTotal } from "@/lib/plan-shared";
-import { schedulePlanRecalc } from "@/lib/plan-recalc";
+import { childPureeGaps } from "@/lib/plan-shared";
+import { rebuildPlanWithHousehold } from "@/lib/plan-recalc";
 import { fillChildMeals } from "@/lib/plan.functions";
 
 export const Route = createFileRoute("/_authenticated/hogar")({
@@ -108,9 +104,9 @@ function Hogar() {
     usesApp: true,
     appetite: "normal",
   });
-  const [goalType, setGoalType] = useState<HouseholdGoalType>("comportamiento");
-  const [goalText, setGoalText] = useState("");
-  const [goalBudget, setGoalBudget] = useState("");
+  // La mesa o los horarios cambiaron en esta visita: el plan del mes aún no
+  // cuenta con ello hasta que quien planifica lo rehaga.
+  const [tableChanged, setTableChanged] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -125,7 +121,6 @@ function Hogar() {
 
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
-  const monthSpend = shoppingTotal(planQ.data?.shopping);
 
   useEffect(() => {
     // Initialize per-member schedule drafts from server data.
@@ -143,14 +138,6 @@ function Hogar() {
       setSchedDrafts(drafts);
     }
   }, [state.data?.household, state.data?.members, state.data?.children]);
-
-  useEffect(() => {
-    const household = state.data?.household;
-    if (!household) return;
-    setGoalType(household.goal_type ?? "comportamiento");
-    setGoalText(household.goal_text ?? "");
-    setGoalBudget(household.goal_budget_eur != null ? String(household.goal_budget_eur) : "");
-  }, [state.data?.household]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["household"] });
 
@@ -196,12 +183,10 @@ function Hogar() {
   const canManageRoster = isCreator || isPlanner;
 
   // Un cambio en la mesa (entra/sale alguien, cambia una ración) invalida los
-  // platos Y las cantidades del plan: se programa un recálculo silencioso con
-  // debounce (issue 05). Solo si quien lo hace es quien planifica — su fila
-  // `monthly_plans` es la del hogar; para otro miembro el servidor lo ignoraría.
-  const recalcRoster = () => {
-    if (isPlanner) schedulePlanRecalc(month, todayISO(), "full");
-  };
+  // platos Y las cantidades del plan, pero ya no se rehace solo: lo pide quien
+  // planifica con "Rehacer plan con la familia" (ver `rebuildPlanWithHousehold`).
+  // Aquí solo se deja constancia para avisarle.
+  const recalcRoster = () => setTableChanged(true);
 
   const addAdult = useMutation({
     mutationFn: () => {
@@ -276,51 +261,33 @@ function Hogar() {
     onSuccess: () => {
       toast.success("Horario guardado");
       refresh();
+      setTableChanged(true);
       qc.invalidateQueries({ queryKey: ["plan", monthISO()] });
     },
     onError: (e: Error) => toast.error(e.message || "No hemos podido guardar el horario"),
   });
 
-  const syncNow = useMutation({
-    mutationFn: () => sync({ data: { month: monthISO(), today: todayISO() } }),
-    onSuccess: (r) =>
+  // Regenera platos y cantidades con la mesa actual y copia las comidas
+  // compartidas a quien tiene la app; quien no la tiene solo cuenta como
+  // raciones. Tarda lo que una generación (~1-2 min).
+  const rebuild = useMutation({
+    mutationFn: () => rebuildPlanWithHousehold(month, todayISO()),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      if (r?.skipped === "no-plan") {
+        toast("Aún no tienes plan este mes: créalo en Plan y ya contará con la familia");
+        return;
+      }
+      setTableChanged(false);
       toast.success(
-        r.synced
-          ? "Plan compartido con el resto del hogar"
-          : "Nada que sincronizar todavía (aún no hay comidas compartidas o plan del otro miembro)",
-      ),
-    onError: () => toast.error("No hemos podido sincronizar el plan"),
-  });
-
-  const saveGoal = useMutation({
-    mutationFn: async () => {
-      const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
-      const budget = Number(goalBudget.replace(",", "."));
-      await saveHouseholdGoal(householdId, {
-        goal_type: goalType,
-        goal_text: goalText,
-        goal_budget_eur:
-          Number.isFinite(budget) && budget > 0 ? Math.round(budget * 100) / 100 : null,
-      });
+        r?.synced
+          ? "Plan rehecho con la familia y compartido con quien usa la app"
+          : "Plan rehecho con la familia",
+      );
     },
-    onSuccess: () => {
-      toast.success("Objetivo del hogar guardado");
-      refresh();
-    },
-    onError: () => toast.error("No hemos podido guardar el objetivo"),
-  });
-
-  const dropGoal = useMutation({
-    mutationFn: async () => {
-      const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
-      await clearHouseholdGoal(householdId);
-    },
-    onSuccess: () => {
-      setGoalText("");
-      setGoalBudget("");
-      refresh();
+    onError: (e: Error) => {
+      console.warn("hogar: rehaciendo el plan con la familia", e);
+      toast.error("No hemos podido rehacer el plan. Inténtalo de nuevo en un rato");
     },
   });
 
@@ -546,7 +513,7 @@ function Hogar() {
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
             <p>
               Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
-              del hogar. Solo compartís las comidas comunes y el objetivo del hogar.
+              del hogar. Solo compartís las comidas comunes.
             </p>
           </div>
 
@@ -996,130 +963,42 @@ function Hogar() {
                 </div>
               ) : null;
             })()}
-
-            <button
-              onClick={() => syncNow.mutate()}
-              disabled={syncNow.isPending}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium disabled:opacity-60"
-            >
-              <RefreshCw className={`h-4 w-4 ${syncNow.isPending ? "animate-spin" : ""}`} />
-              Sincronizar el plan del mes
-            </button>
           </section>
 
-          <section className="surface-card mt-4 p-5">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Target className="h-4 w-4 text-primary-ink" /> Objetivo del hogar
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Un objetivo compartido, visible para todos en casa. Vuestro progreso individual sigue
-              siendo privado.
-            </p>
-
-            <div className="mt-4 grid grid-cols-2 gap-2 rounded-full bg-secondary/80 p-1">
-              {(
-                [
-                  ["comportamiento", "Un hábito"],
-                  ["presupuesto", "Un presupuesto"],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setGoalType(key)}
-                  className={`rounded-full py-2 text-xs font-medium transition-colors ${
-                    goalType === key ? "bg-surface text-primary-ink" : "text-muted-foreground"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {goalType === "comportamiento" ? (
-              <input
-                key="goal-text"
-                className={`${input} mt-3`}
-                value={goalText}
-                onChange={(e) => setGoalText(e.target.value)}
-                placeholder="Ej. cenar juntos entre semana"
-                maxLength={140}
-              />
-            ) : (
-              <input
-                key="goal-budget"
-                className={`${input} mt-3`}
-                inputMode="decimal"
-                value={goalBudget}
-                onChange={(e) => setGoalBudget(e.target.value)}
-                placeholder="Presupuesto compartido del mes (€)"
-              />
-            )}
-
-            <button
-              onClick={() => saveGoal.mutate()}
-              disabled={
-                saveGoal.isPending ||
-                (goalType === "comportamiento" ? !goalText.trim() : !goalBudget.trim())
-              }
-              className="mt-3 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-            >
-              {saveGoal.isPending ? "Guardando..." : "Guardar objetivo"}
-            </button>
-
-            {household.goal_type === "comportamiento" && household.goal_text ? (
-              <p className="mt-4 flex items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-sm text-primary-ink">
-                <Target className="mt-0.5 h-4 w-4 shrink-0" />
-                {household.goal_text}
+          {isPlanner && (members.length > 1 || children.length > 0) ? (
+            <section className="surface-card mt-4 p-5">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <RefreshCw className="h-4 w-4 text-primary-ink" /> Plan del mes con la familia
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Rehace los platos y la compra de lo que queda de mes contando con toda la mesa. A
+                quien usa la app le llegan las comidas compartidas; quien no la usa cuenta en las
+                raciones. Hoy, los días pasados y los platos que cambiaste a mano no se tocan.
               </p>
-            ) : null}
-
-            {household.goal_type === "presupuesto" && household.goal_budget_eur ? (
-              <div className="mt-4">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">
-                    Compra de este mes vs. objetivo del hogar
-                  </p>
-                  <span
-                    className={`font-title text-lg font-semibold tabular-nums ${
-                      monthSpend > household.goal_budget_eur
-                        ? "text-destructive"
-                        : "text-primary-ink"
-                    }`}
-                  >
-                    {eur(monthSpend)} / {eur(household.goal_budget_eur)}
-                  </span>
-                </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className={`h-full rounded-full transition-[width] duration-500 ${
-                      monthSpend > household.goal_budget_eur
-                        ? "bg-danger"
-                        : monthSpend / household.goal_budget_eur >= 0.85
-                          ? "bg-warning"
-                          : "bg-success"
-                    }`}
-                    style={{
-                      width: `${Math.min(100, (monthSpend / household.goal_budget_eur) * 100)}%`,
-                    }}
-                  />
-                </div>
-                <p className="mt-1.5 text-[11px] text-muted-foreground">
-                  Es el total de tu propia lista de la compra, la que se comparte con el resto del
-                  hogar cuando marcáis comidas comunes.
+              {tableChanged ? (
+                <p className="mt-3 rounded-2xl bg-primary-soft px-4 py-3 text-xs text-primary-ink">
+                  Has cambiado la mesa o los horarios. Tu plan aún no cuenta con ello.
                 </p>
-              </div>
-            ) : null}
-
-            {household.goal_type ? (
+              ) : null}
               <button
-                onClick={() => dropGoal.mutate()}
-                disabled={dropGoal.isPending}
-                className="mt-3 text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+                onClick={() => rebuild.mutate()}
+                disabled={rebuild.isPending || !planQ.data?.plan}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
               >
-                Quitar objetivo
+                <RefreshCw className={`h-4 w-4 ${rebuild.isPending ? "animate-spin" : ""}`} />
+                {rebuild.isPending ? "Rehaciendo el plan…" : "Rehacer plan con la familia"}
               </button>
-            ) : null}
-          </section>
+              {rebuild.isPending ? (
+                <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                  Puede tardar un par de minutos.
+                </p>
+              ) : !planQ.data?.plan ? (
+                <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                  Aún no tienes plan este mes: créalo en Plan y ya contará con la familia.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
           <button
             onClick={() => leave.mutate()}

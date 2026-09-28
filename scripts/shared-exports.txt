@@ -11,6 +11,7 @@ MEAL_SLOTS
 MEAL_SLOT_FIELD
 MEAL_SLOT_LABEL
 NEXT_MONTH_UNLOCK_DAYS
+PLAN_ROWS
 PLAN_TARGETS_VERSION
 PRODUCE_UNIT_GRAMS
 WEEK_COUNT
@@ -85,6 +86,7 @@ upcomingMeals
 weekDayCounts
 weekOfDay
 weekdayName
+withOverflowWeek
 withOwnedMark
 withPantryExtra
 withPlanMeal

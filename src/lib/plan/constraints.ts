@@ -1,6 +1,6 @@
 import { isSharedSlot, type SharedSlots } from "@/lib/household-shared";
 import { cleanIntakeText } from "@/lib/month-intake";
-import { planCursor } from "./grid";
+import { PLAN_ROWS, planCursor } from "./grid";
 import type { MealSlot } from "./slots";
 import type { PlanCoverage } from "./types";
 import { dateInMonth } from "@/lib/dates";
@@ -57,7 +57,10 @@ export function awayPlanLine(input: {
   for (let dom = coverage.fromDay; dom <= coverage.toDay; dom++) {
     const date = dateInMonth(month, dom);
     if (date < awayStart || date > awayEnd) continue;
-    awayDays.push({ date, ...planCursor(date) });
+    // La IA genera 4 semanas y la fila de los días 29-31 nace como copia de la
+    // última (`withOverflowWeek`): para ella, esos días son de la semana 4.
+    const cursor = planCursor(date);
+    awayDays.push({ date, ...cursor, weekIndex: Math.min(cursor.weekIndex, PLAN_ROWS - 2) });
   }
   if (!awayDays.length) return notesLine;
 

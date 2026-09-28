@@ -99,15 +99,19 @@ Definidos en las server functions de `src/lib/plan/` y `src/lib/shopping/` (barr
 - [ ] **La lista de la compra nunca cambia** por un cambio de plan (recolocar platos:
       `setPlanMeal`, `adjustMonthlyPlan`, recálculo por despensa). Si un plato pide algo no
       comprado, se guarda igual y los ingredientes que faltan quedan en `PlanDay.extras`
-      como aviso. **Única excepción:** `reflowMonthlyPlan` con `scope: "full"` (cambió la
-      mesa del hogar) sí regenera las cantidades — ver más abajo.
-- [ ] **Recálculo automático (issue 05).** Un cambio en la despensa extra o en la mesa
-      programa `schedulePlanRecalc` ([plan-recalc.ts](../../src/lib/plan-recalc.ts), copia en
-      `mobile/lib/`) con debounce; NO se llama a `reflowMonthlyPlan` en un bucle ni una vez
-      por cada gesto. El servidor debe devolver `skipped: "not-planner"` para un no
-      planificador (nunca regenera el plan de otra persona) y `scope: "meals"` NO debe tocar
-      `shopping`. Cualquier disparo nuevo (otra mutación de despensa/mesa) va con el mismo
-      helper, en ambas plataformas.
+      como aviso. **Única excepción:** `reflowMonthlyPlan` con `scope: "full"` ("Rehacer plan
+      con la familia") sí regenera las cantidades — ver más abajo.
+- [ ] **Recálculo (issue 05).** Un cambio en la despensa extra programa `schedulePlanRecalc`
+      ([plan-recalc.ts](../../src/lib/plan-recalc.ts), copia en `mobile/lib/`) con debounce;
+      NO se llama a `reflowMonthlyPlan` en un bucle ni una vez por cada gesto. Un cambio en la
+      mesa NO dispara nada solo: lo pide quien planifica con `rebuildPlanWithHousehold`
+      (decisión del usuario del 2026-09-28; no lo vuelvas automático). El servidor debe
+      devolver `skipped: "not-planner"` para un no planificador (nunca regenera el plan de
+      otra persona) y `scope: "meals"` NO debe tocar `shopping`.
+- [ ] **Rejilla de 5 filas.** Un plan leído sin `cleanPlan` (lectura directa de Supabase en
+      el cliente) pasa por `withOverflowWeek` antes de usarse, o los días 29-31 vuelven a
+      leer la celda del 22-24. A `projectTrips` se le pasa `WEEK_COUNT`, nunca
+      `plan.weeks.length` (la compra sigue en 4 semanas).
 - [ ] El emparejamiento de un `ShoppingItem` al marcarlo "comprado" (`toggleShoppingOwned`)
       es por `name` + `trip` juntos, nunca solo por `name`. **Excepción deliberada:**
       `carryOwnedByName` (al cambiar de cadencia) empareja **solo por `name`** a propósito —

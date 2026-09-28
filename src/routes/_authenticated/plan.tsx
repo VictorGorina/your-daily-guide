@@ -205,7 +205,7 @@ function PlanPage() {
     plannerShopping,
     plannerCadence,
     plannerCoverage ?? { fromDay: 1, toDay: daysInMonth(month) },
-    plannerPlan?.weeks.length ?? WEEK_COUNT,
+    WEEK_COUNT,
   );
   const hhTripActuals = plannerShoppingQ.data?.trip_actuals ?? {};
   const hhPantryExtras: PantryExtra[] = plannerShoppingQ.data?.pantry_extras ?? [];
@@ -413,13 +413,10 @@ function PlanPage() {
   const tripsTotal = tripsForCoverage(activeCadence, coverage);
   // Cada compra suma lo que piden los platos de las semanas que cubre
   // (`projectTrips`); cambiar de cadencia solo re-trocea el mismo total del mes.
+  // La compra va siempre en `WEEK_COUNT` semanas, aunque el plan tenga la fila
+  // de los días 29-31: esos días cuentan en la última.
   const projCoverage = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
-  const trips = projectTrips(
-    shopping,
-    activeCadence,
-    projCoverage,
-    plan?.weeks.length ?? WEEK_COUNT,
-  );
+  const trips = projectTrips(shopping, activeCadence, projCoverage, WEEK_COUNT);
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   // Compra seleccionada: por defecto la que toca hoy (current) o la primera

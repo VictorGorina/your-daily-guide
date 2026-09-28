@@ -9,7 +9,6 @@ import {
   Pencil,
   RefreshCw,
   ShieldCheck,
-  Target,
   UserPlus,
   Users,
 } from "lucide-react-native";
@@ -34,19 +33,16 @@ import { fetchMonthlyPlan, monthISO, todayISO } from "../../lib/daily";
 import {
   addAdultSlot,
   claimSlot,
-  clearHouseholdGoal,
   createHousehold,
   fetchHousehold,
   leaveHousehold,
   openSlots,
   removeMember,
   renameHousehold,
-  saveHouseholdGoal,
   saveHomeSchedule,
   setPlanner,
   updateMember,
   type HouseholdChild,
-  type HouseholdGoalType,
   type OpenSlot,
 } from "../../lib/household";
 import {
@@ -64,8 +60,8 @@ import {
   type Appetite,
   type HomeSchedule,
 } from "../../lib/household-shared";
-import { childPureeGaps, eur, shoppingTotal, type MonthlyPlan } from "../../lib/plan-shared";
-import { schedulePlanRecalc } from "../../lib/plan-recalc";
+import { childPureeGaps, type MonthlyPlan } from "../../lib/plan-shared";
+import { rebuildPlanWithHousehold } from "../../lib/plan-recalc";
 
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 
@@ -98,9 +94,9 @@ export default function Hogar() {
     usesApp: true,
     appetite: "normal",
   });
-  const [goalType, setGoalType] = useState<HouseholdGoalType>("comportamiento");
-  const [goalText, setGoalText] = useState("");
-  const [goalBudget, setGoalBudget] = useState("");
+  // La mesa o los horarios cambiaron en esta visita: el plan del mes aún no
+  // cuenta con ello hasta que quien planifica lo rehaga.
+  const [tableChanged, setTableChanged] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [childSheet, setChildSheet] = useState<{ open: boolean; child: HouseholdChild | null }>({
@@ -110,7 +106,6 @@ export default function Hogar() {
 
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
-  const monthSpend = shoppingTotal(planQ.data?.shopping);
 
   useEffect(() => {
     // Initialize per-member schedule drafts from server data.
@@ -128,14 +123,6 @@ export default function Hogar() {
       setSchedDrafts(drafts);
     }
   }, [state.data?.household, state.data?.members, state.data?.children]);
-
-  useEffect(() => {
-    const household = state.data?.household;
-    if (!household) return;
-    setGoalType(household.goal_type ?? "comportamiento");
-    setGoalText(household.goal_text ?? "");
-    setGoalBudget(household.goal_budget_eur != null ? String(household.goal_budget_eur) : "");
-  }, [state.data?.household]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["household"] });
 
@@ -181,12 +168,10 @@ export default function Hogar() {
   const canManageRoster = isCreator || isPlanner;
 
   // Un cambio en la mesa (entra/sale alguien, cambia una ración) invalida los
-  // platos Y las cantidades del plan: se programa un recálculo silencioso con
-  // debounce (issue 05). Solo si quien lo hace es quien planifica — su fila
-  // `monthly_plans` es la del hogar; para otro miembro el servidor lo ignoraría.
-  const recalcRoster = () => {
-    if (isPlanner) schedulePlanRecalc(month, todayISO(), "full");
-  };
+  // platos Y las cantidades del plan, pero ya no se rehace solo: lo pide quien
+  // planifica con "Rehacer plan con la familia" (ver `rebuildPlanWithHousehold`).
+  // Aquí solo se deja constancia para avisarle.
+  const recalcRoster = () => setTableChanged(true);
 
   const addAdult = useMutation({
     mutationFn: () => {
@@ -260,56 +245,38 @@ export default function Hogar() {
     onSuccess: () => {
       Alert.alert("Horario guardado");
       refresh();
+      setTableChanged(true);
       qc.invalidateQueries({ queryKey: ["plan", month] });
     },
     onError: (e: Error) => Alert.alert(e.message || "No hemos podido guardar el horario"),
   });
 
-  const syncNow = useMutation({
-    mutationFn: syncSharedPlan,
-    onSuccess: (r) =>
+  // Regenera platos y cantidades con la mesa actual y copia las comidas
+  // compartidas a quien tiene la app; quien no la tiene solo cuenta como
+  // raciones. Tarda lo que una generación (~1-2 min).
+  const rebuild = useMutation({
+    mutationFn: () => rebuildPlanWithHousehold(month, todayISO()),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["plan", month] });
+      if (r?.skipped === "no-plan") {
+        Alert.alert("Aún no tienes plan este mes: créalo en Plan y ya contará con la familia");
+        return;
+      }
+      setTableChanged(false);
       Alert.alert(
-        r.synced
-          ? "Plan compartido con el resto del hogar"
-          : "Nada que sincronizar todavía (aún no hay comidas compartidas o plan del otro miembro)",
-      ),
-    onError: () => Alert.alert("No hemos podido sincronizar el plan"),
-  });
-
-  const saveGoal = useMutation({
-    mutationFn: async () => {
-      const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
-      const budget = Number(goalBudget.replace(",", "."));
-      await saveHouseholdGoal(householdId, {
-        goal_type: goalType,
-        goal_text: goalText,
-        goal_budget_eur:
-          Number.isFinite(budget) && budget > 0 ? Math.round(budget * 100) / 100 : null,
-      });
+        r?.synced
+          ? "Plan rehecho con la familia y compartido con quien usa la app"
+          : "Plan rehecho con la familia",
+      );
     },
-    onSuccess: () => {
-      Alert.alert("Objetivo del hogar guardado");
-      refresh();
-    },
-    onError: () => Alert.alert("No hemos podido guardar el objetivo"),
-  });
-
-  const dropGoal = useMutation({
-    mutationFn: async () => {
-      const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
-      await clearHouseholdGoal(householdId);
-    },
-    onSuccess: () => {
-      setGoalText("");
-      setGoalBudget("");
-      refresh();
+    onError: (e: Error) => {
+      console.warn("hogar: rehaciendo el plan con la familia", e);
+      Alert.alert("No hemos podido rehacer el plan. Inténtalo de nuevo en un rato");
     },
   });
 
   const confirmLeave = () =>
-    Alert.alert("¿Salir del hogar?", "Dejarás de compartir comidas y objetivo con el resto.", [
+    Alert.alert("¿Salir del hogar?", "Dejarás de compartir comidas con el resto.", [
       { text: "Cancelar", style: "cancel" },
       { text: "Salir", style: "destructive", onPress: () => leave.mutate() },
     ]);
@@ -387,8 +354,6 @@ export default function Hogar() {
       </Pressable>
     );
   };
-  const goalDisabled =
-    saveGoal.isPending || (goalType === "comportamiento" ? !goalText.trim() : !goalBudget.trim());
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -569,7 +534,7 @@ export default function Hogar() {
               <ShieldCheck size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
               <Text className="flex-1 text-xs text-muted-foreground">
                 Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el
-                resto del hogar. Solo compartís las comidas comunes y el objetivo del hogar.
+                resto del hogar. Solo compartís las comidas comunes.
               </Text>
             </View>
 
@@ -1072,147 +1037,54 @@ export default function Hogar() {
                   </View>
                 ) : null;
               })()}
-
-              <Pressable
-                onPress={() => syncNow.mutate()}
-                disabled={syncNow.isPending}
-                className="mt-3 flex-row items-center justify-center gap-2 rounded-full bg-secondary py-3 active:opacity-80"
-                style={syncNow.isPending ? { opacity: 0.6 } : undefined}
-              >
-                {syncNow.isPending ? (
-                  <ActivityIndicator size="small" color="#6b6256" />
-                ) : (
-                  <RefreshCw size={16} color="#6b6256" />
-                )}
-                <Text className="text-sm font-sans-medium text-foreground">
-                  Sincronizar el plan del mes
-                </Text>
-              </Pressable>
             </View>
 
-            <View className="mt-4 rounded-3xl bg-surface p-5">
-              <View className="flex-row items-center gap-2">
-                <Target size={16} color="#6dbe7b" />
-                <Text className="text-sm font-sans-semibold text-foreground">
-                  Objetivo del hogar
-                </Text>
-              </View>
-              <Text className="mt-1 text-xs text-muted-foreground">
-                Un objetivo compartido, visible para todos en casa. Vuestro progreso individual
-                sigue siendo privado.
-              </Text>
-
-              <View className="mt-4 flex-row gap-2 rounded-full bg-secondary/80 p-1">
-                {(
-                  [
-                    ["comportamiento", "Un hábito"],
-                    ["presupuesto", "Un presupuesto"],
-                  ] as const
-                ).map(([key, label]) => {
-                  const active = goalType === key;
-                  return (
-                    <Pressable
-                      key={key}
-                      onPress={() => setGoalType(key)}
-                      className={`flex-1 items-center rounded-full py-2 active:opacity-80 ${active ? "bg-surface" : ""}`}
-                    >
-                      <Text
-                        className={`text-xs font-sans-medium ${active ? "text-primary-ink" : "text-muted-foreground"}`}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {goalType === "comportamiento" ? (
-                <TextInput
-                  className={`${INPUT} mt-3`}
-                  value={goalText}
-                  onChangeText={setGoalText}
-                  placeholder="Ej. cenar juntos entre semana"
-                  placeholderTextColor="#a69d8f"
-                  maxLength={140}
-                />
-              ) : (
-                <TextInput
-                  className={`${INPUT} mt-3`}
-                  value={goalBudget}
-                  onChangeText={setGoalBudget}
-                  placeholder="Presupuesto compartido del mes (€)"
-                  placeholderTextColor="#a69d8f"
-                  keyboardType="decimal-pad"
-                />
-              )}
-
-              <Pressable
-                onPress={() => saveGoal.mutate()}
-                disabled={goalDisabled}
-                className="mt-3 items-center rounded-full bg-primary py-3.5 active:opacity-90"
-                style={goalDisabled ? { opacity: 0.6 } : undefined}
-              >
-                <Text className="text-sm font-sans-semibold text-primary-foreground">
-                  {saveGoal.isPending ? "Guardando..." : "Guardar objetivo"}
-                </Text>
-              </Pressable>
-
-              {household.goal_type === "comportamiento" && household.goal_text ? (
-                <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3">
-                  <Target size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
-                  <Text className="flex-1 text-sm text-primary-ink">{household.goal_text}</Text>
-                </View>
-              ) : null}
-
-              {household.goal_type === "presupuesto" && household.goal_budget_eur ? (
-                <View className="mt-4">
-                  <View className="flex-row items-baseline justify-between gap-3">
-                    <Text className="flex-1 text-xs text-muted-foreground">
-                      Compra de este mes vs. objetivo del hogar
-                    </Text>
-                    <Text
-                      className={`text-lg font-sans-bold tabular-nums ${
-                        monthSpend > household.goal_budget_eur
-                          ? "text-destructive"
-                          : "text-primary-ink"
-                      }`}
-                    >
-                      {eur(monthSpend)} / {eur(household.goal_budget_eur)}
-                    </Text>
-                  </View>
-                  <View className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
-                    <View
-                      className={`h-full rounded-full ${
-                        monthSpend > household.goal_budget_eur
-                          ? "bg-danger"
-                          : monthSpend / household.goal_budget_eur >= 0.85
-                            ? "bg-warning"
-                            : "bg-success"
-                      }`}
-                      style={{
-                        width: `${Math.min(100, (monthSpend / household.goal_budget_eur) * 100)}%`,
-                      }}
-                    />
-                  </View>
-                  <Text className="mt-1.5 text-[11px] text-muted-foreground">
-                    Es el total de tu propia lista de la compra, la que se comparte con el resto del
-                    hogar cuando marcáis comidas comunes.
+            {isPlanner && (members.length > 1 || children.length > 0) ? (
+              <View className="mt-4 rounded-3xl bg-surface p-5">
+                <View className="flex-row items-center gap-2">
+                  <RefreshCw size={16} color="#6dbe7b" />
+                  <Text className="text-sm font-sans-semibold text-foreground">
+                    Plan del mes con la familia
                   </Text>
                 </View>
-              ) : null}
-
-              {household.goal_type ? (
+                <Text className="mt-1 text-xs text-muted-foreground">
+                  Rehace los platos y la compra de lo que queda de mes contando con toda la mesa. A
+                  quien usa la app le llegan las comidas compartidas; quien no la usa cuenta en las
+                  raciones. Hoy, los días pasados y los platos que cambiaste a mano no se tocan.
+                </Text>
+                {tableChanged ? (
+                  <View className="mt-3 rounded-2xl bg-primary-soft px-4 py-3">
+                    <Text className="text-xs text-primary-ink">
+                      Has cambiado la mesa o los horarios. Tu plan aún no cuenta con ello.
+                    </Text>
+                  </View>
+                ) : null}
                 <Pressable
-                  onPress={() => dropGoal.mutate()}
-                  disabled={dropGoal.isPending}
-                  className="mt-3 self-start active:opacity-70"
+                  onPress={() => rebuild.mutate()}
+                  disabled={rebuild.isPending || !planQ.data?.plan}
+                  className="mt-3 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
+                  style={rebuild.isPending || !planQ.data?.plan ? { opacity: 0.6 } : undefined}
                 >
-                  <Text className="text-xs font-sans-medium text-muted-foreground underline">
-                    Quitar objetivo
+                  {rebuild.isPending ? (
+                    <ActivityIndicator size="small" color="#3e3d39" />
+                  ) : (
+                    <RefreshCw size={16} color="#3e3d39" />
+                  )}
+                  <Text className="text-sm font-sans-semibold text-primary-foreground">
+                    {rebuild.isPending ? "Rehaciendo el plan…" : "Rehacer plan con la familia"}
                   </Text>
                 </Pressable>
-              ) : null}
-            </View>
+                {rebuild.isPending ? (
+                  <Text className="mt-2 text-center text-[11px] text-muted-foreground">
+                    Puede tardar un par de minutos.
+                  </Text>
+                ) : !planQ.data?.plan ? (
+                  <Text className="mt-2 text-center text-[11px] text-muted-foreground">
+                    Aún no tienes plan este mes: créalo en Plan y ya contará con la familia.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
 
             <Pressable
               onPress={confirmLeave}
