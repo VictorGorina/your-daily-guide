@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import { createFakeSupabase, type FakeOp, type FakeTables } from "@/test/fake-supabase";
 
-import { PLAN_CAS_EXHAUSTED_MESSAGE, type PlanRowCas, updatePlanRowCas } from "./plan-rows.server";
+import {
+  CAS_RETRY_PAUSE_MS,
+  PLAN_CAS_EXHAUSTED_MESSAGE,
+  type PlanRowCas,
+  updatePlanRowCas,
+} from "./plan-rows.server";
 
 const MONTH = "2026-09";
 
@@ -76,16 +81,36 @@ describe("updatePlanRowCas", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("con tres choques seguidos, lanza y lo deja en el log", async () => {
+  it("con cuatro choques seguidos, al quinto intento escribe", async () => {
     const tables = seed();
-    const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 3) });
+    const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 4) });
+    const out = await updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish);
+
+    expect(out.attempts).toBe(5);
+    expect(tables.monthly_plans![0]!.plan).toEqual({
+      dishes: ["IA", "a mano 1", "a mano 2", "a mano 3", "a mano 4", "nuevo"],
+    });
+  });
+
+  it("espera un poco antes de reintentar, para no chocar otra vez en el mismo instante", async () => {
+    const tables = seed();
+    const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 1) });
+    const start = performance.now();
+    await updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish);
+
+    expect(performance.now() - start).toBeGreaterThanOrEqual(CAS_RETRY_PAUSE_MS.min - 1);
+  });
+
+  it("con cinco choques seguidos, lanza y lo deja en el log", async () => {
+    const tables = seed();
+    const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 5) });
 
     await expect(updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish)).rejects.toThrow(
       PLAN_CAS_EXHAUSTED_MESSAGE,
     );
-    expect(fake.calls.filter((c) => c.op === "update")).toHaveLength(3);
+    expect(fake.calls.filter((c) => c.op === "update")).toHaveLength(5);
     expect(tables.monthly_plans![0]!.plan).toEqual({
-      dishes: ["IA", "a mano 1", "a mano 2", "a mano 3"],
+      dishes: ["IA", "a mano 1", "a mano 2", "a mano 3", "a mano 4", "a mano 5"],
     });
     const line = JSON.parse(String(warn.mock.calls[0]![0]));
     expect(line).toMatchObject({ level: "warn", event: "plan_cas_exhausted", month: MONTH });

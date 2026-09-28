@@ -22,7 +22,23 @@ import { logEvent } from "@/lib/log.server";
 
 export type PlanRowCas = { updated_at: string } & Record<string, unknown>;
 
-export const PLAN_CAS_ATTEMPTS = 3;
+/**
+ * Cinco intentos con una pausa aleatoria corta entre ellos. Con tres y sin
+ * pausa, cuatro escritores de verdad simultáneos sobre el mismo mes (una marca
+ * de la compra, un extra y una recolocación compiten por la FILA, no por la
+ * columna) llegaban a agotarlos: 3 de 8 en una prueba forzada. La pausa
+ * desincroniza a los que chocaron en el mismo instante (ticket 21).
+ */
+export const PLAN_CAS_ATTEMPTS = 5;
+export const CAS_RETRY_PAUSE_MS = { min: 20, max: 80 } as const;
+
+const retryPause = () =>
+  new Promise((resolve) =>
+    setTimeout(
+      resolve,
+      CAS_RETRY_PAUSE_MS.min + Math.random() * (CAS_RETRY_PAUSE_MS.max - CAS_RETRY_PAUSE_MS.min),
+    ),
+  );
 
 export const PLAN_CAS_EXHAUSTED_MESSAGE =
   "El plan ha cambiado mientras lo recalculábamos. Vuelve a intentarlo.";
@@ -47,6 +63,7 @@ export async function updatePlanRowCas<Row extends PlanRowCas = PlanRowCas>(
 ): Promise<{ patch: Record<string, unknown> | null; latest: Row | null; attempts: number }> {
   const select = /\bupdated_at\b/.test(columns) ? columns : `${columns}, updated_at`;
   for (let attempt = 1; attempt <= PLAN_CAS_ATTEMPTS; attempt++) {
+    if (attempt > 1) await retryPause();
     const { data, error: readError } = await client
       .from("monthly_plans")
       .select(select)

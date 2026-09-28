@@ -261,7 +261,7 @@ tarda 10-100 s, dos miembros del hogar, dos toques seguidos). Ninguna escritura 
 fila con su `updated_at`, se **reconstruye** el cambio sobre lo leído con una función pura
 (`applyPlanChanges`, `mergeRegeneratedPlan`, `withPlanMeal`, `withChildMeal`, `withOwnedMark`…) y
 se escribe con `.eq("updated_at", leído)`; si no cambia ninguna fila, se relee y se reintenta
-(hasta 3). Helpers: `updatePlanRowCas` (`plan-rows.server.ts`), `updateShoppingState` (estado de
+(el plan, hasta 5 con una pausa aleatoria de 20-80 ms; el día, hasta 3). Helpers: `updatePlanRowCas` (`plan-rows.server.ts`), `updateShoppingState` (estado de
 compra, con la lista blanca de columnas), `updateDailyLogCas` (`daily-rows.server.ts`, el mismo
 contrato para cualquier columna de la fila del día; con `create: true` crea la fila, como picoteo y
 deporte; `patchDailyHabits` es su atajo para `habits`) y `patchTodayHabits` en el cliente. El trabajo caro no se repite: solo se vuelve a aplicar su
