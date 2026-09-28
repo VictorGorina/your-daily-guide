@@ -1,43 +1,19 @@
-import { daysInMonth, planNavBounds } from "./plan-shared";
+import { addDaysISO, dateInMonth, daysBetween, daysInMonth, weekdayIndex } from "./dates";
+import { planNavBounds } from "./plan-shared";
+
+export { addDaysISO, daysBetween, weekdayIndex } from "./dates";
 
 /**
  * Navegación por semanas de la tira de Hoy (feature `hoy-semanas-editables`,
  * ver `.scratch/hoy-semanas-editables/spec.md`). Todo es puro y trabaja con
- * fechas `YYYY-MM-DD`.
+ * fechas `YYYY-MM-DD`; las cuentas de días (en UTC) viven en `dates.ts`.
  *
- * Las cuentas de días van en UTC a propósito: sumar días con `setDate` en hora
- * local da un día de 23 o 25 horas en el cambio de hora (25 de octubre de 2026),
- * y según la hora del dispositivo eso salta o repite una fecha. En UTC un día
- * dura siempre un día, igual en el navegador, en el servidor y en Hermes.
- *
- * Copia de `src/lib/week-nav.ts` (sus tests viven allí): si cambia allí, hay que
- * replicarlo aquí.
+ * Copia de `src/lib/week-nav.ts` (sus tests viven allí); el drift check de la
+ * web la compara con esa, y `dates.ts` debe ser idéntico al de la web.
  */
-
-const DAY_MS = 86_400_000;
-
-const pad = (n: number) => String(n).padStart(2, "0");
-
-const toUTC = (date: string) =>
-  Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)));
-
-const fromUTC = (ms: number) => {
-  const d = new Date(ms);
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-};
 
 const isISODate = (s: string | null | undefined): s is string =>
   !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
-
-/** `date` desplazada `n` días (negativo hacia atrás). */
-export const addDaysISO = (date: string, n: number): string => fromUTC(toUTC(date) + n * DAY_MS);
-
-/** Días naturales de `from` a `to` (positivo si `to` es posterior). */
-export const daysBetween = (from: string, to: string): number =>
-  Math.round((toUTC(to) - toUTC(from)) / DAY_MS);
-
-/** Día de la semana con el lunes como 0 y el domingo como 6 (el orden de la tira y del plan). */
-export const weekdayIndex = (date: string): number => (new Date(toUTC(date)).getUTCDay() + 6) % 7;
 
 /** Lunes de la semana de `date`. Un domingo pertenece a la semana del lunes anterior. */
 export const weekStartOf = (date: string): string => addDaysISO(date, -weekdayIndex(date));
@@ -69,7 +45,7 @@ export function weekStripBounds(
   const { latest } = planNavBounds(today, start);
   return {
     first: weekStartOf(start),
-    last: weekStartOf(`${latest}-${pad(daysInMonth(latest))}`),
+    last: weekStartOf(dateInMonth(latest, daysInMonth(latest))),
   };
 }
 
