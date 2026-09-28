@@ -120,7 +120,7 @@ export function NightlyReviewSheet({
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="flex items-center gap-2 font-title font-semibold tracking-[-0.02em]">
-            <Moon className="h-4 w-4 text-primary" /> Repaso de hoy
+            <Moon className="h-4 w-4 text-primary-ink" /> Repaso de hoy
           </SheetTitle>
           <SheetDescription>Menos de un minuto, sin nota ni examen.</SheetDescription>
         </SheetHeader>

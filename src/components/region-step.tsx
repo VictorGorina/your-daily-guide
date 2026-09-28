@@ -50,7 +50,7 @@ export function RegionStep({ profile, onDone }: Props) {
 
   return (
     <main className="mx-auto flex min-h-[100dvh] max-w-lg flex-col px-5 pb-6 pt-14">
-      <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary-soft px-3 py-1 text-xs font-medium text-primary">
+      <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary-soft px-3 py-1 text-xs font-medium text-primary-ink">
         <Globe className="h-3.5 w-3.5" /> Peppers
       </span>
       <h1 className="mt-5 font-title text-[30px] font-semibold leading-tight tracking-[-0.03em]">

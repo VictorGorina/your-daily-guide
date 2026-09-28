@@ -290,7 +290,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                 <button
                   type="button"
                   onClick={() => setKcalInput(String(estimate.macros?.kcal ?? ""))}
-                  className="text-xs font-medium text-primary"
+                  className="text-xs font-medium text-primary-ink"
                 >
                   Cambiar
                 </button>
@@ -337,7 +337,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
             <p className="text-[11px] leading-snug text-muted-foreground">{ingredientsLine}</p>
           ) : null}
           {showNumbers && estimate.lowConfidence && kcalInput == null ? (
-            <p className="text-[11px] leading-snug text-primary">
+            <p className="text-[11px] leading-snug text-primary-ink">
               No he reconocido todo lo que has escrito: revisa la cifra.
             </p>
           ) : null}

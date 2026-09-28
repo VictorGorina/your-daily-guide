@@ -27,7 +27,7 @@ gestionan los diseños del proyecto).
 | Papel      | `#FBFAF7` | Superficie elevada: tarjetas, nav, botones secundarios. |
 | Arena      | `#EAE6DD` | Raíles de barras, fondo de segmentados, días inactivos. |
 | Grafito    | `#3E3D39` | Texto principal, iconos activos, día de hoy.            |
-| Topo       | `#83796C` | Texto secundario, etiquetas mono, iconos inactivos.     |
+| Topo       | `#6B6256` | Texto secundario, etiquetas mono, iconos inactivos.     |
 | Topo claro | `#A8A093` | Autorías, metadatos, tercer nivel.                      |
 
 ### Función
@@ -35,11 +35,21 @@ gestionan los diseños del proyecto).
 | Nombre           | Hex       | Uso                                                   |
 | ---------------- | --------- | ----------------------------------------------------- |
 | Naranja Peppers  | `#FF8A3D` | Acción única: FAB, CTA, viñetas, estado `:target`.    |
+| Naranja tinta    | `#A84A17` | El naranja cuando es TEXTO o icono (`primary-ink`).   |
+| Rojo peligro     | `#B8433B` | Error y peligro (`destructive`/`danger`).             |
 | Naranja tinte    | `#FFE7D3` | Hover de superficies pulsables.                       |
 | Verde fresco     | `#6DBE7B` | Progreso conseguido. Día cumplido: `#4CAE64`.         |
 | Amarillo mostaza | `#F2C14E` | Aviso suave: día a medias, presupuesto al límite.     |
 | Gris salto       | `#F0EDE7` | Comida saltada. Se acompaña de `opacity .55`.         |
 | Fin de semana    | `#F0C99A` | Sábado y domingo en la tira semanal. Texto `#7A4614`. |
+
+**Contraste AA (ticket 33 de la auditoría, 2026-09-28).** Naranja de relleno ≠ naranja de texto:
+`#FF8A3D` es para rellenos (botón, FAB, viñeta, barra) y lo que va encima es **grafito**, nunca
+papel (papel sobre naranja daba 2,25:1; grafito, 4,64:1). Cuando el naranja es texto o icono se usa
+el tostado `#A84A17` (`text-primary-ink`): el de relleno sobre hueso daba 2,08:1, y este 5,09:1. El
+topo pasó de `#83796C` (3,79:1) a `#6B6256` (5,31:1) y el rojo de `#E2685F` a `#B8433B` (5,15:1
+con texto papel). El tema oscuro ya cumplía y no cambia. En el móvil son hex en
+`mobile/tailwind.config.js` y en props `color=` de iconos: se cambian a mano, igual.
 
 ### Sistema de comida — un color por categoría
 
@@ -127,8 +137,8 @@ comida: mismo diseño, tinte al 22% en lugar del 13% — no hay tarjeta destacad
 
 ### Botones
 
-Primario: naranja, texto papel, radio 99px, padding vertical 13px, Figtree 600 13.5px, ancho
-completo. Secundario: papel sobre hueso, texto topo, hover a naranja. Circular de acción: 34px
+Primario: naranja, texto grafito, radio 99px, padding vertical 13px, Figtree 600 13.5px, ancho
+completo. Secundario: papel sobre hueso, texto topo, hover a naranja tinta. Circular de acción: 34px
 primario, 30px secundario. Hover siempre `scale(1.08)` en 200ms.
 
 ### Segmentado y chips

@@ -44,6 +44,7 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
+  --color-primary-ink: var(--primary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -101,22 +102,28 @@
   --secondary: #eae6dd;
   --secondary-foreground: #3e3d39;
   --muted: #eeeae2;
-  --muted-foreground: #83796c;
+  /* Contraste AA (ticket 33): #83796c daba 3,79:1 sobre el fondo; este, 5,31. */
+  --muted-foreground: #6b6256;
   --accent: #efe7da;
   --accent-foreground: #3e3d39;
   --border: #e2dcd0;
   --input: #e2dcd0;
 
-  /* Naranja Peppers — único acento de toda la app (FAB, CTA, viñetas). */
+  /* Naranja Peppers — único acento de toda la app (FAB, CTA, viñetas). Como
+     RELLENO lleva texto oscuro encima (regla del sistema: los acentos llevan
+     texto oscuro; el claro daba 2,25:1). Como TEXTO o icono se usa
+     --primary-ink, un naranja tostado: el de relleno sobre el fondo da 2,08:1
+     (ticket 33, contraste AA). */
   --primary: #ff8a3d;
-  --primary-foreground: #fbfaf7;
+  --primary-foreground: #3e3d39;
   --primary-soft: #ffe7d3;
+  --primary-ink: #a84a17;
   --ring: #ff8a3d;
 
   /* Carne — usado también como color semántico de error/peligro */
-  --destructive: #e2685f;
+  --destructive: #b8433b;
   --destructive-foreground: #fbfaf7;
-  --danger: #e2685f;
+  --danger: #b8433b;
   --danger-foreground: #fbfaf7;
   /* Mostaza — avisos */
   --warning: #f2c14e;
@@ -176,6 +183,8 @@
   --primary: #ff9d5c;
   --primary-foreground: #2b1a0d;
   --primary-soft: #3a2c1c;
+  /* En oscuro el naranja ya se lee como texto (7,73:1 sobre el fondo). */
+  --primary-ink: #ff9d5c;
   --ring: #ff9d5c;
 
   --destructive: #e8776f;

@@ -91,13 +91,13 @@ export function RegionFields({
                   onClick={() => onCountryChange(c.code)}
                   aria-pressed={active}
                   className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm transition-colors ${
-                    active ? "bg-primary-soft text-primary" : "bg-secondary text-foreground"
+                    active ? "bg-primary-soft text-primary-ink" : "bg-secondary text-foreground"
                   }`}
                 >
                   <span className="font-medium">{t(`countries.${c.code}`)}</span>
                   <span className="flex items-center gap-2 text-xs text-muted-foreground">
                     {c.currency}
-                    {active ? <Check className="h-4 w-4 text-primary" /> : null}
+                    {active ? <Check className="h-4 w-4 text-primary-ink" /> : null}
                   </span>
                 </button>
               </li>
@@ -148,7 +148,7 @@ export function RegionFields({
                   setTzDraft(timezone);
                   setEditingTz(true);
                 }}
-                className="shrink-0 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                className="shrink-0 text-xs font-medium text-primary-ink underline-offset-4 hover:underline"
               >
                 {t("common.change")}
               </button>

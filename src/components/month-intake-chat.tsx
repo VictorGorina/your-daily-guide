@@ -90,7 +90,7 @@ export function MonthIntakeChat({
   return (
     <section className="surface-card animate-rise mt-8 space-y-5 p-6">
       <div className="flex items-center gap-2.5">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-ink">
           <Sparkles className="h-4 w-4" />
         </span>
         <div>

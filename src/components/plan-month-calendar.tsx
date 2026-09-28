@@ -199,7 +199,7 @@ export function PlanMonthCalendar({
                 {meals.map((meal) => (
                   <div key={meal.slot} className="rounded-xl p-3" style={foodBgStyle(meal.idea)}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-primary">{meal.moment}</span>
+                      <span className="text-xs font-semibold text-primary-ink">{meal.moment}</span>
                       <FoodCategoryBadge dish={meal.idea} />
                     </div>
                     <p className="mt-1 text-sm text-foreground">{meal.idea}</p>

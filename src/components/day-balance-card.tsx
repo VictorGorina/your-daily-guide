@@ -151,7 +151,7 @@ export function DayBalanceCard({
 
       {busy ? (
         <p className="mt-3 flex items-center gap-2 text-[12px] text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden />
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary-ink" aria-hidden />
           Ajustando tus próximos días…
         </p>
       ) : changes.length ? (
@@ -177,7 +177,7 @@ export function DayBalanceCard({
             <button
               type="button"
               onClick={onShowAdjustment}
-              className="mt-2.5 text-left text-[12px] font-medium text-primary"
+              className="mt-2.5 text-left text-[12px] font-medium text-primary-ink"
             >
               Ver los {changes.length} cambios
             </button>

@@ -1006,7 +1006,7 @@ function Onboarding() {
     return (
       <main className="mx-auto flex h-[100dvh] max-w-lg flex-col items-center justify-center px-6">
         <div className="w-full space-y-6 text-center">
-          <Sparkles className="mx-auto h-10 w-10 text-primary" aria-hidden />
+          <Sparkles className="mx-auto h-10 w-10 text-primary-ink" aria-hidden />
           <h1 className="font-title text-2xl font-semibold tracking-tight text-foreground">
             Vamos a conocerte
           </h1>
@@ -1124,7 +1124,7 @@ function Onboarding() {
                 <label key={key} className="block text-xs text-muted-foreground">
                   {GAP_LABEL[key].label}
                   {gapMissing.includes(key) ? (
-                    <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary">
+                    <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary-ink">
                       falta
                     </span>
                   ) : null}
@@ -1156,7 +1156,7 @@ function Onboarding() {
                   <span className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
                     {displayQ(n).q}
                   </span>
-                  <span className="shrink-0 text-xs font-semibold text-primary">Responder</span>
+                  <span className="shrink-0 text-xs font-semibold text-primary-ink">Responder</span>
                 </button>
               ))}
             </section>
@@ -1200,7 +1200,7 @@ function Onboarding() {
         ) : null}
         {!canConfirm && requiredPending.length ? (
           <p className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" /> Te quedan{" "}
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-ink" /> Te quedan{" "}
             {requiredPending.length} preguntas por responder antes de guardar.
           </p>
         ) : null}
@@ -1232,7 +1232,7 @@ function Onboarding() {
         <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
           <span className="relative grid h-24 w-24 place-items-center">
             <span className="animate-coach-pulse absolute h-24 w-24 rounded-full bg-primary/12" />
-            <span className="relative grid h-14 w-14 place-items-center rounded-full bg-primary-soft text-primary">
+            <span className="relative grid h-14 w-14 place-items-center rounded-full bg-primary-soft text-primary-ink">
               <Check className="h-6 w-6" strokeWidth={2.6} />
             </span>
           </span>
@@ -1359,7 +1359,7 @@ function Onboarding() {
 
       {error ? (
         <div className="animate-rise mb-2 flex items-start gap-2 rounded-2xl bg-primary-soft px-3.5 py-2.5 text-xs text-foreground">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-ink" />
           <span>{error}</span>
         </div>
       ) : null}

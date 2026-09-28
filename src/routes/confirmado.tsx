@@ -93,7 +93,7 @@ function ConfirmadoPage() {
       <div className="animate-rise">
         {status === "waiting" && (
           <>
-            <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
+            <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary-ink" />
             <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
               {t("auth.confirm.confirming")}
             </h1>
@@ -103,7 +103,7 @@ function ConfirmadoPage() {
 
         {status === "confirmed" && (
           <>
-            <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
+            <CheckCircle2 className="mx-auto h-10 w-10 text-primary-ink" />
             <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
               {t("auth.confirm.confirmed")}
             </h1>

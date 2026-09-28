@@ -651,7 +651,7 @@ function PlanPage() {
         />
       ) : showCreateTakeover ? (
         <section className="surface-card animate-rise mt-8 p-6 text-center">
-          <CalendarRange className="mx-auto h-7 w-7 text-primary" />
+          <CalendarRange className="mx-auto h-7 w-7 text-primary-ink" />
           <h2 className="mt-3 text-sm font-semibold">
             {isSoloPlanner
               ? "Planifica tus comidas en solitario"
@@ -693,7 +693,7 @@ function PlanPage() {
                 key={key}
                 onClick={() => setTab(key)}
                 className={`flex items-center justify-center gap-1 rounded-full py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:text-sm ${
-                  tab === key ? "bg-surface text-primary" : "text-muted-foreground"
+                  tab === key ? "bg-surface text-primary-ink" : "text-muted-foreground"
                 }`}
               >
                 <Icon className="h-4 w-4 shrink-0" /> {label}
@@ -728,7 +728,7 @@ function PlanPage() {
               {plan ? (
                 <div className="surface-card p-5">
                   <div className="flex items-center gap-2">
-                    <Sparkle className="h-4 w-4 text-primary" />
+                    <Sparkle className="h-4 w-4 text-primary-ink" />
                     <h2 className="text-sm font-semibold">Cómo enfocamos el mes</h2>
                   </div>
                   <p className="hyphens-auto mt-2 text-justify text-sm leading-relaxed">
@@ -790,7 +790,7 @@ function PlanPage() {
               {hasHouseholdShopping ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 px-0.5">
-                    <Users className="h-4 w-4 text-primary" />
+                    <Users className="h-4 w-4 text-primary-ink" />
                     <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
                       La compra de la casa
                     </h2>
@@ -840,7 +840,7 @@ function PlanPage() {
 
               <div className="space-y-3">
                 <div className="flex items-center gap-2 px-0.5">
-                  <ShoppingBasket className="h-4 w-4 text-primary" />
+                  <ShoppingBasket className="h-4 w-4 text-primary-ink" />
                   <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
                     Tu compra en solitario
                   </h2>
@@ -1053,7 +1053,7 @@ function PantryExtrasCard({
   return (
     <div className="surface-card px-4 py-3.5">
       <div className="flex items-center gap-2">
-        <Carrot className="h-[15px] w-[15px] shrink-0 text-primary" />
+        <Carrot className="h-[15px] w-[15px] shrink-0 text-primary-ink" />
         <h3 className="flex-1 text-[12.5px] font-semibold">Ya lo tengo en casa · fuera del plan</h3>
       </div>
       <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
@@ -1278,7 +1278,7 @@ function IngredientsTab({
         /* Cadencia */
         <div className="surface-card px-4 py-3.5">
           <div className="flex items-center gap-2">
-            <CalendarSync className="h-[15px] w-[15px] shrink-0 text-primary" />
+            <CalendarSync className="h-[15px] w-[15px] shrink-0 text-primary-ink" />
             <h3 className="flex-1 text-[12.5px] font-semibold">Cada cuánto compras</h3>
           </div>
           <div className="mt-2.5 grid grid-cols-3 gap-1 rounded-full bg-secondary/70 p-1">
@@ -1360,7 +1360,7 @@ function IngredientsTab({
       <div className="surface-card p-5">
         <p className="text-xs font-semibold text-muted-foreground">Te falta comprar</p>
         <div className="mt-0.5 flex items-baseline gap-2">
-          <span className="font-title text-4xl font-semibold tabular-nums tracking-tight text-primary">
+          <span className="font-title text-4xl font-semibold tabular-nums tracking-tight text-primary-ink">
             {eur(stillPending)}
           </span>
           <span className="text-xs text-muted-foreground">
@@ -1452,7 +1452,7 @@ function IngredientsTab({
         {filteredGroups.map((g) => (
           <div key={g.category} className="surface-card px-4 pb-1.5 pt-3.5">
             <div className="flex items-center gap-2 pb-1.5">
-              <CategoryIcon category={g.category} className="h-[15px] w-[15px] text-primary" />
+              <CategoryIcon category={g.category} className="h-[15px] w-[15px] text-primary-ink" />
               <h3 className="flex-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                 {g.category}
               </h3>
@@ -1538,7 +1538,7 @@ function IngredientsTab({
       {/* Tip de persistencia */}
       {readOnly ? null : (
         <div className="flex items-start gap-2.5 rounded-[20px] bg-primary/10 px-4 py-3.5">
-          <Lightbulb className="mt-0.5 h-[15px] w-[15px] shrink-0 text-primary" />
+          <Lightbulb className="mt-0.5 h-[15px] w-[15px] shrink-0 text-primary-ink" />
           <p className="text-xs leading-relaxed text-muted-foreground">
             Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
             volveré a pedir mientras te dure.
@@ -1708,7 +1708,7 @@ function ShopModeView({
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-muted-foreground">Queda por coger</p>
-                <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary">
+                <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary-ink">
                   {eur(Math.round(leftTotal * 100) / 100)}
                 </p>
               </div>
@@ -1747,7 +1747,10 @@ function ShopModeView({
             {shopGroups.map((g) => (
               <div key={g.category}>
                 <div className="flex items-center gap-2 px-1 pb-2">
-                  <CategoryIcon category={g.category} className="h-[15px] w-[15px] text-primary" />
+                  <CategoryIcon
+                    category={g.category}
+                    className="h-[15px] w-[15px] text-primary-ink"
+                  />
                   <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     {g.category}
                   </h3>

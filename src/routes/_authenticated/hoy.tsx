@@ -890,7 +890,7 @@ function Hoy() {
             <button
               type="button"
               onClick={() => requestGuide()}
-              className="shrink-0 text-xs font-medium text-primary"
+              className="shrink-0 text-xs font-medium text-primary-ink"
             >
               Generar
             </button>
@@ -924,7 +924,7 @@ function Hoy() {
               to="/plan"
               className="surface-card mt-3.5 flex items-center gap-3 p-4 transition-transform active:scale-[0.99]"
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-ink">
                 <CalendarRange className="h-5 w-5" />
               </span>
               <span className="min-w-0 flex-1">
@@ -939,7 +939,7 @@ function Hoy() {
             <button
               type="button"
               onClick={() => todayQ.refetch()}
-              className="mt-3.5 text-sm font-medium text-primary"
+              className="mt-3.5 text-sm font-medium text-primary-ink"
             >
               No hemos podido preparar las comidas de hoy. Reintentar
             </button>
@@ -1025,7 +1025,7 @@ function Hoy() {
                                 isSkip
                                   ? "text-muted-foreground line-through"
                                   : wasIdea
-                                    ? "text-primary"
+                                    ? "text-primary-ink"
                                     : "text-foreground"
                               }`
                             : "text-[13px] leading-snug text-muted-foreground"
@@ -1070,7 +1070,7 @@ function Hoy() {
                           className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10"
                           title="Ajustando el plan…"
                         >
-                          <Loader2 className="h-[14px] w-[14px] animate-spin text-primary" />
+                          <Loader2 className="h-[14px] w-[14px] animate-spin text-primary-ink" />
                         </span>
                       ) : null}
 
@@ -1467,7 +1467,7 @@ function DayMenu({
   return (
     <div className="surface-card animate-sheet-up mt-3 p-4">
       <div className="flex items-center gap-2">
-        <ChevronDown className="h-4 w-4 text-primary" />
+        <ChevronDown className="h-4 w-4 text-primary-ink" />
         <h3 className="text-sm font-semibold">{label}</h3>
       </div>
       {meals.length ? (

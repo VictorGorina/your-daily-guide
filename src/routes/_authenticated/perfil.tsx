@@ -188,7 +188,7 @@ function Perfil() {
                                 key={opt}
                                 onClick={() => commit(field, opt)}
                                 className={`rounded-full px-3 py-2 text-xs capitalize ${
-                                  draft === opt ? "bg-primary-soft text-primary" : "bg-surface"
+                                  draft === opt ? "bg-primary-soft text-primary-ink" : "bg-surface"
                                 }`}
                               >
                                 {opt}

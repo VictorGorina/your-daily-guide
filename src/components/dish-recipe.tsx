@@ -29,7 +29,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex items-center gap-1.5 text-[11px] font-semibold text-primary"
+        className="flex items-center gap-1.5 text-[11px] font-semibold text-primary-ink"
       >
         <CookingPot className="h-3.5 w-3.5 shrink-0" />
         {open ? "Ocultar receta" : "Ver receta"}
@@ -68,7 +68,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
                 <ol className="mt-1 space-y-1">
                   {q.data.steps.map((step, i) => (
                     <li key={i} className="flex gap-2 text-xs text-foreground">
-                      <span className="shrink-0 font-semibold text-primary">{i + 1}.</span>
+                      <span className="shrink-0 font-semibold text-primary-ink">{i + 1}.</span>
                       <span className="hyphens-auto min-w-0 text-pretty">{step}</span>
                     </li>
                   ))}
@@ -79,7 +79,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
             <button
               type="button"
               onClick={() => q.refetch()}
-              className="text-xs font-medium text-primary"
+              className="text-xs font-medium text-primary-ink"
             >
               No hemos podido cargar la receta. Reintentar
             </button>

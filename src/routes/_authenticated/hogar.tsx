@@ -499,7 +499,7 @@ function Hogar() {
 
           <section className="surface-card space-y-3 p-5">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Users className="h-4 w-4 text-primary" /> Crear un hogar
+              <Users className="h-4 w-4 text-primary-ink" /> Crear un hogar
             </h2>
             <p className="text-xs text-muted-foreground">
               Tendrás un código para invitar a quien vive contigo.
@@ -520,7 +520,7 @@ function Hogar() {
           </section>
 
           <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
             <p>
               Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
               del hogar.
@@ -562,7 +562,7 @@ function Hogar() {
           </div>
 
           <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
             <p>
               Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
               del hogar. Solo compartís las comidas comunes y el objetivo del hogar.
@@ -632,7 +632,7 @@ function Hogar() {
                       )}
                       <div className="flex shrink-0 items-center gap-1">
                         {m.is_planner ? (
-                          <span className="flex items-center gap-1 rounded-full bg-primary-soft px-2 py-1 text-[11px] font-medium text-primary">
+                          <span className="flex items-center gap-1 rounded-full bg-primary-soft px-2 py-1 text-[11px] font-medium text-primary-ink">
                             <ChefHat className="h-3 w-3" /> Planifica
                           </span>
                         ) : null}
@@ -663,7 +663,7 @@ function Hogar() {
                             onClick={() => setMemberPortion(m.id, value)}
                             className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
                               active
-                                ? "bg-primary-soft text-primary"
+                                ? "bg-primary-soft text-primary-ink"
                                 : "bg-surface text-muted-foreground"
                             } ${canManageRoster ? "" : "opacity-70"}`}
                           >
@@ -678,7 +678,7 @@ function Hogar() {
                         {!m.uses_app ? (
                           <button
                             onClick={() => markUsesApp.mutate(m.id)}
-                            className="text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+                            className="text-[11px] font-medium text-primary-ink underline-offset-2 hover:underline"
                           >
                             Ya usa la app
                           </button>
@@ -730,7 +730,7 @@ function Hogar() {
                     onClick={() => setAddingType("adult")}
                     className={`rounded-xl py-2.5 text-xs font-medium transition-colors ${
                       addingType === "adult"
-                        ? "bg-primary-soft text-primary"
+                        ? "bg-primary-soft text-primary-ink"
                         : "bg-surface text-muted-foreground"
                     }`}
                   >
@@ -740,7 +740,7 @@ function Hogar() {
                     onClick={() => setAddingType("child")}
                     className={`rounded-xl py-2.5 text-xs font-medium transition-colors ${
                       addingType === "child"
-                        ? "bg-primary-soft text-primary"
+                        ? "bg-primary-soft text-primary-ink"
                         : "bg-surface text-muted-foreground"
                     }`}
                   >
@@ -768,7 +768,7 @@ function Hogar() {
                           onClick={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
                           className={`rounded-xl py-2 text-xs font-medium transition-colors ${
                             newAdult.usesApp === value
-                              ? "bg-primary-soft text-primary"
+                              ? "bg-primary-soft text-primary-ink"
                               : "bg-surface text-muted-foreground"
                           }`}
                         >
@@ -784,7 +784,7 @@ function Hogar() {
                           onClick={() => setNewAdult((p) => ({ ...p, appetite: key }))}
                           className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
                             newAdult.appetite === key
-                              ? "bg-primary-soft text-primary"
+                              ? "bg-primary-soft text-primary-ink"
                               : "bg-surface text-muted-foreground"
                           }`}
                         >
@@ -837,7 +837,7 @@ function Hogar() {
             </p>
             <button
               onClick={() => setShowHelp((v) => !v)}
-              className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary"
+              className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary-ink"
             >
               {showHelp ? "Ocultar detalle" : "Cómo funciona exactamente"}
               <ChevronDown
@@ -909,7 +909,7 @@ function Hogar() {
                         {person.name}
                         {person.memberId &&
                         members.find((m) => m.id === person.memberId)?.is_planner ? (
-                          <ChefHat className="ml-1.5 inline h-3.5 w-3.5 text-primary" />
+                          <ChefHat className="ml-1.5 inline h-3.5 w-3.5 text-primary-ink" />
                         ) : null}
                       </span>
                       <span className="text-[11px] text-muted-foreground">
@@ -952,7 +952,7 @@ function Hogar() {
                                       }
                                       className={`h-[38px] rounded-[12px] text-xs font-medium transition-colors ${
                                         active
-                                          ? "bg-primary-soft text-primary"
+                                          ? "bg-primary-soft text-primary-ink"
                                           : "bg-secondary text-muted-foreground"
                                       } disabled:opacity-60`}
                                     >
@@ -1028,7 +1028,7 @@ function Hogar() {
 
           <section className="surface-card mt-4 p-5">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Target className="h-4 w-4 text-primary" /> Objetivo del hogar
+              <Target className="h-4 w-4 text-primary-ink" /> Objetivo del hogar
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Un objetivo compartido, visible para todos en casa. Vuestro progreso individual sigue
@@ -1046,7 +1046,7 @@ function Hogar() {
                   key={key}
                   onClick={() => setGoalType(key)}
                   className={`rounded-full py-2 text-xs font-medium transition-colors ${
-                    goalType === key ? "bg-surface text-primary" : "text-muted-foreground"
+                    goalType === key ? "bg-surface text-primary-ink" : "text-muted-foreground"
                   }`}
                 >
                   {label}
@@ -1086,7 +1086,7 @@ function Hogar() {
             </button>
 
             {household.goal_type === "comportamiento" && household.goal_text ? (
-              <p className="mt-4 flex items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-sm text-primary">
+              <p className="mt-4 flex items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-sm text-primary-ink">
                 <Target className="mt-0.5 h-4 w-4 shrink-0" />
                 {household.goal_text}
               </p>
@@ -1100,7 +1100,9 @@ function Hogar() {
                   </p>
                   <span
                     className={`font-title text-lg font-semibold tabular-nums ${
-                      monthSpend > household.goal_budget_eur ? "text-destructive" : "text-primary"
+                      monthSpend > household.goal_budget_eur
+                        ? "text-destructive"
+                        : "text-primary-ink"
                     }`}
                   >
                     {eur(monthSpend)} / {eur(household.goal_budget_eur)}

@@ -191,7 +191,7 @@ export function ChildSheet({
                   onClick={() => patch({ stage: key })}
                   className={`rounded-2xl px-4 py-2.5 text-left text-[13px] font-medium transition-colors ${
                     draft.stage === key
-                      ? "bg-primary-soft text-primary"
+                      ? "bg-primary-soft text-primary-ink"
                       : "bg-muted text-muted-foreground"
                   }`}
                 >

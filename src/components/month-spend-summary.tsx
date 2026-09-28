@@ -49,12 +49,12 @@ export function MonthSpendSummary({
   return (
     <div className="surface-card p-5">
       <div className="flex items-center gap-2">
-        <Wallet className="h-4 w-4 text-primary" />
+        <Wallet className="h-4 w-4 text-primary-ink" />
         <h2 className="text-sm font-semibold">Gasto en comida</h2>
       </div>
 
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="font-title text-4xl font-semibold tabular-nums tracking-tight text-primary">
+        <span className="font-title text-4xl font-semibold tabular-nums tracking-tight text-primary-ink">
           {hasReal ? eur(real) : "—"}
         </span>
         <span className="text-xs text-muted-foreground">

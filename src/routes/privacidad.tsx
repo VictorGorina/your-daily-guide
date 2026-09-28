@@ -35,7 +35,7 @@ function PrivacidadPage() {
           <p className="mt-2 text-muted-foreground">
             Peppers es una app personal desarrollada y operada por Víctor Gorina. Para cualquier
             duda o solicitud sobre tus datos, escribe a{" "}
-            <a href="mailto:cagafanta@gmail.com" className="text-primary underline">
+            <a href="mailto:cagafanta@gmail.com" className="text-primary-ink underline">
               cagafanta@gmail.com
             </a>
             .

@@ -135,7 +135,7 @@ function RestablecerPage() {
       <div className="animate-rise w-full">
         {status === "waiting" && (
           <>
-            <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
+            <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary-ink" />
             <h1 className="mt-6 font-title text-3xl font-semibold tracking-[-0.03em]">
               {t("auth.reset.checkingLink")}
             </h1>

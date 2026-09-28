@@ -73,7 +73,7 @@ export function PlanFitNote({ fit, fitting }: { fit?: PlanFitMark; fitting: bool
         <button
           type="button"
           onClick={() => setAll((v) => !v)}
-          className="mt-2 text-xs font-medium text-primary"
+          className="mt-2 text-xs font-medium text-primary-ink"
         >
           {all ? "Ver menos" : `Ver los ${n}`}
         </button>

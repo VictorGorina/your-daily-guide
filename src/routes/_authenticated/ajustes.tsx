@@ -199,7 +199,7 @@ function Ajustes() {
 
       {missing.length ? (
         <div className="mt-4 flex items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-xs">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
           <span>
             Para que el progreso y los avisos funcionen bien, completa: {missing.join(", ")}.
           </span>
@@ -211,7 +211,7 @@ function Ajustes() {
       </span>
       <div className="surface-card mt-2 divide-y divide-border overflow-hidden">
         <Link to="/hogar" className="flex items-center gap-3 px-4 py-4 text-sm">
-          <Users className="h-4 w-4 shrink-0 text-primary" />
+          <Users className="h-4 w-4 shrink-0 text-primary-ink" />
           <span className="min-w-0 flex-1">
             <span className="block font-medium">Tu hogar</span>
             <span className="block text-xs text-muted-foreground">
@@ -221,7 +221,7 @@ function Ajustes() {
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </Link>
         <Link to="/perfil" className="flex items-center gap-3 px-4 py-4 text-sm">
-          <Pencil className="h-4 w-4 shrink-0 text-primary" />
+          <Pencil className="h-4 w-4 shrink-0 text-primary-ink" />
           <span className="min-w-0 flex-1">
             <span className="block font-medium">Editar mis respuestas</span>
             <span className="block text-xs text-muted-foreground">

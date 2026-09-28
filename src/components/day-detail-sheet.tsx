@@ -403,7 +403,7 @@ export function DayDetailBody({
                           ? "text-success"
                           : skipped || unlogged
                             ? "text-muted-foreground"
-                            : "text-primary"
+                            : "text-primary-ink"
                       }`}
                     >
                       {unlogged ? "Sin registrar" : MEAL_STATUS_LABEL[h.status!]}
@@ -417,7 +417,7 @@ export function DayDetailBody({
                           : changed && h.actual
                             ? "text-muted-foreground line-through"
                             : changed
-                              ? "text-primary"
+                              ? "text-primary-ink"
                               : "text-foreground"
                       }`}
                     >
@@ -426,7 +426,7 @@ export function DayDetailBody({
                   ) : null}
                   {/* Mostrar qué comió realmente si ya lo indicó */}
                   {changed && h.actual ? (
-                    <p className="mt-0.5 text-sm text-primary">Comí: {h.actual}</p>
+                    <p className="mt-0.5 text-sm text-primary-ink">Comí: {h.actual}</p>
                   ) : null}
                   {wasIdea ? (
                     <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
@@ -474,7 +474,7 @@ export function DayDetailBody({
                         onClick={() => setFamilyToggle((t) => ({ ...t, [i]: !t[i] }))}
                         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                           familyToggle[i]
-                            ? "bg-primary/10 text-primary"
+                            ? "bg-primary/10 text-primary-ink"
                             : "bg-surface text-muted-foreground"
                         }`}
                       >

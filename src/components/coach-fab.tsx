@@ -79,7 +79,7 @@ function ActionRow({ action }: { action: ActionEntry }) {
       className={`animate-toast-in flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 text-xs font-medium ${
         action.state === "error"
           ? "bg-destructive/10 text-destructive"
-          : "bg-primary/10 text-primary"
+          : "bg-primary/10 text-primary-ink"
       }`}
       aria-live="polite"
     >

@@ -213,7 +213,7 @@ export function WeekPager({
             <button
               type="button"
               onClick={() => goTo(weekIndexOf(today, bounds))}
-              className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-num text-[9.5px] font-medium uppercase tracking-wide text-primary transition-opacity active:opacity-70"
+              className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-num text-[9.5px] font-medium uppercase tracking-wide text-primary-ink transition-opacity active:opacity-70"
             >
               Volver a hoy
             </button>
