@@ -2,6 +2,7 @@ import { asPromptData } from "@/lib/prompt-data";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { weekdayIndex } from "@/lib/dates";
+import { effectiveSharedSlots } from "@/lib/effective-shared-slots";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";
 
 import {
@@ -9,7 +10,6 @@ import {
   cleanHomeSchedule,
   cleanSharedSlots,
   DAY_LABEL,
-  deriveSharedSlots,
   describeRoster,
   describeServings,
   describeSharedSlots,
@@ -220,29 +220,19 @@ export async function householdContext(
     homeSchedule: k.home_schedule ? cleanHomeSchedule(k.home_schedule) : null,
   }));
 
-  // Determinar sharedSlots: si hay horarios individuales, derivarlos; si no,
-  // caer al shared_slots heredado del hogar (hogares sin migrar).
+  // Qué se comparte: la regla única de `effectiveSharedSlots` (la misma que usan
+  // las pantallas). Va ANTES de rellenar los horarios de abajo: necesita saber
+  // quién no tenía horario propio.
+  const sharedSlots = effectiveSharedSlots(legacySharedSlots, members, kidsLite);
   const hasAnySchedule =
     members.some((m) => m.homeSchedule != null) || kidsLite.some((c) => c.homeSchedule != null);
 
   // Quien no ha configurado su horario NO está "nunca en casa": hereda los días
-  // compartidos del hogar (`households.shared_slots`). Sin esto, en cuanto una
-  // sola persona configura su horario, el resto (incluido el planificador) cae
-  // en "nunca en casa" y `deriveSharedSlots` colapsa a cero comidas compartidas.
+  // compartidos del hogar (`households.shared_slots`). Las raciones y el resto
+  // de este contexto lo necesitan ya resuelto.
   const resolveSchedule = (s: HomeSchedule | null): HomeSchedule => s ?? legacySharedSlots;
   for (const m of members) m.homeSchedule = resolveSchedule(m.homeSchedule);
   for (const c of kidsLite) c.homeSchedule = resolveSchedule(c.homeSchedule);
-
-  const sharedSlots = hasAnySchedule
-    ? deriveSharedSlots(
-        members.map((m) => ({
-          id: m.userId ?? m.displayName,
-          isPlanner: m.isPlanner,
-          homeSchedule: m.homeSchedule,
-        })),
-        kidsLite.map((c) => ({ id: c.id, homeSchedule: c.homeSchedule, stage: c.stage })),
-      )
-    : legacySharedSlots;
 
   const servings = servingsPerSlot(
     members,

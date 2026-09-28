@@ -20,7 +20,7 @@ cd "$(git rev-parse --show-toplevel)"
 fail=0
 
 # --- Archivos que deben ser 100 % idénticos ---
-for f in age.ts food-categories.ts dates.ts auth-cache.ts log-redact.ts; do
+for f in age.ts food-categories.ts dates.ts auth-cache.ts log-redact.ts effective-shared-slots.ts; do
   if ! diff -q "src/lib/$f" "mobile/lib/$f" > /dev/null 2>&1; then
     echo "DRIFT (idéntico): $f"
     diff --unified=2 "src/lib/$f" "mobile/lib/$f" || true

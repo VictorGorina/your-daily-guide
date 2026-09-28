@@ -41,7 +41,7 @@ import {
   fetchProfile,
   todayISO,
 } from "@/lib/daily";
-import { fetchHousehold } from "@/lib/household";
+import { fetchHousehold, householdSharedSlots } from "@/lib/household";
 import {
   addMonths,
   boughtTotal,
@@ -171,7 +171,8 @@ function PlanPage() {
   const hh = householdQ.data;
   const isSoloPlanner = !!hh?.me && !!hh?.planner && hh.me.id !== hh.planner.id;
   const plannerName = hh?.planner?.display_name ?? "quien lleva la cocina";
-  const sharedSlots = hh?.household?.shared_slots ?? null;
+  // La regla del servidor (horarios de cada persona), no la columna a pelo.
+  const sharedSlots = householdSharedSlots(hh);
   // Para que el calendario del mes solo oculte "Ver receta" a quien de verdad
   // cambió un plato compartido, no al resto del hogar (`dishChangeIsMine`).
   const homePlanner = sharedSlots ? { isPlanner: !!hh?.me?.is_planner, sharedSlots } : null;

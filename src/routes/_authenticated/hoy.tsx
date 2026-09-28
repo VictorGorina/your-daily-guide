@@ -70,7 +70,7 @@ import {
   ZERO_MACROS,
 } from "@/lib/macros";
 import { weekdayIndex } from "@/lib/dates";
-import { fetchHousehold } from "@/lib/household";
+import { fetchHousehold, householdSharedSlots } from "@/lib/household";
 import {
   EMPTY_SCHEDULE,
   isSharedSlot,
@@ -219,6 +219,9 @@ function Hoy() {
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
   const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
+  // Qué comidas comparte la mesa: la regla del servidor (horarios de cada
+  // persona), no `household.shared_slots` a pelo.
+  const sharedSlots = householdSharedSlots(householdQ.data);
 
   // Sin plan del mes en curso, Hoy no lo genera por su cuenta: un mes se
   // genera UNA vez y tras la conversación con el coach (pantalla Plan,
@@ -295,11 +298,8 @@ function Hoy() {
   // compartido, un plato fijado o cambiado por quien planifica se veía como
   // "cambiado a mano" también para el resto, y les ocultaba "Ver receta" sin
   // que ellos hubieran tocado nada).
-  const homePlanner = householdQ.data?.household
-    ? {
-        isPlanner: !!householdQ.data.me?.is_planner,
-        sharedSlots: householdQ.data.household.shared_slots,
-      }
+  const homePlanner = sharedSlots
+    ? { isPlanner: !!householdQ.data?.me?.is_planner, sharedSlots }
     : null;
   const homeCtxFor = (weekday: number) => (homePlanner ? { ...homePlanner, weekday } : null);
   /** Who is eating at home for this meal today? Returns null if no household or not a main meal. */
@@ -309,7 +309,9 @@ function Hoy() {
     const hMembers = householdQ.data?.members ?? [];
     const hChildren = householdQ.data?.children ?? [];
     if (!hMembers.length) return null;
-    const hasSchedules = hMembers.some((m) => m.home_schedule != null);
+    const hasSchedules =
+      hMembers.some((m) => m.home_schedule != null) ||
+      hChildren.some((c) => c.home_schedule != null);
     if (hasSchedules) {
       // Quien no ha configurado su horario hereda los días compartidos del
       // hogar, no "nunca en casa" — así un horario a medias no borra la mesa.
@@ -337,9 +339,8 @@ function Hoy() {
       const others = people.filter((p) => p.id !== myMemberId);
       return { meHome, others };
     }
-    // Legacy: use shared_slots
-    const slots = householdQ.data?.household?.shared_slots;
-    if (!slots || !isSharedSlot(slots, mealKey, todayWeekday)) {
+    // Nadie tiene horario: se comparte lo que diga la columna del hogar.
+    if (!sharedSlots || !isSharedSlot(sharedSlots, mealKey, todayWeekday)) {
       return { meHome: true, others: [] };
     }
     const others = hMembers
@@ -1262,10 +1263,10 @@ function Hoy() {
                 profile={profile ?? null}
                 householdChildren={householdQ.data?.children}
                 household={
-                  householdQ.data?.household?.shared_slots
+                  sharedSlots
                     ? {
-                        sharedSlots: householdQ.data.household.shared_slots,
-                        memberCount: (householdQ.data.members ?? []).filter((m) => m.user_id)
+                        sharedSlots,
+                        memberCount: (householdQ.data?.members ?? []).filter((m) => m.user_id)
                           .length,
                       }
                     : undefined

@@ -1,3 +1,4 @@
+import { effectiveSharedSlots } from "./effective-shared-slots";
 import { BLOCKED_NAME_MESSAGE, isCleanFood } from "./content-guard";
 import { apiPost } from "./api";
 import {
@@ -171,6 +172,21 @@ export async function fetchHousehold(): Promise<HouseholdState> {
     me: members.find((m) => m.user_id === userId) ?? null,
     planner: members.find((m) => m.is_planner) ?? null,
   };
+}
+
+/**
+ * Qué comidas comparte la mesa, visto desde las pantallas: la misma regla que
+ * el servidor (`effectiveSharedSlots`), derivada de los horarios de cada
+ * persona. `null` si no hay hogar. No leas `household.shared_slots` a pelo
+ * para esto: es solo el horario de partida de quien no ha puesto el suyo.
+ */
+export function householdSharedSlots(state: HouseholdState | null | undefined): SharedSlots | null {
+  if (!state?.household) return null;
+  return effectiveSharedSlots(
+    state.household.shared_slots,
+    state.members.map((m) => ({ isPlanner: m.is_planner, homeSchedule: m.home_schedule })),
+    state.children.map((c) => ({ homeSchedule: c.home_schedule, stage: c.feeding_stage })),
+  );
 }
 
 const randomCode = () => {

@@ -1,5 +1,5 @@
 import { BLOCKED_NAME_MESSAGE, isCleanFood } from "./content-guard";
-import { cleanSharedSlots, type SharedSlots } from "./household-shared";
+import { fetchHousehold, householdSharedSlots } from "./household";
 import { composeMonthlyPlanForMember, effectiveMealSlots, mealsForDate } from "./plan-shared";
 import { supabase } from "./supabase";
 import type {
@@ -467,15 +467,17 @@ async function fetchOwnMonthlyPlan(
   return (data as unknown as MonthlyPlanRow | null) ?? null;
 }
 
-/** Quién planifica en tu hogar y qué comidas comparte, en una sola consulta. */
-async function householdPlanInfo(
-  userId: string,
-): Promise<{ plannerId: string; sharedSlots: SharedSlots } | null> {
+/**
+ * Quién planifica en tu hogar, en una sola consulta. La RPC devuelve también
+ * `households.shared_slots`, pero NO es lo que se comparte (eso sale de los
+ * horarios, ver `householdSharedSlots`), así que no se expone.
+ */
+async function householdPlanInfo(userId: string): Promise<{ plannerId: string } | null> {
   const { data } = await supabase.rpc("household_plan_context", { _user_id: userId });
   const row = (Array.isArray(data) ? data[0] : data) as
     { planner_id: string | null; shared_slots: unknown } | undefined;
   if (!row?.planner_id) return null;
-  return { plannerId: row.planner_id, sharedSlots: cleanSharedSlots(row.shared_slots) };
+  return { plannerId: row.planner_id };
 }
 
 /**
@@ -494,15 +496,23 @@ export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | 
   ]);
   if (!info || info.plannerId === userId) return row;
 
-  const { data: plannerRow } = await supabase
-    .from("monthly_plans")
-    .select("plan")
-    .eq("user_id", info.plannerId)
-    .eq("month", month)
-    .maybeSingle();
+  // Qué se compone con la fila del planificador lo decide la misma regla que el
+  // servidor (horarios de cada persona), no la columna del hogar: con la
+  // columna, un día marcado «no como en casa» enseñaba el plato del planificador.
+  const [{ data: plannerRow }, home] = await Promise.all([
+    supabase
+      .from("monthly_plans")
+      .select("plan")
+      .eq("user_id", info.plannerId)
+      .eq("month", month)
+      .maybeSingle(),
+    fetchHousehold(),
+  ]);
+  const sharedSlots = householdSharedSlots(home);
+  if (!sharedSlots) return row;
   const plannerPlan =
     ((plannerRow as { plan: unknown } | null)?.plan as MonthlyPlan | null) ?? null;
-  const composed = composeMonthlyPlanForMember(row?.plan ?? null, plannerPlan, info.sharedSlots);
+  const composed = composeMonthlyPlanForMember(row?.plan ?? null, plannerPlan, sharedSlots);
   if (!composed) return row;
   return row
     ? { ...row, plan: composed }
