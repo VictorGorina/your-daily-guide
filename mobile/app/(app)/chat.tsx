@@ -60,7 +60,14 @@ export default function Chat() {
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const todayQ = useQuery({ queryKey: ["today"], queryFn: () => ensureTodayLog([]) });
-  const historyQ = useQuery({ queryKey: ["messages", date], queryFn: () => fetchMessages(date) });
+  // El historial se pide siempre al entrar: los mensajes se guardan sin
+  // invalidar esta consulta, y con el `staleTime` global volver al chat
+  // enseguida pintaría el de antes de la última conversación.
+  const historyQ = useQuery({
+    queryKey: ["messages", date],
+    queryFn: () => fetchMessages(date),
+    staleTime: 0,
+  });
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
 

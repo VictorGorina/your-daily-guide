@@ -1,4 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { DMMono_400Regular, DMMono_500Medium } from "@expo-google-fonts/dm-mono";
 import {
   Figtree_400Regular,
@@ -22,12 +27,15 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { I18nextProvider } from "react-i18next";
-import { View } from "react-native";
+import { useEffect, useRef } from "react";
+import { AppState, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import "../global.css";
+import { authCacheAction } from "../lib/auth-cache";
 import { AuthProvider } from "../lib/auth-context";
 import i18n from "../lib/i18n";
+import { supabase } from "../lib/supabase";
 import { useLocale } from "../lib/use-locale";
 // Importado aquí a propósito: empieza a escuchar deep links desde el arranque,
 // antes de cualquier navegación, para que /restablecer no se pierda el
@@ -36,8 +44,35 @@ import "../lib/deep-link";
 
 // Un único QueryClient para toda la app, igual que la web: las pantallas
 // comparten caché por `queryKey` (["profile"], ["today"], ["logs"]...) para no
-// repetir consultas a Supabase entre pestañas.
-const queryClient = new QueryClient();
+// repetir consultas a Supabase entre pestañas. Un dato vale 30 s antes de volver
+// a pedirlo al montar una pantalla (antes, cada montaje lo repetía todo);
+// cada escritura invalida lo que cambia, así que esto solo retrasa ver un
+// cambio hecho en OTRO dispositivo (ticket 36, PERF-07).
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: true } },
+});
+
+// En React Native, React Query no sabe cuándo la app vuelve al primer plano:
+// sin esto, `refetchOnWindowFocus` no hace nada.
+AppState.addEventListener("change", (state) => focusManager.setFocused(state === "active"));
+
+/** Aplica a la caché lo que toca con cada evento de sesión (`auth-cache.ts`). Sin UI. */
+function AuthCacheSync() {
+  const qc = useQueryClient();
+  const userId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      const next = session?.user.id ?? null;
+      const action = authCacheAction(event, userId.current, next);
+      userId.current = next;
+      if (action === "reset") void qc.resetQueries();
+      else if (action === "clear") qc.clear();
+      else if (action === "invalidate") void qc.invalidateQueries();
+    });
+    return () => data.subscription.unsubscribe();
+  }, [qc]);
+  return null;
+}
 
 /** Mantiene i18next en sintonía con el locale del perfil (o el del dispositivo
  *  antes de tener sesión). Sin UI. */
@@ -77,6 +112,7 @@ export default function RootLayout() {
       <I18nextProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
+            <AuthCacheSync />
             <LocaleSync />
             <StatusBar style="dark" />
             <Stack screenOptions={{ headerShown: false }} />

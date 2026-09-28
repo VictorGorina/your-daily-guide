@@ -12,6 +12,7 @@ import { I18nextProvider } from "react-i18next";
 
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { authCacheAction } from "@/lib/auth-cache";
 import i18n from "@/lib/i18n";
 import { applyTheme, storedTheme } from "@/lib/theme";
 import { useLocale } from "@/lib/use-locale";
@@ -147,10 +148,18 @@ function RootComponent() {
   }, []);
 
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+    // `undefined` hasta el primer evento; `null`, sin sesión (`auth-cache.ts`).
+    let userId: string | null | undefined;
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      const next = session?.user.id ?? null;
+      const action = authCacheAction(event, userId, next);
+      userId = next;
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
+        router.invalidate();
+      }
+      if (action === "reset") void queryClient.resetQueries();
+      else if (action === "clear") queryClient.clear();
+      else if (action === "invalidate") void queryClient.invalidateQueries();
     });
     return () => data.subscription.unsubscribe();
   }, [router, queryClient]);
