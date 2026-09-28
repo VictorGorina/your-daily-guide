@@ -622,22 +622,7 @@ export async function logTodayWeight(kg: number) {
   await saveProfile({ current_weight_kg: kg });
 }
 
-// --- Señales de progreso (impulso, tendencia semanal, semáforo) ---
-
-export type RatioSignal = "success" | "warning" | "muted" | "none";
-
-/**
- * Semáforo de cumplimiento diario, compartido por WeekPager y MonthCalendar.
- * Deliberadamente sin rojo: un día flojo se marca "muted" (gris neutro), nunca
- * como fallo. "none" es solo para días sin ningún registro.
- */
-export function ratioSignal(done: number, total: number): RatioSignal {
-  if (!total) return "none";
-  const ratio = done / total;
-  if (ratio >= 1) return "success";
-  if (ratio > 0) return "warning";
-  return "muted";
-}
+// --- Señales de progreso (impulso, tendencia semanal) ---
 
 function dailyRatio(log: DailyLog | undefined) {
   const habits = log?.habits ?? [];
