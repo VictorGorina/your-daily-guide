@@ -104,7 +104,7 @@
     "errEmailNotConfirmed": "Tu cuenta está creada, pero el correo sigue sin confirmar. Reenvíate el enlace y ábrelo.",
     "errInvalidCredentials": "El correo o la contraseña no coinciden. Prueba otra vez.",
     "errUserExists": "Ya hay una cuenta con ese correo. Entra con tu contraseña.",
-    "errWeakPassword": "La contraseña necesita al menos 6 caracteres.",
+    "errWeakPassword": "La contraseña necesita al menos 6 caracteres, con letras y números.",
     "errEmailInvalid": "Ese correo no parece válido.",
     "errEmailRateLimit": "Ya hemos enviado varios correos a esa dirección. Espera unos minutos.",
     "errRateLimit": "Demasiados intentos seguidos. Espera un momento y vuelve a probar.",

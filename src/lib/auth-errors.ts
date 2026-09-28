@@ -97,3 +97,26 @@ export function authErrorText(
   }
   return translate(fallbackKey);
 }
+
+/**
+ * Las mismas reglas que Supabase Auth (Authentication → Providers → Email:
+ * longitud mínima y «letters and digits», comprobado en el panel el
+ * 2026-09-26). Si cambian allí, cambian aquí, el mensaje de
+ * `auth.errWeakPassword` y el validador de `requestSignupConfirmation`.
+ * Antes la app solo miraba la longitud: con «abcdefgh» el alta respondía «ok»
+ * sin mandar el correo, y el restablecimiento decía «al menos 6 caracteres» a
+ * quien había escrito 8 (NUEVO-10).
+ */
+export const PASSWORD_RULES = { minLength: 6, lettersAndDigits: true } as const;
+
+/**
+ * Qué le falta a una contraseña NUEVA (alta o restablecer), o `null`. Letras y
+ * números en ASCII, como GoTrue: una «ñ» o una «é» no cuentan como letra.
+ */
+export function passwordProblem(password: string): "short" | "letters-digits" | null {
+  if (password.length < PASSWORD_RULES.minLength) return "short";
+  if (PASSWORD_RULES.lettersAndDigits && !(/[A-Za-z]/.test(password) && /[0-9]/.test(password))) {
+    return "letters-digits";
+  }
+  return null;
+}

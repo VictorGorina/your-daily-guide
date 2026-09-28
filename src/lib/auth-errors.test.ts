@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { authErrorKey, authErrorText, isEmailNotConfirmed } from "./auth-errors";
+import { authErrorKey, authErrorText, isEmailNotConfirmed, passwordProblem } from "./auth-errors";
 
 /** Error tal y como lo devuelve supabase-js: un Error con `code`. */
 function supabaseError(code: string, message: string): Error {
@@ -87,5 +87,17 @@ describe("authErrorText", () => {
 
   it("un error nuestro sin mensaje también cae al genérico", () => {
     expect(authErrorText(ownError("ApiError", ""), t, "auth.errSignIn")).toBe("«auth.errSignIn»");
+  });
+});
+
+describe("passwordProblem", () => {
+  it("pide la misma contraseña que Supabase Auth: 6 caracteres, con letras y números", () => {
+    expect(passwordProblem("abc12")).toBe("short");
+    expect(passwordProblem("abcdefgh")).toBe("letters-digits");
+    expect(passwordProblem("12345678")).toBe("letters-digits");
+    expect(passwordProblem("abc123")).toBeNull();
+    expect(passwordProblem("Ñandú 2026")).toBeNull();
+    // GoTrue solo cuenta letras ASCII: «ñ» y «ú» no bastan.
+    expect(passwordProblem("ññúú2026")).toBe("letters-digits");
   });
 });

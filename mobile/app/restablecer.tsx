@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { passwordProblem } from "../lib/auth-errors";
 import { useDeepLinkUrl } from "../lib/deep-link";
 import { supabase } from "../lib/supabase";
 
@@ -106,8 +107,11 @@ export default function Restablecer() {
   }, [code, error_description, url]);
 
   const submit = async () => {
-    if (password.length < 6) {
-      Alert.alert("Contraseña muy corta", "Tiene que tener al menos 6 caracteres.");
+    if (passwordProblem(password)) {
+      Alert.alert(
+        "Contraseña no válida",
+        "Tiene que tener al menos 6 caracteres, con letras y números.",
+      );
       return;
     }
     if (password !== confirm) {

@@ -104,7 +104,7 @@
     "errEmailNotConfirmed": "Your account exists, but the email is still unconfirmed. Resend the link and open it.",
     "errInvalidCredentials": "That email and password don't match. Try again.",
     "errUserExists": "There's already an account with that email. Sign in with your password.",
-    "errWeakPassword": "Your password needs at least 6 characters.",
+    "errWeakPassword": "Your password needs at least 6 characters, with letters and numbers.",
     "errEmailInvalid": "That email doesn't look valid.",
     "errEmailRateLimit": "We've already sent several emails to that address. Give it a few minutes.",
     "errRateLimit": "Too many tries in a row. Wait a moment and try again.",

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { authErrorText } from "@/lib/auth-errors";
+import { authErrorText, passwordProblem } from "@/lib/auth-errors";
 import { supabase } from "@/integrations/supabase/client";
 import { safeInternalPath } from "@/lib/safe-next";
 
@@ -102,7 +102,7 @@ function RestablecerPage() {
   }, [error_description]);
 
   const submit = async () => {
-    if (password.length < 6) {
+    if (passwordProblem(password)) {
       toast.error(t("auth.errWeakPassword"));
       return;
     }

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
-import { authErrorText, isEmailNotConfirmed } from "@/lib/auth-errors";
+import { authErrorText, isEmailNotConfirmed, passwordProblem } from "@/lib/auth-errors";
 import { requestPasswordReset, requestSignupConfirmation } from "@/lib/auth.functions";
 import { saveProfile } from "@/lib/daily";
 import { randomDemoProfile } from "@/lib/demo-profile";
@@ -196,6 +196,12 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
       toast.error(t("auth.errNeedCreds"));
+      return;
+    }
+    // Al crear la cuenta, las mismas reglas que Supabase (entrar no las mira:
+    // una cuenta antigua puede tener otra contraseña).
+    if (mode === "up" && passwordProblem(password)) {
+      toast.error(t("auth.errWeakPassword"));
       return;
     }
     setLoading(true);

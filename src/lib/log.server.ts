@@ -33,7 +33,7 @@
  *   (migración pendiente); las reservas no caducan. Una vez por proceso.
  * - `settle_outcome_failed` (warn): `settleDay` no pudo guardar `lastOutcome`;
  *   solo se pierde la nota de la tarjeta "Balance de hoy".
- * - `plan_cas_exhausted` (warn): tres escrituras seguidas de la fila del mes
+ * - `plan_cas_exhausted` (warn): cinco escrituras seguidas de la fila del mes
  *   chocaron con otra (`updatePlanRowCas`) y se devolvió un error. Suelto es una
  *   carrera normal; repetido, algo reescribe el plan en bucle.
  * - `daily_cas_exhausted` (warn): lo mismo con la fila `daily_logs` de un día
@@ -41,6 +41,14 @@
  * - `ai_step_no_time` (warn): una llamada al modelo no se hizo (o no se
  *   reintentó) porque no quedaba presupuesto en la petición (`deadline.ts`).
  *   Suelto es una petición lenta; repetido, un paso tarda más de lo previsto.
+ * - `chat_body_rejected` (warn): el cuerpo de `/api/chat` no pasó
+ *   `cleanChatBody` (`reason`). Con `CHAT_BODY_ENFORCE` sin poner solo se
+ *   registra; uno legítimo significa que un tope de `CHAT_LIMITS` es corto.
+ * - `chat_profile_read_failed` (warn): `/api/chat` no pudo leer el perfil y usó
+ *   el que mandó el cliente.
+ * - `signup_weak_password_mismatch` (error): `generateLink` rechazó por débil
+ *   una contraseña que `passwordProblem` aceptó: el panel de Supabase Auth y
+ *   `PASSWORD_RULES` se han desalineado, y el alta no manda el correo.
  */
 import { redactFields } from "@/lib/log-redact";
 

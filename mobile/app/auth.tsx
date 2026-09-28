@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { apiPostPublic } from "../lib/api";
-import { authErrorText, isEmailNotConfirmed } from "../lib/auth-errors";
+import { authErrorText, isEmailNotConfirmed, passwordProblem } from "../lib/auth-errors";
 import { useAuth } from "../lib/auth-context";
 import { saveProfile } from "../lib/daily";
 import { randomDemoProfile } from "../lib/demo-profile";
@@ -225,6 +225,12 @@ export default function Auth() {
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
       Alert.alert(t("auth.errNeedCreds"));
+      return;
+    }
+    // Al crear la cuenta, las mismas reglas que Supabase (entrar no las mira:
+    // una cuenta antigua puede tener otra contraseña).
+    if (mode === "up" && passwordProblem(password)) {
+      Alert.alert(t("auth.errWeakPassword"));
       return;
     }
 

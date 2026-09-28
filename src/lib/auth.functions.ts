@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { passwordProblem } from "@/lib/auth-errors";
 import { ValidationError } from "@/lib/validation-error";
 
 /** A dónde lleva el enlace del correo según desde dónde se pidió. */
@@ -134,8 +135,10 @@ export const requestSignupConfirmation = createServerFn({ method: "POST" })
       const email = typeof input?.email === "string" ? input.email.trim().toLowerCase() : "";
       if (!email || !email.includes("@")) throw new ValidationError("Necesitamos un correo válido");
       const password = typeof input?.password === "string" ? input.password : "";
-      if (password.length < 6) {
-        throw new ValidationError("La contraseña necesita al menos 6 caracteres");
+      if (passwordProblem(password)) {
+        throw new ValidationError(
+          "La contraseña necesita al menos 6 caracteres, con letras y números",
+        );
       }
       const platform: AuthPlatform = input?.platform === "mobile" ? "mobile" : "web";
       return { email, password, platform, next: safeNextPath(input?.next) };
@@ -181,6 +184,10 @@ export const requestSignupConfirmation = createServerFn({ method: "POST" })
         // llegar es un callejón sin salida. Si el motivo es justo ese, se
         // avisa en su lugar a quien SÍ tiene la cuenta.
         const code = (error as { code?: unknown } | null)?.code;
+        if (code === "weak_password") {
+          const { logEvent } = await import("@/lib/log.server");
+          logEvent("error", "signup_weak_password_mismatch", {});
+        }
         if (code === "email_exists" || code === "user_already_exists") {
           const { subject, html } = alreadyRegisteredEmail(`${publicUrl}/auth`);
           await sendEmail({ to: email, subject, html }).catch((notifyError) => {
