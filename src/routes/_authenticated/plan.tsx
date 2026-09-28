@@ -68,14 +68,12 @@ import {
   withOwnedMark,
   withPantryExtra,
   withTripActual,
-  withTripConfirmed,
   type PantryExtra,
   type PlanMonthStatus,
   type ShoppingCadence,
   type ShoppingItem,
   type ShoppingList,
   type TripActuals,
-  type TripConfirmations,
   type TripReceipts,
 } from "@/lib/plan-shared";
 import { freshRiskNames, freshRisksForTrip } from "@/lib/perishability";
@@ -102,7 +100,6 @@ import {
   scanTripReceipt,
   setPantryExtra,
   setTripActual,
-  setTripConfirmed,
   toggleShoppingOwned,
   welcomeBriefing,
   type ReceiptScan,
@@ -208,7 +205,6 @@ function PlanPage() {
   );
   const hhTripActuals = plannerShoppingQ.data?.trip_actuals ?? {};
   const hhPantryExtras: PantryExtra[] = plannerShoppingQ.data?.pantry_extras ?? [];
-  const hhConfirmedTrips = plannerShoppingQ.data?.confirmed_trips ?? {};
   const [hhSelectedTrip, setHhSelectedTrip] = useState(0);
   const [hhFilter, setHhFilter] = useState<"need" | "have" | "all">("all");
   const hhSafeTrip = Math.min(hhSelectedTrip, Math.max(0, plannerTripsTotal - 1));
@@ -266,11 +262,9 @@ function PlanPage() {
   type ShoppingRow = NonNullable<typeof planQ.data> | NonNullable<typeof plannerShoppingQ.data>;
   type OwnedVars = { itemName: string; trip: number; source: "fridge" | "store" | null };
   type ActualVars = { trip: number; amount: number | null };
-  type ConfirmVars = { trip: number; confirmed: boolean };
   type PantryVars = { name: string; qty?: string; remove?: boolean };
   const toggleOwned = useServerFn(toggleShoppingOwned);
   const tripActual = useServerFn(setTripActual);
-  const tripConfirm = useServerFn(setTripConfirmed);
   const pantryFn = useServerFn(setPantryExtra);
   const receiptFn = useServerFn(scanTripReceipt);
   const shoppingOps = <Row extends ShoppingRow>() => ({
@@ -299,23 +293,6 @@ function PlanPage() {
         trip_actuals: res.trip_actuals,
       }),
       onError: () => toast.error("No hemos podido guardar el gasto"),
-    },
-    confirm: {
-      kind: "confirm",
-      mutationFn: (vars: ConfirmVars) => tripConfirm({ data: { month, ...vars } }),
-      optimistic: (row: Row, v: ConfirmVars): Row => ({
-        ...row,
-        confirmed_trips: withTripConfirmed(
-          row.confirmed_trips ?? {},
-          v.trip,
-          v.confirmed ? today : null,
-        ),
-      }),
-      settle: (row: Row, res: { confirmed_trips: TripConfirmations }): Row => ({
-        ...row,
-        confirmed_trips: res.confirmed_trips,
-      }),
-      onError: () => toast.error("No hemos podido fijar los ingredientes"),
     },
     pantry: {
       kind: "pantry",
@@ -357,7 +334,6 @@ function PlanPage() {
   const ownKey = { queryKey: ["plan", month], month };
   const owned = useShoppingMutation({ ...ownKey, ...own.owned });
   const setActual = useShoppingMutation({ ...ownKey, ...own.actual });
-  const confirmTrip = useShoppingMutation({ ...ownKey, ...own.confirm });
 
   // Un cambio en la despensa propia invalida los platos de los días futuros: se
   // programa un recálculo silencioso con debounce (issue 05). No para un no
@@ -389,7 +365,6 @@ function PlanPage() {
   const houseKey = { queryKey: ["planner-shopping", month], month };
   const hhOwned = useShoppingMutation({ ...houseKey, ...house.owned });
   const hhSetActual = useShoppingMutation({ ...houseKey, ...house.actual });
-  const hhConfirmTrip = useShoppingMutation({ ...houseKey, ...house.confirm });
   const hhPantry = useShoppingMutation({ ...houseKey, ...house.pantry });
   const hhReceipt = useShoppingMutation({
     ...houseKey,
@@ -406,7 +381,6 @@ function PlanPage() {
   const tripActuals = planQ.data?.trip_actuals ?? {};
   const tripReceipts: TripReceipts = planQ.data?.trip_receipts ?? {};
   const pantryExtras: PantryExtra[] = planQ.data?.pantry_extras ?? [];
-  const confirmedTrips = planQ.data?.confirmed_trips ?? {};
   const coverage = plan?.coverage;
   const activeCadence: ShoppingCadence = plan?.cadence ?? cadenceOf(shopping);
   const tripsTotal = tripsForCoverage(activeCadence, coverage);
@@ -785,8 +759,6 @@ function PlanPage() {
                     setPendingCadence={() => {}}
                     owned={hhOwned}
                     tripActuals={hhTripActuals}
-                    confirmedTrips={hhConfirmedTrips}
-                    confirmTrip={hhConfirmTrip}
                     pantryExtras={hhPantryExtras}
                     pantry={hhPantry}
                     onEnterShopMode={() => {
@@ -830,8 +802,6 @@ function PlanPage() {
                     setPendingCadence={setPendingCadence}
                     owned={owned}
                     tripActuals={tripActuals}
-                    confirmedTrips={confirmedTrips}
-                    confirmTrip={confirmTrip}
                     pantryExtras={pantryExtras}
                     pantry={pantry}
                     onEnterShopMode={() => {
@@ -888,8 +858,6 @@ function PlanPage() {
               setPendingCadence={setPendingCadence}
               owned={owned}
               tripActuals={tripActuals}
-              confirmedTrips={confirmedTrips}
-              confirmTrip={confirmTrip}
               pantryExtras={pantryExtras}
               pantry={pantry}
               onEnterShopMode={() => {
@@ -1092,11 +1060,6 @@ function IngredientsTab({
   setPendingCadence,
   owned,
   tripActuals,
-  // Sin usar: el rediseño del 30-08 quitó "Fijar ingredientes de esta compra" de la web, pero el
-  // móvil lo conserva y fijarlas todas cierra el mes (`confirmed_at`, que frena `syncSharedMeals`).
-  // Falta decidir si vuelve aquí o sale del móvil; el aviso de no-unused-vars lo recuerda.
-  confirmedTrips,
-  confirmTrip,
   pantryExtras,
   pantry,
   onEnterShopMode,
@@ -1126,8 +1089,6 @@ function IngredientsTab({
     mutate: (v: { itemName: string; trip: number; source: "fridge" | "store" | null }) => void;
   };
   tripActuals: Record<number, number>;
-  confirmedTrips: Record<number, string>;
-  confirmTrip: { isPending: boolean; mutate: (v: { trip: number; confirmed: boolean }) => void };
   pantryExtras: PantryExtra[];
   pantry: {
     isPending: boolean;
