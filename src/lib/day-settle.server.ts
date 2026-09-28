@@ -1,23 +1,25 @@
 import { goalDirection } from "@/lib/goal";
 import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import {
-  adjustmentColumn,
   cleanDayAdjustment,
-  cleanPendingReservations,
   type DayAdjustmentRecord,
   dayBalance,
   dayNote,
   type DayOutcome,
-  type DayReservation,
   dayReversing,
-  EMPTY_RESERVATION,
   mergeDayAdjustment,
+} from "@/lib/day-balance";
+import {
+  adjustmentColumn,
+  cleanPendingReservations,
+  type DayReservation,
+  EMPTY_RESERVATION,
   type PendingReservation,
   releaseDay,
   releaseReservations,
   reserveDay,
   staleReservations,
-} from "@/lib/day-balance";
+} from "@/lib/day-reservation";
 import { requestDeadline } from "@/lib/deadline";
 import { cleanDayExercise, type DayExercise } from "@/lib/exercise";
 import { errorText, logEvent } from "@/lib/log.server";

@@ -4,23 +4,25 @@ import {
   absorbedKcal,
   absorbedNote,
   absorbsTooLittle,
-  adjustmentColumn,
   balanceNote,
-  cleanPendingReservations,
   cleanDayAdjustment,
   changedMealsKcal,
   dayBalance,
   dayNote,
   dayReversing,
   mergeDayAdjustment,
+  type DayBalance,
+} from "./day-balance";
+import {
+  adjustmentColumn,
+  cleanPendingReservations,
   releaseDay,
   releaseReservations,
   reserveDay,
   RESERVATION_TTL_MS,
   staleReservations,
-  type DayBalance,
   type PendingReservation,
-} from "./day-balance";
+} from "./day-reservation";
 import type { DayExercise, ExerciseEntry } from "./exercise";
 import { compensationNeed } from "./nutrition/compensation";
 import type { MealChange, MealHabit } from "./plan-shared";

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } fro
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeRow } from "@/test/fake-supabase";
 
-import { cleanPendingReservations } from "./day-balance";
+import { cleanPendingReservations } from "./day-reservation";
 import type { SettleDayDeps } from "./day-settle.functions";
 import { settleDayHandler } from "./day-settle.server";
 import type { MealHabit, MonthlyPlan } from "./plan-shared";
