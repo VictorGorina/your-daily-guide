@@ -44,9 +44,9 @@ async function post<TOutput>(path: string, body: unknown, token: string | null):
   });
 
   if (!response.ok) {
-    // La API devuelve {"error": mensaje} con textos pensados para enseñarse tal
-    // cual; el código de estado no distingue "dato inválido" de "fallo real",
-    // así que mandan el mensaje y el 401.
+    // La API devuelve {"error": mensaje}; 400, 429 y algunos 500 traen un texto
+    // pensado para enseñarse tal cual, el resto de 500 uno genérico. Así que
+    // se enseña siempre el mensaje, y el código solo decide qué hacer (401).
     const payload = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new ApiError(payload?.error ?? "No hemos podido completar la acción", response.status);
   }

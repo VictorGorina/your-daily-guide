@@ -23,11 +23,24 @@ cabecera `Authorization` de esa petición HTTP, así que la sesión, el `inputVa
 políticas RLS son idénticos por los dos caminos — un único sitio donde vive cada operación.
 Añadir una operación nueva a la API son tres líneas; no hay que tocar la lógica.
 
-Códigos que devuelve `apiPost`: `401` si falta la sesión o el token no vale, `400` si el cuerpo no
-es JSON, `200` con el resultado, y `500` con `{"error": mensaje}` en cualquier otro fallo. Ojo con
-ese 500: los validadores y las reglas de negocio lanzan `Error` con mensajes pensados para
-enseñarse en pantalla ("Mes no válido"), indistinguibles de un fallo real, así que el cliente debe
-guiarse por el campo `error` y no por el código.
+Códigos que devuelve `apiPost` (siempre con `{"error": mensaje}` salvo el `200`):
+
+| Código | Cuándo                                                          | `error`                   |
+| ------ | --------------------------------------------------------------- | ------------------------- |
+| `200`  | todo bien (el cuerpo es el resultado)                           | —                         |
+| `400`  | el cuerpo no es JSON, o la función lanza `ValidationError`      | el mensaje, para enseñar  |
+| `401`  | el mensaje empieza por `Unauthorized` (sin sesión o token malo) | el mensaje; toca reentrar |
+| `429`  | `RateLimitError` (cuota o tope de gasto), con `retry-after`     | el mensaje, para enseñar  |
+| `500`  | `UserFacingError`: fallo real con texto escrito para la persona | el mensaje, para enseñar  |
+| `500`  | cualquier otro `Error` (se registra y va a Sentry)              | un texto genérico         |
+
+Así el cliente puede enseñar **siempre** el campo `error`: lo interno ya llega sustituido por el
+genérico. El código sirve para decidir qué hacer (reentrar con 401, esperar con 429), no qué
+decir. Del lado del servidor, la clase que se lanza es la que decide: `ValidationError` para un
+dato inválido de la persona ("Mes no válido"), `UserFacingError` para un fallo que merece un
+mensaje propio ("No hemos podido guardar el horario") y `Error` para lo interno (una clave que
+falta, la respuesta de un servicio). Un `Error` con un texto pensado para la persona llega a la
+web (por el RPC de las server functions) pero en el móvil sale el genérico (ticket 36, CAL-10).
 
 ## Platos del plan: cambio a mano vs. recolocación
 

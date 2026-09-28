@@ -77,9 +77,11 @@ TanStack Start (dependen del bundle web) y necesita HTTP normal. La ruta no dupl
 la misma server function vía `apiPost` ([src/lib/api-route.server.ts](src/lib/api-route.server.ts)),
 así que la sesión, la validación y las políticas RLS son idénticas por los dos caminos. Al añadir
 una operación nueva, exponerla en la API son tres líneas — la lógica de negocio vive en un único
-sitio. Ojo: `apiPost` devuelve `500` tanto para fallos reales como para errores de validación
-pensados para enseñarse en pantalla; el cliente debe guiarse por el campo `error` del JSON, no
-solo por el código HTTP.
+sitio. `apiPost` traduce el error a código (`400` `ValidationError` o JSON malo, `401` sin
+sesión, `429` cuota con `retry-after`, `500` el resto) y el campo `error` del JSON se puede
+enseñar siempre: un `UserFacingError` llega con su texto y un `Error` cualquiera con uno
+genérico. Por eso un mensaje para la persona se lanza como `ValidationError` o
+`UserFacingError`, nunca como `Error` (tabla completa en AGENTS.md).
 
 **Supabase:** [src/integrations/supabase/client.ts](src/integrations/supabase/client.ts) es el
 cliente de navegador; `client.server.ts` el de servidor. `auth-middleware.ts` valida la sesión (web

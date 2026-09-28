@@ -49,9 +49,11 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
 - [ ] La ruta **no** duplica lógica: invoca la misma server function vía `apiPost`
       ([src/lib/api-route.server.ts](../../src/lib/api-route.server.ts)). Añadir una operación
       a la API son tres líneas.
-- [ ] El cliente se guía por el campo `error` del JSON, **no** por el código HTTP: `apiPost`
-      devuelve `500` tanto para fallos reales como para errores de validación pensados para
-      enseñarse en pantalla ("Mes no válido").
+- [ ] Un mensaje pensado para la persona se lanza como `ValidationError` (dato inválido →
+      `400`) o `UserFacingError` (fallo real → `500` con su texto), nunca como `Error` a secas:
+      por `/api/v1/*` un `Error` sale con un texto genérico y el móvil no ve el mensaje.
+- [ ] El cliente enseña el campo `error` del JSON (siempre es presentable) y usa el código solo
+      para decidir qué hacer: `401` reentrar, `429` esperar `retry-after`.
 
 ## Tabla de composición de alimentos (`foods.data.ts`)
 
