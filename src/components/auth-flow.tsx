@@ -15,6 +15,11 @@ import { useLocale } from "@/lib/use-locale";
 type Stage = "intro" | "access";
 type Mode = "in" | "up" | "forgot";
 
+// Google solo se enseña si está activado en Supabase (Authentication →
+// Providers → Google) y se pide aquí con VITE_AUTH_GOOGLE=1: sin proveedor, el
+// botón solo daba un error (NUEVO-08, decisión P13).
+const GOOGLE_AUTH = import.meta.env.VITE_AUTH_GOOGLE === "1";
+
 /**
  * Fila de pimientos del artboard 3a ("Rediseño Peppers nutrición"): siete
  * círculos, uno por familia de alimento, con el icono Lucide de categoría — la
@@ -428,17 +433,21 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
 
                 {mode !== "forgot" && (
                   <>
-                    <div className="my-1 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="h-px flex-1 bg-border" /> {t("auth.or")}{" "}
-                      <span className="h-px flex-1 bg-border" />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={google}
-                      className="w-full rounded-full bg-surface py-3.5 text-sm font-medium text-foreground transition-transform active:scale-[0.98]"
-                    >
-                      {t("auth.google")}
-                    </button>
+                    {GOOGLE_AUTH && (
+                      <>
+                        <div className="my-1 flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="h-px flex-1 bg-border" /> {t("auth.or")}{" "}
+                          <span className="h-px flex-1 bg-border" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={google}
+                          className="w-full rounded-full bg-surface py-3.5 text-sm font-medium text-foreground transition-transform active:scale-[0.98]"
+                        >
+                          {t("auth.google")}
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={demo}

@@ -31,6 +31,11 @@ import { useLocale } from "../lib/use-locale";
 // Cierra la pestaña de auth que quedara abierta de un intento anterior.
 WebBrowser.maybeCompleteAuthSession();
 
+// Google solo se enseña si está activado en Supabase (Authentication →
+// Providers → Google) y se pide aquí con EXPO_PUBLIC_AUTH_GOOGLE=1: sin
+// proveedor, el botón solo daba un error (NUEVO-08, decisión P13).
+const GOOGLE_AUTH = process.env.EXPO_PUBLIC_AUTH_GOOGLE === "1";
+
 // A dónde vuelve Google/Supabase tras autenticar. Con el scheme "dailyguide"
 // del app.json, esto es dailyguide://. Debe estar dado de alta en el dashboard
 // de Supabase (Authentication → URL Configuration → Redirect URLs).
@@ -449,27 +454,31 @@ export default function Auth() {
 
                   {mode !== "forgot" && (
                     <>
-                      <View className="my-1 flex-row items-center gap-3">
-                        <View className="h-px flex-1 bg-border" />
-                        <Text className="text-xs font-body text-muted-foreground">
-                          {t("auth.or")}
-                        </Text>
-                        <View className="h-px flex-1 bg-border" />
-                      </View>
+                      {GOOGLE_AUTH && (
+                        <>
+                          <View className="my-1 flex-row items-center gap-3">
+                            <View className="h-px flex-1 bg-border" />
+                            <Text className="text-xs font-body text-muted-foreground">
+                              {t("auth.or")}
+                            </Text>
+                            <View className="h-px flex-1 bg-border" />
+                          </View>
 
-                      <Pressable
-                        onPress={google}
-                        disabled={googleLoading}
-                        className="w-full flex-row items-center justify-center rounded-full bg-surface py-3.5 active:opacity-90 disabled:opacity-60"
-                      >
-                        {googleLoading ? (
-                          <ActivityIndicator color="#83796c" />
-                        ) : (
-                          <Text className="text-sm font-body-medium text-foreground">
-                            {t("auth.google")}
-                          </Text>
-                        )}
-                      </Pressable>
+                          <Pressable
+                            onPress={google}
+                            disabled={googleLoading}
+                            className="w-full flex-row items-center justify-center rounded-full bg-surface py-3.5 active:opacity-90 disabled:opacity-60"
+                          >
+                            {googleLoading ? (
+                              <ActivityIndicator color="#83796c" />
+                            ) : (
+                              <Text className="text-sm font-body-medium text-foreground">
+                                {t("auth.google")}
+                              </Text>
+                            )}
+                          </Pressable>
+                        </>
+                      )}
 
                       <Pressable
                         onPress={demo}
