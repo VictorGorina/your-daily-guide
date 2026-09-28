@@ -7,7 +7,7 @@ import {
   scheduleTarget,
   type SharedSlots,
 } from "@/lib/household-shared";
-import { ValidationError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { propagateLogToFamilyHandler } from "./household-propagate.server";
@@ -52,7 +52,7 @@ export const saveSharedSlots = createServerFn({ method: "POST" })
       .eq("id", mine.household_id);
     if (error) {
       console.error("saveSharedSlots", error);
-      throw new Error("No hemos podido guardar las comidas compartidas");
+      throw new UserFacingError("No hemos podido guardar las comidas compartidas");
     }
     return { shared_slots: data.slots };
   });
@@ -173,7 +173,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
         .eq("id", target.childId)
         .eq("household_id", ctx.householdId)
         .select("id");
-      if (error) throw new Error("No hemos podido guardar el horario");
+      if (error) throw new UserFacingError("No hemos podido guardar el horario");
       if (!rows?.length) throw new ValidationError("Ese peque no es de tu casa");
       return { saved: true };
     }
@@ -186,7 +186,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
         .eq("household_id", ctx.householdId)
         .is("user_id", null)
         .select("id");
-      if (error) throw new Error("No hemos podido guardar el horario");
+      if (error) throw new UserFacingError("No hemos podido guardar el horario");
       if (!rows?.length) {
         throw new ValidationError(
           "Solo puedes cambiar el horario de alguien de tu casa que no use la app",
@@ -200,6 +200,6 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
       .from("household_members")
       .update({ home_schedule: data.schedule as never } as never)
       .eq("user_id", context.userId);
-    if (error) throw new Error("No hemos podido guardar el horario");
+    if (error) throw new UserFacingError("No hemos podido guardar el horario");
     return { saved: true };
   });

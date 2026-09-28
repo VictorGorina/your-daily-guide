@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logEvent } from "@/lib/log.server";
+import { UserFacingError } from "@/lib/validation-error";
 
 export type DailyLogCas = { updated_at: string } & Record<string, unknown>;
 
@@ -96,7 +97,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
     if (written?.length) return { patch, latest, attempts: attempt };
   }
   logEvent("warn", "daily_cas_exhausted", { date, columns });
-  throw new Error(options.exhaustedMessage);
+  throw new UserFacingError(options.exhaustedMessage);
 }
 
 /**

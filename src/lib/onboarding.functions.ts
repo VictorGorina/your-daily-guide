@@ -5,6 +5,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { COACH_MODEL, createAiProvider, requireAiKey } from "@/lib/ai-provider.server";
 import { DAILY_ACTIVITIES, type DailyActivity } from "@/lib/nutrition/energy";
 import { formatTraining, parseTraining } from "@/lib/nutrition/exercise-energy";
+import { UserFacingError } from "@/lib/validation-error";
 
 export type OnboardingDraft = {
   display_name: string | null;
@@ -149,7 +150,7 @@ export const parseOnboarding = createServerFn({ method: "POST" })
     try {
       p = JSON.parse(json) as Record<string, unknown>;
     } catch {
-      throw new Error("No hemos podido interpretar tus respuestas. Inténtalo de nuevo.");
+      throw new UserFacingError("No hemos podido interpretar tus respuestas. Inténtalo de nuevo.");
     }
     return {
       display_name: str(p.display_name),

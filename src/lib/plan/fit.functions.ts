@@ -9,7 +9,7 @@ import {
   type MonthlyPlan,
   type PlanFitMark,
 } from "@/lib/plan-shared";
-import { ValidationError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -130,7 +130,7 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
       });
     } catch (error) {
       console.error("fitMonthlyPlan: guardar", error);
-      throw new Error("No hemos podido guardar el plan ajustado. Inténtalo otra vez.");
+      throw new UserFacingError("No hemos podido guardar el plan ajustado. Inténtalo otra vez.");
     }
     if (!fit) return { fit: existing };
     if (fit.changed.length && canTouchShared) {

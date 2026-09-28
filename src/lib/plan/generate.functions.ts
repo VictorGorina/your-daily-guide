@@ -11,7 +11,7 @@ import {
   type ShoppingCadence,
   type ShoppingList,
 } from "@/lib/plan-shared";
-import { ValidationError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 import { createServerFn } from "@tanstack/react-start";
@@ -124,7 +124,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       }
       if (error) {
         console.error("saveMonthlyPlan", error);
-        throw new Error("No hemos podido guardar el plan del mes. Inténtalo otra vez.");
+        throw new UserFacingError("No hemos podido guardar el plan del mes. Inténtalo otra vez.");
       }
 
       await syncSharedMeals({
@@ -199,7 +199,7 @@ export const setMonthConstraints = createServerFn({ method: "POST" })
     );
     if (error) {
       console.error("setMonthConstraints", error);
-      throw new Error("No hemos podido guardar esto. Inténtalo otra vez.");
+      throw new UserFacingError("No hemos podido guardar esto. Inténtalo otra vez.");
     }
     return data;
   });

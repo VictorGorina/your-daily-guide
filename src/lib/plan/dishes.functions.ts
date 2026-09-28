@@ -38,7 +38,7 @@ import {
   withChildMeal,
   withPlanMeal,
 } from "@/lib/plan-shared";
-import { ValidationError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
@@ -262,7 +262,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       } catch (error) {
         if (error instanceof ValidationError) throw error;
         console.error("setPlanMeal", error);
-        throw new Error("No hemos podido guardar el cambio de plato");
+        throw new UserFacingError("No hemos podido guardar el cambio de plato");
       }
 
       const { syncSharedMeals } = await import("@/lib/household.server");
@@ -382,7 +382,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
       } catch (error) {
         if (error instanceof ValidationError) throw error;
         console.error("setChildMeal", error);
-        throw new Error("No hemos podido guardar el plato del niño");
+        throw new UserFacingError("No hemos podido guardar el plato del niño");
       }
 
       await syncSharedMeals({
@@ -583,7 +583,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
         });
       } catch (error) {
         console.error("fillChildMeals", error);
-        throw new Error("No hemos podido guardar el menú de los peques");
+        throw new UserFacingError("No hemos podido guardar el menú de los peques");
       }
 
       if (filled) {

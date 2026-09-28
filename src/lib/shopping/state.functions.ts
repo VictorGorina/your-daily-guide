@@ -35,7 +35,7 @@ import {
   withTripConfirmed,
 } from "@/lib/plan-shared";
 import { RateLimitError } from "@/lib/rate-limit-error";
-import { ValidationError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
@@ -92,7 +92,7 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     ).catch((error: unknown) => {
       if (error instanceof ValidationError) throw error;
       console.error("recadenceMonthlyPlan", error);
-      throw new Error("No hemos podido cambiar la frecuencia de la compra");
+      throw new UserFacingError("No hemos podido cambiar la frecuencia de la compra");
     });
     if (!write.latest || !plan) throw new ValidationError("Todavía no hay plan de este mes");
 
@@ -161,7 +161,7 @@ export const setTripActual = createServerFn({ method: "POST" })
       },
     ).catch((error: unknown) => {
       console.error("setTripActual", error);
-      throw new Error("No hemos podido guardar el gasto");
+      throw new UserFacingError("No hemos podido guardar el gasto");
     });
     if (!latest) throw new ValidationError("Todavía no hay plan de este mes");
 
@@ -210,7 +210,7 @@ export const setPantryExtra = createServerFn({ method: "POST" })
       },
     ).catch((error: unknown) => {
       console.error("setPantryExtra", error);
-      throw new Error("No hemos podido guardar el ingrediente");
+      throw new UserFacingError("No hemos podido guardar el ingrediente");
     });
     if (!latest) throw new ValidationError("Todavía no hay plan de este mes");
 
@@ -352,7 +352,7 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
           console.error("scanTripReceipt vision", e);
         }
       }
-      throw new Error("No hemos podido leer el tiquet. Prueba con una foto más nítida.");
+      throw new UserFacingError("No hemos podido leer el tiquet. Prueba con una foto más nítida.");
     })();
 
     // 2) Quitar lo que ya está cubierto (mismo nombre exacto) y clasificar el
@@ -456,7 +456,9 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
       },
     ).catch((error: unknown) => {
       console.error("scanTripReceipt save", error);
-      throw new Error("Hemos leído el tiquet pero no hemos podido guardarlo. Inténtalo otra vez.");
+      throw new UserFacingError(
+        "Hemos leído el tiquet pero no hemos podido guardarlo. Inténtalo otra vez.",
+      );
     });
 
     return {
@@ -524,7 +526,7 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
       };
     }).catch((error: unknown) => {
       console.error("setTripConfirmed", error);
-      throw new Error("No hemos podido fijar los ingredientes");
+      throw new UserFacingError("No hemos podido fijar los ingredientes");
     });
     if (!next) throw new ValidationError("Todavía no hay lista de la compra este mes");
 

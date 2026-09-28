@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 
 import { apiPost } from "./api-route.server";
 import { RateLimitError } from "./rate-limit-error";
-import { ValidationError } from "./validation-error";
+import { UserFacingError, ValidationError } from "./validation-error";
 
 // `apiPost` es por donde la app móvil llega a cada server function: fija qué
 // código HTTP ve el cliente para cada tipo de error.
@@ -80,6 +80,14 @@ describe("apiPost", () => {
     const res = await failWith(new ValidationError("Mes no válido"))({ request: post("{}") });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "Mes no válido" });
+  });
+
+  it("UserFacingError → 500 con su mensaje: es un fallo real, pero se enseña tal cual", async () => {
+    const res = await failWith(new UserFacingError("No hemos podido guardar el horario"))({
+      request: post("{}"),
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "No hemos podido guardar el horario" });
   });
 
   it("cualquier otro error → 500 genérico, sin filtrar el mensaje interno", async () => {

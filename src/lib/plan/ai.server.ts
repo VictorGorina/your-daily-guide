@@ -10,6 +10,7 @@ import {
 } from "@/lib/plan-shared";
 import { RateLimitError } from "@/lib/rate-limit-error";
 import { generateText, streamText } from "ai";
+import { UserFacingError } from "@/lib/validation-error";
 
 /** Pide el JSON al modelo en streaming (evita cortes por timeout) y lo intenta varias veces. */
 export async function askForJson<T>(
@@ -70,7 +71,9 @@ export async function askForJson<T>(
   }
 
   console.error("askForJson agotó los intentos", lastError);
-  throw new Error("No hemos podido crear el plan ahora mismo. Inténtalo otra vez en un momento.");
+  throw new UserFacingError(
+    "No hemos podido crear el plan ahora mismo. Inténtalo otra vez en un momento.",
+  );
 }
 
 /**

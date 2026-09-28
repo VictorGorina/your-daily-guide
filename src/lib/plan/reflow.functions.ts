@@ -19,7 +19,7 @@ import {
   type ShoppingList,
   weekdayName,
 } from "@/lib/plan-shared";
-import { ValidationError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -349,7 +349,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
       );
     } catch (error) {
       console.error("reflowMonthlyPlan", error);
-      throw new Error("No hemos podido actualizar el plan con los cambios");
+      throw new UserFacingError("No hemos podido actualizar el plan con los cambios");
     }
     if (!final) return { skipped: "no-plan" };
     const { plan: finalPlan, shopping: finalShopping } = final;

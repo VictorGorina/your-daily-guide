@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logEvent } from "@/lib/log.server";
+import { UserFacingError } from "@/lib/validation-error";
 
 /**
  * Escrituras de la fila `monthly_plans` de un mes sin pisar lo que otro haya
@@ -88,5 +89,5 @@ export async function updatePlanRowCas<Row extends PlanRowCas = PlanRowCas>(
     if (written?.length) return { patch, latest, attempts: attempt };
   }
   logEvent("warn", "plan_cas_exhausted", { month });
-  throw new Error(PLAN_CAS_EXHAUSTED_MESSAGE);
+  throw new UserFacingError(PLAN_CAS_EXHAUSTED_MESSAGE);
 }

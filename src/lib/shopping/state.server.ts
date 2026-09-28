@@ -1,5 +1,5 @@
 import { cleanShopping, type ShoppingList, withOwnedMark } from "@/lib/plan-shared";
-import { ValidationError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { resolveShoppingRow, updateShoppingState } from "../plan/rows.server";
 
 /** Cuerpo de `toggleShoppingOwned`, aparte para poder probarlo (ticket 21). */
@@ -32,7 +32,7 @@ export async function toggleShoppingOwnedHandler({
     );
   } catch (error) {
     console.error("toggleShoppingOwned", error);
-    throw new Error("No hemos podido guardar el cambio");
+    throw new UserFacingError("No hemos podido guardar el cambio");
   }
   if (!shopping.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
 
