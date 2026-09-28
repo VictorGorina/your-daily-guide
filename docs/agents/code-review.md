@@ -135,11 +135,13 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
       `user_id` NULL-able (hueco sin reclamar o adulto sin app), `display_name` obligatorio,
       `portion` para el cálculo de la compra. Nada de asumir PK `(household_id, user_id)` ni
       `UNIQUE(user_id)` sin `WHERE user_id IS NOT NULL`.
-- [ ] **`shared_slots` vive en `households`, no por miembro.** Es la única configuración de
-      comidas compartidas del hogar (`{desayuno,comida,cena: number[]}`, 0=lunes…6=domingo;
-      snacks nunca, D5). La columna `household_members.shared_meals` y los helpers de
-      intersección (`sharedDays`) **ya no existen**. Solo el planificador la edita (D2); el
-      resto la ve en lectura.
+- [ ] **Qué comida se comparte se deriva de los horarios (`home_schedule`), no de una config.**
+      Cualquier código que necesite "¿esta comida es compartida?" usa los slots derivados
+      (`deriveSharedSlots`/`isEffectivelyShared`, o los que da `householdContext`), no
+      `households.shared_slots` en bruto: esa columna ya no se edita desde ninguna pantalla y
+      solo es el horario de partida de quien no tiene uno. Snacks nunca (D5). La columna
+      `household_members.shared_meals` y los helpers de intersección (`sharedDays`) **ya no
+      existen**.
 - [ ] **Cada adulto con cuenta conserva su fila `monthly_plans` (D1).** Las comidas
       compartidas de esa fila son un **espejo de lectura** del planificador
       (`composeDayForUser` / `composeMonthlyPlanForMember` en

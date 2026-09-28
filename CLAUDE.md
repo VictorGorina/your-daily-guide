@@ -370,9 +370,17 @@ querer:
 - **`household_members` son huecos de la mesa**: `user_id` NULL-able (hueco sin reclamar o
   adulto sin app), `display_name` obligatorio, `portion` para la compra. Quien se une elige su
   hueco (`household_open_slots` / `claim_household_slot`), no inserta una fila.
-- **`households.shared_slots`** (`{desayuno,comida,cena: number[]}`) es la única config de
-  comidas compartidas, a nivel de hogar. Adiós a `household_members.shared_meals` y a la
-  intersección. Solo la edita el planificador (D2); snacks nunca (D5).
+- **Qué comida se comparte sale de los horarios, no de una config** (desde `08fa7ae`, 05-09).
+  Cada adulto y cada niño tiene su `home_schedule` ("¿cuándo como en casa?", por comida y día
+  de la semana): cada persona guarda el suyo y el planificador el de niños y huecos sin cuenta
+  (`saveHomeSchedule`/`scheduleTarget`). Una comida es compartida si el planificador está en
+  casa y al menos otra persona también; un bebé que no come de la mesa no cuenta
+  (`isEffectivelyShared` → `deriveSharedSlots`, que `householdContext` usa en el servidor).
+  `households.shared_slots` ya no se edita desde ninguna pantalla: es solo el horario de
+  partida de quien no ha puesto el suyo, y el valor único si nadie tiene horario. Snacks nunca
+  (D5). **Ojo:** `fetchMonthlyPlan` (`daily.ts`, web y móvil) todavía compone la vista de un no
+  planificador con la columna en bruto (`household_plan_context`), no con los slots derivados
+  — pendiente de revisar.
 - **Cada adulto con cuenta conserva su fila `monthly_plans` (D1)**: los slots compartidos son
   un espejo de lectura del planificador (`composeDayForUser` /
   `composeMonthlyPlanForMember` al leer; `syncSharedMeals` al escribir hacia adelante,

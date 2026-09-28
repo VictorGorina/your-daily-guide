@@ -259,11 +259,26 @@ planificador sale del hogar o borra su cuenta, otro trigger (`AFTER DELETE`) pas
 `is_planner` al miembro con cuenta de más edad (`date_of_birth` → `age` → `created_at`); no
 hay que llamar a nada desde el código de aplicación (D3).
 
-**Una sola configuración de comidas compartidas, a nivel de hogar.** `households.shared_slots`
-(`{desayuno,comida,cena: number[]}`, 0=lunes…6=domingo) dice qué comida de qué día es "el
-mismo plato para toda la mesa". Sustituye al viejo `household_members.shared_meals` por
-miembro y a la lógica de intersección (`sharedDays`), que ya no existen. Solo el planificador
-la edita; el resto la ve en lectura (D2). Los snacks nunca se comparten (D5).
+**Las comidas compartidas se derivan de los horarios de cada persona** (desde `08fa7ae`,
+05-09, migración `per_member_home_schedule`). Cada adulto (`household_members.home_schedule`) y
+cada niño (`household_children.home_schedule`) dice cuándo come en casa
+(`{desayuno,comida,cena: number[]}`, 0=lunes…6=domingo). Cada persona edita el suyo; el de un
+niño o un hueco sin cuenta, solo el planificador (`saveHomeSchedule`, `scheduleTarget`). Una
+comida de un día es "el mismo plato para toda la mesa" cuando el planificador está en casa y al
+menos otra persona también; un bebé que aún no come de la mesa no cuenta
+(`isEffectivelyShared`, `deriveSharedSlots` en
+[household-shared.ts](src/lib/household-shared.ts)). En el servidor lo calcula
+`householdContext` ([household.server.ts](src/lib/household.server.ts)) al leer; no se guarda.
+
+`households.shared_slots` se conserva, pero ya **no la edita ninguna pantalla** (la antigua
+`saveSharedSlots` y `/api/v1/household/shared-slots` se borraron el 28-09): es el horario de
+partida de quien no ha puesto el suyo y, si nadie del hogar tiene horario, el valor tal cual.
+El trigger `households_guard_shared_slots` (solo el planificador) sigue protegiéndola. El viejo
+`household_members.shared_meals` y la intersección (`sharedDays`) ya no existen. Los snacks
+nunca se comparten (D5). **Pendiente:** `fetchMonthlyPlan` ([daily.ts](src/lib/daily.ts), y su
+copia del móvil) compone la vista de un no planificador con la columna en bruto
+(`household_plan_context`), no con los slots derivados; en cuanto alguien cambia su horario, las
+dos cosas pueden no coincidir.
 
 **Cada adulto con cuenta sigue teniendo su fila `monthly_plans` (D1).** No es todo suyo: los
 slots compartidos de esa fila son un **espejo de solo lectura** del planificador, y los no
@@ -313,7 +328,7 @@ bajo "Bebés · aún no comen de la mesa". `selectWithOptionalColumns`
 ([household.server.ts](src/lib/household.server.ts)) tolera la columna sin migrar.
 
 **El coach conoce la mesa.** `householdContext` (roster con raciones vía `describeRoster`,
-`shared_slots`, niños con alergias, quién planifica) alimenta `generateMonthlyPlan`,
+slots compartidos derivados de los horarios, niños con alergias, quién planifica) alimenta `generateMonthlyPlan`,
 `adjustMonthlyPlan`, `welcomeBriefing` y también `/api/chat`, que para leerlo con las
 políticas del usuario usa `supabaseFromRequest` ([api-auth.server.ts](src/lib/api-auth.server.ts))
 — un cliente Supabase de servidor ligado al Bearer de la petición. Cuando `actions` está
