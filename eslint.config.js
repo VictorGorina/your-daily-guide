@@ -5,6 +5,36 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+// En flat config, si dos bloques configuran la misma regla para un archivo, el
+// último la sustituye entera (las opciones no se combinan). Por eso cada
+// restricción vive en una constante y los bloques más específicos repiten las
+// generales además de añadir las suyas.
+const serverOnlyPackage = {
+  name: "server-only",
+  message:
+    "TanStack Start does not use the Next.js `server-only` package. Rename the module to `*.server.ts` or mark it with `@tanstack/react-start/server-only`.",
+};
+
+const supabaseAdminStaticImport = {
+  selector: 'ImportDeclaration[source.value="@/integrations/supabase/client.server"]',
+  message:
+    'No importes aquí el cliente de servicio arriba del todo: cárgalo dentro del handler con await import("@/integrations/supabase/client.server").',
+};
+
+// La tabla de composición (~200 alimentos, 44 KB) solo la necesita el servidor: desde
+// fuera de src/lib/nutrition/ se usa a través de sus funciones, y el bundle del
+// navegador no debe llevarla (scripts/check-client-bundle.sh lo comprueba en la
+// salida del build; esto lo para antes, en el código).
+const FOODS_DATA_MESSAGE =
+  "La tabla de composición (foods.data) no puede llegar al bundle del navegador: impórtala solo desde src/lib/nutrition/, un *.server.ts o un test, o usa las funciones de @/lib/nutrition.";
+
+const foodsDataImport = { regex: "(^|/)foods\\.data(\\.ts)?$", message: FOODS_DATA_MESSAGE };
+
+const foodsDataDynamicImport = {
+  selector: "ImportExpression[source.value=/(^|\\/)foods\\.data(\\.ts)?$/]",
+  message: FOODS_DATA_MESSAGE,
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -33,18 +63,7 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [
-            {
-              name: "server-only",
-              message:
-                "TanStack Start does not use the Next.js `server-only` package. Rename the module to `*.server.ts` or mark it with `@tanstack/react-start/server-only`.",
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { paths: [serverOnlyPackage] }],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
     },
@@ -59,14 +78,21 @@ export default tseslint.config(
     files: ["**/*.ts", "**/*.tsx"],
     ignores: ["**/*.server.ts"],
     rules: {
-      "no-restricted-syntax": [
+      "no-restricted-syntax": ["error", supabaseAdminStaticImport],
+    },
+  },
+  {
+    // foods.data: fuera de su carpeta, de un *.server.ts o de un test, ni
+    // import estático ni dinámico (un import() también acaba en el navegador,
+    // como chunk aparte). Repite las restricciones generales: ver arriba.
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    ignores: ["**/*.server.ts", "**/*.test.ts", "src/lib/nutrition/**"],
+    rules: {
+      "no-restricted-imports": [
         "error",
-        {
-          selector: 'ImportDeclaration[source.value="@/integrations/supabase/client.server"]',
-          message:
-            'No importes aquí el cliente de servicio arriba del todo: cárgalo dentro del handler con await import("@/integrations/supabase/client.server").',
-        },
+        { paths: [serverOnlyPackage], patterns: [foodsDataImport] },
       ],
+      "no-restricted-syntax": ["error", supabaseAdminStaticImport, foodsDataDynamicImport],
     },
   },
   eslintPluginPrettier,
