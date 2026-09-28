@@ -401,7 +401,7 @@ export default function Hogar() {
               : `${c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"} · apetito ${c.appetite ?? "normal"}`}
           </Text>
         </View>
-        <ChevronRight size={18} color="#83796c" />
+        <ChevronRight size={18} color="#6b6256" />
       </Pressable>
     );
   };
@@ -578,7 +578,7 @@ export default function Hogar() {
                   hitSlop={8}
                   className="mt-4 h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
                 >
-                  <Pencil size={15} color="#83796c" />
+                  <Pencil size={15} color="#6b6256" />
                 </Pressable>
               ) : null}
             </View>
@@ -603,7 +603,7 @@ export default function Hogar() {
                   onPress={() => shareCode(household.invite_code)}
                   className="flex-row items-center gap-2 rounded-full bg-surface px-4 py-3 active:opacity-80"
                 >
-                  <Copy size={16} color="#83796c" />
+                  <Copy size={16} color="#6b6256" />
                   <Text className="text-sm font-sans-medium text-foreground">Compartir</Text>
                 </Pressable>
               </View>
@@ -654,7 +654,7 @@ export default function Hogar() {
                           {m.is_planner ? (
                             <View className="flex-row items-center gap-1 rounded-full bg-primary-soft px-2 py-1">
                               <ChefHat size={12} color="#6dbe7b" />
-                              <Text className="text-[11px] font-sans-medium text-primary">
+                              <Text className="text-[11px] font-sans-medium text-primary-ink">
                                 Planifica
                               </Text>
                             </View>
@@ -691,7 +691,7 @@ export default function Hogar() {
                             >
                               <Text
                                 className={`text-[11px] font-sans-medium ${
-                                  active ? "text-primary" : "text-muted-foreground"
+                                  active ? "text-primary-ink" : "text-muted-foreground"
                                 }`}
                               >
                                 {label}
@@ -705,7 +705,7 @@ export default function Hogar() {
                         <View className="mt-2 flex-row flex-wrap gap-x-3 gap-y-1">
                           {!m.uses_app ? (
                             <Pressable onPress={() => markUsesApp.mutate(m.id)}>
-                              <Text className="text-[11px] font-sans-medium text-primary underline">
+                              <Text className="text-[11px] font-sans-medium text-primary-ink underline">
                                 Ya usa la app
                               </Text>
                             </Pressable>
@@ -768,7 +768,7 @@ export default function Hogar() {
                       >
                         <Text
                           className={`text-xs font-sans-medium ${
-                            addingType === key ? "text-primary" : "text-muted-foreground"
+                            addingType === key ? "text-primary-ink" : "text-muted-foreground"
                           }`}
                         >
                           {label}
@@ -803,7 +803,7 @@ export default function Hogar() {
                             <Text
                               className={`text-xs font-sans-medium ${
                                 newAdult.usesApp === value
-                                  ? "text-primary"
+                                  ? "text-primary-ink"
                                   : "text-muted-foreground"
                               }`}
                             >
@@ -824,7 +824,9 @@ export default function Hogar() {
                           >
                             <Text
                               className={`text-[11px] font-sans-medium ${
-                                newAdult.appetite === key ? "text-primary" : "text-muted-foreground"
+                                newAdult.appetite === key
+                                  ? "text-primary-ink"
+                                  : "text-muted-foreground"
                               }`}
                             >
                               {label}
@@ -870,7 +872,7 @@ export default function Hogar() {
               )}
 
               <View className="mt-4 flex-row items-start gap-2.5 rounded-2xl bg-muted px-3.5 py-3">
-                <ShieldCheck size={14} color="#83796c" style={{ marginTop: 1 }} />
+                <ShieldCheck size={14} color="#6b6256" style={{ marginTop: 1 }} />
                 <Text className="flex-1 text-[11.5px] leading-5 text-muted-foreground">
                   Cada adulto edita su propio perfil desde Ajustes; aquí solo ves lo que comparte
                   con la casa. A los peques los editáis entre todos.
@@ -890,12 +892,12 @@ export default function Hogar() {
                 onPress={() => setShowHelp((v) => !v)}
                 className="mt-2 flex-row items-center gap-1.5 active:opacity-70"
               >
-                <Text className="text-xs font-sans-medium text-primary">
+                <Text className="text-xs font-sans-medium text-primary-ink">
                   {showHelp ? "Ocultar detalle" : "Cómo funciona exactamente"}
                 </Text>
                 <ChevronDown
                   size={14}
-                  color="#ff8a3d"
+                  color="#a84a17"
                   style={{ transform: [{ rotate: showHelp ? "180deg" : "0deg" }] }}
                 />
               </Pressable>
@@ -978,7 +980,7 @@ export default function Hogar() {
                         </Text>
                         <ChevronDown
                           size={16}
-                          color="#83796c"
+                          color="#6b6256"
                           style={{
                             transform: [{ rotate: expanded ? "180deg" : "0deg" }],
                           }}
@@ -1022,7 +1024,7 @@ export default function Hogar() {
                                       >
                                         <Text
                                           className={`text-xs font-sans-medium ${
-                                            active ? "text-primary" : "text-muted-foreground"
+                                            active ? "text-primary-ink" : "text-muted-foreground"
                                           }`}
                                         >
                                           {label}
@@ -1096,9 +1098,9 @@ export default function Hogar() {
                 style={syncNow.isPending ? { opacity: 0.6 } : undefined}
               >
                 {syncNow.isPending ? (
-                  <ActivityIndicator size="small" color="#83796c" />
+                  <ActivityIndicator size="small" color="#6b6256" />
                 ) : (
-                  <RefreshCw size={16} color="#83796c" />
+                  <RefreshCw size={16} color="#6b6256" />
                 )}
                 <Text className="text-sm font-sans-medium text-foreground">
                   Sincronizar el plan del mes
@@ -1133,7 +1135,7 @@ export default function Hogar() {
                       className={`flex-1 items-center rounded-full py-2 active:opacity-80 ${active ? "bg-surface" : ""}`}
                     >
                       <Text
-                        className={`text-xs font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
+                        className={`text-xs font-sans-medium ${active ? "text-primary-ink" : "text-muted-foreground"}`}
                       >
                         {label}
                       </Text>
@@ -1176,7 +1178,7 @@ export default function Hogar() {
               {household.goal_type === "comportamiento" && household.goal_text ? (
                 <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3">
                   <Target size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
-                  <Text className="flex-1 text-sm text-primary">{household.goal_text}</Text>
+                  <Text className="flex-1 text-sm text-primary-ink">{household.goal_text}</Text>
                 </View>
               ) : null}
 
@@ -1188,7 +1190,9 @@ export default function Hogar() {
                     </Text>
                     <Text
                       className={`text-lg font-sans-bold tabular-nums ${
-                        monthSpend > household.goal_budget_eur ? "text-destructive" : "text-primary"
+                        monthSpend > household.goal_budget_eur
+                          ? "text-destructive"
+                          : "text-primary-ink"
                       }`}
                     >
                       {eur(monthSpend)} / {eur(household.goal_budget_eur)}
@@ -1232,7 +1236,7 @@ export default function Hogar() {
               onPress={confirmLeave}
               className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-4 active:opacity-80"
             >
-              <LogOut size={16} color="#83796c" />
+              <LogOut size={16} color="#6b6256" />
               <Text className="text-sm font-sans-medium text-muted-foreground">
                 Salir del hogar
               </Text>

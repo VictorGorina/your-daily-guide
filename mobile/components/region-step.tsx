@@ -65,7 +65,7 @@ export function RegionStep({ profile, onDone }: Props) {
       <ScrollView contentContainerClassName="px-5 pb-6 pt-6" keyboardShouldPersistTaps="handled">
         <View className="w-fit flex-row items-center gap-2 self-start rounded-full bg-primary-soft px-3 py-1">
           <Globe size={14} color="#6dbe7b" />
-          <Text className="text-xs font-sans-medium text-primary">Peppers</Text>
+          <Text className="text-xs font-sans-medium text-primary-ink">Peppers</Text>
         </View>
         <Text className="mt-5 font-heading text-[28px] leading-tight text-foreground">
           {t("region.onboardingTitle")}

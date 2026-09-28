@@ -87,7 +87,7 @@ export function RegionFields({
                 }`}
               >
                 <Text
-                  className={`text-sm font-sans-medium ${active ? "text-primary" : "text-foreground"}`}
+                  className={`text-sm font-sans-medium ${active ? "text-primary-ink" : "text-foreground"}`}
                 >
                   {t(`countries.${c.code}`)}
                 </Text>
@@ -133,7 +133,9 @@ export function RegionFields({
                   setEditingTz(true);
                 }}
               >
-                <Text className="text-xs font-sans-medium text-primary">{t("common.change")}</Text>
+                <Text className="text-xs font-sans-medium text-primary-ink">
+                  {t("common.change")}
+                </Text>
               </Pressable>
             ) : null}
           </View>

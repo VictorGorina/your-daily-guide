@@ -31,13 +31,13 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
         onPress={() => setOpen((o) => !o)}
         className="flex-row items-center gap-1.5 self-start active:opacity-70"
       >
-        <CookingPot size={14} color="#ff8a3d" />
-        <Text className="font-body-semibold text-[11px] text-primary">
+        <CookingPot size={14} color="#a84a17" />
+        <Text className="font-body-semibold text-[11px] text-primary-ink">
           {open ? "Ocultar receta" : "Ver receta"}
         </Text>
         <ChevronDown
           size={14}
-          color="#ff8a3d"
+          color="#a84a17"
           style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }}
         />
       </Pressable>
@@ -69,7 +69,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
                 <View className="mt-1 gap-1">
                   {q.data.steps.map((step, i) => (
                     <View key={i} className="flex-row gap-2">
-                      <Text className="font-body-semibold text-xs text-primary">{i + 1}.</Text>
+                      <Text className="font-body-semibold text-xs text-primary-ink">{i + 1}.</Text>
                       <Text className="font-body flex-1 text-xs text-foreground">{step}</Text>
                     </View>
                   ))}
@@ -78,7 +78,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
             </View>
           ) : (
             <Pressable onPress={() => q.refetch()}>
-              <Text className="font-body-medium text-xs text-primary">
+              <Text className="font-body-medium text-xs text-primary-ink">
                 No hemos podido cargar la receta. Reintentar
               </Text>
             </Pressable>

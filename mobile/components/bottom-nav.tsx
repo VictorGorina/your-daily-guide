@@ -76,7 +76,7 @@ export function BottomNav() {
                   active ? "bg-foreground" : ""
                 }`}
               >
-                <Icon size={18} color={active ? "#f3f1ed" : "#83796c"} />
+                <Icon size={18} color={active ? "#f3f1ed" : "#6b6256"} />
                 {href === "/plan" && planNeedsAction ? (
                   <View
                     accessibilityLabel="Toca preparar tu plan"

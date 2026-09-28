@@ -607,7 +607,7 @@ export default function Plan() {
                 className="h-8 w-8 items-center justify-center rounded-full"
                 style={!canPrev ? { opacity: 0.3 } : undefined}
               >
-                <ChevronLeft size={20} color="#83796c" />
+                <ChevronLeft size={20} color="#6b6256" />
               </Pressable>
               {/* Dos líneas (mes arriba, año debajo) en vez de una sola con
                   numberOfLines={1}: "Septiembre de 2026" no cabía entre los
@@ -637,9 +637,9 @@ export default function Plan() {
                 style={!canNext && !nextIsLocked ? { opacity: 0.3 } : undefined}
               >
                 {nextIsLocked ? (
-                  <Lock size={16} color="#83796c" />
+                  <Lock size={16} color="#6b6256" />
                 ) : (
-                  <ChevronRight size={20} color="#83796c" />
+                  <ChevronRight size={20} color="#6b6256" />
                 )}
               </Pressable>
             </View>
@@ -666,7 +666,7 @@ export default function Plan() {
           />
         ) : showCreateTakeover ? (
           <View className="mt-8 items-center rounded-3xl bg-surface p-6">
-            <CalendarRange size={28} color="#ff8a3d" />
+            <CalendarRange size={28} color="#a84a17" />
             <Text className="mt-3 text-sm font-sans-semibold text-foreground">
               {isSoloPlanner
                 ? "Planifica tus comidas en solitario"
@@ -716,9 +716,9 @@ export default function Plan() {
                       active ? "bg-surface" : ""
                     }`}
                   >
-                    <Icon size={14} color={active ? "#ff8a3d" : "#83796c"} />
+                    <Icon size={14} color={active ? "#a84a17" : "#6b6256"} />
                     <Text
-                      className={`text-xs font-sans-medium ${active ? "text-primary" : "text-muted-foreground"}`}
+                      className={`text-xs font-sans-medium ${active ? "text-primary-ink" : "text-muted-foreground"}`}
                     >
                       {label}
                     </Text>
@@ -729,7 +729,7 @@ export default function Plan() {
 
             {isSoloPlanner && hasSharedMeals ? (
               <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-secondary/60 px-3.5 py-2.5">
-                <Users size={14} color="#83796c" style={{ marginTop: 2 }} />
+                <Users size={14} color="#6b6256" style={{ marginTop: 2 }} />
                 <Text className="flex-1 text-[12px] leading-relaxed text-muted-foreground">
                   Las comidas compartidas de tu casa las lleva{" "}
                   <Text className="font-sans-medium text-foreground">{plannerName}</Text>. Aquí solo
@@ -754,7 +754,7 @@ export default function Plan() {
                 {plan ? (
                   <View className="rounded-3xl bg-surface p-5">
                     <View className="flex-row items-center gap-2">
-                      <Sparkles size={16} color="#ff8a3d" />
+                      <Sparkles size={16} color="#a84a17" />
                       <Text className="text-sm font-sans-semibold text-foreground">
                         Cómo enfocamos el mes
                       </Text>
@@ -803,7 +803,7 @@ export default function Plan() {
                 {hasHouseholdShopping ? (
                   <View className="gap-3">
                     <View className="flex-row items-center gap-2 px-0.5">
-                      <Users size={16} color="#ff8a3d" />
+                      <Users size={16} color="#a84a17" />
                       <Text className="font-heading text-lg text-foreground">
                         La compra de la casa
                       </Text>
@@ -851,7 +851,7 @@ export default function Plan() {
 
                 <View className="gap-3">
                   <View className="flex-row items-center gap-2 px-0.5">
-                    <ShoppingBasket size={16} color="#ff8a3d" />
+                    <ShoppingBasket size={16} color="#a84a17" />
                     <Text className="font-heading text-lg text-foreground">
                       Tu compra en solitario
                     </Text>
@@ -982,7 +982,7 @@ export default function Plan() {
             }}
             className="mx-auto w-full max-w-lg flex-row items-center justify-center gap-2 rounded-[20px] bg-primary py-4 active:opacity-90"
           >
-            <ShoppingCart size={17} color="#fbfaf7" />
+            <ShoppingCart size={17} color="#3e3d39" />
             <Text className="text-sm font-sans-bold text-primary-foreground">
               Ir a comprar · {needCount} art.
             </Text>
@@ -1169,7 +1169,9 @@ function PlanMonthCalendar({
                 const note = offListNote(meal.off);
                 return (
                   <View key={meal.slot} className="rounded-xl bg-secondary p-3">
-                    <Text className="text-xs font-sans-semibold text-primary">{meal.moment}</Text>
+                    <Text className="text-xs font-sans-semibold text-primary-ink">
+                      {meal.moment}
+                    </Text>
                     <Text className="mt-1 text-sm text-foreground">{meal.idea}</Text>
                     {note ? (
                       <View className="mt-1.5 self-start rounded-full bg-warning/20 px-2 py-0.5">
@@ -1223,7 +1225,7 @@ const CATEGORY_MATCHERS: [RegExp, typeof Carrot][] = [
 function CategoryIcon({
   category,
   size = 15,
-  color = "#ff8a3d",
+  color = "#a84a17",
 }: {
   category: string;
   size?: number;
@@ -1292,7 +1294,7 @@ function PantryExtrasCard({
   return (
     <View className="mt-1 rounded-3xl bg-surface px-4 py-3.5">
       <View className="flex-row items-center gap-2">
-        <Carrot size={15} color="#ff8a3d" />
+        <Carrot size={15} color="#a84a17" />
         <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
           Ya lo tengo en casa · fuera del plan
         </Text>
@@ -1331,13 +1333,13 @@ function PantryExtrasCard({
               className="flex-row items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1"
             >
               <Text className="text-[11.5px] text-foreground">{e.name}</Text>
-              {e.source === "receipt" ? <Receipt size={12} color="#83796c" /> : null}
+              {e.source === "receipt" ? <Receipt size={12} color="#6b6256" /> : null}
               <Pressable
                 onPress={() => pantry.mutate({ name: e.name, remove: true })}
                 disabled={pantry.isPending}
                 hitSlop={6}
               >
-                <X size={12} color="#83796c" />
+                <X size={12} color="#6b6256" />
               </Pressable>
             </View>
           ))}
@@ -1514,7 +1516,7 @@ function IngredientsTab({
         /* Cadencia */
         <View className="rounded-3xl bg-surface px-4 py-3.5">
           <View className="flex-row items-center gap-2">
-            <CalendarSync size={15} color="#ff8a3d" />
+            <CalendarSync size={15} color="#a84a17" />
             <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
               Cada cuánto compras
             </Text>
@@ -1576,7 +1578,7 @@ function IngredientsTab({
             className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-70"
             style={selectedTrip === 0 ? { opacity: 0.4 } : undefined}
           >
-            <ChevronLeft size={14} color="#83796c" />
+            <ChevronLeft size={14} color="#6b6256" />
           </Pressable>
           <View className="min-w-0 flex-1 items-center">
             <Text className="text-[12.5px] font-sans-semibold text-foreground">
@@ -1595,7 +1597,7 @@ function IngredientsTab({
             className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-70"
             style={selectedTrip === tripsTotal - 1 ? { opacity: 0.4 } : undefined}
           >
-            <ChevronRight size={14} color="#83796c" />
+            <ChevronRight size={14} color="#6b6256" />
           </Pressable>
         </View>
       ) : null}
@@ -1604,7 +1606,7 @@ function IngredientsTab({
       <View className="rounded-3xl bg-surface p-5">
         <Text className="text-xs font-sans-semibold text-muted-foreground">Te falta comprar</Text>
         <View className="mt-0.5 flex-row items-baseline gap-2">
-          <Text className="font-heading text-4xl tabular-nums text-primary">
+          <Text className="font-heading text-4xl tabular-nums text-primary-ink">
             {eur(stillPending)}
           </Text>
           <Text className="text-xs text-muted-foreground">
@@ -1813,7 +1815,7 @@ function IngredientsTab({
       {/* Tip de persistencia */}
       {readOnly ? null : (
         <View className="mt-1 flex-row items-start gap-2.5 rounded-3xl bg-primary/10 px-4 py-3.5">
-          <Lightbulb size={15} color="#ff8a3d" style={{ marginTop: 2 }} />
+          <Lightbulb size={15} color="#a84a17" style={{ marginTop: 2 }} />
           <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
             Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
             volveré a pedir mientras te dure.
@@ -1829,7 +1831,7 @@ function IngredientsTab({
           onPress={onEnterShopMode}
           className="mt-1 flex-row items-center justify-center gap-2 rounded-[20px] bg-primary py-4 active:opacity-90"
         >
-          <ShoppingCart size={17} color="#fbfaf7" />
+          <ShoppingCart size={17} color="#3e3d39" />
           <Text className="text-sm font-sans-bold text-primary-foreground">
             Ir a comprar · {needCount} art.
           </Text>
@@ -1959,7 +1961,7 @@ function ShopModeView({
             onPress={onClose}
             className="h-9 w-9 items-center justify-center rounded-full bg-surface active:opacity-70"
           >
-            <ChevronLeft size={16} color="#83796c" />
+            <ChevronLeft size={16} color="#6b6256" />
           </Pressable>
           <View className="min-w-0 flex-1">
             <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
@@ -1977,7 +1979,7 @@ function ShopModeView({
               <Text className="text-xs font-sans-semibold text-muted-foreground">
                 Queda por coger
               </Text>
-              <Text className="mt-0.5 font-heading text-3xl tabular-nums text-primary">
+              <Text className="mt-0.5 font-heading text-3xl tabular-nums text-primary-ink">
                 {eur(leftTotal)}
               </Text>
             </View>
@@ -2087,7 +2089,7 @@ function ShopModeView({
                 className="flex-row items-center justify-center gap-2 rounded-2xl border border-secondary py-3 active:opacity-80"
                 style={scanningReceipt ? { opacity: 0.6 } : undefined}
               >
-                <Receipt size={16} color="#83796c" />
+                <Receipt size={16} color="#6b6256" />
                 <Text className="text-xs font-sans-semibold text-muted-foreground">
                   {scanningReceipt ? "Leyendo el tiquet..." : "Escanear tiquet y calcularlo"}
                 </Text>

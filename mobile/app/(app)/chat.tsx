@@ -265,7 +265,7 @@ export default function Chat() {
                 hitSlop={8}
                 className="-ml-1 h-9 w-9 items-center justify-center rounded-full active:opacity-70"
               >
-                <ChevronLeft size={22} color="#83796c" />
+                <ChevronLeft size={22} color="#6b6256" />
               </Pressable>
               <View>
                 <Text className="font-heading text-2xl text-foreground">Tu coach</Text>
@@ -279,7 +279,7 @@ export default function Chat() {
               hitSlop={8}
               className="h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70"
             >
-              <ClipboardList size={18} color="#83796c" />
+              <ClipboardList size={18} color="#6b6256" />
             </Pressable>
           </View>
 

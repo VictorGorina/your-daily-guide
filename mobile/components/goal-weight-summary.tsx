@@ -199,7 +199,7 @@ export function GoalWeightSummary({
 
   // Con meta numérica (o "mantener") se enseña la barra; sin meta, solo un dato.
   const showBar = progress.measurable && (progress.hasTarget || goal === "mantener");
-  const barColor = progress.regressing ? "#e2685f" : "#6dbe7b";
+  const barColor = progress.regressing ? "#b8433b" : "#6dbe7b";
   const pctColor = progress.regressing ? "text-destructive" : "text-foreground";
 
   return (
@@ -293,7 +293,7 @@ function WeightPanel({
       {points.length >= 2 ? (
         <Sparkline weights={points} regressing={regressing} />
       ) : (
-        <Scale size={28} color="#83796c" />
+        <Scale size={28} color="#6b6256" />
       )}
 
       {editing ? (
@@ -389,7 +389,7 @@ function Sparkline({ weights, regressing }: { weights: number[]; regressing: boo
       <Polyline
         points={coords}
         fill="none"
-        stroke={regressing ? "#e2685f" : "#ff8a3d"}
+        stroke={regressing ? "#b8433b" : "#ff8a3d"}
         strokeWidth={2.5}
         strokeLinecap="round"
         strokeLinejoin="round"

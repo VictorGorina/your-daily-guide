@@ -166,7 +166,7 @@ export default function Ajustes() {
                 Une cuentas, elige qué comidas compartís y añade a los peques
               </Text>
             </View>
-            <ChevronRight size={16} color="#83796c" />
+            <ChevronRight size={16} color="#6b6256" />
           </Pressable>
           <Pressable
             onPress={() => router.navigate("/perfil")}
@@ -181,7 +181,7 @@ export default function Ajustes() {
                 Corrige cualquier dato del onboarding en dos toques
               </Text>
             </View>
-            <ChevronRight size={16} color="#83796c" />
+            <ChevronRight size={16} color="#6b6256" />
           </Pressable>
         </View>
 
@@ -288,7 +288,7 @@ export default function Ajustes() {
                     }`}
                   >
                     <Text
-                      className={`text-sm capitalize ${active ? "text-primary" : "text-foreground"}`}
+                      className={`text-sm capitalize ${active ? "text-primary-ink" : "text-foreground"}`}
                     >
                       {t}
                     </Text>
@@ -381,7 +381,7 @@ function FieldNote({ error, help }: { error?: string; help: string }) {
   if (error)
     return (
       <View className="mt-1 flex-row items-start gap-1">
-        <AlertCircle size={12} color="#e2685f" style={{ marginTop: 2 }} />
+        <AlertCircle size={12} color="#b8433b" style={{ marginTop: 2 }} />
         <Text className="flex-1 text-[11px] text-destructive">{error}</Text>
       </View>
     );

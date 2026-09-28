@@ -174,7 +174,7 @@ export function ChildSheet({
                 >
                   <Text
                     className={`text-[13px] font-sans-medium ${
-                      active ? "text-primary" : "text-muted-foreground"
+                      active ? "text-primary-ink" : "text-muted-foreground"
                     }`}
                   >
                     {FEEDING_STAGE_LABEL[key]}
@@ -260,7 +260,7 @@ export function ChildSheet({
           disabled={drop.isPending}
           className="mt-2 flex-row items-center justify-center gap-2 rounded-full py-3 active:opacity-70"
         >
-          <Trash2 size={16} color="#83796c" />
+          <Trash2 size={16} color="#6b6256" />
           <Text className="text-[13px] font-sans-medium text-muted-foreground">
             Quitar de la familia
           </Text>

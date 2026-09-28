@@ -117,7 +117,7 @@ export function MonthIntakeChat({
     <View className="mt-8 gap-5 rounded-3xl bg-surface p-6">
       <View className="flex-row items-center gap-2.5">
         <View className="h-8 w-8 items-center justify-center rounded-full bg-primary-soft">
-          <Sparkles size={16} color="#ff8a3d" />
+          <Sparkles size={16} color="#a84a17" />
         </View>
         <View className="flex-1">
           <Text className="text-sm font-sans-semibold text-foreground">Preparemos {monthName}</Text>
@@ -143,7 +143,7 @@ export function MonthIntakeChat({
                 onChangeText={setAwayStartText}
                 keyboardType="numbers-and-punctuation"
                 placeholder="Desde DD/MM/AAAA"
-                placeholderTextColor="#83796c"
+                placeholderTextColor="#6b6256"
                 className="min-h-[44px] flex-1 rounded-xl bg-muted px-3 text-sm text-foreground"
               />
               <Text className="text-sm text-muted-foreground">a</Text>
@@ -152,7 +152,7 @@ export function MonthIntakeChat({
                 onChangeText={setAwayEndText}
                 keyboardType="numbers-and-punctuation"
                 placeholder="Hasta DD/MM/AAAA"
-                placeholderTextColor="#83796c"
+                placeholderTextColor="#6b6256"
                 className="min-h-[44px] flex-1 rounded-xl bg-muted px-3 text-sm text-foreground"
               />
             </View>
@@ -185,7 +185,7 @@ export function MonthIntakeChat({
                     multiline
                     maxLength={200}
                     placeholder={q.placeholder}
-                    placeholderTextColor="#83796c"
+                    placeholderTextColor="#6b6256"
                     className="min-h-[44px] px-2 py-2 text-sm text-foreground"
                     textAlignVertical="top"
                   />

@@ -376,7 +376,7 @@ export function DayDetailBody({
                           ? "text-success"
                           : skipped || unlogged
                             ? "text-muted-foreground"
-                            : "text-primary"
+                            : "text-primary-ink"
                       }`}
                     >
                       {unlogged ? "Sin registrar" : MEAL_STATUS_LABEL[h.status!]}
@@ -390,7 +390,7 @@ export function DayDetailBody({
                           : changed && h.actual
                             ? "text-muted-foreground line-through"
                             : changed
-                              ? "text-primary"
+                              ? "text-primary-ink"
                               : "text-foreground"
                       }`}
                     >
@@ -399,7 +399,7 @@ export function DayDetailBody({
                   ) : null}
                   {/* Mostrar qué comió realmente si ya lo indicó */}
                   {changed && h.actual ? (
-                    <Text className="mt-0.5 text-sm text-primary">Comí: {h.actual}</Text>
+                    <Text className="mt-0.5 text-sm text-primary-ink">Comí: {h.actual}</Text>
                   ) : null}
                   {wasIdea ? (
                     <Text className="mt-0.5 text-[11px] text-muted-foreground">
@@ -454,10 +454,10 @@ export function DayDetailBody({
                           familyToggle[i] ? "bg-primary-soft" : "bg-surface"
                         }`}
                       >
-                        <Users size={16} color={familyToggle[i] ? "#ff8a3d" : "#83796c"} />
+                        <Users size={16} color={familyToggle[i] ? "#a84a17" : "#6b6256"} />
                         <Text
                           className={`text-xs font-sans-medium ${
-                            familyToggle[i] ? "text-primary" : "text-muted-foreground"
+                            familyToggle[i] ? "text-primary-ink" : "text-muted-foreground"
                           }`}
                         >
                           Toda la familia comió esto
@@ -538,9 +538,9 @@ export function DayDetailBody({
                   className="h-7 w-7 items-center justify-center rounded-full bg-background active:opacity-70"
                 >
                   {removingSnackId === e.id ? (
-                    <ActivityIndicator size="small" color="#83796c" />
+                    <ActivityIndicator size="small" color="#6b6256" />
                   ) : (
-                    <X size={13} color="#83796c" />
+                    <X size={13} color="#6b6256" />
                   )}
                 </Pressable>
               ) : null}
@@ -551,7 +551,7 @@ export function DayDetailBody({
               onPress={() => setSnackSheetOpen(true)}
               className="flex-row items-center justify-center gap-1.5 rounded-full bg-secondary/50 py-2 active:opacity-80"
             >
-              <Cookie size={14} color="#83796c" />
+              <Cookie size={14} color="#6b6256" />
               <Text className="text-xs font-sans-semibold text-foreground">Añadir picoteo</Text>
             </Pressable>
           ) : null}

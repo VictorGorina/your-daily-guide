@@ -32,7 +32,7 @@ export function ScreenStub({
         {back ? (
           <Text
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/hoy"))}
-            className="mt-2 text-sm font-sans-medium text-primary"
+            className="mt-2 text-sm font-sans-medium text-primary-ink"
           >
             ← Volver
           </Text>

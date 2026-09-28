@@ -47,12 +47,12 @@ export function MonthSpendSummary({
   return (
     <View className="rounded-3xl bg-surface p-5">
       <View className="flex-row items-center gap-2">
-        <Wallet size={16} color="#ff8a3d" />
+        <Wallet size={16} color="#a84a17" />
         <Text className="text-sm font-sans-semibold text-foreground">Gasto en comida</Text>
       </View>
 
       <View className="mt-2 flex-row items-baseline gap-2">
-        <Text className="font-heading text-4xl tabular-nums text-primary">
+        <Text className="font-heading text-4xl tabular-nums text-primary-ink">
           {hasReal ? eur(real) : "—"}
         </Text>
         <Text className="text-xs text-muted-foreground">

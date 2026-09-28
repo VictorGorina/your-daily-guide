@@ -141,7 +141,7 @@ export function GuidedLogSheet({
                   active ? "bg-primary/10" : "bg-secondary"
                 }`}
               >
-                <Icon size={16} color={active ? "#3e3d39" : "#83796c"} />
+                <Icon size={16} color={active ? "#3e3d39" : "#6b6256"} />
                 <Text className={`text-sm ${active ? "text-foreground" : "text-muted-foreground"}`}>
                   {label}
                 </Text>
@@ -176,7 +176,7 @@ export function GuidedLogSheet({
                 value={minutes}
                 onChangeText={setMinutes}
                 placeholder="30"
-                placeholderTextColor="#83796c"
+                placeholderTextColor="#6b6256"
               />
             </View>
 

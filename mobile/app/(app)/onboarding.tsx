@@ -566,13 +566,16 @@ type Panel = "chat" | "index" | "resumen" | "saved";
 
 // Colores de icono (RN no entiende currentColor): el tema móvil es monocolor
 // naranja, ver tailwind.config.js.
+// Contraste AA (ticket 33): el naranja como icono es el tostado (primary-ink)
+// y lo que va SOBRE el naranja, oscuro; sobre verde u oscuro sigue claro.
 const C = {
-  primary: "#ff8a3d",
-  onPrimary: "#fbfaf7",
+  primary: "#a84a17",
+  onPrimary: "#3e3d39",
+  onDark: "#fbfaf7",
   fg: "#3e3d39",
-  muted: "#83796c",
+  muted: "#6b6256",
   success: "#4cae64",
-  danger: "#e2685f",
+  danger: "#b8433b",
 };
 
 export default function Onboarding() {
@@ -1051,7 +1054,7 @@ export default function Onboarding() {
                   }`}
                 >
                   {complete ? (
-                    <Check size={16} color={C.onPrimary} />
+                    <Check size={16} color={C.onDark} />
                   ) : (
                     <Text
                       className={`font-mono text-xs ${
@@ -1120,7 +1123,7 @@ export default function Onboarding() {
                     <Text className="text-xs text-muted-foreground">{GAP_LABEL[key].label}</Text>
                     {gapMissing.includes(key) ? (
                       <View className="rounded-full bg-primary-soft px-2 py-0.5">
-                        <Text className="text-[10px] font-sans-medium text-primary">falta</Text>
+                        <Text className="text-[10px] font-sans-medium text-primary-ink">falta</Text>
                       </View>
                     ) : null}
                   </View>
@@ -1154,7 +1157,7 @@ export default function Onboarding() {
                   <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
                     {displayQ(n).q}
                   </Text>
-                  <Text className="text-xs font-sans-semibold text-primary">Responder</Text>
+                  <Text className="text-xs font-sans-semibold text-primary-ink">Responder</Text>
                 </Pressable>
               ))}
             </View>
@@ -1436,7 +1439,7 @@ export default function Onboarding() {
                           active ? "bg-foreground" : "bg-surface"
                         }`}
                       >
-                        {active ? <Check size={14} color={C.onPrimary} /> : null}
+                        {active ? <Check size={14} color={C.onDark} /> : null}
                         <Text
                           className={`text-[13.5px] ${
                             active

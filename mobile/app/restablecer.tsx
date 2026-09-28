@@ -149,7 +149,7 @@ export default function Restablecer() {
         >
           {status === "waiting" && (
             <View className="items-center">
-              <ActivityIndicator color="#ff8a3d" />
+              <ActivityIndicator color="#a84a17" />
               <Text className="mt-6 text-2xl font-display text-foreground">
                 Comprobando el enlace…
               </Text>
@@ -175,7 +175,7 @@ export default function Restablecer() {
                   value={password}
                   onChangeText={setPassword}
                   placeholder="Contraseña nueva"
-                  placeholderTextColor="#83796c"
+                  placeholderTextColor="#6b6256"
                 />
                 <TextInput
                   className="h-12 w-full rounded-2xl border border-input bg-surface px-4 text-sm text-foreground"
@@ -185,7 +185,7 @@ export default function Restablecer() {
                   value={confirm}
                   onChangeText={setConfirm}
                   placeholder="Repite la contraseña"
-                  placeholderTextColor="#83796c"
+                  placeholderTextColor="#6b6256"
                 />
 
                 <Pressable
@@ -208,7 +208,7 @@ export default function Restablecer() {
           {status === "done" && (
             <View className="items-center">
               <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
-                <Check color="#ff8a3d" size={28} />
+                <Check color="#a84a17" size={28} />
               </View>
               <Text className="mt-6 text-2xl font-display text-foreground">
                 ¡Contraseña actualizada!
@@ -220,7 +220,7 @@ export default function Restablecer() {
           {status === "error" && (
             <View className="items-center">
               <View className="h-14 w-14 items-center justify-center rounded-full bg-muted">
-                <AlertCircle color="#e2685f" size={28} />
+                <AlertCircle color="#b8433b" size={28} />
               </View>
               <Text className="mt-6 text-2xl font-display text-foreground">
                 Este enlace ya no funciona

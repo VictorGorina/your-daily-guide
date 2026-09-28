@@ -58,9 +58,9 @@ export function SnackCard({
               className="h-7 w-7 items-center justify-center rounded-full bg-background active:opacity-70"
             >
               {removingId === e.id ? (
-                <ActivityIndicator size="small" color="#83796c" />
+                <ActivityIndicator size="small" color="#6b6256" />
               ) : (
-                <X size={13} color="#83796c" />
+                <X size={13} color="#6b6256" />
               )}
             </Pressable>
           </View>

@@ -34,7 +34,7 @@ export function PlanFitNote({ fit, fitting }: { fit?: PlanFitMark; fitting: bool
   if (fitting && !fit) {
     return (
       <View className="mt-3 flex-row items-center gap-2">
-        <ActivityIndicator size="small" color="#ff8a3d" />
+        <ActivityIndicator size="small" color="#a84a17" />
         <Text className="text-xs text-muted-foreground">Ajustando tus platos a tu objetivo…</Text>
       </View>
     );
@@ -69,7 +69,7 @@ export function PlanFitNote({ fit, fitting }: { fit?: PlanFitMark; fitting: bool
       </View>
       {n > INLINE_CHANGES ? (
         <Pressable onPress={() => setAll((v) => !v)} hitSlop={8} className="mt-2">
-          <Text className="text-xs font-sans-medium text-primary">
+          <Text className="text-xs font-sans-medium text-primary-ink">
             {all ? "Ver menos" : `Ver los ${n}`}
           </Text>
         </Pressable>

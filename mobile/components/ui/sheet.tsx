@@ -61,7 +61,7 @@ export function Sheet({
               accessibilityLabel="Cerrar"
               className="absolute right-3 top-3 z-10 h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
             >
-              <X size={16} color="#83796c" />
+              <X size={16} color="#6b6256" />
             </Pressable>
             {title != null ? (
               <View className="gap-1 px-4 pt-4">

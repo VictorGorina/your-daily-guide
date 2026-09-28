@@ -138,7 +138,7 @@ export function ExerciseSheet({
               setError(null);
             }}
             placeholder="30"
-            placeholderTextColor="#83796c"
+            placeholderTextColor="#6b6256"
           />
         </View>
 

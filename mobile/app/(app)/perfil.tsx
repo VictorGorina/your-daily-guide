@@ -125,7 +125,7 @@ export default function Perfil() {
           className="flex-row items-center gap-1 self-start active:opacity-70"
           hitSlop={8}
         >
-          <ChevronLeft size={16} color="#83796c" />
+          <ChevronLeft size={16} color="#6b6256" />
           <Text className="text-xs font-sans-medium text-muted-foreground">Ajustes</Text>
         </Pressable>
 
@@ -183,7 +183,7 @@ export default function Perfil() {
                                   >
                                     <Text
                                       className={`text-xs capitalize ${
-                                        active ? "text-primary" : "text-muted-foreground"
+                                        active ? "text-primary-ink" : "text-muted-foreground"
                                       }`}
                                     >
                                       {opt}
@@ -235,7 +235,7 @@ export default function Perfil() {
 
                           {error ? (
                             <View className="mt-2 flex-row items-start gap-1">
-                              <AlertCircle size={12} color="#e2685f" style={{ marginTop: 2 }} />
+                              <AlertCircle size={12} color="#b8433b" style={{ marginTop: 2 }} />
                               <Text className="flex-1 text-[11px] text-destructive">{error}</Text>
                             </View>
                           ) : null}
@@ -255,7 +255,7 @@ export default function Perfil() {
                                 onPress={() => setEditing(null)}
                                 className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 active:opacity-80"
                               >
-                                <X size={14} color="#83796c" />
+                                <X size={14} color="#6b6256" />
                                 <Text className="text-xs font-sans-medium text-muted-foreground">
                                   Cancelar
                                 </Text>
@@ -284,7 +284,7 @@ export default function Perfil() {
                               {shown ?? "Sin responder — toca para añadir"}
                             </Text>
                           </View>
-                          <Pencil size={14} color="#83796c" style={{ marginTop: 4 }} />
+                          <Pencil size={14} color="#6b6256" style={{ marginTop: 4 }} />
                         </Pressable>
                       )}
                     </View>

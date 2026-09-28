@@ -22,7 +22,7 @@ export function PlanUpdatedBanner({ onDismiss }: { onDismiss: () => void }) {
         accessibilityLabel="Descartar aviso"
         className="h-6 w-6 items-center justify-center rounded-full active:opacity-70"
       >
-        <X size={14} color="#83796c" />
+        <X size={14} color="#6b6256" />
       </Pressable>
     </View>
   );

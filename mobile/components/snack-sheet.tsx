@@ -75,7 +75,7 @@ function Chip({
       </Pressable>
       {active ? (
         <Pressable onPress={onRemove} hitSlop={8} className="py-1.5 pr-2.5 active:opacity-70">
-          <X size={12} color="#fbfaf7" />
+          <X size={12} color="#3e3d39" />
         </Pressable>
       ) : null}
     </View>
@@ -275,7 +275,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
             busy != null || !text.trim() ? "opacity-60" : ""
           }`}
         >
-          {busy === "estimate" ? <ActivityIndicator size="small" color="#83796c" /> : null}
+          {busy === "estimate" ? <ActivityIndicator size="small" color="#6b6256" /> : null}
           <Text className="text-sm font-semibold text-foreground">
             {busy === "estimate" ? "Calculando…" : "Calcular"}
           </Text>
@@ -302,7 +302,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                   hitSlop={8}
                   className="active:opacity-70"
                 >
-                  <Text className="text-xs font-medium text-primary">Cambiar</Text>
+                  <Text className="text-xs font-medium text-primary-ink">Cambiar</Text>
                 </Pressable>
               </View>
               <Text className="font-mono text-[11px] text-muted-foreground">
@@ -348,7 +348,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
             </Text>
           ) : null}
           {showNumbers && estimate.lowConfidence && kcalInput == null ? (
-            <Text className="text-[11px] leading-snug text-primary">
+            <Text className="text-[11px] leading-snug text-primary-ink">
               No he reconocido todo lo que has escrito: revisa la cifra.
             </Text>
           ) : null}

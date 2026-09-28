@@ -27,7 +27,7 @@ export function DictateButton({
         listening ? "bg-foreground" : "bg-secondary"
       } ${className}`}
     >
-      <Mic size={16} color={listening ? "#fbfaf7" : "#83796c"} />
+      <Mic size={16} color={listening ? "#fbfaf7" : "#6b6256"} />
     </Pressable>
   );
 }

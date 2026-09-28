@@ -803,7 +803,7 @@ export default function Hoy() {
           </Text>
           {!guide && !generating && !todayQ.isLoading ? (
             <Pressable onPress={() => requestGuide()}>
-              <Text className="font-body-medium text-xs text-primary">Generar</Text>
+              <Text className="font-body-medium text-xs text-primary-ink">Generar</Text>
             </Pressable>
           ) : null}
         </View>
@@ -837,7 +837,7 @@ export default function Hoy() {
                 className="flex-row items-center gap-3 rounded-[20px] bg-surface p-4 active:opacity-80"
               >
                 <View className="h-10 w-10 items-center justify-center rounded-full bg-primary-soft">
-                  <CalendarRange size={20} color="#ff8a3d" />
+                  <CalendarRange size={20} color="#a84a17" />
                 </View>
                 <View className="flex-1">
                   <Text className="font-body-semibold text-sm text-foreground">
@@ -847,13 +847,13 @@ export default function Hoy() {
                     Cinco preguntas sobre tu mes y te preparo las comidas y la compra.
                   </Text>
                 </View>
-                <ChevronRight size={16} color="#83796c" />
+                <ChevronRight size={16} color="#6b6256" />
               </Pressable>
             ) : (
               <View className="rounded-[20px] bg-surface p-4">
                 {todayQ.isError ? (
                   <Pressable onPress={() => todayQ.refetch()}>
-                    <Text className="font-body-medium text-sm text-primary">
+                    <Text className="font-body-medium text-sm text-primary-ink">
                       No hemos podido preparar las comidas de hoy. Reintentar
                     </Text>
                   </Pressable>
@@ -949,7 +949,7 @@ export default function Hoy() {
                             fontSize: 16.5,
                             lineHeight: 20,
                             letterSpacing: -0.3,
-                            color: isSkip ? "#83796c" : wasIdea ? "#ff8a3d" : "#3e3d39",
+                            color: isSkip ? "#6b6256" : wasIdea ? "#a84a17" : "#3e3d39",
                           }}
                           numberOfLines={2}
                         >
@@ -967,7 +967,7 @@ export default function Hoy() {
                         {calculating ? (
                           <View className="mt-1 flex-row items-center gap-1">
                             {mealNumbers?.vague ? null : (
-                              <ActivityIndicator size="small" color="#83796c" />
+                              <ActivityIndicator size="small" color="#6b6256" />
                             )}
                             <Text className="font-body text-[11px] text-muted-foreground">
                               {mealNumbers?.vague
@@ -992,7 +992,7 @@ export default function Hoy() {
                             en `DayBalanceCard`. */}
                         {mealSwap.isAdjusting(h.label) ? (
                           <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary/10">
-                            <ActivityIndicator size="small" color="#ff8a3d" />
+                            <ActivityIndicator size="small" color="#a84a17" />
                           </View>
                         ) : null}
                         {isPending ? (
@@ -1001,7 +1001,7 @@ export default function Hoy() {
                               onPress={() => setSwapIndex(i)}
                               className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
                             >
-                              <PencilLine size={14} color="#83796c" />
+                              <PencilLine size={14} color="#6b6256" />
                             </Pressable>
                             <Pressable
                               onPress={() => setMealStatus(i, "plan")}
@@ -1023,7 +1023,7 @@ export default function Hoy() {
                             onPress={() => clearMealStatus(i)}
                             className="h-[34px] w-[34px] items-center justify-center rounded-full bg-secondary"
                           >
-                            <X size={15} color="#83796c" strokeWidth={2.2} />
+                            <X size={15} color="#6b6256" strokeWidth={2.2} />
                           </Pressable>
                         ) : null}
                       </View>
@@ -1045,9 +1045,9 @@ export default function Hoy() {
                       return (
                         <View className="mt-2 flex-row items-center gap-2">
                           {comp.meHome ? (
-                            <Home size={14} color="#83796c" />
+                            <Home size={14} color="#6b6256" />
                           ) : (
-                            <Briefcase size={14} color="#83796c" />
+                            <Briefcase size={14} color="#6b6256" />
                           )}
                           {hasOthers ? (
                             <>
@@ -1445,5 +1445,5 @@ function Field({
 }
 
 function ChatBubbleIcon() {
-  return <MessageCircle size={22} color="#fbfaf7" />;
+  return <MessageCircle size={22} color="#3e3d39" />;
 }

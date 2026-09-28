@@ -213,7 +213,7 @@ export function WeekPager({
           className="h-8 w-8 items-center justify-center rounded-full bg-surface active:opacity-70"
           style={atStart ? { opacity: 0.3 } : undefined}
         >
-          <ChevronLeft size={16} color="#83796c" />
+          <ChevronLeft size={16} color="#6b6256" />
         </Pressable>
         <View className="min-w-0 flex-1 flex-row items-center justify-center gap-2">
           <Animated.Text
@@ -231,7 +231,7 @@ export function WeekPager({
               hitSlop={6}
               className="rounded-full bg-primary/10 px-2 py-0.5 active:opacity-70"
             >
-              <Text className="font-mono-medium text-[9.5px] uppercase tracking-wide text-primary">
+              <Text className="font-mono-medium text-[9.5px] uppercase tracking-wide text-primary-ink">
                 Volver a hoy
               </Text>
             </Pressable>
@@ -244,7 +244,7 @@ export function WeekPager({
           className="h-8 w-8 items-center justify-center rounded-full bg-surface active:opacity-70"
           style={atEnd ? { opacity: 0.3 } : undefined}
         >
-          <ChevronRight size={16} color="#83796c" />
+          <ChevronRight size={16} color="#6b6256" />
         </Pressable>
       </View>
 
