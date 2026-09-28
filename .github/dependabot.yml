@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Solo avisos de seguridad: con el límite a 0 no abre PRs de versión, pero las
+  # "Dependabot security updates" (Settings → Code security) siguen funcionando.
+  - package-ecosystem: "npm" # Dependabot lee bun.lock con el ecosistema npm
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+  - package-ecosystem: "npm"
+    directory: "/mobile"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+  # Las acciones van fijadas por SHA; esto mantiene el SHA y su comentario al día.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
