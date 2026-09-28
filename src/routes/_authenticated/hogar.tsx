@@ -10,7 +10,6 @@ import {
   Copy,
   LogOut,
   Pencil,
-  Plus,
   RefreshCw,
   ShieldCheck,
   Target,
@@ -30,7 +29,6 @@ import {
   EMPTY_SCHEDULE,
   MEAL_KEYS,
   MEAL_LABEL,
-  cleanHomeSchedule,
   deriveSharedSlots,
   describeSharedSlots,
   eatsTableFood,
@@ -39,7 +37,6 @@ import {
   toggleDay,
   type Appetite,
   type HomeSchedule,
-  type SharedSlots,
 } from "@/lib/household-shared";
 import {
   addAdultSlot,
@@ -58,7 +55,7 @@ import {
   type HouseholdGoalType,
   type OpenSlot,
 } from "@/lib/household";
-import { saveHomeSchedule, saveSharedSlots, syncHouseholdPlan } from "@/lib/household.functions";
+import { saveHomeSchedule, syncHouseholdPlan } from "@/lib/household.functions";
 import { childPureeGaps, eur, shoppingTotal } from "@/lib/plan-shared";
 import { schedulePlanRecalc } from "@/lib/plan-recalc";
 import { fillChildMeals } from "@/lib/plan.functions";
@@ -99,14 +96,12 @@ function Hogar() {
   const qc = useQueryClient();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
   const sync = useServerFn(syncHouseholdPlan);
-  const saveSlots = useServerFn(saveSharedSlots);
   const saveSched = useServerFn(saveHomeSchedule);
   const fillKids = useServerFn(fillChildMeals);
 
   const [name, setName] = useState("Mi casa");
   const [code, setCode] = useState("");
   const [slots, setSlots] = useState<OpenSlot[] | null>(null);
-  const [shared, setShared] = useState<SharedSlots | null>(null);
   const [addingType, setAddingType] = useState<"adult" | "child">("adult");
   const [newAdult, setNewAdult] = useState<{ name: string; usesApp: boolean; appetite: Appetite }>({
     name: "",
@@ -133,7 +128,6 @@ function Hogar() {
   const monthSpend = shoppingTotal(planQ.data?.shopping);
 
   useEffect(() => {
-    if (state.data?.household) setShared(state.data.household.shared_slots);
     // Initialize per-member schedule drafts from server data.
     if (state.data?.members?.length || state.data?.children?.length) {
       // Sin horario propio se parte de los días compartidos del hogar (no de
@@ -271,19 +265,6 @@ function Hogar() {
       toast.success("Has salido del hogar");
       refresh();
     },
-  });
-
-  const persistShared = useMutation({
-    mutationFn: async (next: SharedSlots) => {
-      await saveSlots({ data: { slots: next } });
-      await sync({ data: { month: monthISO(), today: todayISO() } });
-    },
-    onSuccess: () => {
-      toast.success("Comidas compartidas actualizadas");
-      refresh();
-      qc.invalidateQueries({ queryKey: ["plan", monthISO()] });
-    },
-    onError: (e: Error) => toast.error(e.message || "No hemos podido guardar"),
   });
 
   const persistSchedule = useMutation({

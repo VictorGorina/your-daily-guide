@@ -60,14 +60,12 @@ import {
   planMonthStatus,
   planNavBounds,
   projectTrips,
-  shoppingToText,
   tripDayRange,
   tripsForCoverage,
   WEEK_COUNT,
   tripTiming,
   tripToText,
   shoppingTotal,
-  tripActualsTotal,
   withOwnedMark,
   withPantryExtra,
   withTripActual,
@@ -80,7 +78,6 @@ import {
   type TripActuals,
   type TripConfirmations,
   type TripReceipts,
-  type TripTiming,
 } from "@/lib/plan-shared";
 import { freshRiskNames, freshRisksForTrip } from "@/lib/perishability";
 import {
@@ -509,8 +506,6 @@ function PlanPage() {
     setSelectedMonth(target);
     setTab("plan");
   };
-
-  const listText = () => shoppingToText(shopping, activeCadence, month, coverage);
 
   // Cada compra es una lista distinta, así que se comparte aparte (no todo el
   // mes de golpe) — refuerza que "Compra 1" y "Compra 2" no son lo mismo.

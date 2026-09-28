@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-import type { MealChange } from "./plan-shared";
 import {
   cleanDaySnacks,
   pendingSnackKcal,

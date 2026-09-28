@@ -3,13 +3,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { updateDailyLogCas } from "@/lib/daily-rows.server";
-import { compensationNeed } from "@/lib/nutrition/compensation";
-import {
-  compensationWindow,
-  diffFutureMeals,
-  effectiveMealSlots,
-  type MealChange,
-} from "@/lib/plan-shared";
 import {
   cleanDayExercise,
   EXERCISE_ACTIVITIES,
@@ -17,14 +10,12 @@ import {
   EXERCISE_MINUTES_MAX,
   EXERCISE_MINUTES_MIN,
   isoWeekDaysUntil,
-  pendingExerciseKcal,
   routineSessionsIn,
   splitRoutineSession,
   withExercise,
   withoutExercise,
   type DayExercise,
   type ExerciseEntry,
-  type ExerciseOutcome,
 } from "@/lib/exercise";
 import { normalizeActivity } from "@/lib/nutrition/energy";
 import { parseTraining } from "@/lib/nutrition/exercise-energy";

@@ -6,16 +6,8 @@ import { assertCleanFood } from "@/lib/assert-clean-food";
 import { updateDailyLogCas } from "@/lib/daily-rows.server";
 import { requestDeadline } from "@/lib/deadline";
 import type { MacroEstimate } from "@/lib/guide.functions";
-import { compensationNeed } from "@/lib/nutrition/compensation";
-import {
-  compensationWindow,
-  diffFutureMeals,
-  effectiveMealSlots,
-  type MealChange,
-} from "@/lib/plan-shared";
 import {
   cleanDaySnacks,
-  pendingSnackKcal,
   SNACK_KCAL_MAX,
   SNACK_TEXT_MAX,
   SNACK_TEXT_MIN,
@@ -23,7 +15,6 @@ import {
   withoutSnack,
   type DaySnacks,
   type SnackEntry,
-  type SnackOutcome,
 } from "@/lib/snacks";
 import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";

@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Cookie,
   Home,
-  Info,
   Loader2,
   PencilLine,
   Undo2,
@@ -347,12 +346,6 @@ function Hoy() {
       .filter((m) => m.user_id !== householdQ.data?.me?.user_id)
       .map((m) => ({ id: m.id, displayName: m.display_name, portion: m.portion }));
     return { meHome: true, others };
-  };
-  /** Backward-compat wrapper for callers that just need a name string or null. */
-  const sharedWith = (label: string) => {
-    const comp = mealCompanions(label);
-    if (!comp || !comp.others.length) return null;
-    return comp.others.length === 1 ? comp.others[0].displayName : "el resto del hogar";
   };
   // Platos aparte de los niños de la casa para ese momento de hoy (issue 07):
   // el plato compartido no les sirve ese día y el plan lleva el suyo.
@@ -957,7 +950,6 @@ function Hoy() {
               const isNext = i === nextIndex;
               const isSkip = h.status === "salteo";
               const note = offListNote(planned?.off);
-              const shared = sharedWith(h.label);
               const kidMeals = childMealsFor(h.label);
               // El plato de este momento se ha cambiado hoy (desde el chat o
               // desde "comí otra cosa"): se muestra el real en naranja y debajo,
