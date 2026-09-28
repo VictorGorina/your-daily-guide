@@ -34,7 +34,8 @@ export type Household = {
   id: string;
   name: string;
   invite_code: string;
-  created_by: string;
+  /** `null` si quien lo creó ya borró su cuenta (el hogar sigue: ticket 36). */
+  created_by: string | null;
   goal_type: HouseholdGoalType | null;
   goal_text: string | null;
   goal_budget_eur: number | null;
