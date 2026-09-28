@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Cookie,
   Home,
-  Info,
   MessageCircle,
   PencilLine,
   Undo2,
@@ -316,12 +315,6 @@ export default function Hoy() {
       .filter((m) => m.user_id !== householdQ.data?.me?.user_id)
       .map((m) => ({ id: m.id, displayName: m.display_name, portion: m.portion }));
     return { meHome: true, others };
-  };
-  /** Backward-compat wrapper for callers that just need a name string or null. */
-  const sharedWith = (label: string) => {
-    const comp = mealCompanions(label);
-    if (!comp || !comp.others.length) return null;
-    return comp.others.length === 1 ? comp.others[0].displayName : "el resto del hogar";
   };
   // Platos aparte de los niños de la casa para ese momento de hoy (issue 07).
   const childMealsFor = (label: string) => {
@@ -889,7 +882,6 @@ export default function Hoy() {
                 const hideRecipe =
                   !!wasIdea && dishChangeIsMine(mealKeyForPin, homeCtxFor(todayWeekday));
                 const note = offListNote(planned?.off);
-                const shared = sharedWith(h.label);
                 // D13: un plato sin cifra se dice, no se rellena con un promedio.
                 const mealNumbers = guide?.mealMacros?.find(
                   (m) => m.moment === h.label && m.idea === dish,

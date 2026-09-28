@@ -38,7 +38,6 @@ import { Route as ApiV1ExerciseRemoveRouteImport } from './routes/api/v1/exercis
 import { Route as ApiV1ExerciseSettleRouteImport } from './routes/api/v1/exercise/settle'
 import { Route as ApiV1HouseholdHomeScheduleRouteImport } from './routes/api/v1/household/home-schedule'
 import { Route as ApiV1HouseholdPropagateLogRouteImport } from './routes/api/v1/household/propagate-log'
-import { Route as ApiV1HouseholdSharedSlotsRouteImport } from './routes/api/v1/household/shared-slots'
 import { Route as ApiV1HouseholdSyncRouteImport } from './routes/api/v1/household/sync'
 import { Route as ApiV1OnboardingParseRouteImport } from './routes/api/v1/onboarding/parse'
 import { Route as ApiV1PlanAdjustRouteImport } from './routes/api/v1/plan/adjust'
@@ -212,12 +211,6 @@ const ApiV1HouseholdPropagateLogRoute =
     path: '/api/v1/household/propagate-log',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiV1HouseholdSharedSlotsRoute =
-  ApiV1HouseholdSharedSlotsRouteImport.update({
-    id: '/api/v1/household/shared-slots',
-    path: '/api/v1/household/shared-slots',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiV1HouseholdSyncRoute = ApiV1HouseholdSyncRouteImport.update({
   id: '/api/v1/household/sync',
   path: '/api/v1/household/sync',
@@ -379,7 +372,6 @@ export interface FileRoutesByFullPath {
   '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
-  '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
@@ -436,7 +428,6 @@ export interface FileRoutesByTo {
   '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
-  '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
@@ -495,7 +486,6 @@ export interface FileRoutesById {
   '/api/v1/exercise/settle': typeof ApiV1ExerciseSettleRoute
   '/api/v1/household/home-schedule': typeof ApiV1HouseholdHomeScheduleRoute
   '/api/v1/household/propagate-log': typeof ApiV1HouseholdPropagateLogRoute
-  '/api/v1/household/shared-slots': typeof ApiV1HouseholdSharedSlotsRoute
   '/api/v1/household/sync': typeof ApiV1HouseholdSyncRoute
   '/api/v1/onboarding/parse': typeof ApiV1OnboardingParseRoute
   '/api/v1/plan/adjust': typeof ApiV1PlanAdjustRoute
@@ -554,7 +544,6 @@ export interface FileRouteTypes {
     | '/api/v1/exercise/settle'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
-    | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
@@ -611,7 +600,6 @@ export interface FileRouteTypes {
     | '/api/v1/exercise/settle'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
-    | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
@@ -669,7 +657,6 @@ export interface FileRouteTypes {
     | '/api/v1/exercise/settle'
     | '/api/v1/household/home-schedule'
     | '/api/v1/household/propagate-log'
-    | '/api/v1/household/shared-slots'
     | '/api/v1/household/sync'
     | '/api/v1/onboarding/parse'
     | '/api/v1/plan/adjust'
@@ -720,7 +707,6 @@ export interface RootRouteChildren {
   ApiV1ExerciseSettleRoute: typeof ApiV1ExerciseSettleRoute
   ApiV1HouseholdHomeScheduleRoute: typeof ApiV1HouseholdHomeScheduleRoute
   ApiV1HouseholdPropagateLogRoute: typeof ApiV1HouseholdPropagateLogRoute
-  ApiV1HouseholdSharedSlotsRoute: typeof ApiV1HouseholdSharedSlotsRoute
   ApiV1HouseholdSyncRoute: typeof ApiV1HouseholdSyncRoute
   ApiV1OnboardingParseRoute: typeof ApiV1OnboardingParseRoute
   ApiV1PlanAdjustRoute: typeof ApiV1PlanAdjustRoute
@@ -952,13 +938,6 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/household/propagate-log'
       fullPath: '/api/v1/household/propagate-log'
       preLoaderRoute: typeof ApiV1HouseholdPropagateLogRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/household/shared-slots': {
-      id: '/api/v1/household/shared-slots'
-      path: '/api/v1/household/shared-slots'
-      fullPath: '/api/v1/household/shared-slots'
-      preLoaderRoute: typeof ApiV1HouseholdSharedSlotsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/household/sync': {
@@ -1193,7 +1172,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1ExerciseSettleRoute: ApiV1ExerciseSettleRoute,
   ApiV1HouseholdHomeScheduleRoute: ApiV1HouseholdHomeScheduleRoute,
   ApiV1HouseholdPropagateLogRoute: ApiV1HouseholdPropagateLogRoute,
-  ApiV1HouseholdSharedSlotsRoute: ApiV1HouseholdSharedSlotsRoute,
   ApiV1HouseholdSyncRoute: ApiV1HouseholdSyncRoute,
   ApiV1OnboardingParseRoute: ApiV1OnboardingParseRoute,
   ApiV1PlanAdjustRoute: ApiV1PlanAdjustRoute,

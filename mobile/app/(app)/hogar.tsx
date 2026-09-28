@@ -7,7 +7,6 @@ import {
   Copy,
   LogOut,
   Pencil,
-  Plus,
   RefreshCw,
   ShieldCheck,
   Target,
@@ -44,7 +43,6 @@ import {
   renameHousehold,
   saveHouseholdGoal,
   saveHomeSchedule,
-  saveSharedSlots,
   setPlanner,
   updateMember,
   type HouseholdChild,
@@ -65,7 +63,6 @@ import {
   toggleDay,
   type Appetite,
   type HomeSchedule,
-  type SharedSlots,
 } from "../../lib/household-shared";
 import { childPureeGaps, eur, shoppingTotal, type MonthlyPlan } from "../../lib/plan-shared";
 import { schedulePlanRecalc } from "../../lib/plan-recalc";
@@ -93,7 +90,6 @@ export default function Hogar() {
   const [name, setName] = useState("Mi casa");
   const [code, setCode] = useState("");
   const [slots, setSlots] = useState<OpenSlot[] | null>(null);
-  const [shared, setShared] = useState<SharedSlots | null>(null);
   const [addingType, setAddingType] = useState<"adult" | "child">("adult");
   const [schedDrafts, setSchedDrafts] = useState<Record<string, HomeSchedule>>({});
   const [schedExpanded, setSchedExpanded] = useState<Record<string, boolean>>({});
@@ -117,7 +113,6 @@ export default function Hogar() {
   const monthSpend = shoppingTotal(planQ.data?.shopping);
 
   useEffect(() => {
-    if (state.data?.household) setShared(state.data.household.shared_slots);
     // Initialize per-member schedule drafts from server data.
     if (state.data?.members?.length || state.data?.children?.length) {
       // Sin horario propio se parte de los días compartidos del hogar (no de
@@ -255,19 +250,6 @@ export default function Hogar() {
       Alert.alert("Has salido del hogar");
       refresh();
     },
-  });
-
-  const persistShared = useMutation({
-    mutationFn: async (next: SharedSlots) => {
-      await saveSharedSlots(next);
-      await syncSharedPlan();
-    },
-    onSuccess: () => {
-      Alert.alert("Comidas compartidas actualizadas");
-      refresh();
-      qc.invalidateQueries({ queryKey: ["plan", month] });
-    },
-    onError: (e: Error) => Alert.alert(e.message || "No hemos podido guardar"),
   });
 
   const persistSchedule = useMutation({

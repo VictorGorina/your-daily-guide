@@ -329,18 +329,6 @@ export async function clearHouseholdGoal(id: string) {
   if (error) throw error;
 }
 
-/**
- * Guarda las comidas compartidas del hogar. Solo la puede cambiar el
- * planificador (candado en el servidor), así que va por `/api/v1/*` como el
- * resto de operaciones con clave de servicio.
- */
-export async function saveSharedSlots(slots: SharedSlots): Promise<SharedSlots> {
-  const { shared_slots } = await apiPost<{ shared_slots: SharedSlots }>("household/shared-slots", {
-    slots,
-  });
-  return cleanSharedSlots(shared_slots);
-}
-
 export async function addChild(
   householdId: string,
   child: Omit<HouseholdChild, "id" | "home_schedule">,
