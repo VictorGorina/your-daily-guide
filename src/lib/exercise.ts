@@ -8,7 +8,8 @@ import { addDaysISO, weekdayIndex } from "@/lib/dates";
  *
  * Vive en su propia columna y no en `habits` por el mismo motivo que el
  * picoteo: `reconcileHabits` reconstruye `habits` desde el plan en cada carga
- * y lo borraría, y así el deporte no cuenta en el semáforo de cumplimiento.
+ * y lo borraría. El semáforo del día (`daySignalOf`) solo mira lo comido, así
+ * que el deporte apuntado no le cambia el color.
  *
  * Las kcal quemadas se calculan con una tabla determinista
  * (`estimateExerciseKcal`), no con IA: a diferencia del picoteo (que necesita

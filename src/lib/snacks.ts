@@ -5,8 +5,8 @@ import type { MealChange } from "@/lib/plan-shared";
  * Picoteo de un día (`daily_logs.snacks`, feature `picoteo-hoy`).
  *
  * Vive en su propia columna y no en `habits` porque `reconcileHabits`
- * reconstruye `habits` desde el plan en cada carga y lo borraría. Además así un
- * picoteo no cuenta en el semáforo de cumplimiento: no es un fallo.
+ * reconstruye `habits` desde el plan en cada carga y lo borraría. Sí suma en lo
+ * comido del día y, por tanto, en su semáforo (`consumedMacrosOf`, `daySignalOf`).
  *
  * Lógica pura: la usan Hoy, el detalle de un día pasado y el servidor
  * (`snacks.functions.ts`). Copia en `mobile/lib/snacks.ts`.

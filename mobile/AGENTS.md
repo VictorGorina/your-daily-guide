@@ -24,8 +24,8 @@ instala la v4: hay que forzar `tailwindcss@^3.4.17` a mano. (La web sí usa Tail
 configuraciones distintas a propósito.)
 
 La paleta de [tailwind.config.js](tailwind.config.js) es el tema "niebla" de la web
-(`:root` en `src/styles.css`) convertido de `oklch()` a hex, porque React Native no entiende
-`oklch`. Si allí cambia un color, hay que reconvertirlo aquí: son dos copias.
+(`:root` en `src/styles.css`, en hex) copiado a mano, porque React Native no lee las variables CSS
+de la web. Si allí cambia un color, hay que copiarlo aquí: son dos copias.
 
 `.npmrc` fija `legacy-peer-deps` porque el árbol de Expo 57 choca consigo mismo (expo-router
 arrastra react-dom 19.2.8 y expo fija react 19.2.3); sin eso npm no instala nada.

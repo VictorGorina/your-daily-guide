@@ -179,11 +179,12 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
 - [ ] Sigue [docs/design-guidelines.md](../design-guidelines.md): un solo naranja de marca
       por pantalla, sin bordes de 1px (jerarquía por fondo y radio), solo dos sombras en toda
       la app, cero emoji, sin blanco ni negro puro. El historial muestra deriva aquí.
-- [ ] Sin mecánicas de castigo: nada de rojo en el semáforo de cumplimiento, saltar una
+- [ ] Sin mecánicas de castigo: quedarse corto nunca es rojo (el semáforo del día,
+      `daySignal`, solo pinta rojo al pasarse de largo: decisión del 2026-09-20), saltar una
       comida es neutro, la racha es "impulso" (EMA, nunca se resetea a cero).
-- [ ] Cualquier color cambiado en la web (`oklch()` en [src/styles.css](../../src/styles.css))
-      se replica **a mano** en [mobile/tailwind.config.js](../../mobile/tailwind.config.js)
-      convertido a hex. Son dos copias, no una fuente compartida.
+- [ ] Cualquier color cambiado en la web (hex en [src/styles.css](../../src/styles.css)) se
+      replica **a mano** en [mobile/tailwind.config.js](../../mobile/tailwind.config.js). Son
+      dos copias, no una fuente compartida.
 - [ ] Cambio en superficie compartida (`/api/v1/*`, auth, esquema, o pantalla que existe en
       las dos apps) → aplicado también en `mobile/` y verificado en el simulador
       (screenshot tras recargar) antes de cerrar. `mobile/` tiene su propia copia de cada

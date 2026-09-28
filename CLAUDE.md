@@ -59,7 +59,7 @@ antes de tocar algo ahí.
 
 **Rutas:** enrutado por archivos en `src/routes/`, según las convenciones de TanStack Start (no
 las de Next.js/Remix) — están explicadas en [src/routes/README.md](src/routes/README.md).
-`src/routes/routeTree.gen.ts` es autogenerado; no se edita a mano.
+`src/routeTree.gen.ts` es autogenerado; no se edita a mano.
 
 **Server-only:** los módulos que solo deben ejecutarse en el servidor se nombran `*.server.ts`
 (TanStack Start no usa el paquete `server-only` de Next.js; un lint en
@@ -540,9 +540,9 @@ escrituras van del navegador directo a Supabase (ver `.scratch/limites-ia-y-cont
   `src/components/ui/`.
 - Formato: Prettier (`printWidth` 100, comillas dobles, `;` siempre) — corre `bun run format`
   antes de dar algo por terminado.
-- El código de la app móvil vuelve a convertir la misma paleta de color de la web (definida como
-  `oklch()` en `src/styles.css`) a hex en `mobile/tailwind.config.js`, porque React Native no
-  entiende `oklch`. Si cambias un color en la web, hay que replicarlo ahí a mano — son dos copias.
+- La paleta de color de la web está en hex en `src/styles.css` y la app móvil tiene una copia en
+  `mobile/tailwind.config.js` (React Native no lee las variables CSS de la web). Si cambias un
+  color en la web, hay que replicarlo ahí a mano — son dos copias.
 - Guidelines de UI (color, tipografía, radios, espaciado, componentes, movimiento, tono de voz):
   [docs/design-guidelines.md](docs/design-guidelines.md). Consúltalo antes de tocar estilos para
   no apartarte de los valores ya establecidos.

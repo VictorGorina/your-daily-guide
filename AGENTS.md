@@ -1,4 +1,4 @@
-# Senda
+# Peppers
 
 App de coach de salud y alimentación. TanStack Start + React + TypeScript + Tailwind + Supabase.
 La IA (chat del coach, guía diaria, plan mensual) usa OpenRouter (modelo `google/gemini-2.5-flash`
@@ -9,7 +9,8 @@ El modelo se queda deliberadamente en la gama barata: cuando la calidad de una s
 respuesta es **sacar el trabajo verificable del modelo hacia código**, no subir de modelo. Primer
 ejemplo: las **kcal y macros** ya no las estima el modelo — `src/lib/nutrition/` descompone cada
 plato en ingredientes (una llamada) y los suma contra una tabla de composición estática. Ver
-"Macros y kcal — deterministas" en CLAUDE.md y `.scratch/nutricion-determinista/`.
+"Macros y kcal — receta canónica, no del modelo" en CLAUDE.md, `.scratch/nutricion-determinista/`
+y `.scratch/precision-nutricional/`.
 
 ## API HTTP (`/api/v1/*`)
 
@@ -210,7 +211,9 @@ Botón "Añadir picoteo" justo encima de "Registrar deporte", en web y móvil. S
 
 El asentamiento no cambia nunca la compra, hoy ni el pasado. `composeDayForUser` conserva el array
 `kids` si el conjunto no cambia, para que congelar las compartidas no reescriba días pasados solo
-por reordenarlo. El registro guiado del chat sigue yendo por el coach (`ajustar_plan_mensual`).
+por reordenarlo. El registro guiado del chat (picoteo y deporte) y la herramienta
+`registrar_deporte` acaban en este mismo asentamiento (`scheduleDaySettle`), nunca en
+`ajustar_plan_mensual`: ver "El chat tampoco compensa por origen" en CLAUDE.md.
 
 ## Balance del día (`balance-del-dia`)
 
@@ -462,15 +465,13 @@ un cambio suele romper sin querer:
 ## Push notifications
 
 Web Push real (VAPID) vía [`@pushforge/builder`](https://github.com/draphy/pushforge) — usa solo
-Web Crypto API, así que funciona en Cloudflare Workers (el `web-push` de npm no, depende de
-`crypto.createECDH()` que Workers no soporta). Requiere en `.env`: `VAPID_PUBLIC_KEY` /
-`VAPID_PRIVATE_KEY` (servidor, par generado con `bun x pushforge vapid`), `VITE_VAPID_PUBLIC_KEY`
-(cliente, mismo valor que la pública), y `CRON_SECRET` (protege `/api/cron/dispatch`, ver abajo).
+Web Crypto API (el `web-push` de npm depende de `crypto.createECDH()`, que no está en todos los
+runtimes serverless; se eligió cuando la app corría en Cloudflare Workers y hoy corre en Vercel).
+Requiere en `.env` (par generado con `bun x pushforge vapid`): `VAPID_PRIVATE_KEY` (servidor, el
+JWK privado), `VITE_VAPID_PUBLIC_KEY` (cliente, la clave pública), `VAPID_CONTACT` (opcional,
+`mailto:` del remitente) y `CRON_SECRET` (protege `/api/cron/dispatch`, ver abajo).
 
-El disparo periódico **no** usa el `scheduled` nativo de Cloudflare Workers — este proyecto
-sustituye el entry-point autogenerado de Nitro por [src/server.ts](src/server.ts), que solo
-expone `fetch`, así que enganchar ahí un Cron Trigger de Cloudflare es incierto sin desplegar y
-probar. En su lugar, un workflow de GitHub Actions
+El disparo periódico no usa un cron de la plataforma: un workflow de GitHub Actions
 ([.github/workflows/push-dispatch.yml](.github/workflows/push-dispatch.yml)) llama cada 15 min a
 `POST /api/cron/dispatch` (protegido por `x-cron-secret`), que reutiliza
 [src/lib/push-dispatch.server.ts](src/lib/push-dispatch.server.ts) para mirar qué perfiles caen en

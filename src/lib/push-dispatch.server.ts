@@ -151,8 +151,7 @@ function renewalCopyMember(name: string | null, nextMonthLabel: string) {
  * actual y no se les ha enviado ya hoy, y envía el push correspondiente a
  * cada una de sus suscripciones. Pensado para llamarse desde
  * `POST /api/cron/dispatch`, disparado externamente (GitHub Actions) cada 15
- * minutos — ver AGENTS.md para por qué no usamos el `scheduled` nativo de
- * Cloudflare Workers.
+ * minutos — ver "Push notifications" en AGENTS.md.
  */
 export async function dispatchPush(
   /** Solo para los tests: el envío real por defecto. */

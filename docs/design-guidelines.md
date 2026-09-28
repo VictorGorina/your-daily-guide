@@ -217,7 +217,7 @@ regaña: nunca «te lo saltaste», sino la fila en gris y ya está.
 
 ## Nota sobre web vs. móvil
 
-La web define estos tokens como `oklch()` en [src/styles.css](../src/styles.css); React Native no
-entiende `oklch`, así que `mobile/tailwind.config.js` guarda los mismos valores ya convertidos a
-hex a mano — son dos copias, no una fuente compartida. Si se retoca un color aquí, hay que
+La web define estos tokens en hex en [src/styles.css](../src/styles.css) (solo los bordes
+translúcidos del tema oscuro van en `oklch()`); `mobile/tailwind.config.js` guarda los mismos
+valores copiados a mano — son dos copias, no una fuente compartida. Si se retoca un color aquí, hay que
 replicarlo en los dos sitios (ver también [CLAUDE.md](../CLAUDE.md)).

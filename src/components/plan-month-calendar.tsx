@@ -34,8 +34,9 @@ const SIGNAL_CLASS: Record<string, string> = {
 
 /**
  * Calendario del mes. Además del menú por día (hoy y días futuros abren un
- * diálogo con los platos), los días pasados llevan el semáforo de cumplimiento
- * — verde/amarillo/gris, sin rojo — y al tocarlos abren el detalle reducido del
+ * diálogo con los platos), los días pasados llevan el semáforo del día
+ * (`daySignalOf`: kcal contra el objetivo, rojo solo al pasarse de largo) y al
+ * tocarlos abren el detalle reducido del
  * día (`onOpenDay`). Es el navegador del historial desde que se fundió la
  * subpestaña Historial en Plan.
  */

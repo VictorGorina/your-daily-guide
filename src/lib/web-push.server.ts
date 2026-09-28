@@ -14,9 +14,9 @@ export type PushPayload = {
  * Envía una notificación push a una única suscripción.
  *
  * `@pushforge/builder` usa solo Web Crypto API (a diferencia del `web-push` de
- * npm, que depende de `crypto.createECDH()` — no soportado en Cloudflare
- * Workers ni con `nodejs_compat`), así que esto funciona igual en local y en
- * el Worker desplegado.
+ * npm, que depende de `crypto.createECDH()`, ausente en algunos runtimes
+ * serverless), así que funciona igual en local y en Vercel. Se eligió cuando
+ * la app corría en Cloudflare Workers.
  *
  * Devuelve `"gone"` cuando el servicio de push confirma que la suscripción ya
  * no es válida (404/410 — el navegador la revocó), señal estándar de que hay
