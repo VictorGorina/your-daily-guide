@@ -65,7 +65,10 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "no-restricted-imports": ["error", { paths: [serverOnlyPackage] }],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
     },
   },
   {

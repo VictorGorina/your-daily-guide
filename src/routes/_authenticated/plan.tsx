@@ -64,7 +64,6 @@ import {
   tripsForCoverage,
   WEEK_COUNT,
   tripTiming,
-  tripToText,
   shoppingTotal,
   withOwnedMark,
   withPantryExtra,
@@ -505,28 +504,6 @@ function PlanPage() {
     setTab("plan");
   };
 
-  // Cada compra es una lista distinta, así que se comparte aparte (no todo el
-  // mes de golpe) — refuerza que "Compra 1" y "Compra 2" no son lo mismo.
-  const shareTrip = async (
-    trip: { groups: { category: string; items: ShoppingItem[] }[] },
-    label: string,
-  ) => {
-    const text = tripToText(trip, label);
-    const nav = navigator as Navigator & {
-      share?: (data: { title?: string; text?: string }) => Promise<void>;
-    };
-    try {
-      if (nav.share) {
-        await nav.share({ title: label, text });
-        return;
-      }
-      await nav.clipboard.writeText(text);
-      toast.success("Lista copiada al portapapeles");
-    } catch {
-      /* el usuario canceló el diálogo de compartir */
-    }
-  };
-
   const budget = Number(profileQ.data?.budget_month_eur ?? 0);
   // Si el plan empieza a media de mes, el presupuesto que aplica es la parte
   // proporcional del mes que cubre, no el mes entero.
@@ -808,7 +785,6 @@ function PlanPage() {
                     setPendingCadence={() => {}}
                     owned={hhOwned}
                     tripActuals={hhTripActuals}
-                    setActual={hhSetActual}
                     confirmedTrips={hhConfirmedTrips}
                     confirmTrip={hhConfirmTrip}
                     pantryExtras={hhPantryExtras}
@@ -817,12 +793,10 @@ function PlanPage() {
                       setShopSource("household");
                       setShopMode(true);
                     }}
-                    onShareTrip={(trip, label) => void shareTrip(trip, label)}
                     month={month}
                     monthStatus={monthStatus}
                     readOnly={readOnlyMonth}
                     periodBudget={0}
-                    partialMonth={false}
                     overBudget={false}
                     plannerLocked
                     plannerName={plannerName}
@@ -856,7 +830,6 @@ function PlanPage() {
                     setPendingCadence={setPendingCadence}
                     owned={owned}
                     tripActuals={tripActuals}
-                    setActual={setActual}
                     confirmedTrips={confirmedTrips}
                     confirmTrip={confirmTrip}
                     pantryExtras={pantryExtras}
@@ -865,12 +838,10 @@ function PlanPage() {
                       setShopSource("own");
                       setShopMode(true);
                     }}
-                    onShareTrip={(trip, label) => void shareTrip(trip, label)}
                     month={month}
                     monthStatus={monthStatus}
                     readOnly={readOnlyMonth}
                     periodBudget={periodBudget}
-                    partialMonth={partialMonth}
                     overBudget={overBudget}
                     inlineCta
                   />
@@ -917,7 +888,6 @@ function PlanPage() {
               setPendingCadence={setPendingCadence}
               owned={owned}
               tripActuals={tripActuals}
-              setActual={setActual}
               confirmedTrips={confirmedTrips}
               confirmTrip={confirmTrip}
               pantryExtras={pantryExtras}
@@ -926,12 +896,10 @@ function PlanPage() {
                 setShopSource("own");
                 setShopMode(true);
               }}
-              onShareTrip={(trip, label) => void shareTrip(trip, label)}
               month={month}
               monthStatus={monthStatus}
               readOnly={readOnlyMonth}
               periodBudget={periodBudget}
-              partialMonth={partialMonth}
               overBudget={overBudget}
             />
           )}
@@ -1124,18 +1092,18 @@ function IngredientsTab({
   setPendingCadence,
   owned,
   tripActuals,
-  setActual,
+  // Sin usar: el rediseño del 30-08 quitó "Fijar ingredientes de esta compra" de la web, pero el
+  // móvil lo conserva y fijarlas todas cierra el mes (`confirmed_at`, que frena `syncSharedMeals`).
+  // Falta decidir si vuelve aquí o sale del móvil; el aviso de no-unused-vars lo recuerda.
   confirmedTrips,
   confirmTrip,
   pantryExtras,
   pantry,
   onEnterShopMode,
-  onShareTrip,
   month,
   monthStatus,
   readOnly,
   periodBudget,
-  partialMonth,
   overBudget,
   plannerLocked = false,
   plannerName,
@@ -1158,7 +1126,6 @@ function IngredientsTab({
     mutate: (v: { itemName: string; trip: number; source: "fridge" | "store" | null }) => void;
   };
   tripActuals: Record<number, number>;
-  setActual: { isPending: boolean; mutate: (v: { trip: number; amount: number | null }) => void };
   confirmedTrips: Record<number, string>;
   confirmTrip: { isPending: boolean; mutate: (v: { trip: number; confirmed: boolean }) => void };
   pantryExtras: PantryExtra[];
@@ -1167,15 +1134,10 @@ function IngredientsTab({
     mutate: (v: { name: string; qty?: string; remove?: boolean }) => void;
   };
   onEnterShopMode: () => void;
-  onShareTrip: (
-    trip: { groups: { category: string; items: ShoppingItem[] }[] },
-    label: string,
-  ) => void;
   month: string;
   monthStatus: PlanMonthStatus;
   readOnly: boolean;
   periodBudget: number;
-  partialMonth: boolean;
   overBudget: boolean;
   /** Lista de la casa vista por un no planificador (issue 06): se puede marcar
    *  y comprar, pero no regenerar ni cambiar la cadencia. */
