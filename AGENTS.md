@@ -275,10 +275,18 @@ menos otra persona también; un bebé que aún no come de la mesa no cuenta
 partida de quien no ha puesto el suyo y, si nadie del hogar tiene horario, el valor tal cual.
 El trigger `households_guard_shared_slots` (solo el planificador) sigue protegiéndola. El viejo
 `household_members.shared_meals` y la intersección (`sharedDays`) ya no existen. Los snacks
-nunca se comparten (D5). **Pendiente:** `fetchMonthlyPlan` ([daily.ts](src/lib/daily.ts), y su
-copia del móvil) compone la vista de un no planificador con la columna en bruto
-(`household_plan_context`), no con los slots derivados; en cuanto alguien cambia su horario, las
-dos cosas pueden no coincidir.
+nunca se comparten (D5).
+
+**Una sola regla para servidor y pantallas.** `effectiveSharedSlots`
+([effective-shared-slots.ts](src/lib/effective-shared-slots.ts), idéntico byte a byte en
+`mobile/lib/` y vigilado por `scripts/check-shared-drift.sh`) rellena con la columna los
+horarios que faltan, deriva si hay alguno y, si no, devuelve la columna. La usa
+`householdContext` y, en el cliente, `householdSharedSlots(estadoDelHogar)` (`household.ts`, web y
+móvil), que es lo que leen `fetchMonthlyPlan`, Hoy y Plan. Hasta el 28-09 el cliente leía la
+columna a pelo (la RPC `household_plan_context` la devuelve): en 6 de 17 hogares ya no
+coincidía con los horarios, y quien no planificaba veía el plato del planificador un día que
+había marcado «no como en casa», mientras el servidor contaba con el suyo. `householdPlanInfo`
+ya no expone la columna.
 
 **Cada adulto con cuenta sigue teniendo su fila `monthly_plans` (D1).** No es todo suyo: los
 slots compartidos de esa fila son un **espejo de solo lectura** del planificador, y los no

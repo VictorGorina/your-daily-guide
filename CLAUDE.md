@@ -375,12 +375,14 @@ querer:
   de la semana): cada persona guarda el suyo y el planificador el de niños y huecos sin cuenta
   (`saveHomeSchedule`/`scheduleTarget`). Una comida es compartida si el planificador está en
   casa y al menos otra persona también; un bebé que no come de la mesa no cuenta
-  (`isEffectivelyShared` → `deriveSharedSlots`, que `householdContext` usa en el servidor).
-  `households.shared_slots` ya no se edita desde ninguna pantalla: es solo el horario de
-  partida de quien no ha puesto el suyo, y el valor único si nadie tiene horario. Snacks nunca
-  (D5). **Ojo:** `fetchMonthlyPlan` (`daily.ts`, web y móvil) todavía compone la vista de un no
-  planificador con la columna en bruto (`household_plan_context`), no con los slots derivados
-  — pendiente de revisar.
+  (`isEffectivelyShared` → `deriveSharedSlots`). La regla vive UNA vez en
+  `effectiveSharedSlots` (`effective-shared-slots.ts`, idéntico en `mobile/lib/`, lo vigila el
+  drift check): la usan `householdContext` en el servidor y, en las pantallas,
+  `householdSharedSlots(estadoDelHogar)` (`fetchMonthlyPlan`, Hoy, Plan). `households.shared_slots`
+  ya no se edita desde ninguna pantalla: es solo el horario de partida de quien no ha puesto el
+  suyo, y el valor único si nadie tiene horario. **No la leas a pelo para decidir qué se
+  comparte**: con eso quien no planifica veía el plato del planificador un día que había
+  marcado «no como en casa». Snacks nunca (D5).
 - **Cada adulto con cuenta conserva su fila `monthly_plans` (D1)**: los slots compartidos son
   un espejo de lectura del planificador (`composeDayForUser` /
   `composeMonthlyPlanForMember` al leer; `syncSharedMeals` al escribir hacia adelante,

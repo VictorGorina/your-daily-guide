@@ -136,9 +136,9 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
       `portion` para el cálculo de la compra. Nada de asumir PK `(household_id, user_id)` ni
       `UNIQUE(user_id)` sin `WHERE user_id IS NOT NULL`.
 - [ ] **Qué comida se comparte se deriva de los horarios (`home_schedule`), no de una config.**
-      Cualquier código que necesite "¿esta comida es compartida?" usa los slots derivados
-      (`deriveSharedSlots`/`isEffectivelyShared`, o los que da `householdContext`), no
-      `households.shared_slots` en bruto: esa columna ya no se edita desde ninguna pantalla y
+      Cualquier código que necesite "¿esta comida es compartida?" usa `effectiveSharedSlots`
+      (en el servidor, vía `householdContext`; en una pantalla, `householdSharedSlots(estado)`),
+      no `households.shared_slots` en bruto: esa columna ya no se edita desde ninguna pantalla y
       solo es el horario de partida de quien no tiene uno. Snacks nunca (D5). La columna
       `household_members.shared_meals` y los helpers de intersección (`sharedDays`) **ya no
       existen**.
