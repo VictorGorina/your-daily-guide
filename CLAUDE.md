@@ -150,8 +150,9 @@ precalienta los platos del mes (`recipe-warm.ts`, `/api/v1/recipes/warm`). Ingre
 casan y pesan: USDA (`usda.server.ts`, `USDA_FDC_API_KEY`, tabla `foods_extra`) y si no, el más
 parecido. Medida: `bun run eval:recipes` (exactitud contra el golden set) y `bun run
 eval:plan-lite` (el plan contra el objetivo); gastan llamadas y no van en CI.
-`src/lib/nutrition/index.ts` reexporta solo lo puro; `foods.data.ts` no debe entrar en el bundle
-de navegador. Las migraciones `dish_recipes` y `foods_extra` son manuales: sin ellas todo
+`foods.data.ts` no debe entrar en el bundle de navegador: el cliente solo importa módulos de
+`src/lib/nutrition/` que no la cargan (`energy`, `portion`; `nutrition.ts` y `recipe.ts` sí la
+cargan), y un lint prohíbe importarla fuera de su carpeta, de un `*.server.ts` o de un test. Las migraciones `dish_recipes` y `foods_extra` son manuales: sin ellas todo
 funciona, sin caché global.
 
 **Todo plato se calcula: nada de promedios** (ticket 13 de `precision-nutricional`, D13; ya no

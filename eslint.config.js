@@ -26,7 +26,7 @@ const supabaseAdminStaticImport = {
 // navegador no debe llevarla (scripts/check-client-bundle.sh lo comprueba en la
 // salida del build; esto lo para antes, en el código).
 const FOODS_DATA_MESSAGE =
-  "La tabla de composición (foods.data) no puede llegar al bundle del navegador: impórtala solo desde src/lib/nutrition/, un *.server.ts o un test, o usa las funciones de @/lib/nutrition.";
+  "La tabla de composición (foods.data) no puede llegar al bundle del navegador: impórtala solo desde src/lib/nutrition/, un *.server.ts o un test, o, desde el cliente, usa módulos de @/lib/nutrition/ que no la carguen (energy, portion).";
 
 const foodsDataImport = { regex: "(^|/)foods\\.data(\\.ts)?$", message: FOODS_DATA_MESSAGE };
 

@@ -77,7 +77,7 @@ type WeekPagerProps = {
  * `hoy-semanas-editables`, ticket 04 — versión web de
  * `mobile/components/week-pager.tsx`, ticket 03). Mismos límites y misma
  * cabecera que móvil; el gesto lo lleva Embla (sin el wrapper de
- * `ui/carousel.tsx`, que trae flechas propias) y las animaciones (anillo,
+ * el `Carousel` de shadcn, que trae flechas propias) y las animaciones (anillo,
  * etiqueta, panel del día) `motion`, en vez de Reanimated.
  */
 export function WeekPager({
