@@ -1,5 +1,8 @@
 @import "tailwindcss" source(none);
 @source "../src";
+/* streamdown pinta el markdown del coach con clases de Tailwind y Tailwind no mira node_modules:
+   sin esto sus clases solo existían si algún archivo nuestro las repetía (list-decimal no). */
+@source "../node_modules/streamdown/dist/*.js";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
