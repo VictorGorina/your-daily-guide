@@ -35,8 +35,8 @@ parsers de la salida de la IA — con el runner de Bun (sin dependencias nuevas)
 Vitest es el siguiente escalón cuando hagan falta.
 
 Necesitas un `.env` con tus propias claves (Supabase + `OPENROUTER_API_KEY` para el coach; VAPID y
-`CRON_SECRET` para las notificaciones push — ver la lista completa de variables en `.env` o en
-AGENTS.md).
+`CRON_SECRET` para las notificaciones push). La lista completa, con qué hace cada variable, es
+[.env.example](.env.example): cópialo a `.env`.
 
 ## Comandos (móvil, `mobile/`)
 

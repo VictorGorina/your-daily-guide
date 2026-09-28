@@ -28,8 +28,8 @@ bun run format     # Prettier
 ```
 
 Copia `.env.example` a `.env` y rellénalo con tus propias claves (Supabase, `OPENROUTER_API_KEY`
-para el coach, VAPID y `CRON_SECRET` para las notificaciones). La lista completa, con qué hace
-cada variable, está en [AGENTS.md](AGENTS.md).
+para el coach, VAPID y `CRON_SECRET` para las notificaciones). Cada variable lleva al lado un
+comentario que dice para qué sirve y si es opcional.
 
 ### App móvil
 
