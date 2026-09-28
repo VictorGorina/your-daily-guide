@@ -1,5 +1,6 @@
 /** Configuración de comidas compartidas del hogar (compartido entre cliente y servidor). */
 
+import { asPromptData } from "@/lib/prompt-data";
 import { ValidationError } from "@/lib/validation-error";
 
 export const MEAL_KEYS = ["desayuno", "comida", "cena"] as const;
@@ -76,9 +77,12 @@ export function describeRoster(
     stage?: FeedingStage;
   }[],
 ): string {
-  const withApp = members.filter((m) => m.hasAccount).map((m) => m.displayName);
-  const withoutApp = members.filter((m) => !m.hasAccount).map((m) => m.displayName);
-  const planner = members.find((m) => m.isPlanner)?.displayName ?? null;
+  // Nombres y alergias los escribe la gente: van entre «» como dato (ticket 08,
+  // SEC-S-05), igual que el texto libre del perfil en `coachSystemPrompt`.
+  const withApp = members.filter((m) => m.hasAccount).map((m) => asPromptData(m.displayName));
+  const withoutApp = members.filter((m) => !m.hasAccount).map((m) => asPromptData(m.displayName));
+  const plannerName = members.find((m) => m.isPlanner)?.displayName;
+  const planner = plannerName != null ? asPromptData(plannerName) : null;
 
   const adultParts: string[] = [];
   if (withApp.length) adultParts.push(`${joinPeople(withApp)} (con la app)`);
@@ -92,8 +96,8 @@ export function describeRoster(
       : "Hogar sin adultos configurados todavía.",
   ];
   const describeKid = (c: (typeof children)[number]) =>
-    `${c.name}${c.age != null ? ` (${c.age} años)` : ""}${
-      c.allergies ? `, alergia a ${c.allergies}` : ", sin alergias"
+    `${asPromptData(c.name)}${c.age != null ? ` (${c.age} años)` : ""}${
+      c.allergies ? `, alergia a ${asPromptData(c.allergies)}` : ", sin alergias"
     }`;
   const tableKids = children.filter((c) => (c.stage ?? "mesa") === "mesa");
   const babies = children.filter((c) => (c.stage ?? "mesa") !== "mesa");
@@ -105,7 +109,7 @@ export function describeRoster(
       `Bebés que aún no comen de la mesa: ${babies
         .map(
           (c) =>
-            `${c.name}${c.age != null ? ` (${c.age} años)` : ""} — ${
+            `${asPromptData(c.name)}${c.age != null ? ` (${c.age} años)` : ""} — ${
               c.stage === "pecho" ? "pecho o biberón" : "triturados y potitos"
             }`,
         )

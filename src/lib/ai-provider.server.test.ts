@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 
-import { asPromptData, requireAiKey } from "./ai-provider.server";
+import { asPromptData, requireAiKey, onFinishPart } from "./ai-provider.server";
 
 describe("requireAiKey", () => {
   const saved = process.env.OPENROUTER_API_KEY;
@@ -58,5 +58,64 @@ describe("asPromptData", () => {
 
   it("recorta a 600 caracteres", () => {
     expect(asPromptData("a".repeat(1000))).toBe(`«${"a".repeat(600)}»`);
+  });
+});
+
+type Part = { type: string };
+
+/** Un stream que emite `parts` y se queda abierto (como el del modelo a mitad). */
+const openStream = (parts: Part[], close = false) =>
+  new ReadableStream<Part>({
+    start(controller) {
+      for (const p of parts) controller.enqueue(p);
+      if (close) controller.close();
+    },
+  });
+
+describe("onFinishPart", () => {
+  it("si se corta antes de `finish`, apunta la estimación una sola vez", async () => {
+    const onFinish = mock(async () => {});
+    const onAbort = mock(async () => {});
+    const out = onFinishPart(
+      openStream([{ type: "text-delta" }, { type: "text-delta" }]),
+      onFinish,
+      onAbort,
+    );
+    const reader = out.getReader();
+    await reader.read();
+    await reader.read();
+    await reader.cancel("el cliente se ha ido");
+
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+  });
+
+  it("si llega a `finish`, apunta el coste real y no la estimación", async () => {
+    const onFinish = mock(async () => {});
+    const onAbort = mock(async () => {});
+    const out = onFinishPart(
+      openStream([{ type: "text-delta" }, { type: "finish" }], true),
+      onFinish,
+      onAbort,
+    );
+    const reader = out.getReader();
+    while (!(await reader.read()).done) {
+      // consumir entero
+    }
+
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(onAbort).not.toHaveBeenCalled();
+  });
+
+  it("un corte después de `finish` no cuenta dos veces", async () => {
+    const onFinish = mock(async () => {});
+    const onAbort = mock(async () => {});
+    const out = onFinishPart(openStream([{ type: "finish" }]), onFinish, onAbort);
+    const reader = out.getReader();
+    await reader.read();
+    await reader.cancel();
+
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(onAbort).not.toHaveBeenCalled();
   });
 });

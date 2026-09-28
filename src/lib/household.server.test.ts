@@ -158,9 +158,9 @@ describe("householdContext", () => {
 
   it("el texto para el coach lleva la mesa, los niños y sus notas", async () => {
     const ctx = await contextFor("ana").run();
-    expect(ctx.text).toContain("Leo: no le gusta el pescado");
-    expect(ctx.text).toContain("Mía (triturados");
-    expect(ctx.text).toContain("solo lo cambia Ana");
+    expect(ctx.text).toContain("«Leo»: «no le gusta el pescado»");
+    expect(ctx.text).toContain("«Mía» (triturados");
+    expect(ctx.text).toContain("solo lo cambia «Ana»");
   });
 
   it("un hogar sin quien planifica con cuenta: plannerId null", async () => {

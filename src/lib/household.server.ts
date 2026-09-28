@@ -1,3 +1,4 @@
+import { asPromptData } from "@/lib/prompt-data";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { weekdayIndex } from "@/lib/dates";
@@ -207,7 +208,7 @@ export async function householdContext(
   // en `describeRoster`.
   const kidNotes = kids
     .filter((k) => k.notes?.trim())
-    .map((k) => `- ${k.name}: ${k.notes!.trim()}`);
+    .map((k) => `- ${asPromptData(k.name)}: ${asPromptData(k.notes)}`);
 
   const kidsLite: HouseholdChildLite[] = kids.map((k) => ({
     id: k.id,
@@ -249,7 +250,7 @@ export async function householdContext(
     sharedSlots,
   );
 
-  const plannerName = planner?.displayName ?? "quien lleva la cocina";
+  const plannerName = asPromptData(planner?.displayName) || "quien lleva la cocina";
   const anyShared = MEAL_KEYS.some((m) => sharedSlots[m].length);
   const tableKids = kidsLite.filter((k) => eatsTableFood(k.stage));
   const infantKids = kidsLite.filter((k) => !eatsTableFood(k.stage));
@@ -291,8 +292,8 @@ export async function householdContext(
         ? `Bebés que AÚN NO comen del plato de la mesa: ${infantKids
             .map((k) =>
               k.stage === "pecho"
-                ? `${k.name} (toma pecho o biberón, no necesita plato ni entra en la compra)`
-                : `${k.name} (triturados: lleva SIEMPRE su propio plato en "days[].kids" cada día que come en casa — puré/triturado sencillo sin sal, con sus ingredientes sumados al "weekQty" a ración de bebé)`,
+                ? `${asPromptData(k.name)} (toma pecho o biberón, no necesita plato ni entra en la compra)`
+                : `${asPromptData(k.name)} (triturados: lleva SIEMPRE su propio plato en "days[].kids" cada día que come en casa — puré/triturado sencillo sin sal, con sus ingredientes sumados al "weekQty" a ración de bebé)`,
             )
             .join("; ")}. La mesa NO se dimensiona para ellos.`
         : "",
@@ -333,8 +334,8 @@ function describePerDayServings(
         (c) => eatsTableFood(c.stage) && (c.homeSchedule ?? EMPTY_SCHEDULE)[meal].includes(day),
       );
       const names = [
-        ...presentMembers.map((m) => `${m.displayName} ${m.portion}`),
-        ...presentKids.map((c) => `${c.name} ${c.portion}`),
+        ...presentMembers.map((m) => `${asPromptData(m.displayName)} ${m.portion}`),
+        ...presentKids.map((c) => `${asPromptData(c.name)} ${c.portion}`),
       ].join(" + ");
       lines.push(`${DAY_LABEL[day]} ${MEAL_LABEL[meal]}: ${portions} raciones (${names})`);
     }

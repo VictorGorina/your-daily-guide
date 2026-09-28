@@ -1,3 +1,4 @@
+import { asPromptData } from "@/lib/prompt-data";
 import { coachSystemPrompt, PLAN_MODEL } from "@/lib/ai-provider.server";
 import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { absorbedKcal, absorbsTooLittle } from "@/lib/day-balance";
@@ -243,7 +244,7 @@ export async function reflowMeals(opts: {
           `Plan actual del mes ${month} (cada día lleva su "fecha" real):\n${JSON.stringify(dated)}\n\n` +
           `Ingredientes ya comprados (no pueden cambiar): ${ingredientNames(shopping)}\n\n` +
           (pantryExtras.length
-            ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => e.name).join(", ")}\n\n`
+            ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => asPromptData(e.name)).join(", ")}\n\n`
             : "") +
           `${goalLine}\n` +
           `Últimos días reales registrados: ${JSON.stringify(recentLogs)}\n\n` +

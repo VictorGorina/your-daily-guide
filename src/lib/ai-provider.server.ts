@@ -6,6 +6,11 @@ import { abortedCallCostUsd, callCostUsd, type SpendCapScope } from "@/lib/ai-sp
 import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { showsNutritionNumbers } from "@/lib/macros";
 import { energyTargets } from "@/lib/nutrition/energy";
+import { asPromptData } from "@/lib/prompt-data";
+
+// Vive en un módulo puro para que lo usen también `household-shared.ts` y la
+// ruta del chat; se reexporta para no cambiar los imports que ya había.
+export { asPromptData };
 
 /** Modelo usado por el coach vía OpenRouter: Gemini 2.5 Flash da un buen
  * equilibrio coste/calidad para chat conversacional en español, y es el que
@@ -142,7 +147,11 @@ function aiSpendMiddleware(
       const { stream, ...rest } = await doStream();
       return {
         ...rest,
-        stream: onFinishPart(stream, (part) => recordAiSpend(userId, callCostUsd(part, modelId))),
+        stream: onFinishPart(
+          stream,
+          (part) => recordAiSpend(userId, callCostUsd(part, modelId)),
+          () => recordAiSpend(userId, abortedCallCostUsd(modelId)),
+        ),
       };
     },
   };
@@ -153,24 +162,50 @@ function aiSpendMiddleware(
  * que trae el uso y el coste), lanza `onFinish`. El stream no se cierra hasta
  * que termina: en serverless, lo que queda pendiente tras la respuesta puede no
  * llegar a ejecutarse.
+ *
+ * Si se cancela antes de `finish` (el cliente cierra la conexión y nadie más
+ * lee el stream), OpenRouter cobra igual lo generado pero ya no dice cuánto:
+ * `onAbort` apunta una estimación para que no se escape del tope (ticket 08).
+ * La red principal es `waitUntil(result.consumeStream())` en `/api/chat`, que
+ * deja terminar al modelo; esto cubre lo que aun así se corte.
  */
-function onFinishPart<P extends { type: string }>(
+export function onFinishPart<P extends { type: string }>(
   stream: ReadableStream<P>,
   onFinish: (part: Extract<P, { type: "finish" }>) => Promise<void>,
+  onAbort?: () => Promise<void>,
 ): ReadableStream<P> {
+  // Un ReadableStream propio y no un TransformStream: el `cancel` del
+  // transformador no lo llaman todos los runtimes (Bun no; Node solo desde la
+  // 21), y el de la fuente de un ReadableStream, sí.
+  const reader = stream.getReader();
   let pending: Promise<void> | undefined;
-  return stream.pipeThrough(
-    new TransformStream<P, P>({
-      transform(part, controller) {
-        if (part.type === "finish") pending = onFinish(part as Extract<P, { type: "finish" }>);
-        controller.enqueue(part);
-      },
-      flush: () => pending,
-    }),
-  );
+  let settled = false;
+  return new ReadableStream<P>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        await pending;
+        controller.close();
+        return;
+      }
+      if (value.type === "finish" && !settled) {
+        settled = true;
+        pending = onFinish(value as Extract<P, { type: "finish" }>);
+      }
+      controller.enqueue(value);
+    },
+    async cancel(reason) {
+      if (settled) await pending;
+      else {
+        settled = true;
+        await onAbort?.();
+      }
+      await reader.cancel(reason);
+    },
+  });
 }
 
-type CoachProfile = {
+export type CoachProfile = {
   display_name?: string | null;
   age?: number | null;
   date_of_birth?: string | null;
@@ -224,29 +259,62 @@ type CoachProfile = {
 };
 
 /**
- * Prepara un valor escrito por la persona para meterlo en el prompt: quita
- * saltos de línea y marcadores de bloque, recorta y lo envuelve en «» para que
- * se vea dónde empieza y dónde acaba el dato.
- *
- * No es cosmética. La herramienta `actualizar_perfil` del chat deja escribir
- * estos campos, así que sin esto alguien puede guardar "ignora tus
- * instrucciones" en `life_context` y queda inyectado en el system prompt de
- * TODAS las superficies (chat, guía diaria, plan mensual, briefing y repaso
- * nocturno) para siempre, en cada llamada. El prompt dice explícitamente que lo
- * que va entre «» es un dato y no una instrucción.
+ * Columnas de `profiles` que lee `/api/chat` para el prompt del coach: las de
+ * `CoachProfile` y `timezone` (para la fecha de hoy). Un `select` explícito, no
+ * `*`, y la comprobación de abajo hace que no compile si `CoachProfile` gana un
+ * campo que no se lee aquí.
  */
-const PROMPT_FIELD_MAX = 600;
-export function asPromptData(value: string | number | null | undefined): string {
-  const clean = String(value ?? "")
-    // Fences, comillas angulares (cerrar la «» propia) y caracteres de control
-    // (Cc/Cf: saltos de línea, tabuladores y los invisibles de dirección).
-    .replace(/[`«»]+/g, " ")
-    .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, PROMPT_FIELD_MAX);
-  return clean ? `«${clean}»` : "";
-}
+export const COACH_PROFILE_COLUMNS = [
+  "display_name",
+  "age",
+  "date_of_birth",
+  "height_cm",
+  "current_weight_kg",
+  "start_weight_kg",
+  "target_weight_kg",
+  "activity_level",
+  "goal_type",
+  "goal_amount",
+  "goal_target_date",
+  "restrictions",
+  "meal_schedule",
+  "life_context",
+  "family_context",
+  "budget_month_eur",
+  "tone",
+  "diet_pattern",
+  "medical_conditions",
+  "medications",
+  "exercise",
+  "non_negotiable_foods",
+  "food_relationship",
+  "past_struggles",
+  "coach_scope",
+  "pregnancy_status",
+  "menstrual_cycle",
+  "ed_history",
+  "nutrition_numbers",
+  "alcohol",
+  "smoking",
+  "allergy_severity",
+  "disliked_foods",
+  "cuisine_preference",
+  "portions_per_meal",
+  "meals_per_day",
+  "meals_to_plan",
+  "kitchen_equipment",
+  "cooking_skill",
+  "strength_training_experience",
+  "supplements",
+  "locale",
+  "country",
+  "currency",
+  "timezone",
+] as const satisfies readonly (keyof CoachProfile | "timezone")[];
+
+type MissingCoachColumns = Exclude<keyof CoachProfile, (typeof COACH_PROFILE_COLUMNS)[number]>;
+const _allCoachColumns: [MissingCoachColumns] extends [never] ? true : never = true;
+void _allCoachColumns;
 
 /** Nombre del idioma para la instrucción de salida del prompt. */
 export function languageName(locale: string | null | undefined): string {

@@ -1,3 +1,4 @@
+import { asPromptData } from "@/lib/prompt-data";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   COACH_MODEL,
@@ -80,7 +81,7 @@ async function resolveDish(
   if (!key) return { dish, off: [] };
 
   const bought = ingredientNames(shopping);
-  const extra = pantryExtras.map((e) => e.name).join(", ");
+  const extra = pantryExtras.map((e) => asPromptData(e.name)).join(", ");
   const names = [bought, extra].filter(Boolean).join(", ");
 
   try {
@@ -471,7 +472,10 @@ export const fillChildMeals = createServerFn({ method: "POST" })
       const pantryExtras = cleanPantryExtras(
         (row as { pantry_extras?: unknown } | null)?.pantry_extras,
       );
-      const available = [ingredientNames(shopping), pantryExtras.map((e) => e.name).join(", ")]
+      const available = [
+        ingredientNames(shopping),
+        pantryExtras.map((e) => asPromptData(e.name)).join(", "),
+      ]
         .filter(Boolean)
         .join(", ");
 

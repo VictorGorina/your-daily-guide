@@ -1,16 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { waitUntil } from "@vercel/functions";
 import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
   streamText,
   tool,
+  type Tool,
   type UIMessage,
 } from "ai";
 import { z } from "zod";
 
-import { COACH_MODEL, coachSystemPrompt, createAiProvider } from "@/lib/ai-provider.server";
+import {
+  COACH_MODEL,
+  COACH_PROFILE_COLUMNS,
+  coachSystemPrompt,
+  createAiProvider,
+  type CoachProfile,
+} from "@/lib/ai-provider.server";
 import { supabaseFromRequest, unauthorized } from "@/lib/api-auth.server";
+import { type ActionToolName, CHAT_LIMITS, type ChatBody, cleanChatBody } from "@/lib/chat-body";
 import { chatPreflight, lastUserMessage } from "@/lib/chat-preflight";
 import { offTopicMessage } from "@/lib/coach-scope";
 import { EXERCISE_ACK_PREFIX, loggedAckKind, SNACK_ACK_PREFIX } from "@/lib/day-log-ack";
@@ -22,8 +31,10 @@ import {
 } from "@/lib/exercise";
 import { describeSharedSlots } from "@/lib/household-shared";
 import { householdContext, type HouseholdContext } from "@/lib/household.server";
+import { errorText, logEvent } from "@/lib/log.server";
 import { addDays, weekdayName } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS } from "@/lib/profile-fields";
+import { asPromptData } from "@/lib/prompt-data";
 import { enforceUserRateLimit } from "@/lib/rate-limit.server";
 import { zonedTodayISO } from "@/lib/zoned-date";
 
@@ -36,8 +47,10 @@ import { zonedTodayISO } from "@/lib/zoned-date";
 function householdCoachRules(home: HouseholdContext, userId: string): string {
   if (!home.householdId) return "";
   const plannerName =
-    home.members.find((m) => m.userId === home.plannerId)?.displayName ?? "quien lleva la cocina";
-  const myName = home.members.find((m) => m.userId === userId)?.displayName ?? "esta persona";
+    asPromptData(home.members.find((m) => m.userId === home.plannerId)?.displayName) ||
+    "quien lleva la cocina";
+  const myName =
+    asPromptData(home.members.find((m) => m.userId === userId)?.displayName) || "esta persona";
   const isPlanner = !home.plannerId || home.plannerId === userId;
   const kids = home.children;
 
@@ -45,7 +58,10 @@ function householdCoachRules(home: HouseholdContext, userId: string): string {
     if (!kids.length) return "";
     return (
       `\nNiños de la casa: ${kids
-        .map((c) => `${c.name}${c.allergies ? ` (alergia a ${c.allergies})` : ""}`)
+        .map(
+          (c) =>
+            `${asPromptData(c.name)}${c.allergies ? ` (alergia a ${asPromptData(c.allergies)})` : ""}`,
+        )
         .join(", ")}. ` +
       "Si la persona quiere otro plato para un NIÑO concreto un día (su alérgeno, no le gusta, o pide otra cosa para él), usa cambiar_plato_nino con el nombre del niño — no cambiar_plato, que cambia el plato de toda la mesa. Deja 'plato' vacío para que el niño vuelva a comer lo compartido."
     );
@@ -176,7 +192,7 @@ const actionTools = {
       "Actualiza uno o varios datos del perfil (los mismos campos editables en Ajustes > Mis respuestas: horarios, restricciones o alergias, presupuesto mensual, tono, objetivo, nivel de actividad, etc.) cuando la persona cuenta un cambio real y explícito sobre sí misma. Incluye solo los campos que cambian; no inventes ni asumas datos que no te ha dado, y no la uses para peso de hoy ni para la fecha objetivo (esas tienen su propia herramienta).",
     inputSchema: z.object(actualizarPerfilShape),
   }),
-} as const;
+} as const satisfies Record<ActionToolName, Tool>;
 
 /**
  * Contesta el mensaje fijo de "solo me dedico a la alimentación" como un turno
@@ -206,26 +222,67 @@ export const Route = createFileRoute("/api/chat")({
         if (!auth) return unauthorized();
         const { userId, supabase } = auth;
 
-        const body = (await request.json()) as {
-          messages?: UIMessage[];
+        // Cuerpo con tope antes de parsear, y validado (ticket 08): sin esto,
+        // cualquier rol (`system`) o parte (`file`, herramientas inventadas)
+        // llegaba al modelo, y el contexto entraba sin límite al prompt.
+        const text = await request.text();
+        if (text.length > CHAT_LIMITS.bodyBytes) {
+          return new Response("Mensaje demasiado grande", { status: 413 });
+        }
+        let raw: unknown;
+        try {
+          raw = JSON.parse(text);
+        } catch {
+          return new Response("Cuerpo inválido", { status: 400 });
+        }
+        const checked = cleanChatBody(raw, text.length);
+        let body: ChatBody;
+        if (checked.ok) {
+          body = checked.body;
+        } else {
+          const messages = (raw as { messages?: unknown } | null)?.messages;
+          logEvent("warn", "chat_body_rejected", {
+            userId,
+            reason: checked.reason,
+            bytes: text.length,
+            messages: Array.isArray(messages) ? messages.length : null,
+          });
+          // Modo informe hasta ver una semana sin rechazos legítimos en los
+          // logs: con `CHAT_BODY_ENFORCE=1` en Vercel, se rechaza de verdad.
+          if (process.env.CHAT_BODY_ENFORCE === "1") {
+            return new Response("Mensaje no válido", { status: checked.status });
+          }
+          body = raw as ChatBody;
+        }
 
-          profile?: Record<string, unknown> | null;
-          guide?: unknown;
-          log?: unknown;
-          actions?: boolean;
-          today?: string;
-          compra?: { confirmada: boolean; ingredientes: string[] } | null;
-          despensa_extra?: string[];
-          proximos?: Record<string, string>[];
-        };
+        // El perfil sale de la base de datos, no del cuerpo: lo que manda el
+        // cliente entraba tal cual al system prompt. Si la lectura falla, se
+        // usa el del cuerpo (como antes) para no dejar el coach sin perfil.
+        const { data: profileRow, error: profileError } = await supabase
+          .from("profiles")
+          .select(COACH_PROFILE_COLUMNS.join(", "))
+          .eq("id", userId)
+          .maybeSingle();
+        if (profileError) {
+          logEvent("warn", "chat_profile_read_failed", { userId, error: errorText(profileError) });
+        }
+        const profile = (
+          profileError
+            ? ((raw as { profile?: unknown } | null)?.profile ?? null)
+            : (profileRow ?? null)
+        ) as (CoachProfile & { timezone?: string | null }) | null;
+
         // Mensajes, alcance, clave y cuota, en ese orden: fuera de alcance no
         // cuesta ni cupo ni dinero (ver `chatPreflight`). Esta ruta no pasa por
         // `apiPost`, así que traduce ella misma la cuota agotada a un 429 en vez
         // de dejar que suba como error del servidor.
-        const pre = await chatPreflight(body, {
-          readKey: () => process.env.OPENROUTER_API_KEY,
-          consumeQuota: () => enforceUserRateLimit(userId, "chat"),
-        });
+        const pre = await chatPreflight(
+          { messages: body.messages, profile: profile as Record<string, unknown> | null },
+          {
+            readKey: () => process.env.OPENROUTER_API_KEY,
+            consumeQuota: () => enforceUserRateLimit(userId, "chat"),
+          },
+        );
         if (pre.kind === "no-messages") return new Response("Faltan mensajes", { status: 400 });
         if (pre.kind === "off-topic") {
           console.warn("chat off-topic", { userId, reason: pre.reason });
@@ -256,7 +313,7 @@ export const Route = createFileRoute("/api/chat")({
         // convertir en la fecha que necesita cambiar_plato.
         const today = /^\d{4}-\d{2}-\d{2}$/.test(body.today ?? "")
           ? body.today!
-          : zonedTodayISO((body.profile as { timezone?: string } | null)?.timezone ?? undefined);
+          : zonedTodayISO(profile?.timezone ?? undefined);
         const tomorrow = addDays(today, 1);
 
         // Contexto del hogar (mesa, comidas compartidas, niños y quién
@@ -266,24 +323,26 @@ export const Route = createFileRoute("/api/chat")({
         const home = await householdContext(supabase as never, userId);
 
         const system =
-          coachSystemPrompt(body.profile as never, home.householdId ? home.text : null) +
+          coachSystemPrompt(profile, home.householdId ? home.text : null) +
           `\nHoy es ${today} (${weekdayName(today)}). Mañana es ${tomorrow} (${weekdayName(tomorrow)}).` +
           (withTools ? householdCoachRules(home, userId) : "") +
           (body.compra
-            ? `\nIngredientes que ya tiene comprados este mes: ${body.compra.ingredientes.join(", ") || "sin lista"}.` +
+            ? `\nIngredientes que ya tiene comprados este mes: ${body.compra.ingredientes.map((i) => asPromptData(i)).join(", ") || "sin lista"}.` +
               (body.compra.confirmada
                 ? " La compra está confirmada: no se puede añadir nada a la lista."
                 : " La compra aún no está confirmada.")
             : "") +
           (body.despensa_extra?.length
-            ? `\nAdemás dice tener en casa (fuera de la lista de la compra, no lo añadas a la lista pero puedes proponer platos con ello): ${body.despensa_extra.join(", ")}.`
+            ? `\nAdemás dice tener en casa (fuera de la lista de la compra, no lo añadas a la lista pero puedes proponer platos con ello): ${body.despensa_extra.map((i) => asPromptData(i)).join(", ")}.`
             : "") +
           (body.proximos?.length
-            ? `\nMenú de los próximos días: ${JSON.stringify(body.proximos)}`
+            ? `\nMenú de los próximos días: ${asPromptData(JSON.stringify(body.proximos), CHAT_LIMITS.guideBytes)}`
             : "") +
-          (body.guide ? `\nGuía de hoy ya enviada: ${JSON.stringify(body.guide)}` : "") +
+          (body.guide
+            ? `\nGuía de hoy ya enviada: ${asPromptData(JSON.stringify(body.guide), CHAT_LIMITS.guideBytes)}`
+            : "") +
           (body.log
-            ? `\nLo que ha pasado hoy de verdad (peso, hábitos, notas): ${JSON.stringify(body.log)}`
+            ? `\nLo que ha pasado hoy de verdad (peso, hábitos, notas): ${asPromptData(JSON.stringify(body.log), CHAT_LIMITS.logBytes)}`
             : "") +
           (withTools
             ? "\nPuedes cambiar lo que la persona ve en pantalla con tus herramientas (peso, hábitos, deporte de hoy, guía del día, platos sueltos del plan, reajuste del plan mensual, recálculo del objetivo, fecha objetivo y el resto del perfil)." +
@@ -309,6 +368,11 @@ export const Route = createFileRoute("/api/chat")({
           messages: await convertToModelMessages(messages),
           ...(withTools ? { tools: actionTools } : {}),
         });
+        // Si el cliente corta (cierra el chat a mitad), el modelo sigue hasta
+        // el final y el middleware de gasto apunta el coste real con la parte
+        // `finish` (ticket 08). Sin esto, esa llamada se cobraba sin contar
+        // para el tope de la persona.
+        waitUntil(Promise.resolve(result.consumeStream()));
 
         return result.toUIMessageStreamResponse({ originalMessages: messages });
       },
