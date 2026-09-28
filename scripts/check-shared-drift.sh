@@ -76,11 +76,13 @@ for f in energy.ts exercise-energy.ts portion.ts dish-key.ts; do
 done
 
 # --- plan-shared, export a export ---
-# Cuerpo de `export (async )?(function|const) <nombre>`: desde esa línea hasta
+# También constantes y funciones privadas de las que dependen los exports (el
+# 28-09 se escapó `DIA_NOMBRES`: el móvil la tenía en otro orden).
+# Cuerpo de `(export )?(async )?(function|const) <nombre>`: desde esa línea hasta
 # que los ({[ abiertos se cierran en una línea que acaba en ; o }.
 extract_export() {
   awk -v name="$2" '
-    !on && $0 ~ "^export (async )?(function|const) " name "[^A-Za-z0-9_]" { on=1 }
+    !on && $0 ~ "^(export )?(async )?(function|const) " name "[^A-Za-z0-9_]" { on=1 }
     on {
       print
       line=$0; opens=gsub(/[({[]/, "", line)
@@ -92,7 +94,9 @@ extract_export() {
 }
 
 strip_comments() {
+  # El `export ` inicial no cuenta: una copia puede exportar lo que la otra no.
   sed -E \
+    -e 's/^export //' \
     -e '/^[[:space:]]*\/\//d' \
     -e '/^[[:space:]]*\/\*/d' \
     -e '/^[[:space:]]*\*.*$/d' \
@@ -106,8 +110,8 @@ web_plan_files=$(ls src/lib/plan/*.ts src/lib/shopping/*.ts | grep -v '\.test\.t
 while read -r name; do
   case "$name" in ''|'#'*) continue ;; esac
   # shellcheck disable=SC2086
-  web_file=$(grep -lE "^export (async )?(function|const) ${name}[^A-Za-z0-9_]" $web_plan_files | head -1 || true)
-  if [ -z "$web_file" ] || ! grep -qE "^export (async )?(function|const) ${name}[^A-Za-z0-9_]" mobile/lib/plan-shared.ts; then
+  web_file=$(grep -lE "^(export )?(async )?(function|const) ${name}[^A-Za-z0-9_]" $web_plan_files | head -1 || true)
+  if [ -z "$web_file" ] || ! grep -qE "^(export )?(async )?(function|const) ${name}[^A-Za-z0-9_]" mobile/lib/plan-shared.ts; then
     echo "DRIFT (plan-shared): $name ya no existe en las dos apps (actualiza scripts/shared-exports.txt)"
     fail=1
     continue

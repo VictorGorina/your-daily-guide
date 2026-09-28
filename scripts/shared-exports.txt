@@ -5,11 +5,14 @@
 # de aquí con un comentario "# divergente: <nombre> — <motivo>".
 CADENCES
 DEFAULT_MEAL_SLOTS
+DIA_NOMBRES
+FULL_MONTH_COVERAGE
 MEAL_SLOTS
 MEAL_SLOT_FIELD
 MEAL_SLOT_LABEL
 NEXT_MONTH_UNLOCK_DAYS
 PLAN_TARGETS_VERSION
+PRODUCE_UNIT_GRAMS
 WEEK_COUNT
 addMonths
 approxUnitGrams
@@ -35,6 +38,7 @@ groupByTrip
 homeTotal
 isBeforeAppStart
 isCanonicalShopping
+isMealSlot
 isMonthActionable
 isNextMonthUnlocked
 isPinned
@@ -45,7 +49,9 @@ monthCoverage
 monthParts
 monthTitle
 nextMonthISO
+normDay
 normName
+normalizeForMatch
 offListNote
 ownedTotal
 parseMealSlotsLegacy
@@ -57,9 +63,12 @@ planForDate
 planMonthStatus
 planNavBounds
 planSlotIndex
+projectItemForTrip
 projectTrips
 reconcileHabits
+roundForBuying
 sameHabits
+sameJson
 shoppingTotal
 sortByPending
 splitTripByStatus
@@ -74,6 +83,7 @@ tripsForCoverage
 tripsOfCadence
 upcomingMeals
 weekDayCounts
+weekOfDay
 weekdayName
 withOwnedMark
 withPantryExtra

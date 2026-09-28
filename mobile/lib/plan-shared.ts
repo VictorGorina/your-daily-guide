@@ -245,9 +245,16 @@ export type PlanFitMark = {
 export const PLAN_TARGETS_VERSION = 1;
 
 const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+// Lunes primero, igual que la web: `weekdayName` lo indexa con `weekdayIndex`
+// (lunes = 0). Vigilado por el drift check y por `src/lib/mobile-parity.test.ts`.
+const DIA_NOMBRES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
 
-const normDay = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+const normDay = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 
 /** Posición de una fecha dentro del plan (semana 0-3, día 0-6 lunes→domingo). */
 export const planCursor = (date: string) => {
