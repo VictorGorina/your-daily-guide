@@ -99,9 +99,9 @@ strip_comments() {
     -e '/^[[:space:]]*$/d'
 }
 
-# Mientras el ticket 36 no porte al móvil el arreglo de `reconcileHabits`
-# (MOB-07), este bloque avisa pero no hace fallar el script.
-PLAN_SHARED_BLOCKING="${PLAN_SHARED_BLOCKING:-0}"
+# Bloqueante desde el ticket 36 (MOB-07 portado). PLAN_SHARED_BLOCKING=0 lo
+# deja en aviso, para investigar una deriva sin tumbar el CI en local.
+PLAN_SHARED_BLOCKING="${PLAN_SHARED_BLOCKING:-1}"
 web_plan_files=$(ls src/lib/plan/*.ts src/lib/shopping/*.ts | grep -v '\.test\.ts$')
 while read -r name; do
   case "$name" in ''|'#'*) continue ;; esac

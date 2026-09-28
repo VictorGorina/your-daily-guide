@@ -7,6 +7,7 @@
  * nativa recibe datos ya saneados de `/api/v1/*`.
  */
 
+import { dateInMonth, weekdayIndex } from "./dates";
 import {
   isSharedSlot,
   MEAL_KEYS,
@@ -246,20 +247,18 @@ export const PLAN_TARGETS_VERSION = 1;
 const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DIA_NOMBRES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
-const normDay = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+const normDay = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
 /** Posición de una fecha dentro del plan (semana 0-3, día 0-6 lunes→domingo). */
 export const planCursor = (date: string) => {
   const dayOfMonth = Number(date.slice(8, 10));
   const weekIndex = Math.min(Math.max(Math.floor((dayOfMonth - 1) / 7), 0), 3);
-  const jsDay = new Date(`${date}T00:00:00`).getDay();
-  const dayIndex = (jsDay + 6) % 7;
+  const dayIndex = weekdayIndex(date);
   return { weekIndex, dayIndex, dayName: DAY_NAMES[dayIndex] ?? "Lunes" };
 };
 
 /** Nombre del día de la semana de una fecha, sin depender del locale del entorno. */
-export const weekdayName = (date: string) =>
-  DIA_NOMBRES[new Date(`${date}T00:00:00`).getDay()] ?? "";
+export const weekdayName = (date: string) => DIA_NOMBRES[weekdayIndex(date)] ?? "";
 
 /**
  * Posición exacta (semana, día) que ocupa una fecha dentro del plan. Es la que
@@ -277,7 +276,7 @@ export function planSlotIndex(
   if (!week) return null;
   const target = normDay(weekdayName(date));
   const byName = week.days.findIndex((d) => normDay(d.day).includes(target));
-  const dayIndex = byName >= 0 ? byName : (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+  const dayIndex = byName >= 0 ? byName : weekdayIndex(date);
   return week.days[dayIndex] ? { weekIndex, dayIndex } : null;
 }
 
@@ -526,6 +525,22 @@ export function reconcileHabits(
   const next = meals.map((m) => {
     const existing = byLabel.get(m.moment);
     if (!existing) return { label: m.moment, done: false, plannedIdea: m.idea || undefined };
+    // Una confirmación ("comí esto" / "comí otra cosa") queda obsoleta si el
+    // plato que hay AHORA en ese momento ya no es el que se confirmó: pasa
+    // cuando el hogar espeja por detrás un cambio del planificador sobre una
+    // comida compartida, nunca por una recolocación automática (que no toca
+    // hoy). Se trata como una comida nueva — si no, Hoy seguía marcando como
+    // "ya comido" un plato distinto al que de verdad se sirvió, y la barra de
+    // macros sumaba las kcal congeladas del plato antiguo bajo el nombre del
+    // nuevo (MOB-07: el arreglo de la web del 16-09 no había llegado aquí).
+    if (
+      existing.status &&
+      existing.status !== "salteo" &&
+      existing.confirmedIdea &&
+      existing.confirmedIdea !== m.idea
+    ) {
+      return { label: m.moment, done: false, plannedIdea: m.idea || undefined };
+    }
     // `plannedIdea` solo se rellena si falta: una vez congelado no se toca ni
     // aunque el plato del plan haya cambiado (que es justo lo que pasa tras un
     // cambio a mano — `setPlanMeal` escribe el plato nuevo en el plan).
@@ -609,7 +624,7 @@ export function diffFutureMeals(
   const totalDays = daysInMonth(month);
 
   for (let d = 1; d <= totalDays; d++) {
-    const date = `${month}-${String(d).padStart(2, "0")}`;
+    const date = dateInMonth(month, d);
     if (date <= today) continue; // solo días futuros
 
     const mealsBefore = mealsForDate(before, date);
@@ -681,6 +696,27 @@ export function childPureeGaps(
 }
 
 /**
+ * Marcas de "elegido a mano" de un día de un miembro del hogar tras espejar las
+ * comidas compartidas: igual que el plato de un niño, la marca viaja con su
+ * comida. En un slot compartido manda la del planificador (el plato es suyo) y
+ * en el resto se conserva la propia. Si no, un miembro que tenía fijada su cena
+ * en solitario seguiría protegiendo el plato del planificador cuando esa cena
+ * pasa a ser compartida.
+ */
+export function mirrorPinned(
+  own: PlanDay,
+  source: PlanDay,
+  sharedSlots: ReadonlySet<string>,
+): MealSlot[] | undefined {
+  const pins = new Set([
+    ...(own.pinned ?? []).filter((s) => !sharedSlots.has(s)),
+    ...(source.pinned ?? []).filter((s) => sharedSlots.has(s)),
+  ]);
+  const ordered = MEAL_SLOTS.filter((s) => pins.has(s));
+  return ordered.length ? ordered : undefined;
+}
+
+/**
  * El día que ve un miembro del hogar (issue 05, D1): las comidas compartidas
  * ese día de la semana muestran el plato del planificador; las demás, el
  * suyo propio. `weekday` es el índice de día dentro de la semana del plan
@@ -737,12 +773,8 @@ export function composeDayForUser(
 
   // La marca de "elegido a mano" viaja igual: en un slot compartido, la del
   // planificador; en el resto, la propia.
-  const pins = new Set([
-    ...(mineDay.pinned ?? []).filter((s) => !sharedSet.has(s)),
-    ...(plannerDay.pinned ?? []).filter((s) => sharedSet.has(s)),
-  ]);
-  const pinned = MEAL_SLOTS.filter((s) => pins.has(s));
-  if (pinned.length) next.pinned = pinned;
+  const pinned = mirrorPinned(mineDay, plannerDay, sharedSet);
+  if (pinned) next.pinned = pinned;
   else delete next.pinned;
   return next;
 }
@@ -777,7 +809,7 @@ export function composeMonthlyPlanForMember(
       })),
       coverage: planner.coverage,
       cadence: planner.cadence,
-    } as MonthlyPlan);
+    } satisfies MonthlyPlan);
 
   return {
     ...base,
@@ -883,7 +915,7 @@ export const normName = (s: string) =>
   String(s ?? "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
