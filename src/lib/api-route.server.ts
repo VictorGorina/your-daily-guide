@@ -16,6 +16,7 @@
 type ServerFn<TOutput> = (opts: { data: never }) => Promise<TOutput>;
 
 import { RateLimitError } from "@/lib/rate-limit-error";
+import { captureServerException } from "@/lib/sentry.server";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
 
 export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
@@ -60,9 +61,11 @@ export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
       // texto (el genérico de abajo es para lo que no se debe enseñar).
       if (error instanceof UserFacingError) {
         console.error("apiPost", error);
+        captureServerException(error, { where: "apiPost" });
         return Response.json({ error: raw }, { status: 500 });
       }
       console.error("apiPost", error);
+      captureServerException(error, { where: "apiPost" });
       return Response.json(
         { error: "No hemos podido completar la acción. Inténtalo de nuevo." },
         { status: 500 },

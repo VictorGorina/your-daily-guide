@@ -51,6 +51,7 @@
  *   `PASSWORD_RULES` se han desalineado, y el alta no manda el correo.
  */
 import { redactFields } from "@/lib/log-redact";
+import { captureServerEvent } from "@/lib/sentry.server";
 
 export type LogLevel = "info" | "warn" | "error";
 
@@ -66,6 +67,12 @@ export function errorText(error: unknown): string {
   return String(error);
 }
 
+/**
+ * Además del log, van a Sentry (ticket 35): todo `error` y estos `warn`, que
+ * suelen avisar de algo que se repite (el catálogo de arriba dice cuándo).
+ */
+const SENTRY_WARN_EVENTS = new Set(["plan_cas_exhausted", "daily_cas_exhausted"]);
+
 export function logEvent(
   level: LogLevel,
   event: string,
@@ -78,4 +85,7 @@ export function logEvent(
     ...redactFields(fields),
   });
   (level === "error" ? console.error : level === "warn" ? console.warn : console.info)(line);
+  if (level === "error" || (level === "warn" && SENTRY_WARN_EVENTS.has(event))) {
+    captureServerEvent(level, event, redactFields(fields));
+  }
 }

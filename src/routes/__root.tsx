@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createClientOnlyFn } from "@tanstack/react-start";
 import {
   Outlet,
   Link,
@@ -17,6 +18,11 @@ import i18n from "@/lib/i18n";
 import { applyTheme, storedTheme } from "@/lib/theme";
 import { useLocale } from "@/lib/use-locale";
 import appCss from "../styles.css?url";
+
+// `sentry.client.ts` no puede entrar en el bundle del servidor (la protección de
+// imports bloquea `*.client.*` allí, y `__root` se renderiza en el servidor):
+// `createClientOnlyFn` lo deja fuera y en el servidor devuelve `undefined`.
+const loadSentry = createClientOnlyFn(() => import("@/lib/sentry.client"));
 
 function NotFoundComponent() {
   return (
@@ -134,6 +140,16 @@ function RootComponent() {
 
   useEffect(() => {
     applyTheme(storedTheme());
+  }, []);
+
+  useEffect(() => {
+    // Errores del navegador a Sentry (ticket 35), solo con DSN y en diferido:
+    // sin él, `@sentry/react` ni se descarga.
+    const dsn = import.meta.env.VITE_SENTRY_DSN;
+    if (!dsn) return;
+    void loadSentry()
+      ?.then(({ initSentry }) => initSentry(dsn))
+      .catch((error) => console.warn("root: no se pudo cargar Sentry", error));
   }, []);
 
   useEffect(() => {
