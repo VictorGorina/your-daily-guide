@@ -1,5 +1,3 @@
-import { ValidationError } from "@/lib/validation-error";
-
 /**
  * Guard de contenido para el texto libre que escribe la persona: un plato, un
  * picoteo, un ingrediente o un nombre tienen que ser eso y no una broma.
@@ -171,11 +169,3 @@ export const BLOCKED_NAME_MESSAGE = "Ese nombre no vale. Escribe uno de verdad."
  */
 export const VAGUE_DISH_MESSAGE =
   "¿Qué comiste? Concreta un poco el plato, por ejemplo «bocadillo de jamón».";
-
-/**
- * Versión para un `.validator()` de server function: lanza `ValidationError`,
- * que `apiPost` traduce a un 400 con este mensaje tal cual en pantalla.
- */
-export function assertCleanFood(text: string): void {
-  if (blockedTermIn(text)) throw new ValidationError(BLOCKED_FOOD_MESSAGE);
-}

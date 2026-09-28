@@ -6,7 +6,8 @@ import {
   PLAN_MODEL,
   requireAiKey,
 } from "@/lib/ai-provider.server";
-import { assertCleanFood, BLOCKED_FOOD_MESSAGE, VAGUE_DISH_MESSAGE } from "@/lib/content-guard";
+import { assertCleanFood } from "@/lib/assert-clean-food";
+import { BLOCKED_FOOD_MESSAGE, VAGUE_DISH_MESSAGE } from "@/lib/content-guard";
 import { requestDeadline } from "@/lib/deadline";
 import {
   EMPTY_SCHEDULE,

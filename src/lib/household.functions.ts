@@ -1,5 +1,5 @@
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertCleanFood } from "@/lib/content-guard";
+import { assertCleanFood } from "@/lib/assert-clean-food";
 import type { MealStatus } from "@/lib/daily";
 import {
   cleanHomeSchedule,

@@ -5,7 +5,7 @@ import {
   createAiProvider,
   requireAiKey,
 } from "@/lib/ai-provider.server";
-import { assertCleanFood } from "@/lib/content-guard";
+import { assertCleanFood } from "@/lib/assert-clean-food";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";
 import {
   cadenceOf,

@@ -485,7 +485,7 @@ dos redes:
 - **Lo que se escribe como comida tiene que ser comida.**
   [src/lib/content-guard.ts](src/lib/content-guard.ts) (puro, testeado, copia en
   `mobile/lib/content-guard.ts`) compara **por token entero, nunca por subcadena** — si no,
-  "cacahuete", "cacao", "penne" y "queso de tetilla" se caen — y `assertCleanFood` va en los
+  "cacahuete", "cacao", "penne" y "queso de tetilla" se caen — y `assertCleanFood` (`assert-clean-food.ts`, solo web) va en los
   `.validator()` de `setPlanMeal`, `setChildMeal`, `setPantryExtra`, el `cleanText` de los
   snacks y el `actual` de `propagateLogToFamily`. Por `apiPost`, eso cubre web, móvil y las
   herramientas del coach de una vez. La segunda red no cuesta llamadas nuevas: `resolveDish` y
