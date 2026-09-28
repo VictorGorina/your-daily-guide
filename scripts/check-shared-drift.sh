@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Comprueba que los archivos compartidos entre src/lib/ (web) y mobile/lib/
-# no hayan divergido funcionalmente. Los que deben ser idénticos byte a byte
-# se comparan con `diff`; los que difieren solo en imports y cabecera se
-# comparan sin las primeras líneas de cada archivo.
+# Comprueba que el código compartido entre src/lib/ (web) y mobile/lib/ no haya
+# divergido funcionalmente. Tres categorías (ticket 10 de la auditoría):
 #
-# Archivos intencionalmente divergentes (daily.ts, plan-shared.ts,
-# use-coach-actions.ts, household-shared.ts, macros.ts, etc.) NO se
-# comprueban: tienen código específico de plataforma.
+#  1. Idénticos byte a byte (`diff`): archivos sin imports que el móvil no tenga.
+#  2. Iguales salvo imports y comentarios: se comparan normalizados.
+#  3. plan-shared, export a export: la web lo tiene partido en src/lib/plan/ y
+#     src/lib/shopping/; el móvil, en un solo archivo. La lista de exports está
+#     en scripts/shared-exports.txt.
+#
+# Los archivos que divergen a propósito (daily.ts, household.ts,
+# household-shared.ts, macros.ts, use-*.ts, i18n.ts, zoned-date.ts,
+# recipe-warm.ts, exercise.ts, day-settle.ts, plan-recalc.ts,
+# pending-chat-message.ts) NO se comprueban: tienen código de cada plataforma.
+# Para vigilar uno nuevo, añádelo a la lista que le toque.
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -14,7 +20,7 @@ cd "$(git rev-parse --show-toplevel)"
 fail=0
 
 # --- Archivos que deben ser 100 % idénticos ---
-for f in age.ts food-categories.ts; do
+for f in age.ts food-categories.ts dates.ts; do
   if ! diff -q "src/lib/$f" "mobile/lib/$f" > /dev/null 2>&1; then
     echo "DRIFT (idéntico): $f"
     diff --unified=2 "src/lib/$f" "mobile/lib/$f" || true
@@ -26,20 +32,28 @@ done
 # Se compara desde la primera línea que no sea import, comentario de cabecera
 # ni línea vacía. Cualquier diferencia después de eso es drift funcional.
 strip_portable() {
-  # Elimina líneas que se esperan diferentes entre web y móvil: imports,
-  # comentarios puros (// y bloques JSDoc) y líneas vacías. Así la comparación
-  # se centra en el código funcional, no en la documentación ni los paths.
-  # Nota: BSD sed (macOS) no soporta \s — usamos [[:space:]].
-  sed -E \
-    -e '/^[[:space:]]*import /d' \
+  # Quita lo que se espera distinto entre web y móvil: imports (también los de
+  # varias líneas) y reexportaciones `export { … } from`, que solo cambian de
+  # ruta; comentarios (// y bloques JSDoc) y líneas vacías.
+  # Nota: BSD sed/awk (macOS) no soportan \s — usamos [[:space:]].
+  awk '
+    /^[[:space:]]*(import|export)[[:space:]]+(type[[:space:]]+)?\{/ || /^[[:space:]]*import[[:space:]]/ {
+      if ($0 ~ /^[[:space:]]*export/ && $0 !~ /\}[[:space:]]*from|^[[:space:]]*export[[:space:]]+(type[[:space:]]+)?\{[^}]*$/) { print; next }
+      if ($0 !~ /from[[:space:]]+["'\''].*["'\''];?[[:space:]]*$/ && $0 !~ /^[[:space:]]*import[[:space:]]+["'\'']/) skip=1
+      next
+    }
+    skip { if ($0 ~ /from[[:space:]]+["'\'']/) skip=0; next }
+    { print }
+  ' "$1" | sed -E \
     -e '/^[[:space:]]*\/\//d' \
     -e '/^[[:space:]]*\/\*/d' \
     -e '/^[[:space:]]*\*.*$/d' \
-    -e '/^[[:space:]]*$/d' \
-    "$1"
+    -e '/^[[:space:]]*$/d'
 }
 
-for f in perishability.ts quotes.ts profile-fields.ts day-log-ack.ts; do
+for f in perishability.ts quotes.ts profile-fields.ts day-log-ack.ts auth-errors.ts \
+  demo-profile.ts regions.ts snacks.ts week-nav.ts content-guard.ts day-balance.ts \
+  month-intake.ts use-shopping-mutation.ts; do
   a=$(strip_portable "src/lib/$f")
   b=$(strip_portable "mobile/lib/$f")
   if [ "$a" != "$b" ]; then
@@ -60,6 +74,56 @@ for f in energy.ts exercise-energy.ts portion.ts dish-key.ts; do
     fail=1
   fi
 done
+
+# --- plan-shared, export a export ---
+# Cuerpo de `export (async )?(function|const) <nombre>`: desde esa línea hasta
+# que los ({[ abiertos se cierran en una línea que acaba en ; o }.
+extract_export() {
+  awk -v name="$2" '
+    !on && $0 ~ "^export (async )?(function|const) " name "[^A-Za-z0-9_]" { on=1 }
+    on {
+      print
+      line=$0; opens=gsub(/[({[]/, "", line)
+      line=$0; closes=gsub(/[)}\]]/, "", line)
+      depth += opens - closes
+      if (depth <= 0 && $0 ~ /[;}][[:space:]]*$/) exit
+    }
+  ' "$1"
+}
+
+strip_comments() {
+  sed -E \
+    -e '/^[[:space:]]*\/\//d' \
+    -e '/^[[:space:]]*\/\*/d' \
+    -e '/^[[:space:]]*\*.*$/d' \
+    -e '/^[[:space:]]*$/d'
+}
+
+# Mientras el ticket 36 no porte al móvil el arreglo de `reconcileHabits`
+# (MOB-07), este bloque avisa pero no hace fallar el script.
+PLAN_SHARED_BLOCKING="${PLAN_SHARED_BLOCKING:-0}"
+web_plan_files=$(ls src/lib/plan/*.ts src/lib/shopping/*.ts | grep -v '\.test\.ts$')
+while read -r name; do
+  case "$name" in ''|'#'*) continue ;; esac
+  # shellcheck disable=SC2086
+  web_file=$(grep -lE "^export (async )?(function|const) ${name}[^A-Za-z0-9_]" $web_plan_files | head -1 || true)
+  if [ -z "$web_file" ] || ! grep -qE "^export (async )?(function|const) ${name}[^A-Za-z0-9_]" mobile/lib/plan-shared.ts; then
+    echo "DRIFT (plan-shared): $name ya no existe en las dos apps (actualiza scripts/shared-exports.txt)"
+    fail=1
+    continue
+  fi
+  a=$(extract_export "$web_file" "$name" | strip_comments)
+  b=$(extract_export mobile/lib/plan-shared.ts "$name" | strip_comments)
+  if [ "$a" != "$b" ]; then
+    if [ "$PLAN_SHARED_BLOCKING" = "1" ]; then
+      echo "DRIFT (plan-shared): $name ($web_file)"
+      fail=1
+    else
+      echo "DRIFT (plan-shared, informativo): $name ($web_file)"
+    fi
+    diff <(echo "$a") <(echo "$b") || true
+  fi
+done < scripts/shared-exports.txt
 
 # --- Catálogos i18n: mismas claves en ES/EN y en web/móvil (requiere jq) ---
 # Los catálogos son intencionalmente un espejo exacto entre plataformas (a
