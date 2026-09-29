@@ -2,7 +2,6 @@ import { useChat } from "@ai-sdk/react";
 
 import { authHeaders } from "@/lib/auth-headers";
 import { useQuery } from "@tanstack/react-query";
-import { useRouterState } from "@tanstack/react-router";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
@@ -38,6 +37,7 @@ import {
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { FAB_CLASS } from "@/components/coach-fab";
 import { DictateButton } from "@/components/dictate-button";
 import {
   addMessage,
@@ -97,15 +97,18 @@ function ActionRow({ action }: { action: ActionEntry }) {
   );
 }
 
-export default function CoachPanel() {
-  const [open, setOpen] = useState(false);
+// Se carga aparte (ver coach-fab.tsx): `hidden` y la posición del botón llegan de allí.
+export default function CoachPanel({
+  hidden,
+  defaultOpen,
+}: {
+  hidden: boolean;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [actions, setActions] = useState<ActionEntry[]>([]);
   const [flash, setFlash] = useState<ActionState | null>(null);
   const date = todayISO();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // La pantalla /chat ya es una conversación a pantalla completa: mostrar la
-  // burbuja encima sería duplicar la misma interfaz dos veces.
-  const onChatScreen = pathname.startsWith("/chat");
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const todayQ = useQuery({
@@ -245,7 +248,7 @@ export default function CoachPanel() {
     void sendMessage({ text });
   };
 
-  if (!profileQ.data?.onboarding_completed || onChatScreen) return null;
+  if (hidden) return null;
 
   const working = actions.some((a) => a.state === "running");
   const lastAction = actions[actions.length - 1];
@@ -274,7 +277,7 @@ export default function CoachPanel() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Hablar con el coach"
-        className={`fixed bottom-[calc(6.5rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 grid h-14 w-14 place-items-center rounded-full shadow-[0_6px_18px_-6px_rgba(0,0,0,.35)] transition-all duration-300 active:scale-90 ${
+        className={`${FAB_CLASS} ${
           flash === "done"
             ? "bg-primary text-primary-foreground scale-105"
             : flash === "error"
