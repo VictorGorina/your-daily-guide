@@ -290,7 +290,8 @@ Invariantes que un cambio suele romper sin querer:
   `fetchOwnMonthlyPlan`), o lanza `PGRST116`. El copy no da por hecho "tu plan" a quien no
   planifica. "Este plato se cambió a mano" se decide con `isPinnedByViewer`, no con `isPinned`.
 
-**Notificaciones push:** Web Push real (VAPID) vía `@pushforge/builder`, elegido porque solo usa
+**Notificaciones push** (detalle en «Push notifications» de AGENTS.md)**:** Web Push real (VAPID)
+vía `@pushforge/builder`, elegido porque solo usa
 Web Crypto API (el paquete `web-push` de npm no funciona en el runtime de despliegue). El disparo
 periódico no usa un cron nativo de la plataforma — un workflow de GitHub Actions
 ([.github/workflows/push-dispatch.yml](.github/workflows/push-dispatch.yml)) llama cada 15 min a
