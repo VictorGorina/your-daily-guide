@@ -235,7 +235,7 @@ export function WeekPager({
         ref={viewportRef}
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        className="overflow-hidden rounded-2xl outline-none transition-opacity duration-150"
+        className="overflow-hidden rounded-2xl outline-none transition-opacity duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         style={{ touchAction: "pan-y pinch-zoom", opacity: fading ? 0 : 1 }}
       >
         <div className="flex" style={{ transform: initialTransform }}>
