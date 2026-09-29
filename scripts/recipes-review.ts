@@ -8,7 +8,8 @@
  * ingredientes en crudo y las kcal que dan, para revisarlas a mano. Objetivo:
  * las 100 más usadas revisadas en el primer mes.
  *
- * Solo lee, salvo con `--mark <dish_key>`, que marca esa receta como revisada:
+ * Solo lee, salvo con `--mark <dish_key>`, que marca esa receta como revisada
+ * tras pedir confirmación (`--yes` se la salta):
  * una receta revisada no se vuelve a descomponer aunque cambie
  * `PIPELINE_VERSION`. Corregir una receta a mano es editar su fila en el panel de
  * Supabase y después marcarla.
@@ -24,9 +25,15 @@ import { createClient } from "@supabase/supabase-js";
 
 import { macrosOfRecipe, type CanonicalIngredient } from "@/lib/nutrition/recipe";
 
+import { confirmWrite } from "./confirm";
+
 const { values: args } = parseArgs({
   args: process.argv.slice(2),
-  options: { limit: { type: "string", default: "30" }, mark: { type: "string" } },
+  options: {
+    limit: { type: "string", default: "30" },
+    mark: { type: "string" },
+    yes: { type: "boolean", short: "y" },
+  },
 });
 
 const url = process.env.SUPABASE_URL;
@@ -38,6 +45,25 @@ if (!url || !key) {
 const db = createClient(url, key, { auth: { persistSession: false } });
 
 if (args.mark) {
+  const { data: found, error: readError } = await db
+    .from("dish_recipes")
+    .select("dish_key, dish_label, reviewed")
+    .eq("dish_key", args.mark);
+  if (readError) throw readError;
+  const row = found?.[0];
+  if (!row) {
+    console.log(`No existe «${args.mark}».`);
+    process.exit(0);
+  }
+  if (row.reviewed) {
+    console.log(`«${args.mark}» ya estaba revisada.`);
+    process.exit(0);
+  }
+  const summary = `Voy a actualizar 1 fila en dish_recipes: «${row.dish_label}» (${row.dish_key}) → reviewed = true.`;
+  if (!(await confirmWrite(summary, args.yes))) {
+    console.log("Cancelado: no se ha escrito nada.");
+    process.exit(1);
+  }
   const { data, error } = await db
     .from("dish_recipes")
     .update({ reviewed: true, updated_at: new Date().toISOString() })

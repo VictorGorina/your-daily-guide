@@ -4,7 +4,8 @@
  * fdcId de USDA, para pasarlos a la tabla (`foods.data.ts`, con su fuente) o
  * corregirlos. Sustituye a la tabla `unmatched_ingredients` que proponía el 04.
  *
- * Solo lee, salvo `--mark <key>`, que la marca como revisada.
+ * Solo lee, salvo `--mark <key>`, que la marca como revisada tras pedir
+ * confirmación (`--yes` se la salta).
  *
  *   bun run foods:review
  *   bun run foods:review --mark usda-171401
@@ -13,9 +14,15 @@ import { parseArgs } from "node:util";
 
 import { createClient } from "@supabase/supabase-js";
 
+import { confirmWrite } from "./confirm";
+
 const { values: args } = parseArgs({
   args: process.argv.slice(2),
-  options: { limit: { type: "string", default: "50" }, mark: { type: "string" } },
+  options: {
+    limit: { type: "string", default: "50" },
+    mark: { type: "string" },
+    yes: { type: "boolean", short: "y" },
+  },
 });
 
 const url = process.env.SUPABASE_URL;
@@ -27,6 +34,25 @@ if (!url || !key) {
 const db = createClient(url, key, { auth: { persistSession: false } });
 
 if (args.mark) {
+  const { data: found, error: readError } = await db
+    .from("foods_extra")
+    .select("key, label, reviewed")
+    .eq("key", args.mark);
+  if (readError) throw readError;
+  const row = found?.[0];
+  if (!row) {
+    console.log(`No existe «${args.mark}».`);
+    process.exit(0);
+  }
+  if (row.reviewed) {
+    console.log(`${args.mark} ya estaba revisada.`);
+    process.exit(0);
+  }
+  const summary = `Voy a actualizar 1 fila en foods_extra: «${row.label}» (${row.key}) → reviewed = true.`;
+  if (!(await confirmWrite(summary, args.yes))) {
+    console.log("Cancelado: no se ha escrito nada.");
+    process.exit(1);
+  }
   const { data, error } = await db
     .from("foods_extra")
     .update({ reviewed: true })
