@@ -120,7 +120,10 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
       ignoreOutdatedRequests: true,
     },
     server: {
-      host: "::",
+      // Solo esta máquina por defecto: con "::" cualquiera en la misma wifi llegaba al
+      // servidor de desarrollo. Pon `DEV_HOST=::` para abrirlo en la red local (probar la
+      // app móvil en un iPhone real contra tu máquina, ver mobile/AGENTS.md).
+      host: process.env.DEV_HOST ?? "127.0.0.1",
       port: 8080,
       watch: { awaitWriteFinish: { stabilityThreshold: 1000, pollInterval: 100 } },
     },

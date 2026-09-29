@@ -71,7 +71,14 @@ npx expo start
 ```
 
 `EXPO_PUBLIC_API_URL` apunta al `bun run dev` de la web. En el simulador vale `localhost`; desde un
-iPhone real hace falta la IP de la Mac en la red local.
+iPhone real hace falta la IP de la Mac en la red local **y** arrancar la web con `DEV_HOST=:: bun
+run dev`: por defecto el servidor de desarrollo solo escucha en `127.0.0.1`, para que nadie más
+en la misma wifi llegue a él.
+
+Los perfiles `preview` y `production` de [eas.json](eas.json) apuntan al **mismo** proyecto de
+Supabase y a la misma API de producción. Es una decisión, no un olvido: el plan gratuito da un
+solo proyecto, así que un build de prueba escribe datos reales (usa un perfil demo). Un proyecto
+de staging sería un coste nuevo y queda fuera por ahora.
 
 Requiere **Xcode** para el simulador (no basta con las Command Line Tools) y **Node** (Metro no
 corre sobre Bun, a diferencia de la web).
