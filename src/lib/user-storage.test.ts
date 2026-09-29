@@ -12,6 +12,7 @@ describe("isUserKey", () => {
       "day-settle:2026-09-29",
       "plan-recalc:2026-09",
       "plan-updated-notice:2026-10",
+      "ydg:autoPlanAttempt:2026-09",
     ]) {
       expect(isUserKey(key)).toBe(true);
     }

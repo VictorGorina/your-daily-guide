@@ -31,6 +31,9 @@ export const USER_KEY_PREFIXES = [
   "day-settle:",
   "plan-recalc:",
   "plan-updated-notice:",
+  // Ya no se escribe (la generación automática del plan se quitó en 23b3cf2),
+  // pero sigue en los dispositivos que la tenían: se borra con lo demás.
+  "ydg:autoPlanAttempt:",
 ] as const;
 
 export const isUserKey = (key: string) => USER_KEY_PREFIXES.some((p) => key.startsWith(p));
