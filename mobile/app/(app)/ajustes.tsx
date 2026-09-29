@@ -10,6 +10,7 @@ import { BottomNav } from "../../components/bottom-nav";
 import { RegionFields } from "../../components/region-fields";
 import { apiPost } from "../../lib/api";
 import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
+import { clearLocalUserData } from "../../lib/local-user-data";
 import { currencyForCountry, DEFAULT_COUNTRY } from "../../lib/regions";
 import { supabase } from "../../lib/supabase";
 import { useLocale } from "../../lib/use-locale";
@@ -110,6 +111,8 @@ export default function Ajustes() {
       await apiPost<{ ok: true }>("account/delete");
       await qc.cancelQueries();
       qc.clear();
+      // También lo hace el listener de sesión con SIGNED_OUT; aquí, por si no llega.
+      await clearLocalUserData();
       await supabase.auth.signOut();
     } catch (error) {
       Alert.alert(error instanceof Error ? error.message : "No hemos podido eliminar tu cuenta");

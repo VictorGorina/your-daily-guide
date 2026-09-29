@@ -35,6 +35,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 import { authCacheAction } from "../lib/auth-cache";
 import { AuthProvider } from "../lib/auth-context";
+import { syncLocalUserData } from "../lib/local-user-data";
 import { initSentry, sentryEnabled } from "../lib/sentry";
 import i18n from "../lib/i18n";
 import { supabase } from "../lib/supabase";
@@ -61,7 +62,10 @@ const queryClient = new QueryClient({
 // sin esto, `refetchOnWindowFocus` no hace nada.
 AppState.addEventListener("change", (state) => focusManager.setFocused(state === "active"));
 
-/** Aplica a la caché lo que toca con cada evento de sesión (`auth-cache.ts`). Sin UI. */
+/**
+ * Aplica a la caché lo que toca con cada evento de sesión (`auth-cache.ts`) y
+ * a lo guardado en el dispositivo (`user-storage.ts`). Sin UI.
+ */
 function AuthCacheSync() {
   const qc = useQueryClient();
   const userId = useRef<string | null | undefined>(undefined);
@@ -70,6 +74,7 @@ function AuthCacheSync() {
       const next = session?.user.id ?? null;
       const action = authCacheAction(event, userId.current, next);
       userId.current = next;
+      void syncLocalUserData(event, next);
       if (action === "reset") void qc.resetQueries();
       else if (action === "clear") qc.clear();
       else if (action === "invalidate") void qc.invalidateQueries();

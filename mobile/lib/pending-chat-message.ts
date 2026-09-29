@@ -14,3 +14,8 @@ export function consumePendingChatMessage(): string | null {
   pending = null;
   return value;
 }
+
+/** Al salir de la cuenta: el mensaje era de quien lo redactó (ticket 18). */
+export function clearPendingChatMessage() {
+  pending = null;
+}
