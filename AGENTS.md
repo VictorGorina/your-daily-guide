@@ -681,3 +681,15 @@ por medio, así que ahí no hay ningún validador donde enganchar: el guard avis
 esquivar con una llamada REST. Cerrarlo de verdad pide un trigger en Postgres o mover esas
 escrituras a server functions (ticket `01-trigger-nombres.md`). El deporte no necesita nada:
 `EXERCISE_ACTIVITIES` es una lista cerrada.
+
+## Lo guardado en el dispositivo es de una persona
+
+El borrador del onboarding (con datos de salud), los pendientes de `day-settle` y `plan-recalc`, el
+aviso del plan y `recipe-warm` viven en `localStorage`/`AsyncStorage` con claves globales. Para
+que en un dispositivo compartido nadie herede lo de otra persona, `STORAGE_OWNER_KEY` apunta de
+quién son, y el listener de sesión de cada app (`__root.tsx`; `AuthCacheSync` en
+`mobile/app/_layout.tsx`) aplica `localDataAction` (`user-storage.ts`, puro e idéntico en web y
+móvil): al salir o al entrar otra cuenta se borran; sin dueño apuntado, se los queda quien tiene
+la sesión. El borrado vive en `local-user-data.ts` de cada app. **Una clave nueva de una persona se
+añade a `USER_KEY_PREFIXES`**, o sobrevivirá al cierre de sesión; las del dispositivo (idioma,
+tema) no van ahí.
