@@ -18,8 +18,8 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
-// h3 swallows in-handler throws into a normal 500 Response with body
-// {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
+// h3 se traga lo que lanza un handler y lo convierte en una Response 500 normal
+// con cuerpo {"unhandled":true,"message":"HTTPError"}: un try/catch no la ve nunca.
 async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
   if (response.status < 500) return response;
   const contentType = response.headers.get("content-type") ?? "";
