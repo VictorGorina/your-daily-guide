@@ -18,8 +18,13 @@ mock.module("../../mobile/lib/api", () => ({
 
 const web = await import("./daily");
 const webPortion = await import("./nutrition/portion");
-const mobile = await import("../../mobile/lib/daily");
-const mobilePortion = await import("../../mobile/lib/portion");
+// Rutas en variable: tsc no sigue el import, y el typecheck de tests no arrastra
+// las dependencias de Expo de mobile/lib/supabase.ts (en CI no hay
+// mobile/node_modules; `portion` llega ahí por energy → daily). Los tipos del
+// móvil los comprueba su propio tsc.
+const MOBILE_LIB = "../../mobile/lib";
+const mobile = (await import(`${MOBILE_LIB}/daily`)) as typeof web;
+const mobilePortion = (await import(`${MOBILE_LIB}/portion`)) as typeof webPortion;
 const { addDaysISO } = await import("./dates");
 
 const DAILY_LOG_KEYS = [
