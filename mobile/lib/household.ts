@@ -9,7 +9,7 @@ import {
   type HomeSchedule,
   type SharedSlots,
 } from "./household-shared";
-import { supabase } from "./supabase";
+import { currentUserId, supabase } from "./supabase";
 
 /**
  * Acceso al hogar, equivalente móvil de `src/lib/household.ts`. Consultas
@@ -89,8 +89,7 @@ const EMPTY_STATE: HouseholdState = {
 };
 
 export async function fetchHousehold(): Promise<HouseholdState> {
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id;
+  const userId = await currentUserId();
   if (!userId) return EMPTY_STATE;
 
   const { data: membership } = await supabase
@@ -193,8 +192,7 @@ const randomCode = () => {
 };
 
 export async function createHousehold(name: string): Promise<string> {
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id;
+  const userId = await currentUserId();
   if (!userId) throw new Error("Sin sesión");
 
   const { data, error } = await supabase
@@ -303,9 +301,9 @@ export async function setPlanner(householdId: string, memberId: string) {
 }
 
 export async function leaveHousehold() {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
-  const { error } = await supabase.from("household_members").delete().eq("user_id", auth.user.id);
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
+  const { error } = await supabase.from("household_members").delete().eq("user_id", userId);
   if (error) throw error;
 }
 

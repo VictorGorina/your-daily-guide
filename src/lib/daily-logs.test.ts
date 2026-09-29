@@ -10,7 +10,10 @@ import { createFakeSupabase, type FakeRow, type FakeTables } from "@/test/fake-s
 const tables: FakeTables = { daily_logs: [] };
 const fake = createFakeSupabase(tables);
 mock.module("@/integrations/supabase/client", () => ({ supabase: fake.db }));
-mock.module("../../mobile/lib/supabase", () => ({ supabase: fake.db }));
+mock.module("../../mobile/lib/supabase", () => ({
+  supabase: fake.db,
+  currentUserId: () => Promise.resolve(null),
+}));
 // La carga exige EXPO_PUBLIC_API_URL; ninguna lectura de logs pasa por la API.
 mock.module("../../mobile/lib/api", () => ({
   apiPost: () => Promise.reject(new Error("sin API")),

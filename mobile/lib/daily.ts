@@ -6,7 +6,7 @@ import {
   mealsForDate,
   withOverflowWeek,
 } from "./plan-shared";
-import { supabase } from "./supabase";
+import { currentUserId, supabase } from "./supabase";
 import type {
   MealHabit,
   MealStatus,
@@ -207,20 +207,20 @@ export const todayISO = () => {
 };
 
 export async function fetchProfile(): Promise<Profile | null> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const userId = await currentUserId();
+  if (!userId) return null;
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", auth.user.id)
+    .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
   return (data as Profile | null) ?? null;
 }
 
 export async function saveProfile(patch: Partial<Profile>) {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   // El nombre sale en el saludo de todas las pantallas y en el prompt del coach.
   if (patch.display_name && !isCleanFood(patch.display_name)) {
     throw new Error(BLOCKED_NAME_MESSAGE);
@@ -235,7 +235,7 @@ export async function saveProfile(patch: Partial<Profile>) {
   const next =
     "meals_to_plan" in patch && !("meal_slots" in patch) ? { ...patch, meal_slots: null } : patch;
   const upsert = (row: Partial<Profile>) =>
-    supabase.from("profiles").upsert({ id: auth.user.id, ...row } as never, { onConflict: "id" });
+    supabase.from("profiles").upsert({ id: userId, ...row } as never, { onConflict: "id" });
   let { error } = await upsert(next);
   // Una columna que llega con una migración aún sin aplicar (PGRST204): se
   // guarda el resto del cambio en vez de fallar entero. La UI ya no enseña esos
@@ -329,8 +329,8 @@ export async function fetchLogsForMonth(month: string): Promise<DailyLog[]> {
 }
 
 export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   const date = todayISO();
 
   const { data: existing } = await supabase
@@ -343,7 +343,7 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
   const { data, error } = await supabase
     .from("daily_logs")
     .insert({
-      user_id: auth.user.id,
+      user_id: userId,
       log_date: date,
       habits: habits.map((label) => ({ label, done: false })),
     } as never)
@@ -424,11 +424,11 @@ export type ChatMessage = {
 
 /** Guarda un mensaje en el historial de chat del día de hoy (mismo backend que la web). */
 export async function addMessage(role: "user" | "assistant", content: string) {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   const { error } = await supabase
     .from("chat_messages")
-    .insert({ user_id: auth.user.id, role, content, log_date: todayISO() } as never);
+    .insert({ user_id: userId, role, content, log_date: todayISO() } as never);
   if (error) throw error;
 }
 
@@ -539,8 +539,7 @@ async function householdPlanInfo(userId: string): Promise<{ plannerId: string } 
  * casa. Sus comidas en solitario siguen siendo las de su propia fila.
  */
 export async function fetchMonthlyPlan(month: string): Promise<MonthlyPlanRow | null> {
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id ?? null;
+  const userId = await currentUserId();
   const [row, info] = await Promise.all([
     fetchOwnMonthlyPlan(month, userId),
     userId ? householdPlanInfo(userId) : Promise.resolve(null),
@@ -598,8 +597,7 @@ export type PlannerShoppingRow = {
  * muestra en solo lectura; el estado de compra se hace editable en issue 06.
  */
 export async function fetchPlannerShopping(month: string): Promise<PlannerShoppingRow | null> {
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id ?? null;
+  const userId = await currentUserId();
   if (!userId) return null;
   const info = await householdPlanInfo(userId);
   if (!info || info.plannerId === userId) return null;
@@ -891,11 +889,11 @@ export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
   // No había registro de ese día (la persona no abrió la app ese día): se crea
   // ahora con la corrección. La policy de INSERT cubre los últimos ~45 días
   // (migración `daily_logs_backfill_window`); más atrás, PostgREST rechaza.
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Sin sesión");
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sin sesión");
   const { error: insertError } = await supabase
     .from("daily_logs")
-    .insert({ user_id: auth.user.id, log_date: date, habits: [], ...patch } as never);
+    .insert({ user_id: userId, log_date: date, habits: [], ...patch } as never);
   if (insertError) {
     throw new Error("Este día es demasiado antiguo para rellenarlo");
   }

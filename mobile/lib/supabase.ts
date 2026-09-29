@@ -34,3 +34,16 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     flowType: "pkce",
   },
 });
+
+/**
+ * Id del usuario actual leído de la sesión LOCAL (AsyncStorage), sin llamada
+ * de red, igual que `currentUserId` de la web (src/lib/auth-headers.ts).
+ * `supabase.auth.getUser()` revalida el token contra el servidor de Auth en
+ * cada llamada, y cada función de datos lo hacía antes de su consulta. Para
+ * construir la consulta basta el id (estable dentro del JWT); la seguridad la
+ * aplica RLS en el servidor en cada query. Devuelve null si no hay sesión.
+ */
+export async function currentUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? null;
+}
