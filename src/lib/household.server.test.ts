@@ -140,6 +140,12 @@ describe("householdContext", () => {
     // Los niños se piden ya filtrados por hogar en la consulta.
     const kidsQuery = fake.calls.find((c) => c.table === "household_children");
     expect(kidsQuery?.filters).toEqual([{ kind: "eq", column: "household_id", value: "h1" }]);
+    // Y los miembros también: su fila por `user_id`, el resto por hogar (PERF-05).
+    const memberQueries = fake.calls.filter((c) => c.table === "household_members");
+    expect(memberQueries.map((c) => c.filters)).toEqual([
+      [{ kind: "eq", column: "user_id", value: "bea" }],
+      [{ kind: "eq", column: "household_id", value: "h1" }],
+    ]);
   });
 
   it("sin horarios individuales, las comidas compartidas son las heredadas del hogar", async () => {
@@ -214,10 +220,19 @@ describe("householdPlannerId", () => {
     expect(await plannerOf("eva").run()).toBeNull();
   });
 
-  it("es una sola consulta a household_members", async () => {
+  it("lee su fila y después solo las de su hogar, nunca la tabla entera (PERF-05)", async () => {
     const { fake, run } = plannerOf("bea");
     await run();
-    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([["household_members", "select"]]);
+    expect(fake.calls.map((c) => [c.table, c.filters])).toEqual([
+      ["household_members", [{ kind: "eq", column: "user_id", value: "bea" }]],
+      ["household_members", [{ kind: "eq", column: "household_id", value: "h1" }]],
+    ]);
+  });
+
+  it("sin hogar, una sola consulta", async () => {
+    const { fake, run } = plannerOf("nadie");
+    await run();
+    expect(fake.calls).toHaveLength(1);
   });
 });
 

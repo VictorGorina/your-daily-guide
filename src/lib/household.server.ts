@@ -81,30 +81,41 @@ export const emptyContext = (): HouseholdContext => ({
 });
 
 /**
+ * El hogar de `userId`, o `null` si no está en ninguno. Lee solo su fila
+ * (`user_id` es único en `household_members`): leer la tabla entera y buscar en
+ * memoria hacía que la RLS evaluase `is_household_member` fila a fila sobre
+ * todos los hogares, y con la clave de servicio traía los de toda la app
+ * (ticket 17, PERF-05).
+ */
+async function ownHouseholdId(supabase: AnyClient, userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("household_members")
+    .select("household_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return (data as { household_id: string } | null)?.household_id ?? null;
+}
+
+/**
  * Solo el `user_id` del planificador del hogar de `userId` — o `null` si no
- * está en un hogar, o su hogar no tiene un planificador con cuenta. Una única
- * consulta a `household_members` (RLS acota a su propio hogar), sin el resto del
- * contexto: para caminos que solo necesitan resolver "¿de quién es la fila del
- * plan?", como el estado de compra compartido (issue 06). La pertenencia queda
- * verificada igual que en `householdContext`: solo devuelve un id no nulo
+ * está en un hogar, o su hogar no tiene un planificador con cuenta. Sin el resto
+ * del contexto: para caminos que solo necesitan resolver "¿de quién es la fila
+ * del plan?", como el estado de compra compartido (issue 06). La pertenencia
+ * queda verificada igual que en `householdContext`: solo devuelve un id no nulo
  * cuando `userId` aparece como miembro de ese hogar.
  */
 export async function householdPlannerId(
   supabase: AnyClient,
   userId: string,
 ): Promise<string | null> {
+  const householdId = await ownHouseholdId(supabase, userId);
+  if (!householdId) return null;
   const { data: rawMembers } = await supabase
     .from("household_members")
-    .select("household_id, user_id, is_planner");
-  const rows = (rawMembers ?? []) as {
-    household_id: string;
-    user_id: string | null;
-    is_planner: boolean;
-  }[];
-  const mine = rows.find((r) => r.user_id === userId);
-  if (!mine) return null;
-  const planner = rows.find((r) => r.household_id === mine.household_id && r.is_planner);
-  return planner?.user_id ?? null;
+    .select("user_id, is_planner")
+    .eq("household_id", householdId);
+  const rows = (rawMembers ?? []) as { user_id: string | null; is_planner: boolean }[];
+  return rows.find((r) => r.is_planner)?.user_id ?? null;
 }
 
 /**
@@ -121,12 +132,10 @@ async function selectWithOptionalColumns(
   table: "household_members" | "household_children",
   baseColumns: string,
   optionalColumns: string[],
-  householdId?: string,
+  householdId: string,
 ): Promise<Record<string, unknown>[] | null> {
-  const run = (columns: string[]) => {
-    const q = supabase.from(table).select(columns.join(", "));
-    return householdId ? q.eq("household_id", householdId) : q;
-  };
+  const run = (columns: string[]) =>
+    supabase.from(table).select(columns.join(", ")).eq("household_id", householdId);
   // De más a menos columnas opcionales, quitando desde el final: la más nueva
   // (`feeding_stage`) es la más probable que falte, así que se conserva
   // `home_schedule` mientras se pueda. [a,b] → [a] → [].
@@ -143,14 +152,17 @@ export async function householdContext(
   supabase: AnyClient,
   userId: string,
 ): Promise<HouseholdContext> {
+  const householdId = await ownHouseholdId(supabase, userId);
+  if (!householdId) return emptyContext();
+
   const rawMembers = await selectWithOptionalColumns(
     supabase,
     "household_members",
-    "household_id, user_id, display_name, uses_app, is_planner, portion",
+    "user_id, display_name, uses_app, is_planner, portion",
     ["home_schedule"],
+    householdId,
   );
   const rows = (rawMembers ?? []) as {
-    household_id: string;
     user_id: string | null;
     display_name: string;
     uses_app: boolean;
@@ -158,11 +170,10 @@ export async function householdContext(
     portion: number | string;
     home_schedule: unknown;
   }[];
-  const mine = rows.find((r) => r.user_id === userId);
-  if (!mine) return emptyContext();
+  // Si la lectura del hogar falla entera, lo de siempre: sin contexto.
+  if (!rows.some((r) => r.user_id === userId)) return emptyContext();
 
-  const householdMembers = rows.filter((r) => r.household_id === mine.household_id);
-  const members: HouseholdMemberLite[] = householdMembers.map((r) => ({
+  const members: HouseholdMemberLite[] = rows.map((r) => ({
     userId: r.user_id,
     displayName: r.display_name,
     isPlanner: r.is_planner,
@@ -178,7 +189,7 @@ export async function householdContext(
   const { data: household } = await supabase
     .from("households")
     .select("shared_slots")
-    .eq("id", mine.household_id)
+    .eq("id", householdId)
     .maybeSingle();
   const legacySharedSlots = cleanSharedSlots(
     (household as { shared_slots?: unknown } | null)?.shared_slots,
@@ -189,7 +200,7 @@ export async function householdContext(
     "household_children",
     "id, name, age, allergies, appetite, notes, portion",
     ["home_schedule", "feeding_stage"],
-    mine.household_id,
+    householdId,
   );
   const kids = (children ?? []) as {
     id: string;
@@ -250,7 +261,7 @@ export async function householdContext(
   const perDayServingsText = hasAnySchedule ? describePerDayServings(members, kidsLite) : "";
 
   return {
-    householdId: mine.household_id,
+    householdId,
     plannerId: planner?.userId ?? null,
     sharedSlots,
     members,
