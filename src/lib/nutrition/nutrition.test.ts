@@ -4,11 +4,13 @@ import { FOODS, GENERIC_FOOD } from "./foods.data";
 import {
   categoryMedianFood,
   clampGrams,
+  foodByKey,
   heavyUnmatched,
   macrosOf,
   matchFood,
   parseFoodCategory,
   priceOf,
+  registerExtraFoods,
   resolutionQuality,
   resolveIngredient,
 } from "./nutrition";
@@ -343,5 +345,36 @@ describe("estado de los gramos (D8)", () => {
     expect(resolveIngredient({ name: "patatas fritas", grams: 150, state: "crudo" }).food.key).toBe(
       "patata",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// registerExtraFoods — idempotente: la caché de foods_extra recarga la tabla
+// entera cada 10 min (ticket 17, PERF-09). Nombres inventados: el registro es
+// estado del proceso y no debe cruzarse con otros tests.
+// ---------------------------------------------------------------------------
+
+describe("registerExtraFoods", () => {
+  const extra = (key: string, label: string, kcal: number) => ({
+    ...GENERIC_FOOD,
+    key,
+    label,
+    aliases: [],
+    kcal,
+  });
+
+  it("volver a registrar una clave deja sus cifras nuevas, también por nombre exacto", () => {
+    registerExtraFoods([extra("zq-test-fruta", "Zqfruta azulada", 100)]);
+    registerExtraFoods([extra("zq-test-fruta", "Zqfruta azulada", 200)]);
+    expect(foodByKey("zq-test-fruta")?.kcal).toBe(200);
+    expect(matchFood("zqfruta azulada")?.food.kcal).toBe(200);
+  });
+
+  it("si la fila cambia de nombre, el nombre viejo ya no casa", () => {
+    registerExtraFoods([extra("zq-test-baya", "Zqbaya verdosa", 50)]);
+    expect(matchFood("zqbaya verdosa")?.food.key).toBe("zq-test-baya");
+    registerExtraFoods([extra("zq-test-baya", "Zqgrano rojizo", 50)]);
+    expect(matchFood("zqbaya verdosa")).toBeNull();
+    expect(matchFood("zqgrano rojizo")?.food.key).toBe("zq-test-baya");
   });
 });

@@ -328,6 +328,15 @@ const EXTRA_FOODS = new Map<string, Food>();
 export function registerExtraFoods(foods: readonly Food[]): void {
   for (const food of foods) {
     if (FOOD_BY_KEY.has(food.key)) continue;
+    // Idempotente: `ensureExtraFoods` recarga la tabla entera cada poco. La
+    // fila anterior de la clave sale de los índices, que van por objeto: si no,
+    // `EXACT` seguiría devolviéndola y `FOOD_TOKENS` crecería en cada recarga.
+    const previous = EXTRA_FOODS.get(food.key);
+    if (previous) {
+      FOOD_TOKENS.delete(previous);
+      FOOD_HEAD.delete(previous);
+      for (const [norm, match] of EXACT) if (match === previous) EXACT.delete(norm);
+    }
     EXTRA_FOODS.set(food.key, food);
     const tokens = new Set<string>();
     for (const phrase of [food.label, ...food.aliases]) {
