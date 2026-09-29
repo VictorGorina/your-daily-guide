@@ -54,7 +54,7 @@ import {
   type DailyLog,
 } from "../../lib/daily";
 import { fetchHousehold, householdSharedSlots } from "../../lib/household";
-import { daySignalOf } from "../../lib/macros";
+import { daySignalLabelOf, daySignalOf } from "../../lib/macros";
 import {
   addMonths,
   boughtTotal,
@@ -1078,10 +1078,14 @@ function PlanMonthCalendar({
             // en lib/macros.ts.
             const signal = daySignalOf(log);
             const bg = SIGNAL_BG[signal] ?? "bg-secondary/70";
+            // El color en palabras, para VoiceOver (A11Y-06).
+            const signalLabel = daySignalLabelOf(log);
             return (
               <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
                 <Pressable
                   onPress={() => onOpenDay(date)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver el día ${Number(date.slice(8, 10))}${signalLabel ? `: ${signalLabel}` : ""}`}
                   className={`aspect-square items-center justify-center rounded-xl active:opacity-80 ${bg}`}
                 >
                   <Text className="text-sm text-foreground">{Number(date.slice(8, 10))}</Text>

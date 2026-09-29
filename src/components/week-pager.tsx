@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { DailyLog } from "@/lib/daily";
-import { daySignalOf, type DaySignal } from "@/lib/macros";
+import { daySignalLabelOf, daySignalOf, type DaySignal } from "@/lib/macros";
 import {
   dayKind,
   mondayAt,
@@ -294,6 +294,8 @@ function WeekPage({
         const d = new Date(`${date}T00:00:00`);
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         const signal: DaySignal = kind === "past" ? habitSignal(logsFor(date)) : "none";
+        // El color en palabras, para quien no lo ve (A11Y-06); igual que el calendario del mes.
+        const signalLabel = kind === "past" ? daySignalLabelOf(logsFor(date)) : null;
         const isOpen = selected === date;
 
         return (
@@ -303,6 +305,9 @@ function WeekPage({
             onClick={() => (isBeforeStart ? undefined : onSelect?.(date))}
             disabled={isBeforeStart}
             aria-expanded={isOpen}
+            aria-label={
+              signalLabel ? `${d.getDate()} ${DAYS[weekdayIndex(date)]}: ${signalLabel}` : undefined
+            }
             style={isBeforeStart ? { opacity: 0.35 } : undefined}
             className={`relative rounded-[14px] px-1 pb-2 pt-2.5 text-center transition-transform active:scale-95 ${dayClasses(kind, isWeekend, signal)}`}
           >

@@ -5,7 +5,7 @@ import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { todayISO, type DailyLog } from "@/lib/daily";
 import type { SharedSlots } from "@/lib/household-shared";
-import { daySignalOf } from "@/lib/macros";
+import { daySignalLabelOf, daySignalOf } from "@/lib/macros";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -144,11 +144,13 @@ export function PlanMonthCalendar({
             // `daySignal` en macros.ts.
             const signal = daySignalOf(log);
             const signalClass = SIGNAL_CLASS[signal] ?? "bg-secondary/70 text-muted-foreground";
+            // El color en palabras, para quien no lo ve (A11Y-06).
+            const signalLabel = daySignalLabelOf(log);
             return (
               <button
                 key={date}
                 onClick={() => onOpenDay(date)}
-                aria-label={`Ver el día ${dayNum(date)}`}
+                aria-label={`Ver el día ${dayNum(date)}${signalLabel ? `: ${signalLabel}` : ""}`}
                 className={`aspect-square rounded-xl text-sm transition-all active:scale-95 ${signalClass}`}
               >
                 {dayNum(date)}

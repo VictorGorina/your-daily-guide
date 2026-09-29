@@ -6,6 +6,7 @@ import {
   ZERO_MACROS,
   addMacros,
   daySignal,
+  daySignalLabel,
   daySignalOf,
   hasDayRecord,
   macroTargets,
@@ -471,6 +472,33 @@ describe("daySignal", () => {
   it("un día registrado sin objetivo no se juzga", () => {
     expect(daySignal(1800, null, true)).toBe("muted");
     expect(daySignal(1800, 0, true)).toBe("muted");
+  });
+});
+
+describe("daySignalLabel — el semáforo en palabras", () => {
+  const label = (consumed: number, target: number | null, logged = true) =>
+    daySignalLabel(daySignal(consumed, target, logged), consumed, target);
+
+  it("el ámbar dice hacia dónde: un día al 40 % no está «cerca del objetivo»", () => {
+    expect(label(800, 2000)).toBe("por debajo del objetivo");
+    expect(label(2300, 2000)).toBe("algo por encima del objetivo");
+  });
+
+  it("cada color tiene su texto, y sin registro no se dice nada", () => {
+    expect(label(2000, 2000)).toBe("dentro del objetivo");
+    expect(label(2600, 2000)).toBe("muy por encima del objetivo");
+    expect(label(1800, null)).toBe("sin cifras todavía");
+    expect(label(0, 2000, false)).toBeNull();
+  });
+
+  it("el texto nunca contradice al color en todo el rango", () => {
+    for (let kcal = 0; kcal <= 4000; kcal += 50) {
+      const signal = daySignal(kcal, 2000, true);
+      const text = daySignalLabel(signal, kcal, 2000);
+      if (signal === "success") expect(text).toBe("dentro del objetivo");
+      if (signal === "over") expect(text).toBe("muy por encima del objetivo");
+      if (signal === "warning") expect(text).toContain(kcal > 2000 ? "encima" : "debajo");
+    }
   });
 });
 

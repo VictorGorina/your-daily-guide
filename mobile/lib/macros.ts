@@ -246,10 +246,47 @@ export function daySignalOf(log: DailyLog | null | undefined): DaySignal {
   // Un día con comidas marcadas que aún están "calculando" no se juzga hasta
   // que estén todas (D13): gris, como un día sin cifras.
   if (logged && donePendingMeals(log?.guide?.mealMacros, log?.habits ?? []).length) return "muted";
-  // El objetivo es el que tenía ESE día (copia en la guía, ticket 07); los días
-  // anteriores a esa copia caen a la suma de lo planificado, como antes.
-  const target = log?.guide?.targets?.kcal ?? log?.guide?.macroEstimate?.kcal;
-  return daySignal(consumedMacrosOf(log).kcal, target, logged);
+  return daySignal(consumedMacrosOf(log).kcal, dayTargetKcal(log), logged);
+}
+
+/**
+ * Objetivo de kcal de un día: el que tenía ESE día (copia en la guía, ticket
+ * 07); los días anteriores a esa copia caen a la suma de lo planificado.
+ */
+function dayTargetKcal(log: DailyLog | null | undefined): number | undefined {
+  return log?.guide?.targets?.kcal ?? log?.guide?.macroEstimate?.kcal;
+}
+
+/**
+ * El semáforo en palabras, para quien no ve el color (lector de pantalla).
+ * `warning` junta dos casos que el color no separa —quedarse corto y pasarse
+ * un poco—, así que el texto dice cuál: «cerca del objetivo» para un día al
+ * 40 % sería falso. Sin registro (`none`) no hay nada que decir.
+ */
+export function daySignalLabel(
+  signal: DaySignal,
+  consumedKcal: number,
+  targetKcal: number | null | undefined,
+): string | null {
+  switch (signal) {
+    case "success":
+      return "dentro del objetivo";
+    case "over":
+      return "muy por encima del objetivo";
+    case "muted":
+      return "sin cifras todavía";
+    case "warning":
+      return targetKcal && consumedKcal > targetKcal
+        ? "algo por encima del objetivo"
+        : "por debajo del objetivo";
+    default:
+      return null;
+  }
+}
+
+/** `daySignalLabel` a partir del registro del día, con las mismas cifras que el color. */
+export function daySignalLabelOf(log: DailyLog | null | undefined): string | null {
+  return daySignalLabel(daySignalOf(log), consumedMacrosOf(log).kcal, dayTargetKcal(log));
 }
 
 /** Lo único que a esta capa le importa de una guía: sus cifras. */

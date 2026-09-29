@@ -20,7 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import type { DailyLog } from "../lib/daily";
-import { daySignalOf, type DaySignal } from "../lib/macros";
+import { daySignalLabelOf, daySignalOf, type DaySignal } from "../lib/macros";
 import {
   dayKind,
   mondayAt,
@@ -343,6 +343,8 @@ function WeekPage({
           const d = new Date(`${date}T00:00:00`);
           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
           const signal: DaySignal = isPast ? habitSignal(logsFor(date)) : "none";
+          // El color en palabras, para VoiceOver (A11Y-06); igual que el calendario del mes.
+          const signalLabel = isPast ? daySignalLabelOf(logsFor(date)) : null;
           const isFutureWeekend = !isToday && !isPast && !isBeforeStart && isWeekend;
 
           const containerBase = isBeforeStart
@@ -369,6 +371,12 @@ function WeekPage({
               key={date}
               onPress={() => (isBeforeStart ? undefined : onSelect?.(date))}
               disabled={isBeforeStart}
+              accessibilityRole="button"
+              accessibilityLabel={
+                signalLabel
+                  ? `${d.getDate()} ${DAYS[weekdayIndex(date)]}: ${signalLabel}`
+                  : undefined
+              }
               style={[
                 { width: cellWidth, opacity: isBeforeStart ? 0.35 : 1 },
                 isFutureWeekend ? { backgroundColor: WEEKEND_BG } : undefined,
