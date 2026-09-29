@@ -1,11 +1,5 @@
 {
   "extraKnownMarketplaces": {
-    "apple-skills": {
-      "source": {
-        "source": "github",
-        "repo": "Prisma-Labs-Dev/apple-skills"
-      }
-    },
     "claude-plugins-official": {
       "source": {
         "source": "github",
@@ -14,7 +8,6 @@
     }
   },
   "enabledPlugins": {
-    "apple-skills@apple-skills": true,
     "swift-lsp@claude-plugins-official": true
   }
 }
