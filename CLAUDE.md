@@ -495,32 +495,20 @@ deduplica por instancia el plato que ya se está descomponiendo. La reserva de `
 lleva su marca en `daily_logs.adjustment.pending`: si la petición muere, el siguiente
 asentamiento la devuelve pasados 5 min (`RESERVATION_TTL_MS`, ligado al `maxDuration`).
 
-**Límites: alcance de la IA y contenido de la persona** (spec en
-`.scratch/limites-ia-y-contenido/`, explicación larga en AGENTS.md). Dos límites, cada uno con
-dos redes:
+**Límites: alcance de la IA y contenido de la persona** (detalle y porqué en la sección del mismo
+nombre de AGENTS.md; spec en `.scratch/limites-ia-y-contenido/`). Dos límites, cada uno con dos
+redes:
 
-- **El coach solo se dedica a la alimentación.** La regla de alcance vive en `coachSystemPrompt`
-  ([src/lib/ai-provider.server.ts](src/lib/ai-provider.server.ts)), así que la heredan todas las
-  superficies (chat, guía, plan, briefing, repaso nocturno). Antes de esa llamada,
-  `offTopicReason` ([src/lib/coach-scope.ts](src/lib/coach-scope.ts)) corta en
-  [src/routes/api/chat.ts](src/routes/api/chat.ts) lo más común y más caro de dejar pasar —
-  pedirle que se salte sus instrucciones o que escriba código — y contesta un mensaje fijo sin
-  gastar cuota ni dinero. Todo el texto libre del perfil entra al prompt por `asPromptData`,
-  envuelto en «» y declarado como dato: sin eso, `actualizar_perfil` (herramienta del chat) es
-  una vía para inyectar instrucciones permanentes en el system prompt.
-- **Lo que se escribe como comida tiene que ser comida.**
-  [src/lib/content-guard.ts](src/lib/content-guard.ts) (puro, testeado, copia en
-  `mobile/lib/content-guard.ts`) compara **por token entero, nunca por subcadena** — si no,
-  "cacahuete", "cacao", "penne" y "queso de tetilla" se caen — y `assertCleanFood` (`assert-clean-food.ts`, solo web) va en los
-  `.validator()` de `setPlanMeal`, `setChildMeal`, `setPantryExtra`, el `cleanText` de los
-  snacks y el `actual` de `propagateLogToFamily`. Por `apiPost`, eso cubre web, móvil y las
-  herramientas del coach de una vez. La segunda red no cuesta llamadas nuevas: `resolveDish` y
-  `decomposeDishes` devuelven ya `comida`/`isFood`, que coge lo que una lista no puede.
+- **El coach solo habla de alimentación.** La regla vive SOLO en `coachSystemPrompt`: una
+  superficie de IA nueva la hereda si usa ese prompt. `offTopicReason` corta en `/api/chat` antes
+  de gastar cuota. Todo texto libre del perfil entra por `asPromptData` («», declarado como dato).
+- **Lo que se escribe como comida es comida.** `assertCleanFood` va en el `.validator()` de cada
+  server function que guarda un plato (por `apiPost` cubre web, móvil y coach); `content-guard.ts`
+  compara por token entero, nunca por subcadena. Segunda red: `comida`/`isFood` de `resolveDish`
+  y `decomposeDishes`, sin llamadas nuevas.
 
-Dos cosas que conviene no romper: ante la duda se **deja pasar** (un falso positivo impide
-apuntar lo que de verdad se comió, y eso es peor), y el guard de los **nombres**
-(`assertCleanName` en `household.ts` y `daily.ts`) avisa pero **no es frontera**, porque esas
-escrituras van del navegador directo a Supabase (ver `.scratch/limites-ia-y-contenido/issues/`).
+Ante la duda se **deja pasar**. `assertCleanName` avisa pero **no es frontera** (esas escrituras
+van del navegador directo a Supabase).
 
 ## Convenciones de código
 

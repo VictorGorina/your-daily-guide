@@ -541,7 +541,7 @@ los prompts. Nadie lo corrige después.
 - **Ante la duda, se deja pasar.** Un falso positivo le impide a alguien apuntar lo que de verdad
   ha comido, y la precisión de kcal/macros es la base de la app.
 
-El enforcement va en los `.validator()` — `setPlanMeal`, `setChildMeal`, `setPantryExtra`, el
+El enforcement es `assertCleanFood` (`assert-clean-food.ts`, solo web) en los `.validator()` — `setPlanMeal`, `setChildMeal`, `setPantryExtra`, el
 `cleanText` compartido por `estimateSnack`/`logSnack`, y el `actual` de `propagateLogToFamily`,
 que lo ven los demás del hogar. Por `apiPost`, eso cubre la web, la app móvil y las herramientas
 `cambiar_plato`/`cambiar_plato_nino` del coach con un solo trozo de código. El chequeo del cliente
