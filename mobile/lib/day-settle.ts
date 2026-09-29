@@ -110,6 +110,12 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
 let failed = false;
 /**
+ * Sube al salir de la cuenta (`cancelDaySettle`). Un lote que estaba esperando
+ * a la IA lo compara al volver: si cambió, no manda nada ni vuelve a la cola,
+ * porque la sesión ya no es la de quien lo encoló (ticket 18).
+ */
+let epoch = 0;
+/**
  * El lote en vuelo, para poder esperarlo. "Deshacer" lo necesita: si pulsa
  * mientras el lote está compensando ESA comida, el `swapKcalDelta` guardado
  * todavía no es el definitivo y se devolvería la energía equivocada.
@@ -191,6 +197,7 @@ async function run(): Promise<void> {
   const dishes = [...pendingDishes.values()];
   const pendingPlainBefore = pendingPlain;
   const { resolveDishDeltas, onDone } = deps;
+  const batchEpoch = epoch;
   running = true;
   failed = false;
   pendingDishes = new Map();
@@ -203,6 +210,7 @@ async function run(): Promise<void> {
     const { deltas: changes, unresolved } = dishes.length
       ? await resolveDishDeltas(dishes)
       : { deltas: [], unresolved: [] };
+    if (batchEpoch !== epoch) return;
     // Lo que aún no tiene cifra vuelve a la cola y se reintenta más tarde; lo
     // demás se asienta ya. Un cambio nuevo de la misma comida manda.
     if (unresolved.length) {
@@ -219,6 +227,7 @@ async function run(): Promise<void> {
     // no existe en ninguna parte y perderlo aquí dejaría el cambio sin
     // compensar para siempre. Un cambio nuevo de la misma comida, entrado
     // mientras esto volaba, manda sobre el viejo.
+    if (batchEpoch !== epoch) return;
     failed = true;
     for (const d of dishes) if (!pendingDishes.has(d.label)) pendingDishes.set(d.label, d);
     pendingPlain = true;
@@ -296,6 +305,23 @@ export function unqueueDishChange(label: string): boolean {
   persist();
   publish();
   return true;
+}
+
+/**
+ * Al salir de la cuenta: se tira lo encolado y el temporizador (también el
+ * reintento), y un lote a medias ya no se manda. Lo encolado era de quien
+ * salió; si otra cuenta entrara antes de que venciera, se asentaría con su
+ * sesión (ticket 18). Lo que ya se mandó termina con la sesión de antes.
+ */
+export function cancelDaySettle(): void {
+  epoch++;
+  if (timer) clearTimeout(timer);
+  timer = null;
+  pendingDate = "";
+  pendingDishes = new Map();
+  pendingPlain = false;
+  failed = false;
+  publish();
 }
 
 /** Manda ya lo pendiente, sin esperar a la ventana de calma. */

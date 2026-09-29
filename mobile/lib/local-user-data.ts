@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { cancelDaySettle } from "./day-settle";
 import { clearPendingChatMessage } from "./pending-chat-message";
+import { cancelPlanRecalc } from "./plan-recalc";
 import { STORAGE_OWNER_KEY, isUserKey, localDataAction } from "./user-storage";
 
 /**
@@ -10,8 +12,14 @@ import { STORAGE_OWNER_KEY, isUserKey, localDataAction } from "./user-storage";
  * `localStorage`.
  */
 
-/** Borra el borrador del onboarding, los pendientes del día y del plan, y su dueño. */
+/**
+ * Borra el borrador del onboarding, los pendientes del día y del plan, y su
+ * dueño. También las colas en memoria de esos pendientes: si no, sus
+ * temporizadores los mandarían con la sesión de quien entre después.
+ */
 export async function clearLocalUserData(): Promise<void> {
+  cancelDaySettle();
+  cancelPlanRecalc();
   clearPendingChatMessage();
   try {
     const keys = await AsyncStorage.getAllKeys();

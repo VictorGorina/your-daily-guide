@@ -1,4 +1,6 @@
+import { cancelDaySettle } from "@/lib/day-settle";
 import { clearPendingChatMessage } from "@/lib/pending-chat-message";
+import { cancelPlanRecalc } from "@/lib/plan-recalc";
 import { STORAGE_OWNER_KEY, isUserKey, localDataAction } from "@/lib/user-storage";
 
 /**
@@ -7,8 +9,14 @@ import { STORAGE_OWNER_KEY, isUserKey, localDataAction } from "@/lib/user-storag
  * `mobile/lib/local-user-data.ts`, con AsyncStorage.
  */
 
-/** Borra el borrador del onboarding, los pendientes del día y del plan, y su dueño. */
+/**
+ * Borra el borrador del onboarding, los pendientes del día y del plan, y su
+ * dueño. También las colas en memoria de esos pendientes: si no, sus
+ * temporizadores los mandarían con la sesión de quien entre después.
+ */
 export function clearLocalUserData(): void {
+  cancelDaySettle();
+  cancelPlanRecalc();
   clearPendingChatMessage();
   try {
     // Primero se reúnen y luego se borran: borrar al recorrer mueve los índices.

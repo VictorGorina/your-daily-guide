@@ -177,6 +177,17 @@ export async function rebuildPlanWithHousehold(
   }
 }
 
+/**
+ * Al salir de la cuenta: se tira el recálculo encolado y su temporizador. Era
+ * de quien salió; si otra cuenta entrara antes de los ~6 s, se mandaría con su
+ * sesión (ticket 18). Uno ya en marcha termina con la sesión de antes.
+ */
+export function cancelPlanRecalc(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  pending = null;
+}
+
 /** Programa un recálculo tras ~6 s de calma. `"full"` gana sobre `"meals"`. */
 export function schedulePlanRecalc(month: string, today: string, scope: RecalcScope): void {
   const nextScope: RecalcScope =
