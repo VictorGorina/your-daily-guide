@@ -4,6 +4,18 @@
    sin esto sus clases solo existían si algún archivo nuestro las repetía (list-decimal no). */
 @source "../node_modules/streamdown/dist/*.js";
 @import "tw-animate-css";
+/* Tipografías servidas desde el propio dominio (ticket 17, PERF-16): antes eran una hoja de Google
+   Fonts aparte, que bloqueaba el primer pintado y mandaba la IP de cada visita a Google. Solo lo
+   que pedía aquella URL: Fraunces con opsz + cursiva, Work Sans + cursiva, Outfit, Figtree (las
+   cuatro variables) y DM Mono 400 y 500. */
+@import "@fontsource-variable/fraunces/opsz.css";
+@import "@fontsource-variable/fraunces/opsz-italic.css";
+@import "@fontsource-variable/work-sans/wght.css";
+@import "@fontsource-variable/work-sans/wght-italic.css";
+@import "@fontsource-variable/outfit/wght.css";
+@import "@fontsource-variable/figtree/wght.css";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -24,14 +36,14 @@
   --radius-2xl: calc(var(--radius) + 12px);
   --radius-3xl: calc(var(--radius) + 18px);
   --radius-4xl: calc(var(--radius) + 26px);
-  --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sans: "Work Sans Variable", "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
   /* Tipografías del rediseño de Hoy (proyecto de Claude Design "Rediseño
      Peppers nutrición"): titulares geométricos, texto de interfaz de más
      altura de x y cifras monoespaciadas. De momento solo las usa /hoy — el
      resto de pantallas sigue en Fraunces + Work Sans. */
-  --font-title: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-ui: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-title: "Outfit Variable", "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Figtree Variable", "Figtree", ui-sans-serif, system-ui, sans-serif;
   --font-num: "DM Mono", ui-monospace, Menlo, monospace;
   --color-habit-1: var(--habit-1);
   --color-habit-2: var(--habit-2);
