@@ -15,6 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { authCacheAction } from "@/lib/auth-cache";
 import i18n from "@/lib/i18n";
+import { syncLocalUserData } from "@/lib/local-user-data";
 import { applyTheme, storedTheme } from "@/lib/theme";
 import { useLocale } from "@/lib/use-locale";
 import appCss from "../styles.css?url";
@@ -164,6 +165,9 @@ function RootComponent() {
       const next = session?.user.id ?? null;
       const action = authCacheAction(event, userId, next);
       userId = next;
+      // Lo guardado en el navegador es de una persona: fuera al salir o al
+      // entrar otra (`user-storage.ts`).
+      syncLocalUserData(event, next);
       if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
         router.invalidate();
       }

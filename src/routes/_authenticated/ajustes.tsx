@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAccount } from "@/lib/account.functions";
 import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
+import { clearLocalUserData } from "@/lib/local-user-data";
 import {
   getPushSubscriptionState,
   isIosNonStandalone,
@@ -189,6 +190,8 @@ function Ajustes() {
       await callDeleteAccount();
       await qc.cancelQueries();
       qc.clear();
+      // También lo hace el listener de sesión con SIGNED_OUT; aquí, por si no llega.
+      clearLocalUserData();
       await supabase.auth.signOut();
       toast.success("Tu cuenta se ha eliminado");
       navigate({ to: "/", replace: true });

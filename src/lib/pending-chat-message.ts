@@ -20,3 +20,12 @@ export function consumePendingChatMessage(): string | null {
     return null;
   }
 }
+
+/** Al salir de la cuenta: el mensaje era de quien lo redactó (ticket 18). */
+export function clearPendingChatMessage() {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    // Sin storage no hay nada que borrar.
+  }
+}
