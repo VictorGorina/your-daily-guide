@@ -452,6 +452,15 @@ miembro leer la fila del planificador hace que cualquier `.maybeSingle()` sin
 `.eq("user_id", …)` explícito devuelva 2 filas para un no planificador y lance `PGRST116`.
 En server functions se usa el helper `ownPlanRow`; en `daily.ts`, `fetchOwnMonthlyPlan`.
 
+**`PlanDay.pinned` en una comida compartida no distingue quién la cambió.** `mirrorPinned` copia el
+pin del planificador a todos los miembros por igual, así que un `isPinned(...)` a pelo en la UI
+(p. ej. para ocultar "Ver receta" tras un cambio a mano) apagaba la receta a todo el hogar aunque
+solo el planificador hubiera tocado el plato. Como `guardSharedSlotWrite` impide que un no
+planificador escriba una comida compartida, "lo cambié yo" en ese caso equivale a "soy el
+planificador": de ahí `dishChangeIsMine`/`isPinnedByViewer` (`plan/types.ts`), que sí lo
+distinguen y son los que debe usar cualquier UI nueva que decida algo por "este plato se cambió
+a mano".
+
 ## Receta canónica, caché y ración personal (`precision-nutricional`, fase 2)
 
 Spec y tickets en `.scratch/precision-nutricional/` (05, 06, 14, 16, 17, 18, 21, 22, 23). Lo que

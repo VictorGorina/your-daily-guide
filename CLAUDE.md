@@ -272,66 +272,23 @@ desajustes de Hoy (`settleDay`) o por `reflowMonthlyPlan` (hogar, despensa). Mot
 generación + precalentado + ronda de ajuste ronda los 0,7 USD contra un tope diario de 0,75, y
 regenerar dejaba sin ajuste el plan nuevo.
 
-**Familia — hogar compartido (`/hogar`).** Modelo de la feature `familia-comidas-compartidas`
-(spec y decisiones D1–D5 en `.scratch/familia-comidas-compartidas/`; explicación larga en la
-sección "Familia — hogar compartido" de AGENTS.md). Invariantes que un cambio suele romper sin
-querer:
+**Familia — hogar compartido (`/hogar`).** Feature `familia-comidas-compartidas` (decisiones D1–D5
+en `.scratch/familia-comidas-compartidas/`; detalle en «Familia — hogar compartido» de AGENTS.md).
+Invariantes que un cambio suele romper sin querer:
 
-- **Un solo planificador** (`household_members.is_planner`, trigger). Su fila `monthly_plans`
-  es la del hogar para las comidas compartidas. Traspaso automático al miembro con cuenta de
-  más edad si sale o borra su cuenta (trigger `AFTER DELETE`, D3).
-- **`household_members` son huecos de la mesa**: `user_id` NULL-able (hueco sin reclamar o
-  adulto sin app), `display_name` obligatorio, `portion` para la compra. Quien se une elige su
-  hueco (`household_open_slots` / `claim_household_slot`), no inserta una fila.
-- **Qué comida se comparte sale de los horarios, no de una config** (desde `08fa7ae`, 05-09).
-  Cada adulto y cada niño tiene su `home_schedule` ("¿cuándo como en casa?", por comida y día
-  de la semana): cada persona guarda el suyo y el planificador el de niños y huecos sin cuenta
-  (`saveHomeSchedule`/`scheduleTarget`). Una comida es compartida si el planificador está en
-  casa y al menos otra persona también; un bebé que no come de la mesa no cuenta
-  (`isEffectivelyShared` → `deriveSharedSlots`). La regla vive UNA vez en
-  `effectiveSharedSlots` (`effective-shared-slots.ts`, idéntico en `mobile/lib/`, lo vigila el
-  drift check): la usan `householdContext` en el servidor y, en las pantallas,
-  `householdSharedSlots(estadoDelHogar)` (`fetchMonthlyPlan`, Hoy, Plan). `households.shared_slots`
-  ya no se edita desde ninguna pantalla: es solo el horario de partida de quien no ha puesto el
-  suyo, y el valor único si nadie tiene horario. **No la leas a pelo para decidir qué se
-  comparte**: con eso quien no planifica veía el plato del planificador un día que había
-  marcado «no como en casa». Snacks nunca (D5).
-- **Cada adulto con cuenta conserva su fila `monthly_plans` (D1)**: los slots compartidos son
-  un espejo de lectura del planificador (`composeDayForUser` /
-  `composeMonthlyPlanForMember` al leer; `syncSharedMeals` al escribir hacia adelante,
-  siempre desde la fila del planificador), los no compartidos los edita él.
-  `generateMonthlyPlan` tiene modo "solo mis slots" para no planificadores. Un no
-  planificador que pida tocar una comida compartida recibe un aviso (`guardSharedSlotWrite`).
-- **El estado de la compra es del hogar**: marcas "en casa"/"comprado", gasto, tiquets y
-  despensa los edita cualquier miembro con cuenta sobre la lista del planificador
-  (`resolveShoppingRow` → `updateShoppingState`, con CAS; `supabaseAdmin` + solo
-  columnas de estado para un no planificador). Los platos, las cantidades y la cadencia, no.
-- **`PlanDay.kids`** (`{childId, slot, dish, off?}`): plato aparte de un niño cuando el
-  compartido no le vale. Lo emite la IA o lo cambia el planificador con `setChildMeal` (ruta
-  `/api/v1/plan/child-meal`, solo pasado bloqueado — hoy en adelante, igual que `setPlanMeal` —,
-  la compra no cambia). Se espeja con la
-  comida compartida.
-- **`household_children.feeding_stage`** (`pecho` · `triturados` · `mesa`, default `mesa`):
-  los bebés que aún no comen de la mesa van aparte. `eatsTableFood`/`childRation`
-  (`household-shared.ts`) sacan a los no-`mesa` de las raciones del plato compartido
-  (`servingsPerSlot`, `deriveSharedSlots`) y de la compra de la casa; `pecho` no lleva plato,
-  `triturados` lleva SIEMPRE el suyo en `PlanDay.kids` (puré, ración pequeña). La ficha del
-  peque (`child-sheet.tsx`) tiene el selector "¿Qué come?" y Familia agrupa a los bebés en
-  "Bebés · aún no comen de la mesa".
-- **El coach conoce el hogar**: `householdContext` alimenta `generateMonthlyPlan`,
-  `adjustMonthlyPlan`, `welcomeBriefing` y `/api/chat` (vía `supabaseFromRequest`). Revisa que
-  el copy no dé por hecho "tu plan" para un no planificador (incluido el push de renovación).
-- **RLS**: toda lectura de `monthly_plans` que espere una sola fila propia filtra por
-  `.eq("user_id", …)` (`ownPlanRow` / `fetchOwnMonthlyPlan`) — hay una policy de SELECT que si
-  no deja ver 2 filas y lanza `PGRST116`.
-- **`PlanDay.pinned` en un slot compartido no distingue quién lo cambió**: `mirrorPinned`
-  copia el pin del planificador a todos los miembros por igual, así que un `isPinned(...)` a
-  pelo en la UI (p. ej. para ocultar "Ver receta" tras un cambio a mano) apagaba la receta a
-  todo el hogar aunque solo el planificador hubiera tocado el plato. Como `guardSharedSlotWrite`
-  impide que un no planificador escriba un slot compartido, "lo cambié yo" para ese slot
-  equivale a "soy el planificador" — de ahí `dishChangeIsMine`/`isPinnedByViewer`
-  (`plan/types.ts`), que sí lo distinguen y son los que debe usar cualquier UI nueva que decida
-  algo por "este plato se cambió a mano".
+- **Un solo planificador** (`is_planner`); su fila `monthly_plans` es la del hogar para las
+  comidas compartidas. Cada adulto con cuenta conserva la suya (D1): lo compartido es un espejo
+  de lectura (`composeDayForUser`) y se escribe solo desde el planificador (`syncSharedMeals`,
+  `guardSharedSlotWrite`). `household_members` son huecos de la mesa: quien se une reclama uno.
+- **Qué se comparte sale de los horarios** (`home_schedule`), con la regla en un solo sitio:
+  `effectiveSharedSlots` (idéntico en `mobile/lib/`). **No leas `households.shared_slots` a pelo**
+  para decidirlo. Snacks nunca (D5); un bebé que no come de la mesa no cuenta (`feeding_stage`).
+- **El estado de la compra es del hogar** (marcas, gasto, tiquets, despensa: cualquier miembro,
+  con CAS); platos, cantidades y cadencia solo el planificador. `PlanDay.kids` es el plato aparte
+  de un niño.
+- **RLS:** toda lectura de la fila propia de `monthly_plans` filtra por `user_id` (`ownPlanRow` /
+  `fetchOwnMonthlyPlan`), o lanza `PGRST116`. El copy no da por hecho "tu plan" a quien no
+  planifica. "Este plato se cambió a mano" se decide con `isPinnedByViewer`, no con `isPinned`.
 
 **Notificaciones push:** Web Push real (VAPID) vía `@pushforge/builder`, elegido porque solo usa
 Web Crypto API (el paquete `web-push` de npm no funciona en el runtime de despliegue). El disparo
