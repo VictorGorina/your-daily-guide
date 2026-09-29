@@ -68,6 +68,17 @@ bun run db daily_logs --eq log_date=2026-08-29 --select id,meals --limit 5
 Usa la `SUPABASE_SERVICE_ROLE_KEY` y se salta RLS: es para mirar, no para escribir. Nunca
 escribas en la BD real para "probar" — usa el perfil demo desde la app.
 
+Los datos de salud, el texto libre, los nombres y el código de invitación de personas reales salen
+enmascarados (`SENSITIVE_COLUMNS` en `scripts/db-mask.ts`): sin `--select` ni aparecen, y pedidos
+con `--select` salen como `"[oculto]"`. `--unmask` los enseña con un aviso en rojo; no lo uses
+en una sesión de agente, porque lo impreso acaba en la transcripción. Una columna sensible
+nueva se añade a esa lista. Para comprobar un cambio, suele bastar con mirar los nombres
+(`bun run db profiles --limit 1 2>/dev/null | jq '.[0] | keys'`).
+
+`bun run foods:review --mark` y `bun run recipes:review --mark`, los dos únicos scripts que
+escriben, enseñan la fila y piden `s/N` antes de hacerlo; sin terminal interactiva se niegan
+salvo con `--yes`.
+
 Si en algún momento se quiere consultar la BD desde el chat sin salir a la terminal, el MCP
 oficial de Supabase (`@supabase/mcp-server-supabase --read-only --project-ref <id>`) en un
 `.mcp.json` lo hace — necesita un _personal access token_ de la cuenta de Supabase, no la
