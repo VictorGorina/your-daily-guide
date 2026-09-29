@@ -1424,7 +1424,7 @@ function Onboarding() {
             </div>
           ) : null}
 
-          <div className="rounded-3xl bg-surface p-2">
+          <div className="rounded-3xl bg-surface p-2 focus-within:ring-2 focus-within:ring-ring/40">
             {currentQ.dateInput ? (
               <input
                 type="date"

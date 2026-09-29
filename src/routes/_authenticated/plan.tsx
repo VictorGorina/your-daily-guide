@@ -1001,7 +1001,7 @@ function PantryExtrasCard({
           }}
           placeholder="p. ej. lentejas, espinacas..."
           aria-label="Ingrediente que ya tienes en casa"
-          className="min-w-0 flex-1 rounded-full bg-secondary px-3.5 py-2 text-xs outline-none placeholder:text-muted-foreground/70"
+          className="min-w-0 flex-1 rounded-full bg-secondary px-3.5 py-2 text-xs outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring/40"
         />
         <button
           type="button"

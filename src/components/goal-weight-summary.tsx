@@ -189,7 +189,7 @@ function WeightPanel({
             }}
             placeholder={last != null ? String(last) : "kg"}
             aria-label="Peso de hoy, en kilos"
-            className="w-16 rounded-lg bg-secondary px-2 py-1.5 text-right font-num text-sm tabular-nums text-foreground outline-none"
+            className="w-16 rounded-lg bg-secondary px-2 py-1.5 text-right font-num text-sm tabular-nums text-foreground outline-none focus:ring-2 focus:ring-ring/40"
           />
           <span className="text-xs text-muted-foreground">kg</span>
           <button

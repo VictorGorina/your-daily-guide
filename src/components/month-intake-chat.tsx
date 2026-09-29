@@ -119,7 +119,7 @@ export function MonthIntakeChat({
                 min={minDate}
                 max={awayEnd || maxDate}
                 onChange={(e) => setAwayStart(e.target.value)}
-                className="min-w-0 flex-1 rounded-xl bg-muted px-3 py-2.5 text-sm outline-none"
+                className="min-w-0 flex-1 rounded-xl bg-muted px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/40"
               />
               <span className="text-sm text-muted-foreground">a</span>
               <input
@@ -129,7 +129,7 @@ export function MonthIntakeChat({
                 min={awayStart || minDate}
                 max={maxDate}
                 onChange={(e) => setAwayEnd(e.target.value)}
-                className="min-w-0 flex-1 rounded-xl bg-muted px-3 py-2.5 text-sm outline-none"
+                className="min-w-0 flex-1 rounded-xl bg-muted px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/40"
               />
             </div>
           ) : null}
@@ -154,7 +154,7 @@ export function MonthIntakeChat({
                   disabled={busy}
                   onPick={(chip) => setAnswer(q.key, { chip: answer?.chip === chip ? null : chip })}
                 />
-                <div className="rounded-3xl bg-muted p-2">
+                <div className="rounded-3xl bg-muted p-2 focus-within:ring-2 focus-within:ring-ring/40">
                   <textarea
                     rows={2}
                     maxLength={200}

@@ -57,7 +57,7 @@ function FieldInput({
   // La etiqueta visible es también el nombre del campo para el lector de pantalla.
   const id = useId();
   return (
-    <div className="rounded-2xl bg-muted px-3.5 py-2.5">
+    <div className="rounded-2xl bg-muted px-3.5 py-2.5 focus-within:ring-2 focus-within:ring-ring/40">
       <label
         htmlFor={id}
         className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
