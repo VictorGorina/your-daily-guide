@@ -383,7 +383,8 @@ un cambio suele romper sin querer:
 - **El modelo propone la composición; el código pone la cantidad.** `decomposeDishes`
   (`resolve-dish.server.ts`) pide con salida estructurada (`Output.object` + Zod) UNA ración base
   de AESAN en gramos **crudos** (arroz, pasta y legumbre en seco) y el `estado` de cada gramaje. El
-  código: lleva lo crudo a la fila en seco (`COOKED_TO_RAW`) o convierte con `cookedYield` según la
+  código casa cada ingrediente con la tabla (`foods.data.ts`, por 100 g; `matchFood`/
+  `resolveIngredient` en `nutrition.ts`), lleva lo crudo a la fila en seco (`COOKED_TO_RAW`) o convierte con `cookedYield` según la
   `basis` de la fila (`gramsInRowBasis`); **sustituye** la grasa del modelo por `OIL_BY_METHOD`
   (`cooking.ts`; de dos métodos de calor cuenta el mayor, el aliño se suma, el untado solo sin
   calor); y pasa `validateRecipe` (techos por ingrediente, un huevo si acompaña, sin patata en una
@@ -393,6 +394,23 @@ un cambio suele romper sin querer:
 - **Calidad por kcal, umbral 0,90** (`resolutionQuality`, `MIN_RECIPE_QUALITY`). Lo que no casa y
   pesa ≥ 5 % de las kcal: primero USDA (ticket 22), luego el alimento más parecido (13). Por debajo
   del umbral el plato no se da por calculado (D13): "Calculando…" y se reintenta.
+- **Todo plato se calcula, nada de promedios (13, D13; ya no existe `roughMealMacros`).** Cada
+  `MealMacroEstimate` está `calculado` (sale de su receta, o la cifra la apuntó la persona:
+  `manual`) o `calculando` (cifras a 0 que **no** suman, no miden ningún desvío y se enseñan como
+  "Calculando…"; el semáforo del día queda gris). Una guía sin `status` cuenta como calculada. La
+  cadena de `decomposeDishes` no se rinde a la primera: lote → reintento uno a uno →
+  `DISH_FALLBACK_MODEL` (otra familia) → `calculando` con su motivo en el log
+  (`decompose-chain.ts`, puro y testeado). Hoy reintenta lo que queda al abrirse, al volver a la
+  app y cada 2 min (máx. 5 seguidos) con `macrosOnly` + `reuse` (solo se descompone lo que
+  falta); el detalle de un día pasado recalcula al abrirse. Un ingrediente que no casa cae en la
+  mediana de su `categoria` (la da el modelo) y, si aporta ≥ 5 % de las kcal, en el alimento más
+  parecido de esa categoría que elige `DISAMBIGUATION_MODEL` de una lista cerrada (sin cifras);
+  `GENERIC_FOOD` solo queda sin categoría. Un texto vago ("algo rápido") lo detecta `resolveDish`
+  en `setPlanMeal` (`VAGUE_DISH_MESSAGE`): la hoja de "comí distinto" pide concretar u ofrece
+  apuntar las kcal a mano (`MealHabit.manualKcal`). La **proteína** entra en la decisión de
+  compensar: `perMealDeltas` devuelve kcal y proteína, `MealHabit.swapProteinDelta` lleva la misma
+  contabilidad que `swapKcalDelta`, y `settleDay` pasa `balance.proteinPending` a
+  `compensationNeed`.
 - **Caché global `dish_recipes`** (`getRecipes` en `recipes.server.ts`, clave `dishKey`: palabras
   ordenadas y en singular, sin quitar nunca "sin" ni "fresco"). Solo escribe el servidor. Las
   macros NO se guardan: `macrosOfRecipe(receta, factor)` al leer. Una receta de un
@@ -409,7 +427,9 @@ un cambio suele romper sin querer:
   (`sharedMealPortions`, con la clave de servicio). **Privacidad:** esa media no se guarda junto a
   la comida (`MealMacroEstimate.portion` solo va en las propias): con el factor propio dejaría
   despejar el de los demás. `guide.portionFactor` guarda el factor del día para los días pasados.
-- **Escalado al objetivo de la comida (08 adelantado)**: `scale.ts` (puro, solo servidor). Grupos
+- **Escalado al objetivo de la comida (08 adelantado)**: una ración de AESAN es una unidad (se
+  recomiendan varias al día), así que sin escalar el día del plan se quedaba en ~60 % del
+  objetivo. `scale.ts` (puro, solo servidor). Grupos
   por los datos del alimento: V (verdura, fruta, condimentos < 60 kcal) fijo, P (proteína ≥ 35 %
   de las kcal) y E (el resto). Se recorre `fP` en pasos de 0,01 y `fE` se despeja de las kcal:
   kcal primero (±1 %), luego la proteína de la comida, luego el reparto menos deformado. Límites
@@ -417,7 +437,7 @@ un cambio suele romper sin querer:
   pero la ración de cereal de AESAN es la mitad de un plato y con ese techo ningún día llegaba). Lo
   que no cabe queda como residuo. Una pieza (`unidad`) no se escala por grupos: en el plan se sirve
   en piezas enteras, las más cercanas al objetivo (mínimo una). Se calcula al leer, no se
-  guarda: `plannedServingsFor` (`planned-serving.server.ts`) junta la ración personal, `perSlot`,
+  guarda: `plannedMacros` sirve los platos del plan y `plannedServingsFor` (`planned-serving.server.ts`) junta la ración personal, `perSlot`,
   el `kcalAdjust` del día y la ración y el objetivo medios del hogar (`sharedMealPortions`); la
   guía, `compensateFutureDishChange` y `eval:plan-lite` lo usan.
 - **Cierre del día (`alignSoloMeals` del 08)**: `day-close.ts` (`closeDay`/`serveDay`, puro).
@@ -444,7 +464,8 @@ un cambio suele romper sin querer:
   reparte cada sesión con `splitRoutineSession`: si esta semana ISO quedan sesiones de la rutina de
   `profiles.training`, su parte normal ya va en el objetivo y solo `kcal` (lo que desvía el día)
   lleva el exceso. Un perfil sin `daily_activity` no tiene rutina separada (todo extra, como antes).
-  La hoja guiada del chat usa la misma cifra, pero aún compensa por el coach (tarea aparte).
+  La hoja guiada del chat usa la misma cifra y compensa igual que Hoy, con `settleDay` (ver "El
+  chat tampoco compensa por origen" en CLAUDE.md).
 - **Reajuste medido (18, puente hasta el 12)**: `reflowMeals({ measure: true })` mide con las
   recetas cuánto compensan de verdad los platos cambiados (`absorbedKcal`); por debajo del 50 %
   insiste UNA vez con los números. `DayAdjustment.absorbedKcal` y la tarjeta lo dicen
@@ -456,11 +477,16 @@ un cambio suele romper sin querer:
   del hogar para las compartidas y la estructura "plato · acompañamiento · postre"
   (`planTargetsPrompt`). Los planes nuevos llevan `targetsVersion`; Hoy explica que uno anterior se
   queda corto. `bun run eval:plan-lite` lo mide.
-- **USDA (22)**: `USDA_FDC_API_KEY` en `.env` y en Vercel (clave gratuita de api.data.gov; sin ella
+- **USDA (22, `usda.server.ts`)**: `USDA_FDC_API_KEY` en `.env` y en Vercel (clave gratuita de api.data.gov; sin ella
   no se busca). Lo encontrado va a `foods_extra` y se registra como una fila más
   (`registerExtraFoods`, `ensureExtraFoods`). `bun run foods:review` para pasarlas a la tabla.
 - **Migraciones manuales**: `20260925140000_dish_recipes.sql` y `20260925150000_foods_extra.sql`
   (SQL Editor). Hasta aplicarlas no hay caché global ni filas de USDA persistentes.
+- **`foods.data.ts` no entra en el bundle del navegador.** El cliente solo importa módulos de
+  `src/lib/nutrition/` que no la cargan (`energy`, `portion`; `nutrition.ts` y `recipe.ts` sí la
+  cargan), y un lint prohíbe importarla fuera de su carpeta, de un `*.server.ts` o de un test.
+- **Medida**: `bun run eval:recipes` (exactitud contra el golden set) y `bun run eval:plan-lite`
+  (el plan contra el objetivo). Gastan llamadas y no van en CI.
 
 ## Push notifications
 

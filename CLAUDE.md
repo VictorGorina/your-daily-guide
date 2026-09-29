@@ -124,55 +124,24 @@ despensa) la lista de la compra nunca cambia — si un plato pide algo no compra
 aparece como aviso en `PlanDay.extras`. La única excepción es rehacer el plan con la mesa del
 hogar, que sí re-dimensiona las cantidades (ver "Recálculo del plan" más abajo).
 
-**Macros y kcal — receta canónica, no del modelo** (`precision-nutricional`, fase 2;
-`src/lib/nutrition/`, explicación larga en AGENTS.md). El modelo solo propone la COMPOSICIÓN de un
-plato: `decomposeDishes` (`resolve-dish.server.ts`) pide con salida estructurada UNA ración base de
-AESAN en gramos **crudos**, y el código pone la cantidad y las cifras: casado contra la tabla
-(`foods.data.ts`, por 100 g con `basis` crudo/cocinado; `matchFood`/`resolveIngredient` en
-`nutrition.ts`), grasa por método de cocción (`OIL_BY_METHOD`, `cooking.ts`) y `validateRecipe`
-(techos, inventados, UN reintento con pista; calibrado para no tocar el golden set). La receta se
-guarda **una vez para toda la app** en `dish_recipes` (`getRecipes`, `recipes.server.ts`, clave
-`dishKey`) y las macros se calculan **al leer** (`macrosOfRecipe(receta, factor)`), nunca se
-guardan. El punto de partida es la **ración personal** (`portion.ts`): `plan` = objetivo ÷ 2.000
-en los platos del plan (la media de los adultos en una comida compartida, que no se guarda con la
-comida por privacidad) y `habitual` = mantenimiento ÷ 2.000 en "comí distinto". Encima, **cada
-plato se escala al objetivo de su comida** (`scale.ts`, ticket 08 adelantado): verdura y fruta
-fijas, dos factores para el grupo proteína y el grupo energía (kcal primero, luego proteína),
-con límites para que el plato siga siendo el mismo; `plannedMacros` para el plan (objetivo de
-`perSlot` + `PlanDay.kcalAdjust`, o la media del hogar en una compartida, vía
-`plannedServingsFor`) y `eatenMacros` para "comí distinto" (el objetivo de esa comida a
-mantenimiento, × texto o chip). Los dos lados se escalan igual: si no, cualquier cambio de plato
-parecería comer menos. Después **se cierra el día** (`closeDay`, `day-close.ts`): lo que una
-comida no alcanza lo absorben las demás propias; una compartida cuenta con el objetivo propio
-de esa comida, no con el medio. Se calcula sobre los platos **planeados** (`plannedIdea`, que
-`guideMeals` manda como `planned`), nunca sobre lo comido: si no, la cena cambiaría de tamaño
-por lo que se comió a mediodía y se compensaría dos veces (ahí y en `settleDay`). Una ración de AESAN es una unidad (se recomiendan varias al día), así que
-sin escalar el día del plan se quedaba en ~60 % del objetivo. La pantalla Plan
-precalienta los platos del mes (`recipe-warm.ts`, `/api/v1/recipes/warm`). Ingredientes que no
-casan y pesan: USDA (`usda.server.ts`, `USDA_FDC_API_KEY`, tabla `foods_extra`) y si no, el más
-parecido. Medida: `bun run eval:recipes` (exactitud contra el golden set) y `bun run
-eval:plan-lite` (el plan contra el objetivo); gastan llamadas y no van en CI.
-`foods.data.ts` no debe entrar en el bundle de navegador: el cliente solo importa módulos de
-`src/lib/nutrition/` que no la cargan (`energy`, `portion`; `nutrition.ts` y `recipe.ts` sí la
-cargan), y un lint prohíbe importarla fuera de su carpeta, de un `*.server.ts` o de un test. Las migraciones `dish_recipes` y `foods_extra` son manuales: sin ellas todo
-funciona, sin caché global.
+**Macros y kcal — receta canónica, no del modelo** (`src/lib/nutrition/`; detalle en «Receta
+canónica, caché y ración personal» de AGENTS.md). El modelo solo propone la COMPOSICIÓN de un
+plato (una ración base de AESAN en gramos crudos, `decomposeDishes`); las cifras las pone el
+código: tabla `foods.data.ts`, grasa por método de cocción (`OIL_BY_METHOD`) y `validateRecipe`,
+calibrado para que ninguna receta del golden set se toque. La receta se guarda una vez para toda
+la app (`dish_recipes`, clave `dishKey`) y las macros se calculan **al leer**, nunca se guardan.
+Cada plato parte de la ración personal (`portion.ts`) y se escala al objetivo de su comida
+(`scale.ts`); el plan y "comí distinto" se escalan igual, o cualquier cambio parecería comer menos.
+`closeDay` cierra el día sobre los platos **planeados**, nunca sobre lo comido (si no, se
+compensaría dos veces). `foods.data.ts` no entra en el bundle del navegador (lo vigila un lint).
+Un cambio que toque cifras se mide con `bun run eval:recipes` y `eval:plan-lite`.
 
-**Todo plato se calcula: nada de promedios** (ticket 13 de `precision-nutricional`, D13; ya no
-existe `roughMealMacros`). Cada `MealMacroEstimate` está `calculado` (sale de su receta, o la
-cifra la apuntó la persona: `manual`) o `calculando` (cifras a 0 que **no** suman, no miden
-ningún desvío y se enseñan como "Calculando…"; el semáforo del día queda gris). Una guía sin
-`status` cuenta como calculada. La cadena de `decomposeDishes` no se rinde a la primera: lote →
-reintento uno a uno → `DISH_FALLBACK_MODEL` (otra familia) → `calculando` con su motivo en el log
-(`decompose-chain.ts`, puro y testeado). Hoy reintenta lo que queda al abrirse, al volver a la app
-y cada 2 min (máx. 5 seguidos) con `macrosOnly` + `reuse` (solo se descompone lo que falta); el
-detalle de un día pasado recalcula al abrirse. Un ingrediente que no casa cae en la mediana de su
-`categoria` (la da el modelo) y, si aporta ≥ 5 % de las kcal, en el alimento más parecido de esa
-categoría que elige `DISAMBIGUATION_MODEL` de una lista cerrada (sin cifras); `GENERIC_FOOD` solo
-queda sin categoría. Un texto vago ("algo rápido") lo detecta `resolveDish` en `setPlanMeal`
-(`VAGUE_DISH_MESSAGE`): la hoja de "comí distinto" pide concretar u ofrece apuntar las kcal a mano
-(`MealHabit.manualKcal`). La **proteína** entra en la decisión de compensar: `perMealDeltas`
-devuelve kcal y proteína, `MealHabit.swapProteinDelta` lleva la misma contabilidad que
-`swapKcalDelta`, y `settleDay` pasa `balance.proteinPending` a `compensationNeed`.
+**Todo plato se calcula: nada de promedios** (D13; detalle en la misma sección de AGENTS.md). Un
+`MealMacroEstimate` está `calculado` (de su receta, o `manual` si la cifra la apuntó la persona)
+o `calculando`: cifras a 0 que no suman ni miden ningún desvío, se enseñan como "Calculando…" y
+dejan gris el semáforo. Nunca se rellena con una media: `decomposeDishes` reintenta en cadena
+(`decompose-chain.ts`) y Hoy vuelve a pedir lo que falta. Un texto vago se pregunta
+(`VAGUE_DISH_MESSAGE`) o se apunta a mano. La proteína también decide si se compensa.
 
 **El plan se comprueba contra el objetivo — UNA ronda** (ticket 10, `plan-fit.ts` puro +
 `plan-fit.server.ts`). El escalado tiene límites (una merluza con brócoli no llega a 465 kcal), así
