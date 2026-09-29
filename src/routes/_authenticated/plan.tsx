@@ -1006,6 +1006,7 @@ function PantryExtrasCard({
           type="button"
           onClick={add}
           disabled={pantry.isPending || !name.trim()}
+          aria-label="Añadir ingrediente"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-foreground text-background disabled:opacity-40"
         >
           <Plus className="h-4 w-4" />
@@ -1604,6 +1605,7 @@ function ShopModeView({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Salir del modo compra"
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground"
             >
               <ChevronLeft className="h-4 w-4" />

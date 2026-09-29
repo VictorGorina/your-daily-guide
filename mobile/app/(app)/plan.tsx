@@ -1285,6 +1285,8 @@ function PantryExtrasCard({
         <Pressable
           onPress={add}
           disabled={pantry.isPending || !name.trim()}
+          accessibilityRole="button"
+          accessibilityLabel="Añadir ingrediente"
           className="h-9 w-9 items-center justify-center rounded-full bg-foreground active:opacity-80"
           style={pantry.isPending || !name.trim() ? { opacity: 0.4 } : undefined}
         >
@@ -1895,6 +1897,8 @@ function ShopModeView({
         <View className="flex-row items-center gap-3">
           <Pressable
             onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Salir del modo compra"
             className="h-9 w-9 items-center justify-center rounded-full bg-surface active:opacity-70"
           >
             <ChevronLeft size={16} color="#6b6256" />

@@ -82,6 +82,7 @@ export const ConversationScrollButton = ({
         size="icon"
         type="button"
         variant="outline"
+        aria-label="Ir al último mensaje"
         {...props}
       >
         <ArrowDownIcon className="size-4" />

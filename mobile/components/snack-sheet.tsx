@@ -74,7 +74,13 @@ function Chip({
         </Text>
       </Pressable>
       {active ? (
-        <Pressable onPress={onRemove} hitSlop={8} className="py-1.5 pr-2.5 active:opacity-70">
+        <Pressable
+          onPress={onRemove}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Quitar ${label}`}
+          className="py-1.5 pr-2.5 active:opacity-70"
+        >
           <X size={12} color="#3e3d39" />
         </Pressable>
       ) : null}
