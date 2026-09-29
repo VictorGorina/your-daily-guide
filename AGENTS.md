@@ -264,6 +264,71 @@ Cosas que un cambio suele romper sin querer:
 - `/api/v1/snacks/settle` y `/api/v1/exercise/settle` se conservan como alias de `day/settle` para
   las builds móviles ya instaladas.
 
+### Cómo se asienta el día
+
+Cambiar un plato en Hoy, picotear y hacer deporte desvían el
+día, y los tres se resuelven juntos: `day-settle.ts` tiene **un** debounce de 10 s compartido (el
+"pendiente" se persiste y se fuerza al ocultar la app, misma forma que `plan-recalc.ts`) que acaba
+en **una** llamada a `settleDay` ([src/lib/day-settle.functions.ts](src/lib/day-settle.functions.ts)).
+Esa función suma el día con `dayBalance` ([src/lib/day-balance.ts](src/lib/day-balance.ts), puro y
+testeado), decide **una vez** con `compensationNeed` (tabla aprobada por objetivo), reserva los tres
+libros de cuentas a la vez y llama **una vez** a `reflowMeals` con la nota del día entero
+(`dayNote`). Recoloca comidas/cenas **propias** de mañana a hoy + 6 (`compensationWindow`,
+`soloOnly`); la compra, hoy y el pasado no cambian. Como los platos del plan se escalan al objetivo de su comida,
+cambiar un plato por otro más ligero ya no aligera nada por sí solo: `reflowMeals` guarda en cada
+día recolocado lo que mueve cada plato (`PlanDay.kcalAdjust`, puente hasta el ticket 12, que lo
+escribirá sin cambiar platos) y el escalado apunta a `objetivo + ajuste`. Lo que dice la tarjeta
+(`absorbedKcal`) es exactamente lo que cambian esos días.
+
+### El chat tampoco compensa por origen
+
+El deporte y lo que se come encima del plan nunca van
+por `ajustar_plan_mensual` (que decidía con una cifra estimada por el modelo y contaba también las
+sesiones de la rutina, que ya van en el objetivo — ticket 16, D9):
+
+- El registro guiado del chat (`guided-log-sheet.tsx`, web y móvil) guarda igual que Hoy:
+  "Actividad" con `logExercise` y "Picoteo o extra" con `SnackForm` (el formulario de
+  `snack-sheet.tsx`, que usa también "Añadir picoteo"). Una comida del plan cambiada por otra NO
+  va ahí — como extra contaría también la comida planeada —, sino por "Comí otra cosa" o
+  `cambiar_plato`. El chat programa `scheduleDaySettle` (con `ensureDaySettleDeps` por si Hoy no
+  se ha montado) y al coach solo le llega un acuse (`day-log-ack.ts`) con una marca en el
+  `metadata`, así que `/api/chat` contesta ese turno **sin herramientas**. El prefijo del acuse
+  queda en el historial y el prompt prohíbe volver a registrarlo o compensarlo después.
+- El deporte contado por escrito va por la herramienta `registrar_deporte` (actividad, minutos e
+  intensidad de las listas de `exercise.ts`; las kcal no las da el modelo), que en el cliente
+  (`use-coach-actions.ts`, web y móvil) hace lo mismo: `logExercise` + `scheduleDaySettle`.
+
+### Procedencia y resultado
+
+Los tres libros siguen donde estaban y son la PROCEDENCIA (`habits[].swapKcalDelta`,
+`snacks.compensatedKcal`, `exercise.compensatedKcal`): de ahí sale el desglose que se enseña, y
+mantienen la garantía de no compensar dos veces. El RESULTADO se guarda una sola vez, en
+`daily_logs.adjustment` — el código tolera que la columna no exista todavía (42703), como
+`reflowMeals` con `snacks`. `dayReversing` generaliza a todo el día las reglas que picoteo y
+deporte tenían por separado para "esto deshace un ajuste ya aplicado".
+
+### Cambio de plato en Hoy
+
+Lo que aporta `use-meal-swap.ts` a ese lote es solo `resolveDishDeltas`: regenerar las macros del
+día una vez y sacar el desvío por comida contra `plannedKcal` (congelada como `plannedIdea`, para
+medir siempre contra el plan y no contra el cambio anterior). `setPlanMeal` escribe el plato al
+instante y sin IA, y el estado es por comida, no global. Cada escritura de `habits` desde el cliente
+pasa por `patchTodayHabits`, que escribe con CAS sobre `updated_at` (ver "Escrituras concurrentes" en CLAUDE.md).
+
+### Tarjeta "Balance de hoy"
+
+[src/components/day-balance-card.tsx](src/components/day-balance-card.tsx), debajo de "Registrar
+deporte". Es una petición explícita del usuario: la persona tiene que VER que
+lo que hace mueve el plan de los próximos días, porque eso genera confianza. Enseña el desvío del
+día con el **desglose por origen** (comidas cambiadas · picoteo · deporte), que es lo que hace
+legible la causalidad, y debajo los platos que se han movido, con el anterior tachado. El número es
+inmediato (deterministas: tabla de composición y `estimateExerciseKcal`); los platos tardan lo que
+tarde el modelo, y entre medias dice "Ajustando tus próximos días…". Cuando el plan **no** se mueve
+también lo dice (`balanceNote`) — un "no he cambiado nada" explicado demuestra que el sistema estaba
+mirando. Sustituye al bloque de ajuste de `snack-card` y `exercise-card` (ahora solo listas), a las
+tres instancias de `AdjustmentInfoSheet` y al badge "i" por comida, que mentía: el servidor escribía
+la misma lista de cambios en todas las comidas del lote.
+
 **Editar el picoteo de un día pasado (2026-09-19) es solo corregir el historial.** La sección
 "Picoteo" de `DayDetailBody` (calendario de Plan y tira de Hoy) deja de ser de solo lectura: una X
 por entrada y un botón "Añadir picoteo" abren el mismo `SnackSheet` con la fecha de ese día
