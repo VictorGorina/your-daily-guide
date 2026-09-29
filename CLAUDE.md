@@ -88,41 +88,16 @@ cliente de navegador; `client.server.ts` el de servidor. `auth-middleware.ts` va
 y, vía cabecera `Authorization`, también las peticiones de `/api/v1/*`). Las migraciones SQL viven
 en `supabase/migrations/`.
 
-**Plan de comidas — dos caminos deliberadamente separados** (ver
-[src/lib/plan/dishes.functions.ts](src/lib/plan/dishes.functions.ts),
-[src/lib/plan/reflow.server.ts](src/lib/plan/reflow.server.ts) y
-[src/lib/plan-shared.ts](src/lib/plan-shared.ts)):
-
-- `setPlanMeal` cambia un plato de un día concreto tal cual lo pide la persona, sin IA de por
-  medio — así es verificable que se aplicó lo pedido.
-- `adjustMonthlyPlan` recoloca varios días futuros para compensar (comió de más, hizo ejercicio);
-  el día de hoy nunca se toca. La IA **no** devuelve el plan entero, sino una lista de cambios
-  (`{"cambios": [{"fecha","comida","cena"}]}`, ver `cleanReflowChanges` + `applyPlanChanges`):
-  pidiéndole las cuatro semanas de vuelta copiaba el plan tal cual casi siempre. Las fechas que
-  puede tocar van explícitas en el prompt y se validan al aplicarlas. Si el desvío en kcal supera
-  `FORCE_ADJUST_KCAL` y no cambia nada, se le insiste una vez.
-
-Un cambio a mano (`setPlanMeal`, que escribe con `withPlanMeal`) queda **fijado** en
-`PlanDay.pinned`: ninguna recolocación automática lo pisa (`applyPlanChanges`, `mergeFuturePlan`, y
-el prompt de `reflowMeals` lo marca como `"fijo"`). Hace falta porque comida y cena viven en los
-mismos campos (`lunch`/`dinner`) que escribe la IA; antes solo sobrevivían desayuno y merienda
-(`breakfast`/`snack`, que además mandan sobre la rotación semanal). "Deshacer" manda `pin: false`
-con el `previousPinned` que devuelve `setPlanMeal`. En el hogar, la marca de una comida compartida
-viaja con el plato del planificador (`mirrorPinned`). **Ojo con la rejilla del plan:** las semanas van por día del mes
-(`floor((día-1)/7)`) y la posición dentro de la fila es el día de la semana, así que el orden de la
-fila no es el del calendario — un lunes 7 es la última fecha de la semana 0 pero la posición 0.
-Qué fecha ocupa cada celda lo dice `dateOfPlanCell`, y es lo que decide qué se puede reescribir;
-compararlo por posición hacía que la recolocación pisara días pasados y no tocara ninguno futuro.
-El plan tiene **5 filas** (`PLAN_ROWS`): las 4 semanas que genera la IA y una con los días 29-31.
-Antes esos días compartían celda con el mismo día de la semana 3 (el martes 29 ERA el martes 22):
-lo cambiado una semana salía la siguiente, y cambiar el 29 reescribía el 22. `withOverflowWeek`
-añade la fila como copia de la semana 3 (sin sus comidas fijadas a mano) en `cleanPlan`,
-`completePlan` y las lecturas del cliente (`withPlanRows` en `daily.ts`, web y móvil); se guarda
-en la siguiente escritura. La compra sigue en 4 semanas: pasa `WEEK_COUNT`, nunca
-`plan.weeks.length`, a `projectTrips`. Al recolocar platos (`adjustMonthlyPlan`, `setPlanMeal`, recálculo por
-despensa) la lista de la compra nunca cambia — si un plato pide algo no comprado, se guarda igual y
-aparece como aviso en `PlanDay.extras`. La única excepción es rehacer el plan con la mesa del
-hogar, que sí re-dimensiona las cantidades (ver "Recálculo del plan" más abajo).
+**Plan de comidas — dos caminos deliberadamente separados** (detalle en «Platos del plan: cambio
+a mano vs. recolocación» de AGENTS.md). `setPlanMeal` cambia un plato tal cual lo pide la persona,
+sin IA, y lo deja **fijado** (`PlanDay.pinned`): ninguna recolocación automática lo pisa.
+`adjustMonthlyPlan`/`reflowMeals` recolocan días futuros con una **lista de cambios** de la IA,
+nunca el plan entero, y nunca tocan hoy ni el pasado. **La rejilla no va en orden de calendario:**
+qué fecha ocupa cada celda lo dice `dateOfPlanCell`, nunca la posición en la fila. El plan tiene 5
+filas (`PLAN_ROWS`; la 5.ª, días 29-31) pero la compra sigue en 4: a `projectTrips` se le pasa
+`WEEK_COUNT`, nunca `plan.weeks.length`. Recolocar platos **nunca** cambia la lista de la compra
+(lo que falte va como aviso en `PlanDay.extras`); la única excepción es "Rehacer plan con la
+familia".
 
 **Macros y kcal — receta canónica, no del modelo** (`src/lib/nutrition/`; detalle en «Receta
 canónica, caché y ración personal» de AGENTS.md). El modelo solo propone la COMPOSICIÓN de un

@@ -77,6 +77,15 @@ cambio para un día concreto se guarda en campos propios del día — `breakfast
 ([plan/types.ts](src/lib/plan/types.ts)) — y manda sobre la rotación. `mergeFuturePlan` los
 conserva: una recolocación automática posterior no pisa lo que se pidió a mano.
 
+**Comidas fijadas.** Un cambio a mano (`setPlanMeal`, que escribe con `withPlanMeal`) queda
+**fijado** en `PlanDay.pinned`: ninguna recolocación automática lo pisa (`applyPlanChanges`,
+`mergeFuturePlan`, y el prompt de `reflowMeals` lo marca como `"fijo"`). Hace falta porque comida
+y cena viven en los mismos campos (`lunch`/`dinner`) que escribe la IA; antes solo sobrevivían
+desayuno y merienda (`breakfast`/`snack`, que además mandan sobre la rotación semanal).
+"Deshacer" manda `pin: false` con el `previousPinned` que devuelve `setPlanMeal`. En el hogar, la
+marca de una comida compartida viaja con el plato del planificador (`mirrorPinned`); para decidir
+algo en la UI por "este plato se cambió a mano" se usa `isPinnedByViewer` (ver "Familia").
+
 **La rejilla del plan no va en orden de calendario.** La semana la marca el día del mes
 (`floor((día-1)/7)`) y la posición dentro de la fila, el día de la semana. En un mes que empieza en
 martes, la semana 0 va martes(día 1)…domingo(día 6) y luego lunes(día 7): el lunes es la ÚLTIMA
@@ -89,7 +98,10 @@ veía, y parecía que el coach no hacía nada. Los días 29-31 van en una 5.ª f
 cambiado el martes 22 salía también el martes 29 y cambiar el 29 reescribía el 22. La IA sigue
 generando 4 semanas y la compra sigue en 4 (`WEEK_COUNT`, días 29-31 en la última): la fila nueva
 nace como copia de la semana 3, sin sus comidas fijadas a mano, que se sustituyen por el plato del
-plan del mismo día en la fila anterior.
+plan del mismo día en la fila anterior. `withOverflowWeek` la añade en `cleanPlan`, `completePlan`
+y las lecturas del cliente (`withPlanRows` en `daily.ts`, web y móvil), y se guarda en la
+siguiente escritura. Como la compra sigue en 4 semanas, a `projectTrips` se le pasa `WEEK_COUNT`,
+nunca `plan.weeks.length`.
 
 La lista de la compra **nunca** cambia. Si el plato pide algo que no se compró, se guarda igual y
 los ingredientes que faltan quedan en `PlanDay.extras[comida]`, que se pintan como aviso ("Fuera de
