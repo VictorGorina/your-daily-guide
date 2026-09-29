@@ -9,8 +9,9 @@
  *   peticiones por hora). Sin clave, no se busca: se queda el "más parecido".
  * - Lo encontrado se guarda en `foods_extra` (global, solo escribe el servidor)
  *   y se registra en el proceso (`registerExtraFoods`): a partir de ahí es una
- *   fila más de la tabla. `ensureExtraFoods` las carga una vez por proceso, que
- *   es lo que permite volver a sumar una receta guardada que las usa.
+ *   fila más de la tabla. `ensureExtraFoods` las carga en el proceso (y las
+ *   relee cada 10 min), que es lo que permite volver a sumar una receta guardada
+ *   que las usa.
  *
  * Server-only.
  */
@@ -18,6 +19,7 @@
 import { generateText } from "ai";
 
 import { DISAMBIGUATION_MODEL, type createAiProvider } from "@/lib/ai-provider.server";
+import { errorText, logEvent } from "@/lib/log.server";
 import { parseJsonLoose } from "@/lib/plan-shared";
 
 import type { Food, FoodCategory } from "./foods.data";
@@ -73,26 +75,48 @@ const rowToFood = (r: ExtraRow): Food => ({
   pricePer100Eur: 0.5,
 });
 
-let loading: Promise<void> | null = null;
+/** Cada cuánto se relee `foods_extra`: lo que guarda otra instancia tarda como mucho esto. */
+const EXTRA_FOODS_TTL_MS = 10 * 60_000;
+/** Tras una lectura fallida, cuándo se vuelve a intentar. */
+const EXTRA_FOODS_RETRY_MS = 30_000;
 
-/** Carga `foods_extra` en el proceso, una vez. Sin tabla (migración pendiente), nada. */
+let extraFoods: { at: number; ok: boolean; promise: Promise<void> } | null = null;
+
+/**
+ * Carga `foods_extra` en el proceso y la relee cada `EXTRA_FOODS_TTL_MS`; tras
+ * un fallo, reintenta a los `EXTRA_FOODS_RETRY_MS` (antes un fallo se memorizaba
+ * y la instancia se quedaba sin esas filas hasta morir). Llamadas a la vez
+ * comparten la lectura. Sin tabla (migración pendiente), nada.
+ */
 export function ensureExtraFoods(): Promise<void> {
-  loading ??= (async () => {
+  const now = Date.now();
+  if (
+    extraFoods &&
+    now - extraFoods.at < (extraFoods.ok ? EXTRA_FOODS_TTL_MS : EXTRA_FOODS_RETRY_MS)
+  ) {
+    return extraFoods.promise;
+  }
+  const entry = { at: now, ok: true, promise: Promise.resolve() };
+  entry.promise = (async () => {
     try {
       const db = await admin();
       const { data, error } = await db
         .from("foods_extra" as never)
         .select("key, label, aliases, category, kcal, protein_g, carbs_g, fat_g, fiber_g");
       if (error) {
-        if (!isMissingTable(error)) console.error("foods_extra: lectura", error);
+        if (isMissingTable(error)) return;
+        entry.ok = false;
+        logEvent("warn", "foods_extra_load_failed", { error: errorText(error) });
         return;
       }
       registerExtraFoods(((data ?? []) as unknown as ExtraRow[]).map(rowToFood));
     } catch (error) {
-      console.warn("foods_extra: sin cargar", error);
+      entry.ok = false;
+      logEvent("warn", "foods_extra_load_failed", { error: errorText(error) });
     }
   })();
-  return loading;
+  extraFoods = entry;
+  return entry.promise;
 }
 
 async function translate(ai: Provider, name: string, category: FoodCategory) {

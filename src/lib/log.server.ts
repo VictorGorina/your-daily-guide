@@ -15,6 +15,10 @@
  *   imposible usando la app con normalidad: si se repite, merece un vistazo.
  * - `push_failed` (warn): el servicio de push rechazó un envío (no 404/410).
  * - `recipe_hits_failed` (warn): no se pudo sumar el uso de una receta.
+ * - `foods_extra_load_failed` (warn): no se pudo leer `foods_extra`; esa instancia
+ *   reintenta a los 30 s y, mientras, una receta guardada con ingredientes de USDA
+ *   no se resuelve y se vuelve a descomponer (una llamada a la IA). Suelto es un
+ *   fallo de red; repetido, la tabla o su acceso.
  * - `reflow_changes_discarded` (warn): la IA propuso cambios fuera de las fechas
  *   permitidas y se descartaron.
  * - `plan_generic_dish_fixed` (warn): el plan recién generado traía platos de
