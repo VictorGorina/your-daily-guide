@@ -75,6 +75,7 @@
     "subtitleUp": "Create your account and your coach is with you from today.",
     "subtitleForgot": "We'll send a link to your email to create a new password.",
     "emailPlaceholder": "you@email.com",
+    "emailLabel": "Email",
     "passwordPlaceholder": "Password",
     "forgotLink": "Forgot your password?",
     "sendLink": "Send link",

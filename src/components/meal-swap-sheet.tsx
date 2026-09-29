@@ -161,6 +161,7 @@ export function MealSwapSheet({
           <div className="relative">
             <Textarea
               placeholder="Ej: Una pizza margarita con ensalada"
+              aria-label={`Qué has comido en ${mealLabel.toLowerCase()}`}
               value={what}
               onChange={(e) => {
                 setWhat(e.target.value);
@@ -224,6 +225,7 @@ export function MealSwapSheet({
                 <Input
                   inputMode="numeric"
                   placeholder="kcal aproximadas"
+                  aria-label="Calorías aproximadas"
                   value={kcal}
                   onChange={(e) => setKcal(e.target.value)}
                   disabled={locked}

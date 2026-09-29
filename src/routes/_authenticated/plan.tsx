@@ -21,7 +21,7 @@ import {
   Wheat,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -1000,6 +1000,7 @@ function PantryExtrasCard({
             if (e.key === "Enter") add();
           }}
           placeholder="p. ej. lentejas, espinacas..."
+          aria-label="Ingrediente que ya tienes en casa"
           className="min-w-0 flex-1 rounded-full bg-secondary px-3.5 py-2 text-xs outline-none placeholder:text-muted-foreground/70"
         />
         <button
@@ -1536,6 +1537,7 @@ function ShopModeView({
   scanningReceipt: boolean;
 }) {
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
+  const spendId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   const pickReceipt = async (file: File | undefined) => {
     if (!file) return;
@@ -1749,8 +1751,11 @@ function ShopModeView({
           {allDone ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 rounded-[20px] bg-surface px-4 py-3">
-                <label className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</label>
+                <label htmlFor={spendId} className="flex-1 text-xs text-muted-foreground">
+                  ¿Cuánto gastaste?
+                </label>
                 <input
+                  id={spendId}
                   type="text"
                   inputMode="decimal"
                   value={text}

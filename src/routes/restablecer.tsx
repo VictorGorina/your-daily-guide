@@ -163,6 +163,7 @@ function RestablecerPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t("auth.reset.newPasswordPlaceholder")}
+                aria-label={t("auth.reset.newPasswordPlaceholder")}
               />
               <input
                 className={field}
@@ -171,6 +172,7 @@ function RestablecerPage() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder={t("auth.reset.repeatPasswordPlaceholder")}
+                aria-label={t("auth.reset.repeatPasswordPlaceholder")}
               />
               <button
                 type="submit"

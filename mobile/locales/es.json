@@ -75,6 +75,7 @@
     "subtitleUp": "Crea tu cuenta y tu coach te acompaña desde hoy.",
     "subtitleForgot": "Te enviamos un enlace a tu correo para crear una contraseña nueva.",
     "emailPlaceholder": "tu@correo.com",
+    "emailLabel": "Correo electrónico",
     "passwordPlaceholder": "Contraseña",
     "forgotLink": "¿Has olvidado tu contraseña?",
     "sendLink": "Enviar enlace",

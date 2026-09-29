@@ -381,6 +381,7 @@ function Hogar() {
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   placeholder="ABC123"
+                  aria-label="Código de invitación"
                 />
                 <button
                   onClick={() => lookup.mutate()}
@@ -457,6 +458,7 @@ function Hogar() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Nombre del hogar"
+              aria-label="Nombre del hogar"
             />
             <button
               onClick={() => create.mutate()}
@@ -703,6 +705,7 @@ function Hogar() {
                       value={newAdult.name}
                       onChange={(e) => setNewAdult((p) => ({ ...p, name: e.target.value }))}
                       placeholder="Nombre"
+                      aria-label="Nombre del adulto"
                     />
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       {(

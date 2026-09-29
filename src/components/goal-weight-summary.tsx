@@ -188,6 +188,7 @@ function WeightPanel({
               if (e.key === "Escape") setEditing(false);
             }}
             placeholder={last != null ? String(last) : "kg"}
+            aria-label="Peso de hoy, en kilos"
             className="w-16 rounded-lg bg-secondary px-2 py-1.5 text-right font-num text-sm tabular-nums text-foreground outline-none"
           />
           <span className="text-xs text-muted-foreground">kg</span>

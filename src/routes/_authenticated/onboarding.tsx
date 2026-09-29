@@ -1449,6 +1449,7 @@ function Onboarding() {
                     commit(value);
                   }
                 }}
+                aria-label="Tu respuesta"
                 placeholder={
                   saving ? "Preparando tu plan..." : (currentQ.hint ?? "Escribe aquí...")
                 }

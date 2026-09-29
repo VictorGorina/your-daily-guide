@@ -399,6 +399,7 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
                     setNeedsConfirm(false);
                   }}
                   placeholder={t("auth.emailPlaceholder")}
+                  aria-label={t("auth.emailLabel")}
                 />
                 {mode !== "forgot" && (
                   <input
@@ -408,6 +409,7 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={t("auth.passwordPlaceholder")}
+                    aria-label={t("auth.passwordPlaceholder")}
                   />
                 )}
                 {/* Salida del callejón sin salida: la cuenta existe pero nadie

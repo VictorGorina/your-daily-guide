@@ -161,6 +161,7 @@ export function MonthIntakeChat({
                     value={answer?.text ?? ""}
                     onChange={(e) => setAnswer(q.key, { text: e.target.value })}
                     placeholder={q.placeholder}
+                    aria-label={q.ask(monthName)}
                     className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
                   />
                   <div className="flex items-center px-1">

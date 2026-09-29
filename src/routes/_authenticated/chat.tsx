@@ -316,7 +316,11 @@ function ChatPage() {
       </div>
 
       <PromptInput onSubmit={handleSubmit} className="mt-2">
-        <PromptInputTextarea ref={textareaRef} placeholder="Escribe a tu coach..." />
+        <PromptInputTextarea
+          ref={textareaRef}
+          placeholder="Escribe a tu coach..."
+          aria-label="Mensaje para tu coach"
+        />
         <PromptInputFooter className="justify-between">
           <DictateButton onText={appendDictation} label="Dictar" />
           <PromptInputSubmit status={status} disabled={busy} />

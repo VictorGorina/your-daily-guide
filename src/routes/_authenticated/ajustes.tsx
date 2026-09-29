@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react";
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -54,12 +54,18 @@ function FieldInput({
   className,
   ...props
 }: { label: string } & React.ComponentProps<"input">) {
+  // La etiqueta visible es también el nombre del campo para el lector de pantalla.
+  const id = useId();
   return (
     <div className="rounded-2xl bg-muted px-3.5 py-2.5">
-      <label className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <label
+        htmlFor={id}
+        className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+      >
         {label}
       </label>
       <input
+        id={id}
         {...props}
         className={`mt-0.5 w-full bg-transparent text-sm font-medium text-foreground outline-none ${className ?? ""}`}
       />

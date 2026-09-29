@@ -237,6 +237,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       <div className="space-y-2">
         <Textarea
           placeholder="Ej: un puñado de almendras"
+          aria-label="Qué has picoteado"
           value={text}
           onChange={(e) => changeText(e.target.value)}
           onKeyDown={(e) => {

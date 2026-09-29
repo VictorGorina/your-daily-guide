@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Cookie, Loader2, Users, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { MacroBars } from "@/components/macro-bars";
@@ -132,6 +132,8 @@ export function DayDetailBody({
   const [editing, setEditing] = useState<number | null>(null);
   // Texto libre de "qué comí realmente" por índice de habit, mientras se edita.
   const [actualDraft, setActualDraft] = useState<Record<number, string>>({});
+  // Asocia cada «¿Qué comiste realmente?» con su campo (una por comida).
+  const actualId = useId();
   // Toggle "toda la familia comió esto" por índice de habit.
   const [familyToggle, setFamilyToggle] = useState<Record<number, boolean>>({});
   const [snackSheetOpen, setSnackSheetOpen] = useState(false);
@@ -484,10 +486,14 @@ export function DayDetailBody({
                     ) : null}
                     {/* Campo de texto para indicar qué comió realmente */}
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-muted-foreground">
+                      <label
+                        htmlFor={`${actualId}-${i}`}
+                        className="text-[11px] font-medium text-muted-foreground"
+                      >
                         ¿Qué comiste realmente?
                       </label>
                       <input
+                        id={`${actualId}-${i}`}
                         type="text"
                         autoFocus={!h.actual}
                         value={actualDraft[i] ?? h.actual ?? ""}

@@ -378,7 +378,11 @@ export function CoachFab() {
             </Conversation>
 
             <PromptInput onSubmit={handleSubmit} className="mt-3">
-              <PromptInputTextarea ref={textareaRef} placeholder="Habla con tu coach..." />
+              <PromptInputTextarea
+                ref={textareaRef}
+                placeholder="Habla con tu coach..."
+                aria-label="Mensaje para tu coach"
+              />
               <PromptInputFooter className="justify-between">
                 <DictateButton onText={appendDictation} label="Dictar" />
                 <PromptInputSubmit status={status} disabled={busy} />
