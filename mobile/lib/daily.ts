@@ -267,14 +267,47 @@ export const hasProfileColumn = (
   column: (typeof PENDING_MIGRATION_COLUMNS)[number],
 ): boolean => !!profile && column in profile;
 
-export async function fetchLogs(): Promise<DailyLog[]> {
+/**
+ * Las columnas de `daily_logs` que se leen: las de `DailyLog`, sin
+ * `created_at`/`updated_at`. Explícitas y no `*` (ticket 17 de la auditoría);
+ * si `DailyLog` gana un campo y esta lista no, deja de compilar.
+ */
+const LOG_COLUMN_LIST = [
+  "id",
+  "user_id",
+  "log_date",
+  "weight_kg",
+  "habits",
+  "guide",
+  "mood",
+  "notes",
+  "evening_done",
+  "snacks",
+  "exercise",
+  "adjustment",
+] as const satisfies readonly (keyof DailyLog)[];
+
+type MissingLogColumns = Exclude<keyof DailyLog, (typeof LOG_COLUMN_LIST)[number]>;
+const _allLogColumns: [MissingLogColumns] extends [never] ? true : never = true;
+void _allLogColumns;
+
+export const LOG_COLUMNS = LOG_COLUMN_LIST.join(", ");
+
+/**
+ * Lo que usa el histórico de `fetchLogs`: impulso, tendencia semanal, tamaño de
+ * ración aprendido y pesajes. Sin la guía, el picoteo ni el ajuste de cada día,
+ * que en 120 filas eran casi todo lo descargado y nadie leía.
+ */
+export type DailyLogHistory = Pick<DailyLog, "log_date" | "weight_kg" | "habits">;
+
+export async function fetchLogs(): Promise<DailyLogHistory[]> {
   const { data, error } = await supabase
     .from("daily_logs")
-    .select("*")
+    .select("log_date, weight_kg, habits")
     .order("log_date", { ascending: false })
     .limit(120);
   if (error) throw error;
-  return (data ?? []) as unknown as DailyLog[];
+  return (data ?? []) as unknown as DailyLogHistory[];
 }
 
 /**
@@ -287,7 +320,7 @@ export async function fetchLogsForMonth(month: string): Promise<DailyLog[]> {
   const lastDay = new Date(y ?? 1970, m ?? 1, 0).getDate();
   const { data, error } = await supabase
     .from("daily_logs")
-    .select("*")
+    .select(LOG_COLUMNS)
     .gte("log_date", `${month}-01`)
     .lte("log_date", `${month}-${String(lastDay).padStart(2, "0")}`)
     .order("log_date", { ascending: true });
@@ -624,7 +657,7 @@ export async function logTodayWeight(kg: number) {
 
 // --- Señales de progreso (impulso, tendencia semanal) ---
 
-function dailyRatio(log: DailyLog | undefined) {
+function dailyRatio(log: DailyLogHistory | undefined) {
   const habits = log?.habits ?? [];
   return habits.length ? habits.filter((h) => h.done).length / habits.length : 0;
 }
@@ -635,7 +668,7 @@ function dailyRatio(log: DailyLog | undefined) {
  * flojo la hace bajar, no la borra; unos días buenos la recuperan rápido.
  * `days` limita cuánto histórico pesa (por defecto, las últimas 3 semanas).
  */
-export function impulsoFrom(logs: DailyLog[], days = 21): number {
+export function impulsoFrom(logs: DailyLogHistory[], days = 21): number {
   const sorted = [...logs].sort((a, b) => (a.log_date < b.log_date ? -1 : 1)).slice(-days);
   if (!sorted.length) return 0;
   const alpha = 0.25;
@@ -653,7 +686,7 @@ export type WeeklyTrend = { thisWeek: number; lastWeek: number; deltaPts: number
  * anteriores. Devuelve null si no hay al menos 2 días registrados en cada una
  * de las dos semanas para que la comparación signifique algo.
  */
-export function weeklyTrendFrom(logs: DailyLog[]): WeeklyTrend | null {
+export function weeklyTrendFrom(logs: DailyLogHistory[]): WeeklyTrend | null {
   const todayStr = todayISO();
   const byDate = new Map(logs.map((l) => [l.log_date, l]));
   const avgRatioFor = (offsetStart: number, offsetEnd: number) => {

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { ProgressBar } from "@/components/progress-bar";
 import { WeightGauge } from "@/components/weight-gauge";
-import { logTodayWeight, type DailyLog, type Profile } from "@/lib/daily";
+import { logTodayWeight, type DailyLogHistory, type Profile } from "@/lib/daily";
 import { goalProgress, normalizeGoalType } from "@/lib/goal";
 
 // "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
@@ -27,7 +27,7 @@ export function GoalWeightSummary({
   logs,
   profile,
 }: {
-  logs: DailyLog[];
+  logs: DailyLogHistory[];
   profile: Profile | null;
 }) {
   const progress = goalProgress(profile ?? null);
@@ -136,7 +136,7 @@ function WeightPanel({
   lastKnown,
   regressing,
 }: {
-  logs: DailyLog[];
+  logs: DailyLogHistory[];
   lastKnown: number | null;
   regressing: boolean;
 }) {
@@ -242,9 +242,9 @@ function WeightPanel({
 
 // Últimos 10 pesajes en orden cronológico — de un vistazo, sin abrir cada día
 // para reconstruir si la semana fue a mejor o peor.
-function weighPoints(logs: DailyLog[]): number[] {
+function weighPoints(logs: DailyLogHistory[]): number[] {
   return [...logs]
-    .filter((l): l is DailyLog & { weight_kg: number } => l.weight_kg != null)
+    .filter((l): l is DailyLogHistory & { weight_kg: number } => l.weight_kg != null)
     .sort((a, b) => a.log_date.localeCompare(b.log_date))
     .slice(-10)
     .map((p) => p.weight_kg);
