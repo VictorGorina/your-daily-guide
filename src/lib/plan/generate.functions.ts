@@ -90,10 +90,12 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
 
       const { householdContext, householdMealTargets, syncSharedMeals } =
         await import("@/lib/household.server");
-      const [home, sharedTargets] = await Promise.all([
-        householdContext(context.supabase as never, context.userId),
-        householdMealTargets(context.supabase as never, context.userId),
-      ]);
+      const home = await householdContext(context.supabase as never, context.userId);
+      const sharedTargets = await householdMealTargets(
+        context.supabase as never,
+        context.userId,
+        home,
+      );
 
       const { plan, shopping } = await generatePlanBody({
         sharedTargets,

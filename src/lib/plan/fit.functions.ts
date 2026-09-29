@@ -67,10 +67,12 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
       import("@/lib/household.server"),
       import("@/lib/nutrition/plan-fit.server"),
     ]);
-    const [home, shared] = await Promise.all([
-      household.householdContext(supabase as never, context.userId),
-      household.sharedMealPortionsByDate(supabase as never, context.userId),
-    ]);
+    const home = await household.householdContext(supabase as never, context.userId);
+    const shared = await household.sharedMealPortionsByDate(
+      supabase as never,
+      context.userId,
+      home,
+    );
     const canTouchShared = !home.plannerId || home.plannerId === context.userId;
 
     const { report } = await fitPlanMeals({

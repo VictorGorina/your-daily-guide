@@ -308,11 +308,7 @@ export async function reflowMeals(opts: {
         import("@/lib/nutrition/energy"),
         import("@/lib/nutrition/portion"),
       ]);
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
+    // El perfil ya se leyó al entrar (ticket 17, PERF-10): no se relee por medición.
     const factor = portionFactors(energyTargets(profile as never), profile as never).plan;
     const recipes = await getRecipes(
       cells.flatMap((c) => [c.before, c.after]),

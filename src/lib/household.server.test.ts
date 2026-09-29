@@ -3,7 +3,13 @@ import { describe, expect, it } from "bun:test";
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeTables } from "@/test/fake-supabase";
 
-import { householdContext, householdPlannerId, syncSharedMeals } from "./household.server";
+import {
+  householdContext,
+  householdMealTargets,
+  householdPlannerId,
+  sharedMealPortionsByDate,
+  syncSharedMeals,
+} from "./household.server";
 import type { MonthlyPlan } from "./plan-shared";
 
 // Tres hogares en las mismas tablas. En producción la RLS solo deja ver las
@@ -336,5 +342,52 @@ describe("syncSharedMeals", () => {
     });
     expect(out).toEqual({ synced: 0 });
     expect(fake.calls.some((c) => c.op === "update")).toBe(false);
+  });
+});
+
+describe("con el hogar ya leído (ticket 17, PERF-10)", () => {
+  // Dos adultos con cuenta en h1, con datos de sobra para `energyTargets`.
+  const adult = (id: string, sex: string, weight: number) => ({
+    id,
+    sex,
+    age: 35,
+    height_cm: 170,
+    current_weight_kg: weight,
+    daily_activity: "sentado",
+  });
+  const withProfiles = (): FakeTables => ({
+    ...seed(),
+    profiles: [adult("ana", "mujer", 62), adult("bea", "hombre", 80)],
+  });
+  const memberReads = (fake: ReturnType<typeof createFakeSupabase>) =>
+    fake.calls.filter((c) => c.table === "household_members").length;
+
+  it("householdMealTargets: mismo resultado y ninguna lectura más del hogar", async () => {
+    const fresh = createFakeSupabase(withProfiles());
+    setFakeAdmin(fresh.client);
+    const before = await householdMealTargets(fresh.client, "ana");
+    expect(before.comida?.kcal).toBeGreaterThan(0);
+
+    const reuse = createFakeSupabase(withProfiles());
+    setFakeAdmin(reuse.client);
+    const home = await householdContext(reuse.client, "ana");
+    const readsForContext = memberReads(reuse);
+    expect(await householdMealTargets(reuse.client, "ana", home)).toEqual(before);
+    expect(memberReads(reuse)).toBe(readsForContext);
+  });
+
+  it("sharedMealPortionsByDate: mismo resultado y ninguna lectura más del hogar", async () => {
+    const saturday = "2026-10-03";
+    const fresh = createFakeSupabase(withProfiles());
+    setFakeAdmin(fresh.client);
+    const before = (await sharedMealPortionsByDate(fresh.client, "ana"))(saturday);
+    expect(before.cena?.factor).toBeGreaterThan(0);
+
+    const reuse = createFakeSupabase(withProfiles());
+    setFakeAdmin(reuse.client);
+    const home = await householdContext(reuse.client, "ana");
+    const readsForContext = memberReads(reuse);
+    expect((await sharedMealPortionsByDate(reuse.client, "ana", home))(saturday)).toEqual(before);
+    expect(memberReads(reuse)).toBe(readsForContext);
   });
 });

@@ -186,21 +186,19 @@ export async function householdContext(
   // Leemos el `shared_slots` heredado del hogar como fallback para hogares que
   // aún no tienen `home_schedule` por miembro. Si hay horarios individuales,
   // `deriveSharedSlots` los sustituye.
-  const { data: household } = await supabase
-    .from("households")
-    .select("shared_slots")
-    .eq("id", householdId)
-    .maybeSingle();
+  // Las dos lecturas solo dependen del hogar: en paralelo (ticket 17, PERF-10).
+  const [{ data: household }, children] = await Promise.all([
+    supabase.from("households").select("shared_slots").eq("id", householdId).maybeSingle(),
+    selectWithOptionalColumns(
+      supabase,
+      "household_children",
+      "id, name, age, allergies, appetite, notes, portion",
+      ["home_schedule", "feeding_stage"],
+      householdId,
+    ),
+  ]);
   const legacySharedSlots = cleanSharedSlots(
     (household as { shared_slots?: unknown } | null)?.shared_slots,
-  );
-
-  const children = await selectWithOptionalColumns(
-    supabase,
-    "household_children",
-    "id, name, age, allergies, appetite, notes, portion",
-    ["home_schedule", "feeding_stage"],
-    householdId,
   );
   const kids = (children ?? []) as {
     id: string;
@@ -502,14 +500,16 @@ export async function sharedMealPortions(
 /**
  * `sharedMealPortions` para cualquier fecha, con UNA lectura del hogar y de los
  * perfiles: las comidas compartidas dependen solo del día de la semana. Para
- * recorrer un mes entero (`fitMonthlyPlan`).
+ * recorrer un mes entero (`fitMonthlyPlan`). Con `home` (el `householdContext`
+ * que el handler ya leyó) no se vuelve a leer el hogar.
  */
 export async function sharedMealPortionsByDate(
   supabase: AnyClient,
   userId: string,
+  known?: HouseholdContext,
 ): Promise<(date: string) => Partial<Record<(typeof MEAL_KEYS)[number], SharedServing>>> {
   const none = () => ({});
-  const home = await householdContext(supabase, userId);
+  const home = known ?? (await householdContext(supabase, userId));
   if (!home.householdId) return none;
   const eatersOn = (weekday: number) => {
     const eaters = new Map<(typeof MEAL_KEYS)[number], string[]>();
@@ -575,13 +575,15 @@ export type SharedServing = {
  * Objetivo por comida de las comidas compartidas del hogar, para el prompt del
  * plan (ticket 23 de `precision-nutricional`): la media de los adultos con cuenta,
  * sin nombres ni cifras individuales (D4 e invariante 8). Solo las comidas que
- * se comparten algún día. Vacío sin hogar o sin datos.
+ * se comparten algún día. Vacío sin hogar o sin datos. Con `home` (el
+ * `householdContext` que el handler ya leyó) no se vuelve a leer el hogar.
  */
 export async function householdMealTargets(
   supabase: AnyClient,
   userId: string,
+  known?: HouseholdContext,
 ): Promise<Partial<Record<(typeof MEAL_KEYS)[number], { kcal: number; protein_g: number }>>> {
-  const home = await householdContext(supabase, userId);
+  const home = known ?? (await householdContext(supabase, userId));
   if (!home.householdId) return {};
   const ids = home.members.filter((m) => m.userId && m.usesApp).map((m) => m.userId!);
   if (ids.length < 2) return {};

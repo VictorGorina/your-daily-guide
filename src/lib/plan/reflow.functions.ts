@@ -307,7 +307,11 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     const coverage = current.coverage ?? monthCoverage(data.month, data.today);
 
     const { householdMealTargets } = await import("@/lib/household.server");
-    const sharedTargets = await householdMealTargets(context.supabase as never, context.userId);
+    const sharedTargets = await householdMealTargets(
+      context.supabase as never,
+      context.userId,
+      home,
+    );
     const fresh = await generatePlanBody({
       sharedTargets,
       deadline,
