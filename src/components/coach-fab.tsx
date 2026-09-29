@@ -304,10 +304,18 @@ export function CoachFab() {
             onClick={() => setOpen(false)}
             className="flex-1"
           />
-          <div className="animate-sheet-up mx-auto flex h-[78dvh] w-full max-w-lg flex-col rounded-t-3xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="coach-fab-title"
+            className="animate-sheet-up mx-auto flex h-[78dvh] w-full max-w-lg flex-col rounded-t-3xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4"
+          >
             <div className="flex items-center justify-between pb-2">
               <div>
-                <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
+                <h2
+                  id="coach-fab-title"
+                  className="font-title text-lg font-semibold tracking-[-0.02em]"
+                >
                   Coach rápido
                 </h2>
                 <p className="text-xs text-muted-foreground">Cuéntame y lo cambio en tu pantalla</p>

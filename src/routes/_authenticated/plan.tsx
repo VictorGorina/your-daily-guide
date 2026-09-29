@@ -1378,19 +1378,30 @@ function IngredientsTab({
             <ul className="m-0 list-none p-0">
               {g.items.map((item, i) => {
                 const have = !!item.owned;
+                // Un solo gesto: toca (o Espacio/Intro con teclado) para alternar "ya lo tengo en casa"
+                const toggle = () => {
+                  if (!editable) return;
+                  owned.mutate({
+                    itemName: item.name,
+                    trip: selectedTrip,
+                    source: item.owned ? null : "fridge",
+                  });
+                };
                 return (
                   <li
                     key={`${item.name}-${i}`}
-                    onClick={() => {
-                      if (!editable) return;
-                      // Un solo gesto: toca para alternar "ya lo tengo en casa"
-                      owned.mutate({
-                        itemName: item.name,
-                        trip: selectedTrip,
-                        source: item.owned ? null : "fridge",
-                      });
+                    role="checkbox"
+                    aria-checked={have}
+                    aria-disabled={!editable}
+                    tabIndex={editable ? 0 : -1}
+                    onClick={toggle}
+                    onKeyDown={(e) => {
+                      if (e.key === " " || e.key === "Enter") {
+                        e.preventDefault(); // sin esto, Espacio hace scroll
+                        toggle();
+                      }
                     }}
-                    className={`flex cursor-pointer items-center gap-3 border-t border-secondary/90 py-2.5 ${editable ? "active:bg-secondary/40" : "cursor-default"}`}
+                    className={`flex cursor-pointer items-center gap-3 border-t border-secondary/90 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${editable ? "active:bg-secondary/40" : "cursor-default"}`}
                   >
                     {/* Checkbox circular */}
                     <span
@@ -1597,7 +1608,12 @@ function ShopModeView({
   return (
     // Modo compra: pantalla completa enfocada (diseño 1b). El overlay tapa la
     // barra de navegación y la burbuja del coach; se sale con la flecha ←.
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shopping-mode-title"
+      className="fixed inset-0 z-[60] flex flex-col bg-background"
+    >
       <div className="flex-1 overflow-y-auto px-5 pb-6 pt-12">
         <div className="mx-auto max-w-lg">
           {/* Cabecera modo compra */}
@@ -1615,7 +1631,10 @@ function ShopModeView({
                 Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to}{" "}
                 {monthShort}
               </p>
-              <h1 className="font-title text-2xl font-semibold tracking-[-0.02em] leading-tight">
+              <h1
+                id="shopping-mode-title"
+                className="font-title text-2xl font-semibold tracking-[-0.02em] leading-tight"
+              >
                 En el súper
               </h1>
             </div>
@@ -1679,11 +1698,18 @@ function ShopModeView({
                     return (
                       <li
                         key={`${item.name}-${i}`}
-                        onClick={() => {
-                          // En modo compra, tocar alterna "store" (comprado)
-                          onToggle(item.name);
+                        role="checkbox"
+                        aria-checked={done}
+                        tabIndex={0}
+                        // En modo compra, tocar (o Espacio/Intro) alterna "store" (comprado)
+                        onClick={() => onToggle(item.name)}
+                        onKeyDown={(e) => {
+                          if (e.key === " " || e.key === "Enter") {
+                            e.preventDefault(); // sin esto, Espacio hace scroll
+                            onToggle(item.name);
+                          }
                         }}
-                        className={`flex cursor-pointer items-center gap-3.5 rounded-[18px] px-4 py-3.5 transition-colors active:scale-[0.99] ${
+                        className={`flex cursor-pointer items-center gap-3.5 rounded-[18px] px-4 py-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.99] ${
                           done ? "bg-secondary/45" : "bg-surface"
                         }`}
                       >
