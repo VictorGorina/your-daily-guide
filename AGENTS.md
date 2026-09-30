@@ -272,6 +272,9 @@ Cambiar un plato en Hoy, picotear y hacer deporte desvían el
 día, y los tres se resuelven juntos: `day-settle.ts` tiene **un** debounce de 10 s compartido (el
 "pendiente" se persiste y se fuerza al ocultar la app, misma forma que `plan-recalc.ts`) que acaba
 en **una** llamada a `settleDay` ([src/lib/day-settle.functions.ts](src/lib/day-settle.functions.ts)).
+El lote mandado sigue guardado (`inFlight`) hasta que `settleDay` responde bien: si la app se
+cierra a mitad, al volver a Hoy se reenvía pasados 5 min (antes puede seguir en el servidor). Es
+seguro porque el servidor no vuelve a contar un plato cuyo mismo desvío ya está compensado.
 Esa función suma el día con `dayBalance` ([src/lib/day-balance.ts](src/lib/day-balance.ts), puro y
 testeado), decide **una vez** con `compensationNeed` (tabla aprobada por objetivo), reserva los tres
 libros de cuentas a la vez y llama **una vez** a `reflowMeals` con la nota del día entero
