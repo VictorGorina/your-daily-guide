@@ -99,6 +99,10 @@ type DayPatch = {
  * sigue sin ella (se compensa igual, solo que la tarjeta no puede enseñar los
  * platos movidos). Mismo criterio que `reflowMeals` con `snacks` — un despliegue
  * por delante de la migración no debe dejar la app sin compensar.
+ *
+ * Es estado del módulo, compartido por las peticiones que atiende a la vez una
+ * instancia, y está bien así (ARQ-03): guarda un hecho del esquema, el mismo
+ * para todas, no nada de una persona o de una petición.
  */
 let hasAdjustmentColumn = true;
 let warnedNoAdjustmentColumn = false;
