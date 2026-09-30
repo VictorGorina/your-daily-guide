@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } from "bun:test";
 
 import { setFakeAdmin } from "@/test/admin";
-import { createFakeSupabase, type FakeRow } from "@/test/fake-supabase";
+import { createFakeSupabase, type FakeOptions, type FakeRow } from "@/test/fake-supabase";
 
 import { dispatchPush } from "./push-dispatch.server";
 import type { PushPayload } from "./web-push.server";
@@ -37,15 +37,19 @@ type Sent = { endpoint: string; payload: PushPayload };
 function setup(
   tables: Record<string, FakeRow[]>,
   result: (endpoint: string) => unknown = () => "sent",
+  opts: FakeOptions = {},
 ) {
-  const fake = createFakeSupabase({
-    profiles: [],
-    push_subscriptions: [],
-    monthly_plans: [],
-    daily_logs: [],
-    household_members: [],
-    ...tables,
-  });
+  const fake = createFakeSupabase(
+    {
+      profiles: [],
+      push_subscriptions: [],
+      monthly_plans: [],
+      daily_logs: [],
+      household_members: [],
+      ...tables,
+    },
+    opts,
+  );
   setFakeAdmin(fake.client);
   const sent: Sent[] = [];
   const send = async (s: { endpoint: string }, payload: PushPayload) => {
@@ -61,14 +65,26 @@ const profileRow = (tables: Record<string, FakeRow[]>, id: string) =>
   tables.profiles.find((p) => p.id === id);
 
 let consoleError: ReturnType<typeof spyOn>;
+let consoleWarn: ReturnType<typeof spyOn>;
 beforeEach(() => {
   setSystemTime(MID_MONTH);
   consoleError = spyOn(console, "error").mockImplementation(() => {});
+  consoleWarn = spyOn(console, "warn").mockImplementation(() => {});
 });
 afterEach(() => {
   setSystemTime();
   consoleError.mockRestore();
+  consoleWarn.mockRestore();
 });
+
+const loggedEvents = (spy: ReturnType<typeof spyOn>) =>
+  spy.mock.calls.map((call: unknown[]) => {
+    try {
+      return (JSON.parse(String(call[0])) as { event?: string }).event;
+    } catch {
+      return undefined;
+    }
+  });
 
 describe("dispatchPush — resumen de la mañana", () => {
   it("envía a cada suscripción con el primer plato de la guía y marca el día", async () => {
@@ -218,5 +234,107 @@ describe("dispatchPush — aviso de preparar el mes que viene", () => {
     });
     await run();
     expect(sent[0]?.payload.body).toContain("El menú de tu casa lo renueva quien planifica");
+  });
+});
+
+describe("dispatchPush — fallos que no deben tumbar el envío (ticket 06)", () => {
+  it("una zona horaria inválida usa el reloj de Madrid y no deja sin push a los demás", async () => {
+    const { fake, sent, run } = setup({
+      profiles: [
+        profile("marte", { timezone: "Mars/Olympus", morning_time: "08:00" }),
+        profile("ana", { morning_time: "08:00" }),
+      ],
+      push_subscriptions: [sub("marte"), sub("ana")],
+    });
+    const summary = await run();
+    expect(summary.sent).toBe(2);
+    expect(sent.map((s) => s.endpoint).sort()).toEqual([
+      "https://push.example/ana/1",
+      "https://push.example/marte/1",
+    ]);
+    expect(profileRow(fake.tables, "marte")?.morning_push_sent_on).toBe("2026-09-15");
+    expect(loggedEvents(consoleWarn)).toContain("push_bad_timezone");
+  });
+
+  it("si falla la consulta de suscripciones, no se envía ni se marca nada", async () => {
+    const { fake, sent, run } = setup(
+      {
+        profiles: [profile("ana", { morning_time: "08:00" })],
+        push_subscriptions: [sub("ana")],
+      },
+      undefined,
+      { failOn: (op) => op.table === "push_subscriptions" && op.op === "select" },
+    );
+    const summary = await run();
+    expect(sent).toEqual([]);
+    expect(summary.errors).toBe(1);
+    expect(profileRow(fake.tables, "ana")?.morning_push_sent_on).toBeNull();
+    expect(loggedEvents(consoleError)).toContain("push_query_failed");
+  });
+
+  it("si falla la consulta de planes, no hay aviso de renovación ni se marca", async () => {
+    setSystemTime(END_OF_MONTH);
+    const { fake, sent, run } = setup(
+      {
+        profiles: [profile("ana")],
+        push_subscriptions: [sub("ana")],
+        monthly_plans: [{ user_id: "ana", month: "2026-10" }],
+      },
+      undefined,
+      { failOn: (op) => op.table === "monthly_plans" },
+    );
+    await run();
+    expect(sent).toEqual([]);
+    expect(profileRow(fake.tables, "ana")?.plan_renewal_push_sent_on).toBeNull();
+    expect(loggedEvents(consoleError)).toContain("push_query_failed");
+  });
+
+  it("si falla la lectura del día de un perfil, ese perfil no se envía ni se marca", async () => {
+    const { fake, sent, run } = setup(
+      {
+        profiles: [
+          profile("ana", { morning_time: "08:00" }),
+          profile("bea", { morning_time: "08:00" }),
+        ],
+        push_subscriptions: [sub("ana"), sub("bea")],
+      },
+      undefined,
+      {
+        failOn: (op) =>
+          op.table === "daily_logs" &&
+          op.filters.some((f) => f.kind === "eq" && f.column === "user_id" && f.value === "ana"),
+      },
+    );
+    const summary = await run();
+    expect(sent.map((s) => s.endpoint)).toEqual(["https://push.example/bea/1"]);
+    expect(summary.errors).toBe(1);
+    expect(profileRow(fake.tables, "ana")?.morning_push_sent_on).toBeNull();
+    expect(profileRow(fake.tables, "bea")?.morning_push_sent_on).toBe("2026-09-15");
+  });
+
+  it("las consultas por user_id van en grupos de 100 como mucho", async () => {
+    setSystemTime(END_OF_MONTH);
+    const ids = Array.from({ length: 150 }, (_, i) => `u${i}`);
+    const inSizes: number[] = [];
+    const { sent, run } = setup(
+      {
+        profiles: ids.map((id) => profile(id)),
+        push_subscriptions: ids.map((id) => sub(id)),
+        monthly_plans: [{ user_id: "u0", month: "2026-10" }],
+      },
+      undefined,
+      {
+        failOn: (op) => {
+          for (const f of op.filters) {
+            if (f.kind === "in" && f.column === "user_id") inSizes.push(f.value.length);
+          }
+          return null;
+        },
+      },
+    );
+    await run();
+    expect(sent).toHaveLength(149);
+    expect(inSizes.length).toBeGreaterThanOrEqual(6);
+    expect(Math.max(...inSizes)).toBeLessThanOrEqual(100);
   });
 });

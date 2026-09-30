@@ -1,4 +1,5 @@
 import type { DailyGuide } from "@/lib/daily";
+import { errorText, logEvent } from "@/lib/log.server";
 import { daysLeftInMonth, nextMonthISO, NEXT_MONTH_UNLOCK_DAYS } from "@/lib/plan-shared";
 import { sendPushNotification, type PushPayload } from "@/lib/web-push.server";
 import { DEFAULT_TZ, zonedMinutesNow, zonedTodayISO } from "@/lib/zoned-date";
@@ -24,9 +25,36 @@ const WINDOW_MINUTES = 20;
 // dispositivo), así que el resumen matutino y el repaso nocturno se comparan
 // contra el reloj de esa persona, no contra el de Madrid. `zonedMinutesNow` y
 // `zonedTodayISO` viven en zoned-date.ts.
+//
+// `profiles.timezone` se puede escribir con cualquier texto, e `Intl` lanza
+// `RangeError` con una zona que no existe: sin el `catch`, un solo perfil así
+// dejaba sin push a todos (ticket 06, SEC-DB-06). Se usa el reloj de Madrid.
 function clockFor(timeZone: string | null): { nowMinutes: number; today: string } {
   const tz = timeZone || DEFAULT_TZ;
-  return { nowMinutes: zonedMinutesNow(tz), today: zonedTodayISO(tz) };
+  try {
+    return { nowMinutes: zonedMinutesNow(tz), today: zonedTodayISO(tz) };
+  } catch {
+    logEvent("warn", "push_bad_timezone", { timeZone: tz.slice(0, 64) });
+    return { nowMinutes: zonedMinutesNow(DEFAULT_TZ), today: zonedTodayISO(DEFAULT_TZ) };
+  }
+}
+
+// Los `.in("user_id", …)` van troceados: con todos los ids de golpe, la URL
+// de PostgREST crece con cada perfil y acaba pasando del límite del servidor.
+const ID_CHUNK = 100;
+
+type QueryResult = PromiseLike<{ data: unknown; error: unknown }>;
+
+async function selectByUserIds<T>(
+  ids: string[],
+  query: (chunk: string[]) => QueryResult,
+): Promise<{ rows: T[]; error: unknown }> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK) chunks.push(ids.slice(i, i + ID_CHUNK));
+  const results = await Promise.all(chunks.map(query));
+  const failed = results.find((r) => r.error);
+  if (failed) return { rows: [], error: failed.error };
+  return { rows: results.flatMap((r) => (r.data ?? []) as T[]), error: null };
 }
 
 function timeToMinutes(hhmm: string | null): number | null {
@@ -204,23 +232,33 @@ export async function dispatchPush(
   let renewalMatches: ProfileRow[] = [];
   if (renewalCandidates.length) {
     const nextMonths = [...new Set(renewalCandidates.map(nextMonthOf))];
-    const { data: nextPlans } = await supabaseAdmin
-      .from("monthly_plans")
-      .select("user_id, month")
-      .in("month", nextMonths)
-      .in(
-        "user_id",
-        renewalCandidates.map((p) => p.id),
+    const { rows: nextPlans, error: plansError } = await selectByUserIds<{
+      user_id: string;
+      month: string;
+    }>(
+      renewalCandidates.map((p) => p.id),
+      (ids) =>
+        supabaseAdmin
+          .from("monthly_plans")
+          .select("user_id, month")
+          .in("month", nextMonths)
+          .in("user_id", ids),
+    );
+    if (plansError) {
+      // Sin saber quién tiene ya el plan, el aviso le llegaría también a quien
+      // lo tiene: esta vez no se avisa a nadie (ni se marca) y lo intenta el
+      // siguiente disparo.
+      summary.errors++;
+      logEvent("error", "push_query_failed", {
+        query: "next_plans",
+        error: errorText(plansError),
+      });
+    } else {
+      const alreadyPlanned = new Set(nextPlans.map((row) => `${row.user_id}|${row.month}`));
+      renewalMatches = renewalCandidates.filter(
+        (p) => !alreadyPlanned.has(`${p.id}|${nextMonthOf(p)}`),
       );
-    const alreadyPlanned = new Set(
-      (nextPlans ?? []).map((r) => {
-        const row = r as { user_id: string; month: string };
-        return `${row.user_id}|${row.month}`;
-      }),
-    );
-    renewalMatches = renewalCandidates.filter(
-      (p) => !alreadyPlanned.has(`${p.id}|${nextMonthOf(p)}`),
-    );
+    }
   }
 
   if (!morningMatches.length && !eveningMatches.length && !renewalMatches.length) return summary;
@@ -228,13 +266,27 @@ export async function dispatchPush(
   const matchedIds = [
     ...new Set([...morningMatches, ...eveningMatches, ...renewalMatches].map((p) => p.id)),
   ];
-  const { data: subs } = await supabaseAdmin
-    .from("push_subscriptions")
-    .select("user_id, endpoint, p256dh, auth")
-    .in("user_id", matchedIds);
+  const { rows: subs, error: subsError } = await selectByUserIds<SubscriptionRow>(
+    matchedIds,
+    (ids) =>
+      supabaseAdmin
+        .from("push_subscriptions")
+        .select("user_id, endpoint, p256dh, auth")
+        .in("user_id", ids),
+  );
+  if (subsError) {
+    // Sin suscripciones no se envía nada; tampoco se marca, para que el
+    // siguiente disparo (dentro de la ventana) lo vuelva a intentar.
+    summary.errors++;
+    logEvent("error", "push_query_failed", {
+      query: "subscriptions",
+      error: errorText(subsError),
+    });
+    return summary;
+  }
 
   const subsByUser = new Map<string, SubscriptionRow[]>();
-  for (const s of (subs ?? []) as SubscriptionRow[]) {
+  for (const s of subs) {
     const list = subsByUser.get(s.user_id) ?? [];
     list.push(s);
     subsByUser.set(s.user_id, list);
@@ -272,20 +324,28 @@ export async function dispatchPush(
           }
         } catch (err) {
           summary.errors++;
-          console.error("dispatchPush: fallo al enviar", userId, err);
+          logEvent("error", "push_send_threw", { userId, error: errorText(err) });
         }
       }),
     );
   };
 
+  // Sin el día no se sabe qué decir: ese perfil no recibe nada ni se marca, y
+  // el siguiente disparo lo vuelve a intentar.
+  const dailyLogFailed = (error: unknown) => {
+    summary.errors++;
+    logEvent("error", "push_query_failed", { query: "daily_log", error: errorText(error) });
+  };
+
   await batch(morningMatches, async (p) => {
     const { today } = clockOf(p);
-    const { data: log } = await supabaseAdmin
+    const { data: log, error: logError } = await supabaseAdmin
       .from("daily_logs")
       .select("guide")
       .eq("user_id", p.id)
       .eq("log_date", today)
       .maybeSingle();
+    if (logError) return dailyLogFailed(logError);
     const firstMealIdea = (log?.guide as unknown as DailyGuide | null)?.meals?.[0]?.idea;
     const { title, body } = morningCopy(toneOf(p.tone), p.display_name, firstMealIdea);
     await sendTo(p.id, { title, body, url: "/hoy" });
@@ -297,12 +357,13 @@ export async function dispatchPush(
   await batch(eveningMatches, async (p) => {
     const { today } = clockOf(p);
     const tone = toneOf(p.tone);
-    const { data: log } = await supabaseAdmin
+    const { data: log, error: logError } = await supabaseAdmin
       .from("daily_logs")
       .select("habits")
       .eq("user_id", p.id)
       .eq("log_date", today)
       .maybeSingle();
+    if (logError) return dailyLogFailed(logError);
     const habits = (log?.habits as { done: boolean }[] | null) ?? [];
     const pendingCount = Math.max(0, habits.length - habits.filter((h) => h.done).length);
     // Tono relajado + día ya completo: se prioriza contactar menos, no un
@@ -321,17 +382,26 @@ export async function dispatchPush(
   if (renewalMatches.length) {
     // Un no planificador del hogar recibe un aviso distinto: la renovación del
     // menú de la casa no es cosa suya (issue 08, D1).
-    const { data: memberRows } = await supabaseAdmin
-      .from("household_members")
-      .select("user_id, is_planner")
-      .in(
-        "user_id",
-        renewalMatches.map((p) => p.id),
-      );
+    const { rows: memberRows, error: membersError } = await selectByUserIds<{
+      user_id: string | null;
+      is_planner: boolean;
+    }>(
+      renewalMatches.map((p) => p.id),
+      (ids) =>
+        supabaseAdmin.from("household_members").select("user_id, is_planner").in("user_id", ids),
+    );
+    if (membersError) {
+      // Sin saber quién planifica, un no planificador recibiría el aviso del
+      // planificador: esta vez no se avisa (ni se marca).
+      summary.errors++;
+      logEvent("error", "push_query_failed", {
+        query: "household_members",
+        error: errorText(membersError),
+      });
+      return summary;
+    }
     const nonPlanner = new Set(
-      ((memberRows ?? []) as { user_id: string | null; is_planner: boolean }[])
-        .filter((m) => m.user_id && !m.is_planner)
-        .map((m) => m.user_id as string),
+      memberRows.filter((m) => m.user_id && !m.is_planner).map((m) => m.user_id as string),
     );
     await batch(renewalMatches, async (p) => {
       const { today } = clockOf(p);
