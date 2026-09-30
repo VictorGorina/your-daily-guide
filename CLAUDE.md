@@ -80,8 +80,10 @@ una operación nueva, exponerla en la API son tres líneas — la lógica de neg
 sitio. `apiPost` traduce el error a código (`400` `ValidationError` o JSON malo, `401` sin
 sesión, `429` cuota con `retry-after`, `500` el resto) y el campo `error` del JSON se puede
 enseñar siempre: un `UserFacingError` llega con su texto y un `Error` cualquiera con uno
-genérico. Por eso un mensaje para la persona se lanza como `ValidationError` o
-`UserFacingError`, nunca como `Error` (tabla completa en AGENTS.md).
+genérico. La web recibe lo mismo por el RPC: un middleware global de `start.ts` (`publicError`)
+tapa lo demás (ticket 15). Por eso un mensaje para la persona se lanza como `ValidationError` o
+`UserFacingError`, nunca como `Error` (tabla completa en AGENTS.md). El `today` que manda el
+cliente se lee siempre con `clampClientToday` (decide qué días son pasado).
 
 **Supabase:** [src/integrations/supabase/client.ts](src/integrations/supabase/client.ts) es el
 cliente de navegador; `client.server.ts` el de servidor. `auth-middleware.ts` valida la sesión (web
@@ -279,7 +281,7 @@ Invariantes que un cambio suele romper sin querer:
 - **Un solo planificador** (`is_planner`); su fila `monthly_plans` es la del hogar para las
   comidas compartidas. Cada adulto con cuenta conserva la suya (D1): lo compartido es un espejo
   de lectura (`composeDayForUser`) y se escribe solo desde el planificador (`syncSharedMeals`,
-  `guardSharedSlotWrite`). `household_members` son huecos de la mesa: quien se une reclama uno.
+  `guardSharedSlotWrite`). Lo que otro lee de esa fila pasa antes por `cleanSharedPlan`. `household_members` son huecos de la mesa: quien se une reclama uno.
 - **Qué se comparte sale de los horarios** (`home_schedule`), con la regla en un solo sitio:
   `effectiveSharedSlots` (idéntico en `mobile/lib/`). **No leas `households.shared_slots` a pelo**
   para decidirlo. Snacks nunca (D5); un bebé que no come de la mesa no cuenta (`feeding_stage`).

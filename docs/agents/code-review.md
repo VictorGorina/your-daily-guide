@@ -51,7 +51,11 @@ ya tomadas que un cambio nuevo tiende a romper sin querer.
       a la API son tres líneas.
 - [ ] Un mensaje pensado para la persona se lanza como `ValidationError` (dato inválido →
       `400`) o `UserFacingError` (fallo real → `500` con su texto), nunca como `Error` a secas:
-      por `/api/v1/*` un `Error` sale con un texto genérico y el móvil no ve el mensaje.
+      un `Error` sale con un texto genérico, por `/api/v1/*` (`apiPost`) y por el RPC de la web
+      (`publicError` en `start.ts`).
+- [ ] Un `today` que manda el cliente se lee con `clampClientToday`
+      ([src/lib/zoned-date.ts](../../src/lib/zoned-date.ts)), nunca con la regex a pelo: decide
+      qué días son pasado, y una fecha lejana dejaría reescribirlos.
 - [ ] El cliente enseña el campo `error` del JSON (siempre es presentable) y usa el código solo
       para decidir qué hacer: `401` reentrar, `429` esperar `retry-after`.
 
@@ -141,6 +145,10 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
       `user_id` NULL-able (hueco sin reclamar o adulto sin app), `display_name` obligatorio,
       `portion` para el cálculo de la compra. Nada de asumir PK `(household_id, user_id)` ni
       `UNIQUE(user_id)` sin `WHERE user_id IS NOT NULL`.
+- [ ] **Lo que se lee de la fila de otra persona se limpia.** El plan del planificador pasa por
+      `cleanSharedPlan` antes de enseñárselo a otro miembro o copiarlo a su fila (su dueño la
+      puede escribir por PostgREST sin validadores). Un perfil ajeno se lee con las columnas
+      justas (`ENERGY_PROFILE_COLUMNS` para su objetivo), nunca con `select("*")`.
 - [ ] **Qué comida se comparte se deriva de los horarios (`home_schedule`), no de una config.**
       Cualquier código que necesite "¿esta comida es compartida?" usa `effectiveSharedSlots`
       (en el servidor, vía `householdContext`; en una pantalla, `householdSharedSlots(estado)`),

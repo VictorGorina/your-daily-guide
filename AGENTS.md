@@ -42,8 +42,12 @@ genérico. El código sirve para decidir qué hacer (reentrar con 401, esperar c
 decir. Del lado del servidor, la clase que se lanza es la que decide: `ValidationError` para un
 dato inválido de la persona ("Mes no válido"), `UserFacingError` para un fallo que merece un
 mensaje propio ("No hemos podido guardar el horario") y `Error` para lo interno (una clave que
-falta, la respuesta de un servicio). Un `Error` con un texto pensado para la persona llega a la
-web (por el RPC de las server functions) pero en el móvil sale el genérico (ticket 36, CAL-10).
+falta, la respuesta de un servicio). La web ve la misma tabla: el middleware
+`publicErrorMiddleware` de `src/start.ts` pasa cada error de una server function por
+`publicError` (`src/lib/public-error.ts`) y sustituye lo interno por `HiddenServerError`, con el
+mismo texto genérico, antes de que TanStack Start lo serialice (ticket 15, SEC-S-14). Hacía
+falta: un error de postgrest-js es un objeto plano y viajaba entero al navegador, con `details`
+y `hint`. El original queda en `server_fn_failed` y en Sentry.
 
 ## Platos del plan: cambio a mano vs. recolocación
 
