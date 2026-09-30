@@ -16,7 +16,7 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://tocmrlmxrwylyniyjtlv.supabase.co",
         "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvY21ybG14cnd5bHluaXlqdGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NjA2NzgsImV4cCI6MjEwMjMzNjY3OH0.D_-GpNvm_-DfUzSIS5ugY6-VqJF3UfEe9jeGr0MxwJw",
-        "EXPO_PUBLIC_API_URL": "https://your-daily-guide-topaz.vercel.app",
+        "EXPO_PUBLIC_API_URL": "https://www.peppersfam.es",
         "EXPO_PUBLIC_SENTRY_DSN": "https://2b81d9d7e8343fe1c4d06441477e934d@o4512165234802688.ingest.de.sentry.io/4512165245485136",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
@@ -29,7 +29,7 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://tocmrlmxrwylyniyjtlv.supabase.co",
         "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvY21ybG14cnd5bHluaXlqdGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NjA2NzgsImV4cCI6MjEwMjMzNjY3OH0.D_-GpNvm_-DfUzSIS5ugY6-VqJF3UfEe9jeGr0MxwJw",
-        "EXPO_PUBLIC_API_URL": "https://your-daily-guide-topaz.vercel.app",
+        "EXPO_PUBLIC_API_URL": "https://www.peppersfam.es",
         "EXPO_PUBLIC_SENTRY_DSN": "https://2b81d9d7e8343fe1c4d06441477e934d@o4512165234802688.ingest.de.sentry.io/4512165245485136",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
