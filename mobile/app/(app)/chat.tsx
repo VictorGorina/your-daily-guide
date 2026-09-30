@@ -23,7 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DictateButton } from "../../components/dictate-button";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
-import { API_BASE_URL, getAccessToken } from "../../lib/api";
+import { API_BASE_URL, CLIENT_VERSION_HEADERS, getAccessToken } from "../../lib/api";
 import {
   addMessage,
   ensureTodayLog,
@@ -110,6 +110,7 @@ export default function Chat() {
           return {
             headers: {
               "Content-Type": "application/json",
+              ...CLIENT_VERSION_HEADERS,
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: {
