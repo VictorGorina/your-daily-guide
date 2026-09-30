@@ -1,0 +1,10 @@
+# Prettier solo lee el .prettierignore del directorio desde el que corre, así que
+# el de la raíz no cubre `cd mobile && npx prettier --check .` (el job `mobile` de
+# CI). Mismos motivos que allí.
+
+package-lock.json
+
+# Catálogos de assets de Xcode: los escribe Expo al generar los targets nativos
+# ("author": "expo" dentro de cada Contents.json) y los vuelve a escribir a su
+# manera en el siguiente prebuild.
+**/Assets.xcassets
