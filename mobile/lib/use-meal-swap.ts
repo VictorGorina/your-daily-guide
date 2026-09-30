@@ -11,6 +11,7 @@ import {
   updateTodayLog,
   type DailyGuide,
   type DailyLog,
+  type DishMacros,
 } from "./daily";
 import {
   bindDaySettleDeps,
@@ -23,7 +24,6 @@ import {
   type ResolvedDishes,
 } from "./day-settle";
 import { VAGUE_DISH_MESSAGE } from "./content-guard";
-import type { DishMacros } from "./daily";
 import { guideMeals, guideReuse, isMealCalculated, mergeGuide, perMealDeltas } from "./macros";
 import type { PortionSize } from "./portion";
 import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "./plan-shared";

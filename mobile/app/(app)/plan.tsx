@@ -42,7 +42,6 @@ import {
   warmPlanRecipes,
   type WarmResult,
 } from "../../lib/recipe-warm";
-import type { PlanFitMark } from "../../lib/plan-shared";
 import {
   fetchLogs,
   fetchLogsForMonth,
@@ -92,6 +91,7 @@ import {
   type MonthlyPlan,
   type PantryExtra,
   type PlanCoverage,
+  type PlanFitMark,
   type PlanMonthStatus,
   type ShoppingCadence,
   type ShoppingItem,

@@ -5,7 +5,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { apiPost } from "../lib/api";
 
-type DishRecipe = { ingredients: string[]; steps: string[] };
+type RecipeData = { ingredients: string[]; steps: string[] };
 
 /**
  * Disclosure con la receta simplificada de un plato, equivalente RN de
@@ -17,7 +17,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
   const [open, setOpen] = useState(false);
   const q = useQuery({
     queryKey: ["recipe", dish],
-    queryFn: () => apiPost<DishRecipe>("plan/recipe", { dish, month }),
+    queryFn: () => apiPost<RecipeData>("plan/recipe", { dish, month }),
     enabled: open,
     staleTime: Infinity,
     gcTime: Infinity,
