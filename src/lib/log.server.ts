@@ -37,8 +37,7 @@
  *   y la web (o `apiPost`) recibió el genérico (`code` de PostgREST si lo hay).
  *   Va a Sentry con su pila por `captureServerException`, no por aquí.
  * - `email_send_failed` (error): Resend rechazó un correo (`status`), o falló
- *   un correo de acceso mandado en segundo plano (`kind`: `reset`, `signup`,
- *   `already-registered`). Un rechazo de Resend de esos sale con los dos.
+ *   un correo de acceso (`kind`: `reset`, `signup`, `already-registered`). Un rechazo de Resend de esos sale con los dos.
  * - `env_missing` (error): falta una variable de entorno y se usa un respaldo.
  * - `settle_release_failed` (error): `settleDay` no pudo devolver una reserva.
  *   Su marca (`adjustment.pending`) se queda y el siguiente asentamiento la

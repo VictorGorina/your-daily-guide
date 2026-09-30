@@ -40,6 +40,7 @@ function mailbox() {
   return {
     sent,
     sendEmail: async (m: { to: string; subject: string; html: string }) => void sent.push(m),
+    minResponseMs: 0,
   };
 }
 
@@ -86,6 +87,7 @@ describe("requestPasswordResetHandler", () => {
         sendEmail: async () => {
           throw new Error("Resend 500");
         },
+        minResponseMs: 0,
       },
     );
     expect(result).toEqual({ ok: true });
@@ -122,62 +124,107 @@ describe("requestSignupConfirmationHandler", () => {
   });
 });
 
-// SEC-S-10: si la respuesta esperase al correo, que solo se manda cuando la
-// cuenta existe, el tiempo de respuesta diría quién tiene cuenta.
-describe("el correo no retrasa la respuesta", () => {
-  const never = () => new Promise<void>(() => {});
-  const settles = (p: Promise<unknown>) =>
-    Promise.race([p.then(() => "ok"), new Promise((r) => setTimeout(() => r("colgada"), 50))]);
+// SEC-S-10: solo hay correo cuando la cuenta existe; si la respuesta tardase
+// lo que el envío, su tiempo diría quién tiene cuenta. Y el correo tiene que
+// haber salido ya al responder: en producción, mandado en segundo plano con
+// waitUntil, se perdía (ticket 15).
+describe("tiempo de respuesta y envío", () => {
+  const FLOOR = 60;
+  const slowBox = () => {
+    const sent: string[] = [];
+    return {
+      sent,
+      sendEmail: async (m: { to: string }) => {
+        await new Promise((r) => setTimeout(r, 15));
+        sent.push(m.to);
+      },
+      minResponseMs: FLOOR,
+    };
+  };
+  const timed = async (p: Promise<unknown>) => {
+    const t0 = performance.now();
+    await p;
+    return performance.now() - t0;
+  };
 
-  it("reset: responde sin esperar al envío y lo deja en waitUntil", async () => {
-    adminWith(() => link("https://auth.example/recover?t=9"));
-    const background: Promise<unknown>[] = [];
-    const result = requestPasswordResetHandler(
-      { email: "lenta@example.com", platform: "web" },
-      { sendEmail: never, waitUntil: (p) => void background.push(p) },
+  it("reset: exista o no la cuenta, tarda el mínimo, y el correo ya ha salido", async () => {
+    adminWith(() => ({ data: null, error: { code: "user_not_found" } }));
+    const none = slowBox();
+    const tNone = await timed(
+      requestPasswordResetHandler({ email: "t-nadie@example.com", platform: "web" }, none),
     );
-    expect(await settles(result)).toBe("ok");
-    expect(background).toHaveLength(1);
+    adminWith(() => link("https://auth.example/recover?t=9"));
+    const some = slowBox();
+    const tSome = await timed(
+      requestPasswordResetHandler({ email: "t-ana@example.com", platform: "web" }, some),
+    );
+    expect(tNone).toBeGreaterThanOrEqual(FLOOR - 2);
+    expect(tSome).toBeGreaterThanOrEqual(FLOOR - 2);
+    expect(Math.abs(tSome - tNone)).toBeLessThan(25);
+    expect(none.sent).toEqual([]);
+    expect(some.sent).toEqual(["t-ana@example.com"]); // enviado ANTES de responder
   });
 
-  it("alta: tampoco espera, ni al enlace nuevo ni al aviso de cuenta existente", async () => {
-    const background: Promise<unknown>[] = [];
-    const deps = { sendEmail: never, waitUntil: (p: Promise<unknown>) => void background.push(p) };
+  it("alta: el enlace nuevo y el aviso de cuenta existente salen antes de responder", async () => {
     adminWith(() => link("https://auth.example/confirm?t=9"));
-    expect(
-      await settles(
-        requestSignupConfirmationHandler(
-          { email: "lenta-nueva@example.com", password: "secreta123", platform: "web" },
-          deps,
-        ),
-      ),
-    ).toBe("ok");
+    const nueva = slowBox();
+    await requestSignupConfirmationHandler(
+      { email: "t-nueva@example.com", password: "secreta123", platform: "web" },
+      nueva,
+    );
+    expect(nueva.sent).toEqual(["t-nueva@example.com"]);
     adminWith(() => ({ data: null, error: { code: "email_exists" } }));
-    expect(
-      await settles(
-        requestSignupConfirmationHandler(
-          { email: "lenta-existe@example.com", password: "secreta123", platform: "web" },
-          deps,
-        ),
+    const existe = slowBox();
+    const t = await timed(
+      requestSignupConfirmationHandler(
+        { email: "t-existe@example.com", password: "secreta123", platform: "web" },
+        existe,
       ),
-    ).toBe("ok");
-    expect(background).toHaveLength(2);
+    );
+    expect(existe.sent).toEqual(["t-existe@example.com"]);
+    expect(t).toBeGreaterThanOrEqual(FLOOR - 2);
   });
 
-  it("un envío que falla en segundo plano queda en el log, no rompe nada", async () => {
+  it("un envío más lento que el mínimo se espera igual: nunca se responde antes de mandarlo", async () => {
+    adminWith(() => link("https://auth.example/recover?t=12"));
+    const sent: string[] = [];
+    await requestPasswordResetHandler(
+      { email: "t-lento@example.com", platform: "web" },
+      {
+        sendEmail: async (m) => {
+          await new Promise((r) => setTimeout(r, 80));
+          sent.push(m.to);
+        },
+        minResponseMs: 10,
+      },
+    );
+    expect(sent).toEqual(["t-lento@example.com"]);
+  });
+
+  it("también el freno de un minuto tarda el mínimo", async () => {
+    adminWith(() => link("https://auth.example/recover?t=11"));
+    const box = slowBox();
+    await requestPasswordResetHandler({ email: "t-rep@example.com", platform: "web" }, box);
+    const t = await timed(
+      requestPasswordResetHandler({ email: "t-rep@example.com", platform: "web" }, box),
+    );
+    expect(t).toBeGreaterThanOrEqual(FLOOR - 2);
+    expect(box.sent).toHaveLength(1);
+  });
+
+  it("un envío que falla queda en el log y la respuesta sigue siendo ok", async () => {
     adminWith(() => link("https://auth.example/recover?t=10"));
     const quiet = spyOn(console, "error").mockImplementation(() => {});
-    const background: Promise<unknown>[] = [];
-    await requestPasswordResetHandler(
-      { email: "falla-fondo@example.com", platform: "web" },
+    const result = await requestPasswordResetHandler(
+      { email: "t-falla@example.com", platform: "web" },
       {
         sendEmail: async () => {
           throw new Error("Resend 500");
         },
-        waitUntil: (p) => void background.push(p),
+        minResponseMs: 0,
       },
     );
-    await Promise.all(background);
+    expect(result).toEqual({ ok: true });
     const lines = quiet.mock.calls.map((c) => String(c[0]));
     expect(
       lines.some((l) => l.includes('"event":"email_send_failed"') && l.includes('"kind":"reset"')),
