@@ -4,8 +4,8 @@ name: CI
 # tests de lógica (también en dos zonas horarias, porque parte del código de
 # fechas depende de la hora local), el build de producción y que nada de
 # servidor acabe en el bundle del navegador. Ver docs/agents/verification.md y
-# docs/agents/testing.md. La app móvil (mobile/) no entra aquí — tiene su
-# propio toolchain.
+# docs/agents/testing.md. La app móvil (mobile/) tiene su propio job, `mobile`,
+# con su propio toolchain (npm, no Bun: Metro no corre sobre Bun).
 on:
   push:
     branches: [main]
@@ -87,3 +87,42 @@ jobs:
       - name: Marcadores de servidor en el bundle de cliente
         if: ${{ !cancelled() }}
         run: bash scripts/check-client-bundle.sh
+
+  # Puertas del móvil (ticket 27 de la auditoría): typecheck, ESLint (config de
+  # Expo), Prettier y npm audit. Sin build nativo: eso necesita macOS y Xcode.
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: mobile/.nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      # `npm ci` respeta el legacy-peer-deps de mobile/.npmrc (ver su comentario).
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Informativo hasta revisar el primer informe (ticket 27, `## Comments`).
+      - name: Avisos de seguridad (npm audit)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: npx tsc --noEmit
+
+      - name: Lint (ESLint)
+        if: ${{ !cancelled() }}
+        run: npx eslint .
+
+      - name: Formato (Prettier)
+        if: ${{ !cancelled() }}
+        run: npx prettier --check .
