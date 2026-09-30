@@ -116,5 +116,12 @@
     "enteringApp": "Entrando en Peppers…",
     "linkErrorTitle": "Este enlace ya no funciona",
     "linkErrorBody": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar."
+  },
+  "errorScreen": {
+    "title": "Algo no ha cargado",
+    "body": "Puedes reintentar o volver al inicio.",
+    "bodyRoot": "Puedes volver a intentarlo.",
+    "retry": "Reintentar",
+    "home": "Inicio"
   }
 }

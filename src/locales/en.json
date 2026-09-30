@@ -116,5 +116,12 @@
     "enteringApp": "Entering Peppers…",
     "linkErrorTitle": "This link doesn't work anymore",
     "linkErrorBody": "It may have expired or already been used. Request a new one from the sign-in screen."
+  },
+  "errorScreen": {
+    "title": "Something didn’t load",
+    "body": "You can try again or go back to the start.",
+    "bodyRoot": "You can try again.",
+    "retry": "Try again",
+    "home": "Home"
   }
 }

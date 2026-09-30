@@ -55,9 +55,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="font-title text-2xl font-semibold tracking-[-0.02em] text-foreground">
-          Algo no ha cargado
+          {i18n.t("errorScreen.title")}
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">Puedes reintentar o volver al inicio.</p>
+        <p className="mt-2 text-sm text-muted-foreground">{i18n.t("errorScreen.body")}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -66,13 +66,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             }}
             className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
           >
-            Reintentar
+            {i18n.t("errorScreen.retry")}
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-full bg-secondary px-5 py-2.5 text-sm font-medium text-foreground"
           >
-            Inicio
+            {i18n.t("errorScreen.home")}
           </a>
         </div>
       </div>
