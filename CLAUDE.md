@@ -323,7 +323,15 @@ de salud y suscripciones a cualquier profundidad: por eso una clave como `name` 
 `"[redacted]"` (usa otra), y un error de Supabase se pasa como `errorText(error)`. En el cliente, un
 `.catch` nunca va vacío: como poco `console.warn("<pantalla>: <qué hacía>", error)`.
 `GET /api/health` (sin BD ni IA) responde `{ ok, version }` y, con `x-cron-secret`, qué variables
-de entorno están definidas.
+de entorno están definidas, el dominio de `RESEND_FROM` y una huella (8 hex del SHA-256) de la
+clave de Resend, para saber sin los logs de Vercel por qué no sale un correo.
+
+**Cabeceras de seguridad** (`securityHeadersMiddleware` en `start.ts`). La CSP va en modo
+Report-Only (`buildCsp`, [src/lib/csp.ts](src/lib/csp.ts)): no bloquea, avisa a
+`/api/csp-report` y deja `csp_violation` en el log. Un origen externo nuevo que pida el
+navegador (un SDK, un CDN, una imagen remota) se añade a `buildCsp`, o el día que la CSP se
+aplique (ticket 37) dejará de funcionar. En `bun run dev` sale un `eval` en `script-src`: es de
+Vite, el build de producción no lo tiene.
 
 **Tope de gasto en IA (`ai_spend` + `record_ai_spend`):** complementa las cuotas por hora con un
 tope en dólares por persona, diario y mensual (`AI_SPEND_CAPS`, junto a `RATE_LIMITS`; días y
