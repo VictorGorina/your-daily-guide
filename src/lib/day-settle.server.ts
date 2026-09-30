@@ -232,6 +232,16 @@ export async function settleDayHandler(
       habits: (released.habits ?? current.habits).map((h) => {
         const c = byLabel.get(h.label);
         if (!c) return h;
+        // El mismo desvío (frente al plan) que ya está compensado no se vuelve a
+        // contar: es un lote reenviado porque la app se cerró sin ver la
+        // respuesta (ticket 27, PERF-11), y marcarlo pendiente movería el plan
+        // dos veces por un solo cambio.
+        if (
+          h.swapCompensated &&
+          h.swapKcalDelta === c.kcalDelta &&
+          (h.swapProteinDelta ?? null) === (c.proteinDelta ?? null)
+        )
+          return h;
         const { swapProteinDelta: _previous, ...rest } = h;
         return {
           ...rest,

@@ -261,3 +261,69 @@ describe("settleDayHandler — la reserva caduca (ticket 22)", () => {
     expect(pendingOf(fake).map((p) => p.id)).toEqual(["otra"]);
   });
 });
+
+describe("settleDayHandler — un lote reenviado no compensa dos veces (ticket 27, PERF-11)", () => {
+  // El cliente guarda el lote en vuelo y, si la app se cerró sin respuesta, lo
+  // reenvía. Casi siempre el servidor ya lo había asentado: el mismo desvío de
+  // un plato ya compensado no puede volver a contar como pendiente.
+  const resend = (fake: ReturnType<typeof setup>, kcalDelta: number, proteinDelta: number | null) =>
+    settleDayHandler(
+      {
+        data: {
+          today: TODAY,
+          changes: [
+            {
+              label: "Comida",
+              slot: "comida",
+              dish: "Comida de verdad",
+              plannedDish: "Comida del plan",
+              kcalDelta,
+              proteinDelta,
+            },
+          ],
+        },
+        context: { supabase: fake.client, userId: "u1" },
+      },
+      { reflow: fakeReflow().reflow },
+    );
+  const compensated = (protein?: number): MealHabit => ({
+    ...changed("Comida", 450),
+    swapCompensated: true,
+    ...(protein != null ? { swapProteinDelta: protein } : {}),
+  });
+
+  it("el mismo desvío ya compensado se queda compensado y no recoloca", async () => {
+    const fake = setup({ habits: [compensated()] });
+
+    const result = await resend(fake, 450, null);
+
+    expect(result.outcome).toBe("nothing");
+    expect(habitsOf(fake)[0]!.swapCompensated).toBe(true);
+  });
+
+  it("también con la proteína: misma cifra, sigue compensado", async () => {
+    const fake = setup({ habits: [compensated(-12)] });
+
+    const result = await resend(fake, 450, -12);
+
+    expect(result.outcome).toBe("nothing");
+    expect(habitsOf(fake)[0]!.swapCompensated).toBe(true);
+  });
+
+  it("un desvío distinto sí se vuelve a asentar", async () => {
+    const fake = setup({ habits: [compensated()] });
+
+    const result = await resend(fake, 700, null);
+
+    expect(result.outcome).toBe("adjusted");
+    expect(habitsOf(fake)[0]!.swapKcalDelta).toBe(700);
+  });
+
+  it("otra proteína con las mismas kcal también se vuelve a asentar", async () => {
+    const fake = setup({ habits: [compensated(-12)] });
+
+    await resend(fake, 450, -30);
+
+    expect(habitsOf(fake)[0]!.swapProteinDelta).toBe(-30);
+  });
+});
