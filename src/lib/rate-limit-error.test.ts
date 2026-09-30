@@ -57,6 +57,15 @@ describe("RateLimitError", () => {
     expect(monthly.scope).toBe("month");
   });
 
+  it("el disyuntor global no culpa a la persona ni promete una hora (ticket 14)", () => {
+    const error = new RateLimitError(7200, "generar el plan", "global");
+    expect(error.message).toBe(
+      "El coach está descansando un rato por mantenimiento. Vuelve a intentarlo más tarde.",
+    );
+    expect(error.scope).toBe("global");
+    expect(error.retryAfterSeconds).toBe(7200);
+  });
+
   it("es un Error de verdad, para que `instanceof` funcione en apiPost", () => {
     expect(new RateLimitError(60, "hablar con el coach")).toBeInstanceOf(Error);
   });

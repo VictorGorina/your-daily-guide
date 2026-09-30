@@ -163,3 +163,25 @@ export function spendCapBlocks(decision: SpendCapDecision, capScope: SpendCapSco
   if (decision.allowed) return false;
   return capScope === "day" || decision.scope === "month";
 }
+
+export type GlobalSpendDecision = { allowed: true } | { allowed: false; retryAfterSeconds: number };
+
+/**
+ * Disyuntor global (ticket 14): los topes de arriba son por persona, y con el
+ * alta anónima sin límite mil cuentas son mil topes. Si el gasto de TODOS hoy
+ * (UTC) llega a `dailyUsd`, la IA se pausa para todos hasta mañana. Sin umbral
+ * (la variable de entorno sin definir, o algo que no sea un número positivo),
+ * está apagado.
+ */
+export function decideGlobalSpend(
+  spentTodayUsd: number,
+  dailyUsd: number | undefined,
+  now: Date,
+): GlobalSpendDecision {
+  if (dailyUsd === undefined || !Number.isFinite(dailyUsd) || dailyUsd <= 0) {
+    return { allowed: true };
+  }
+  if (spentTodayUsd < dailyUsd) return { allowed: true };
+  const tomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return { allowed: false, retryAfterSeconds: secondsUntil(now, tomorrow) };
+}

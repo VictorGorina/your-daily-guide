@@ -5,6 +5,7 @@ import {
   abortedCallCostUsd,
   callCostUsd,
   COACH_MODEL_USD_PER_MTOK,
+  decideGlobalSpend,
   decideSpendCap,
   DISH_MODEL_USD_PER_MTOK,
   PLAN_MODEL_USD_PER_MTOK,
@@ -234,5 +235,31 @@ describe("spendCapBlocks — la descomposición de platos no la corta el tope di
     expect(spendCapBlocks(overDay, "month")).toBe(false);
     expect(spendCapBlocks(overMonth, "month")).toBe(true);
     expect(spendCapBlocks(ok, "month")).toBe(false);
+  });
+});
+
+describe("decideGlobalSpend (disyuntor global, ticket 14)", () => {
+  const now = new Date("2026-09-30T22:00:00Z");
+
+  it("por debajo del umbral deja pasar", () => {
+    expect(decideGlobalSpend(9.99, 10, now)).toEqual({ allowed: true });
+  });
+
+  it("al llegar al umbral corta hasta la medianoche UTC", () => {
+    expect(decideGlobalSpend(10, 10, now)).toEqual({ allowed: false, retryAfterSeconds: 2 * 3600 });
+  });
+
+  it("por encima también corta", () => {
+    expect(decideGlobalSpend(42, 10, now).allowed).toBe(false);
+  });
+
+  it("sin umbral (variable sin definir) nunca corta", () => {
+    expect(decideGlobalSpend(1_000_000, undefined, now)).toEqual({ allowed: true });
+  });
+
+  it("un umbral que no es un número positivo cuenta como apagado", () => {
+    for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(decideGlobalSpend(1_000_000, bad, now)).toEqual({ allowed: true });
+    }
   });
 });

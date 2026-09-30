@@ -33,10 +33,15 @@ export function retryAfterText(seconds: number): string {
  * gasto en IA del día o del mes (`AI_SPEND_CAPS`, ambos en
  * `rate-limit.server.ts`). Solo cambia la primera frase del mensaje: al tope de
  * gasto se llega sumando a lo largo del día, no repitiendo algo seguido.
+ * `global` es el disyuntor de gasto de todos (ticket 14): no es cosa de la
+ * persona, así que su mensaje es otro entero y no promete una hora.
  */
-export type RateLimitScope = "window" | "day" | "month";
+export type RateLimitScope = "window" | "day" | "month" | "global";
 
-const LEAD: Record<RateLimitScope, string> = {
+const GLOBAL_MESSAGE =
+  "El coach está descansando un rato por mantenimiento. Vuelve a intentarlo más tarde.";
+
+const LEAD: Record<Exclude<RateLimitScope, "global">, string> = {
   window: "Has hecho esto muchas veces seguidas.",
   day: "Por hoy ya has llegado al tope de uso del coach.",
   month: "Este mes ya has llegado al tope de uso del coach.",
@@ -49,7 +54,11 @@ export class RateLimitError extends Error {
   /** `action` completa la frase "puedes volver a …": "hablar con el coach",
    *  "generar el plan". En infinitivo y en español, que es lo que se enseña. */
   constructor(retryAfterSeconds: number, action: string, scope: RateLimitScope = "window") {
-    super(`${LEAD[scope]} Puedes volver a ${action} en ${retryAfterText(retryAfterSeconds)}.`);
+    super(
+      scope === "global"
+        ? GLOBAL_MESSAGE
+        : `${LEAD[scope]} Puedes volver a ${action} en ${retryAfterText(retryAfterSeconds)}.`,
+    );
     this.name = "RateLimitError";
     this.retryAfterSeconds = retryAfterSeconds;
     this.scope = scope;
