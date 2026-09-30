@@ -1,6 +1,7 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { buildCsp, PERMISSIONS_POLICY } from "@/lib/csp";
 import { errorText, logEvent } from "@/lib/log.server";
 import { publicError } from "@/lib/public-error";
 import { captureServerException } from "@/lib/sentry.server";
@@ -51,6 +52,14 @@ const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
 });
 
+// Los mismos orígenes que usa el navegador: el cliente de Supabase y Sentry
+// leen estas variables, que Vite incrusta en el build (ticket 16).
+const CSP = buildCsp({
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
+  sentryDsn: import.meta.env.VITE_SENTRY_DSN,
+  dev: import.meta.env.DEV,
+});
+
 // H-07: Cabeceras de seguridad en todas las respuestas del servidor.
 const securityHeadersMiddleware = createMiddleware().server(async ({ next }) => {
   const response = await next();
@@ -59,6 +68,9 @@ const securityHeadersMiddleware = createMiddleware().server(async ({ next }) => 
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  // Solo observa (ticket 16); se aplica en el ticket 37.
+  headers.set("Content-Security-Policy-Report-Only", CSP);
+  headers.set("Permissions-Policy", PERMISSIONS_POLICY);
   return new Response(response.response.body, {
     status: response.response.status,
     headers,

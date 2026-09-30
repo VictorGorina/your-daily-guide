@@ -24,6 +24,7 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedPerfilRouteImport } from './routes/_authenticated/perfil'
 import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/plan'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiCspReportRouteImport } from './routes/api/csp-report'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
 import { Route as ApiPushSubscribeRouteImport } from './routes/api/push/subscribe'
@@ -137,6 +138,11 @@ const AuthenticatedPlanRoute = AuthenticatedPlanRouteImport.update({
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCspReportRoute = ApiCspReportRouteImport.update({
+  id: '/api/csp-report',
+  path: '/api/csp-report',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
@@ -358,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/perfil': typeof AuthenticatedPerfilRoute
   '/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/csp-report': typeof ApiCspReportRoute
   '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
@@ -414,6 +421,7 @@ export interface FileRoutesByTo {
   '/perfil': typeof AuthenticatedPerfilRoute
   '/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/csp-report': typeof ApiCspReportRoute
   '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
@@ -472,6 +480,7 @@ export interface FileRoutesById {
   '/_authenticated/perfil': typeof AuthenticatedPerfilRoute
   '/_authenticated/plan': typeof AuthenticatedPlanRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/csp-report': typeof ApiCspReportRoute
   '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
@@ -530,6 +539,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/plan'
     | '/api/chat'
+    | '/api/csp-report'
     | '/api/health'
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
@@ -586,6 +596,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/plan'
     | '/api/chat'
+    | '/api/csp-report'
     | '/api/health'
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
@@ -643,6 +654,7 @@ export interface FileRouteTypes {
     | '/_authenticated/perfil'
     | '/_authenticated/plan'
     | '/api/chat'
+    | '/api/csp-report'
     | '/api/health'
     | '/api/cron/dispatch'
     | '/api/push/subscribe'
@@ -693,6 +705,7 @@ export interface RootRouteChildren {
   PrivacidadRoute: typeof PrivacidadRoute
   RestablecerRoute: typeof RestablecerRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiCspReportRoute: typeof ApiCspReportRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute
   ApiPushSubscribeRoute: typeof ApiPushSubscribeRoute
@@ -840,6 +853,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/csp-report': {
+      id: '/api/csp-report'
+      path: '/api/csp-report'
+      fullPath: '/api/csp-report'
+      preLoaderRoute: typeof ApiCspReportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health': {
@@ -1158,6 +1178,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadRoute: PrivacidadRoute,
   RestablecerRoute: RestablecerRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiCspReportRoute: ApiCspReportRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiPushSubscribeRoute: ApiPushSubscribeRoute,

@@ -62,6 +62,10 @@
  *   registra; uno legítimo significa que un tope de `CHAT_LIMITS` es corto.
  * - `chat_profile_read_failed` (warn): `/api/chat` no pudo leer el perfil y usó
  *   el que mandó el cliente.
+ * - `csp_violation` (warn): el navegador informó de algo que la CSP en modo
+ *   Report-Only habría bloqueado (`directive`, `blocked`, `page`; sin query).
+ *   Uno por directiva + `blocked` y minuto en cada instancia (ticket 16). Un
+ *   origen legítimo se añade a `buildCsp`; una extensión del navegador, no.
  * - `signup_weak_password_mismatch` (error): `generateLink` rechazó por débil
  *   una contraseña que `passwordProblem` aceptó: el panel de Supabase Auth y
  *   `PASSWORD_RULES` se han desalineado, y el alta no manda el correo.
