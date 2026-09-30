@@ -600,6 +600,17 @@ la ventana de su `morning_time`/`evening_time` — cada uno evaluado contra su p
 `profiles.timezone` (detectada del dispositivo; ver [src/lib/zoned-date.ts](src/lib/zoned-date.ts)) —
 y enviar el push.
 Necesita los secrets de repo `APP_URL` y `CRON_SECRET` en GitHub una vez desplegada la app.
+`CRON_SECRET` se compara en tiempo constante (`cronSecretMatches`) y con menos de 32 caracteres no
+vale ni acertándolo (`cron_secret_weak` en el log): se rota con `openssl rand -hex 32`.
+
+El servidor hace `fetch` a cada endpoint guardado, así que solo se aceptan servicios de push de
+verdad (`isAllowedPushEndpoint`, [src/lib/push-endpoint.ts](src/lib/push-endpoint.ts): FCM,
+Apple, Mozilla y Windows). Se comprueba al suscribirse y otra vez al enviar (uno que no pasa se
+trata como `gone` y se borra), y la BD no deja insertar suscripciones con la sesión de la persona:
+un host nuevo se añade ahí, no en la ruta. Cada envío corta a los 10 s. Un fallo no debe tumbar el
+lote: una `timezone` que no existe usa el reloj de Madrid, y si falla una consulta (planes,
+suscripciones, el día, el hogar) no se envía ni se marca lo que dependía de ella, para que el
+siguiente disparo lo reintente (`push_query_failed`).
 
 El copy de mañana/noche y la frecuencia de contacto varían según `profiles.tone`
 (relajado/neutro/exigente, ver `morningCopy`/`eveningCopy` en
