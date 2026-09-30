@@ -1,3 +1,4 @@
+import { isCleanFood } from "@/lib/content-guard";
 import {
   type FeedingStage,
   type HomeSchedule,
@@ -179,6 +180,46 @@ export function composeDayForUser(
 }
 
 /**
+ * Un plato que viene de la fila de otra persona (el planificador), antes de
+ * enseñárselo a un miembro o de copiarlo a su fila (SEC-DB-07, corto plazo: el
+ * fondo es validar la fila en la base de datos). Esa fila se puede escribir por
+ * PostgREST sin pasar por `assertCleanFood`: aquí se aplica la misma guarda y el
+ * mismo tope de 200 caracteres que `setPlanMeal`.
+ */
+export function cleanSharedDish(text: string): string {
+  // La fila se escribe a mano: puede traer cualquier cosa, y esto no debe lanzar.
+  if (typeof text !== "string") return text;
+  if (!isCleanFood(text)) return "Plato del día";
+  return text.length > 200 ? text.slice(0, 200) : text;
+}
+
+/**
+ * El plan del planificador con cada plato pasado por `cleanSharedDish`: los del
+ * día, el desayuno, el plato aparte de los niños y la rotación semanal de
+ * desayunos (lo que se comparte; el snack nunca). Sin nada que limpiar devuelve
+ * el mismo objeto.
+ */
+export function cleanSharedPlan(plan: MonthlyPlan): MonthlyPlan {
+  let changed = false;
+  const dish = (text: string): string => {
+    const next = cleanSharedDish(text);
+    if (next !== text) changed = true;
+    return next;
+  };
+  const weeks = plan.weeks.map((week) => ({
+    ...week,
+    breakfasts: Array.isArray(week.breakfasts) ? week.breakfasts.map(dish) : week.breakfasts,
+    days: (Array.isArray(week.days) ? week.days : []).map((day) => {
+      const next: PlanDay = { ...day, lunch: dish(day.lunch), dinner: dish(day.dinner) };
+      if (day.breakfast !== undefined) next.breakfast = dish(day.breakfast);
+      if (Array.isArray(day.kids)) next.kids = day.kids.map((k) => ({ ...k, dish: dish(k.dish) }));
+      return next;
+    }),
+  }));
+  return changed ? { ...plan, weeks } : plan;
+}
+
+/**
  * El plan mensual que ve un miembro del hogar: compone cada día con
  * `composeDayForUser` y, cuando el desayuno se comparte, también sustituye la
  * rotación semanal (`week.breakfasts`) por la del planificador — igual que
@@ -195,27 +236,28 @@ export function composeMonthlyPlanForMember(
   sharedSlots: SharedSlots,
 ): MonthlyPlan | null {
   if (!planner || !MEAL_KEYS.some((m) => sharedSlots[m].length)) return mine;
+  const source = cleanSharedPlan(planner);
 
   const base: MonthlyPlan =
     mine ??
     ({
       intro: "",
       focus: [],
-      weeks: planner.weeks.map((w) => ({
+      weeks: source.weeks.map((w) => ({
         label: w.label,
         focus: "",
         breakfasts: [],
         snacks: [],
         days: w.days.map((d) => ({ day: d.day, lunch: "", dinner: "" })),
       })),
-      coverage: planner.coverage,
-      cadence: planner.cadence,
+      coverage: source.coverage,
+      cadence: source.cadence,
     } satisfies MonthlyPlan);
 
   return {
     ...base,
     weeks: base.weeks.map((week, wi) => {
-      const plannerWeek = planner.weeks[wi];
+      const plannerWeek = source.weeks[wi];
       if (!plannerWeek) return week;
       return {
         ...week,

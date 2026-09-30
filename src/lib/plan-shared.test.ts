@@ -21,6 +21,8 @@ import {
   cleanTripActuals,
   cleanTripReceipts,
   composeDayForUser,
+  cleanSharedPlan,
+  coachPlanContext,
   composeMonthlyPlanForMember,
   compensationWindow,
   coverageRatio,
@@ -1296,6 +1298,67 @@ describe("composeDayForUser", () => {
     // comida "viene del planificador" y el de la cena es el propio.
     const composed = composeDayForUser(own, own, slots, 0);
     expect(composed.kids).toBe(kids);
+  });
+});
+
+// SEC-DB-07 (corto plazo): el planificador puede escribir su fila por
+// PostgREST sin pasar por los validadores; lo que otro miembro lee de ella no
+// debe traer lo que `assertCleanFood` habría rechazado.
+describe("cleanSharedPlan", () => {
+  const LONG = "Ensalada ".repeat(30).trim(); // 269 caracteres
+  const dirty = (): MonthlyPlan => {
+    const p = plan();
+    const w = p.weeks[0]!;
+    w.breakfasts = ["Tostada con caca", "Avena con fruta"];
+    w.days[0] = {
+      ...w.days[0]!,
+      lunch: "Caca de vaca al horno",
+      dinner: LONG,
+      breakfast: "Pene de cerdo",
+      kids: [{ childId: "leo", slot: "comida", dish: "caca con tomate" }],
+    };
+    return p;
+  };
+
+  it("cambia el plato con un término bloqueado y recorta el que pasa de 200", () => {
+    const w = cleanSharedPlan(dirty()).weeks[0]!;
+    expect(w.days[0]!.lunch).toBe("Plato del día");
+    expect(w.days[0]!.breakfast).toBe("Plato del día");
+    expect(w.days[0]!.kids![0]!.dish).toBe("Plato del día");
+    expect(w.days[0]!.dinner).toBe(LONG.slice(0, 200));
+    expect(w.breakfasts).toEqual(["Plato del día", "Avena con fruta"]);
+    // Lo limpio no se toca.
+    expect(w.days[1]).toEqual(plan().weeks[0]!.days[1]!);
+  });
+
+  it("una fila escrita a mano con campos raros no lanza", () => {
+    const odd = {
+      ...plan(),
+      weeks: [{ label: "S1", days: [{ day: "Lunes", lunch: 42, dinner: null }] }],
+    } as unknown as MonthlyPlan;
+    expect(() => cleanSharedPlan(odd)).not.toThrow();
+    expect(cleanSharedPlan(odd)).toBe(odd);
+  });
+
+  it("un plan limpio sale idéntico, con los mismos objetos", () => {
+    const p = plan();
+    expect(cleanSharedPlan(p)).toBe(p);
+  });
+
+  it("no llega al plan compuesto del miembro ni al contexto del coach", () => {
+    const all: SharedSlots = {
+      desayuno: [0, 1, 2, 3, 4, 5, 6],
+      comida: [0, 1, 2, 3, 4, 5, 6],
+      cena: [0, 1, 2, 3, 4, 5, 6],
+    };
+    const composed = composeMonthlyPlanForMember(plan(), dirty(), all)!;
+    const text = JSON.stringify(composed);
+    expect(text).not.toMatch(/caca|pene/i);
+    const prompt = JSON.stringify(
+      coachPlanContext({ plan: composed, shopping: null, confirmed_at: null }, "2026-09-01"),
+    );
+    expect(prompt).toContain("Plato del día"); // el plan sí llega al prompt…
+    expect(prompt).not.toMatch(/caca|pene/i); // …pero limpio
   });
 });
 

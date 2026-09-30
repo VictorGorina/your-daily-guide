@@ -92,3 +92,5 @@ withPantryExtra
 withPlanMeal
 withTripActual
 withTripConfirmed
+cleanSharedDish
+cleanSharedPlan

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import * as mobile from "../../mobile/lib/plan-shared";
-import { planSlotIndex, weekdayName } from "./plan-shared";
+import { cleanSharedPlan, planSlotIndex, weekdayName } from "./plan-shared";
 import type { MonthlyPlan } from "./plan-shared";
 
 // Paridad web ↔ móvil ejecutando las DOS copias (no comparando su texto): el
@@ -33,5 +33,16 @@ describe("paridad web ↔ móvil de plan-shared", () => {
     for (const d of dates) {
       expect(mobile.planSlotIndex(plan as never, d)).toEqual(planSlotIndex(plan, d));
     }
+  });
+
+  it("cleanSharedPlan limpia igual en las dos apps", () => {
+    const dirty = structuredClone(plan) as MonthlyPlan;
+    (dirty.weeks[0] as { breakfasts?: string[] }).breakfasts = ["Tostada con caca", "Avena"];
+    dirty.weeks[0]!.days[0]!.lunch = "Caca de vaca";
+    dirty.weeks[0]!.days[1]!.dinner = "x".repeat(250);
+    dirty.weeks[0]!.days[2]!.kids = [{ childId: "leo", slot: "cena", dish: "pene" }];
+    expect(mobile.cleanSharedPlan(structuredClone(dirty) as never)).toEqual(
+      cleanSharedPlan(structuredClone(dirty)) as never,
+    );
   });
 });

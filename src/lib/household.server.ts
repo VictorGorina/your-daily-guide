@@ -26,6 +26,7 @@ import {
 } from "@/lib/household-shared";
 import {
   cleanPlan,
+  cleanSharedPlan,
   isPlanCellAhead,
   isPlanWeekAhead,
   mirrorPinned,
@@ -379,8 +380,9 @@ export async function syncSharedMeals(opts: {
     .eq("user_id", ctx.plannerId)
     .eq("month", opts.month)
     .maybeSingle();
-  const source = cleanPlan((plannerRow as { plan?: unknown } | null)?.plan);
-  if (!source) return { synced: 0 };
+  const plannerPlan = cleanPlan((plannerRow as { plan?: unknown } | null)?.plan);
+  if (!plannerPlan) return { synced: 0 };
+  const source = cleanSharedPlan(plannerPlan);
 
   // Qué celdas se reescriben lo decide la fecha real de cada una
   // (`isPlanCellAhead` / `isPlanWeekAhead`), no su posición en la fila: la

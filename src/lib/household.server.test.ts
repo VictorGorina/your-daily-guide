@@ -299,6 +299,19 @@ describe("syncSharedMeals", () => {
     expect(days[5]!.dinner).toBe("Cena Ana 5");
   });
 
+  it("un plato con un término bloqueado en la fila de quien planifica no llega al miembro", async () => {
+    const tables = withPlans();
+    const ana = tables.monthly_plans!.find((r) => r.user_id === "ana")!;
+    (ana.plan as MonthlyPlan).weeks[0]!.days[2]!.lunch = "Caca de vaca";
+    const fake = createFakeSupabase(tables);
+    setFakeAdmin(fake.client);
+    await syncSharedMeals({ supabase: fake.client, userId: "ana", month: MONTH, today: TODAY });
+
+    const days = beaPlan(fake.tables).weeks[0]!.days;
+    expect(days[2]!.lunch).toBe("Plato del día");
+    expect(days[3]!.lunch).toBe("Comida Ana 3");
+  });
+
   it("si el miembro cambia una comida suya a mitad, se reconstruye sobre su versión", async () => {
     const tables = withPlans();
     let raced = false;
