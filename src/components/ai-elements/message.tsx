@@ -269,10 +269,18 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 // Sin plugins de code/math/mermaid/cjk: el coach solo genera texto y listas en
 // español, y esos plugins arrastran shiki (todos los lenguajes), KaTeX y
 // cytoscape/dagre — varios MB de JS que este chat nunca necesita.
+//
+// Sin imágenes (ticket 16): Streamdown deja por defecto cualquier URL de
+// imagen, así que un `![](https://…)` en la respuesta del modelo haría que el
+// navegador pidiera esa dirección, con lo que llevara en la query. Se quitan
+// después de los plugins de rehype, así que vale también para el HTML crudo.
+const NO_IMAGES = ["img", "picture", "source"];
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn("size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0", className)}
+      disallowedElements={NO_IMAGES}
       {...props}
     />
   ),
