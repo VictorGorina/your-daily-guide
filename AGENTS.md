@@ -22,7 +22,9 @@ La ruta **no** duplica la lógica: invoca la misma server function que usa la we
 `apiPost` ([api-route.server.ts](src/lib/api-route.server.ts)). El middleware de auth lee la
 cabecera `Authorization` de esa petición HTTP, así que la sesión, el `inputValidator` y las
 políticas RLS son idénticos por los dos caminos — un único sitio donde vive cada operación.
-Añadir una operación nueva a la API son tres líneas; no hay que tocar la lógica.
+Añadir una operación nueva a la API son tres líneas; no hay que tocar la lógica. Si la operación
+llama al modelo, añade además su ruta a `LONG_ROUTES` de [mobile/lib/api.ts](mobile/lib/api.ts):
+el móvil corta el resto a los 30 s.
 
 Códigos que devuelve `apiPost` (siempre con `{"error": mensaje}` salvo el `200`):
 

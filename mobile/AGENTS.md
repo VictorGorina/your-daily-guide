@@ -13,8 +13,13 @@ código compartido por ahora — cuando duela duplicar, se monta `packages/share
   son las que protegen los datos.
 - **Operaciones de IA y las que necesitan clave de servicio**: por HTTP con
   [lib/api.ts](lib/api.ts) contra `/api/v1/*`, adjuntando el token de Supabase como Bearer.
-  Ojo con los errores: la API devuelve `{"error": mensaje}` con textos para enseñar tal cual, y su
-  código de estado no distingue "dato inválido" de "fallo real" — guíate por el mensaje y por el 401.
+  La API devuelve `{"error": mensaje}` con un texto que se enseña siempre tal cual (tabla de
+  códigos en el AGENTS.md de la raíz); `ApiError.status` solo decide qué hacer. `api.ts` ya
+  resuelve tres casos: corta a los 30 s (280 s en las rutas con IA, `LONG_ROUTES`: **una ruta
+  nueva que llame al modelo va ahí**, o el móvil la aborta antes de tiempo) con un `ApiError`
+  408; ante un 401 renueva la sesión una vez y repite (si vuelve a dar 401, cierra sesión en este
+  dispositivo); y un 429 trae `retryAfter` en segundos, sin reintento automático. Cada petición
+  lleva `X-Client-Version` (`version+buildNumber` de `app.json`).
 
 ## Versiones que no se pueden tocar a la ligera
 
