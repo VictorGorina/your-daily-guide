@@ -9,6 +9,7 @@ import {
   enforceAiSpendCap,
   enforceUserRateLimit,
   recordAiSpend,
+  resetGlobalSpendCache,
 } from "./rate-limit.server";
 
 // Topes de hoy (`AI_SPEND_CAPS`): 0,75 $/día y 5 $/mes, en UTC.
@@ -114,6 +115,74 @@ describe("enforceAiSpendCap", () => {
     fakeWith([spent("u1", "2026-09-26", 9)], { failOn: (op) => op.table === "ai_spend" });
     await expect(enforceAiSpendCap("u1")).resolves.toBeUndefined();
     expect(events()).toEqual(["spend_cap_failopen"]);
+  });
+});
+
+describe("disyuntor global de gasto (ticket 14)", () => {
+  const savedThreshold = process.env.AI_GLOBAL_DAILY_USD;
+  beforeEach(() => {
+    resetGlobalSpendCache();
+    process.env.AI_GLOBAL_DAILY_USD = "10";
+  });
+  afterEach(() => {
+    if (savedThreshold === undefined) delete process.env.AI_GLOBAL_DAILY_USD;
+    else process.env.AI_GLOBAL_DAILY_USD = savedThreshold;
+  });
+
+  /** Doble cuyo `ai_spend_total_today` devuelve `total` (como texto, igual que `numeric`). */
+  const withTotal = (total: number | string, opts: FakeOptions = {}) =>
+    fakeWith([], { ...opts, rpc: { ai_spend_total_today: () => String(total), ...opts.rpc } });
+  const totalCalls = (fake: ReturnType<typeof fakeWith>) =>
+    fake.calls.filter((c) => c.table === "ai_spend_total_today").length;
+
+  it("sin la variable está apagado: ni siquiera consulta el total", async () => {
+    delete process.env.AI_GLOBAL_DAILY_USD;
+    const fake = withTotal(1_000);
+    await expect(enforceAiSpendCap("u1")).resolves.toBeUndefined();
+    expect(totalCalls(fake)).toBe(0);
+  });
+
+  it("con el gasto de todos por debajo del umbral deja pasar", async () => {
+    withTotal(9.5);
+    await expect(enforceAiSpendCap("u1")).resolves.toBeUndefined();
+  });
+
+  it("al llegar al umbral corta a cualquiera con alcance 'global' y lo registra", async () => {
+    withTotal(10);
+    const error = await enforceAiSpendCap("u1").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect((error as RateLimitError).scope).toBe("global");
+    // Hasta la medianoche UTC (NOW = 12:00).
+    expect((error as RateLimitError).retryAfterSeconds).toBe(12 * 3600);
+    expect(events()).toContain("spend_global_tripped");
+  });
+
+  it("corta también la descomposición de platos (capScope 'month'): es un interruptor", async () => {
+    withTotal(10);
+    const error = await enforceAiSpendCap("u1", "calcular", "month").catch((e: unknown) => e);
+    expect((error as RateLimitError).scope).toBe("global");
+  });
+
+  it("enforceUserRateLimit corta en la entrada, antes de hacer trabajo", async () => {
+    withTotal(10);
+    const error = await enforceUserRateLimit("u1", "chat").catch((e: unknown) => e);
+    expect((error as RateLimitError).scope).toBe("global");
+  });
+
+  it("si la consulta falla, deja pasar y lo registra como spend_global_failopen", async () => {
+    withTotal(10, { failOn: (op) => op.table === "ai_spend_total_today" });
+    await expect(enforceAiSpendCap("u1")).resolves.toBeUndefined();
+    expect(events()).toContain("spend_global_failopen");
+  });
+
+  it("consulta el total como mucho una vez por minuto en cada instancia", async () => {
+    const fake = withTotal(1);
+    await enforceAiSpendCap("u1");
+    await enforceAiSpendCap("u2");
+    expect(totalCalls(fake)).toBe(1);
+    setSystemTime(new Date(NOW.getTime() + 61_000));
+    await enforceAiSpendCap("u1");
+    expect(totalCalls(fake)).toBe(2);
   });
 });
 

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
+  decideGlobalSpend,
   decideSpendCap,
   spendCapBlocks,
   utcMonthStartISO,
@@ -143,6 +144,62 @@ async function spendCapDecision(userId: string): Promise<SpendCapDecision | null
 }
 
 /**
+ * Disyuntor global (ticket 14): umbral de gasto de TODOS en un día UTC, en
+ * dólares, desde `AI_GLOBAL_DAILY_USD`. Sin la variable está apagado (el código
+ * desplegado no hace nada); con ella, se enciende sin desplegar. Se lee en cada
+ * llamada para que quitarla en Vercel lo apague en la siguiente instancia.
+ */
+function globalDailyUsd(): number | undefined {
+  const raw = process.env.AI_GLOBAL_DAILY_USD;
+  return raw ? Number(raw) : undefined;
+}
+
+/**
+ * El total de hoy se consulta como mucho una vez por minuto en cada instancia:
+ * lo llama el middleware antes de CADA llamada al modelo, y un minuto de
+ * retraso en cortar cuesta céntimos. Con varias instancias, cada una tiene la
+ * suya.
+ */
+const GLOBAL_CACHE_MS = 60_000;
+let globalCache: { at: number; usd: number } | null = null;
+
+/** Solo para los tests: la caché es estado del módulo. */
+export function resetGlobalSpendCache(): void {
+  globalCache = null;
+}
+
+/** Lo que llevan gastado todos hoy (UTC), o `null` si no se pudo leer (fail-open). */
+async function globalSpentToday(): Promise<number | null> {
+  const now = Date.now();
+  if (globalCache && now - globalCache.at < GLOBAL_CACHE_MS) return globalCache.usd;
+  try {
+    const { data, error } = await supabaseAdmin.rpc("ai_spend_total_today" as never);
+    if (error) throw error;
+    globalCache = { at: now, usd: Number(data) || 0 };
+    return globalCache.usd;
+  } catch (error) {
+    logEvent("error", "spend_global_failopen", { error: errorText(error) });
+    return null;
+  }
+}
+
+/**
+ * Lanza si el disyuntor global está encendido y ha saltado. Corta todos los
+ * `capScope`, también la descomposición de platos: es un interruptor de
+ * incidencia, y un plato que se queda "Calculando…" ya lo contempla D13.
+ */
+async function enforceGlobalSpend(action: string): Promise<void> {
+  const threshold = globalDailyUsd();
+  if (threshold === undefined) return;
+  const spent = await globalSpentToday();
+  if (spent === null) return;
+  const decision = decideGlobalSpend(spent, threshold, new Date());
+  if (decision.allowed) return;
+  logEvent("error", "spend_global_tripped", { spentUsd: spent, thresholdUsd: threshold });
+  throw new RateLimitError(decision.retryAfterSeconds, action, "global");
+}
+
+/**
  * Tope de gasto en IA antes de UNA llamada al modelo. Lo usa el middleware de
  * `createAiProvider` en cada llamada, para que ninguna se escape del tope
  * aunque su server function no pase por `enforceUserRateLimit` (p. ej.
@@ -154,6 +211,7 @@ export async function enforceAiSpendCap(
   action = "usar el coach",
   capScope: SpendCapScope = "day",
 ): Promise<void> {
+  await enforceGlobalSpend(action);
   const decision = await spendCapDecision(userId);
   if (decision && !decision.allowed && spendCapBlocks(decision, capScope)) {
     throw new RateLimitError(decision.retryAfterSeconds, action, decision.scope);
@@ -199,6 +257,7 @@ export async function enforceUserRateLimit(
   capScope: SpendCapScope = "day",
 ): Promise<void> {
   const { action } = RATE_LIMITS[bucket];
+  await enforceGlobalSpend(action);
   const [spend, { allowed, retryAfterSeconds }] = await Promise.all([
     spendCapDecision(userId),
     consume(`user:${userId}`, bucket),

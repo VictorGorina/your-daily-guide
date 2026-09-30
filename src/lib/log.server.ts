@@ -13,6 +13,11 @@
  *   esa llamada queda fuera del tope.
  * - `spend_cap_reached` (warn): una cuenta llegó a su tope de gasto. Casi
  *   imposible usando la app con normalidad: si se repite, merece un vistazo.
+ * - `spend_global_tripped` (error): el gasto en IA de todos hoy llegó a
+ *   `AI_GLOBAL_DAILY_USD` y la IA está pausada para todos hasta la medianoche
+ *   UTC (ticket 14). Es una incidencia: mirar quién gasta antes de subirlo.
+ * - `spend_global_failopen` (error): no se pudo sumar el gasto de todos
+ *   (`ai_spend_total_today`) y se dejó pasar: mientras falle, no hay disyuntor.
  * - `push_failed` (warn): el servicio de push rechazó un envío (no 404/410).
  * - `recipe_hits_failed` (warn): no se pudo sumar el uso de una receta.
  * - `foods_extra_load_failed` (warn): no se pudo leer `foods_extra`; esa instancia
