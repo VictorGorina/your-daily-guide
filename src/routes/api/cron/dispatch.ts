@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { cronSecretMatches } from "@/lib/cron-secret.server";
+import { errorText, logEvent } from "@/lib/log.server";
 import { dispatchPush } from "@/lib/push-dispatch.server";
 
 // Sin auth de usuario: lo llama el workflow programado de GitHub Actions (ver
@@ -9,8 +11,8 @@ export const Route = createFileRoute("/api/cron/dispatch")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.CRON_SECRET;
-        if (!secret || request.headers.get("x-cron-secret") !== secret) {
+        // En tiempo constante y con longitud mínima (ticket 06, SEC-S-13).
+        if (!(await cronSecretMatches(request.headers.get("x-cron-secret")))) {
           return new Response("Unauthorized", { status: 401 });
         }
 
@@ -20,7 +22,7 @@ export const Route = createFileRoute("/api/cron/dispatch")({
             headers: { "content-type": "application/json" },
           });
         } catch (error) {
-          console.error("POST /api/cron/dispatch", error);
+          logEvent("error", "push_dispatch_failed", { error: errorText(error) });
           return new Response("Error al despachar notificaciones", { status: 500 });
         }
       },

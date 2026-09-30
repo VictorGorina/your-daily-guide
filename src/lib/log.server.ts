@@ -19,6 +19,19 @@
  * - `spend_global_failopen` (error): no se pudo sumar el gasto de todos
  *   (`ai_spend_total_today`) y se dejó pasar: mientras falle, no hay disyuntor.
  * - `push_failed` (warn): el servicio de push rechazó un envío (no 404/410).
+ * - `push_timeout` (warn): el servicio de push no contestó en 10 s o falló la
+ *   red (`host`); cuenta como `failed` y la suscripción se conserva.
+ * - `push_bad_timezone` (warn): un perfil tiene una `timezone` que no existe;
+ *   el cron usa la de Madrid para esa persona (ticket 06).
+ * - `push_query_failed` (error): el cron no pudo leer `query` (`next_plans`,
+ *   `subscriptions`, `daily_log`, `household_members`); no envía ni marca lo
+ *   que dependía de ella, y el siguiente disparo lo vuelve a intentar.
+ * - `push_send_threw` (error): el envío lanzó en vez de devolver un resultado
+ *   (p. ej. falta `VAPID_PRIVATE_KEY`).
+ * - `push_dispatch_failed` (error): `/api/cron/dispatch` falló entero (500).
+ * - `push_subscribe_failed` (error): no se pudo guardar una suscripción.
+ * - `cron_secret_weak` (error): `CRON_SECRET` tiene menos de 32 caracteres y
+ *   se rechaza todo (cron y `/api/health`) hasta rotarlo.
  * - `recipe_hits_failed` (warn): no se pudo sumar el uso de una receta.
  * - `foods_extra_load_failed` (warn): no se pudo leer `foods_extra`; esa instancia
  *   reintenta a los 30 s y, mientras, una receta guardada con ingredientes de USDA
