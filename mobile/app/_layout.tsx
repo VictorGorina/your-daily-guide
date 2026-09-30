@@ -25,7 +25,7 @@ import {
   WorkSans_700Bold,
 } from "@expo-google-fonts/work-sans";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { I18nextProvider } from "react-i18next";
 import { useEffect, useRef } from "react";
@@ -33,6 +33,7 @@ import { AppState, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import "../global.css";
+import { ErrorFallback } from "../components/error-fallback";
 import { authCacheAction } from "../lib/auth-cache";
 import { AuthProvider } from "../lib/auth-context";
 import { syncLocalUserData } from "../lib/local-user-data";
@@ -131,6 +132,11 @@ function RootLayout() {
       </I18nextProvider>
     </SafeAreaProvider>
   );
+}
+
+/** Un error de render en la raíz, en vez de pantalla en blanco (ticket 27). */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <ErrorFallback {...props} showHome={false} />;
 }
 
 // Sentry envuelve la raíz (captura los errores de render) solo si está activo.
