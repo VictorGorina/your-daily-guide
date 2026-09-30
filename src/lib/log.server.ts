@@ -33,7 +33,9 @@
  * - `receipt_items_dropped` (info): productos de un tiquet que no pasaron
  *   `isCleanFood` y no fueron a la despensa extra (`count`). Suelto es una línea
  *   mal leída; repetido, la guarda descarta comida de verdad.
- * - `email_send_failed` (error): Resend rechazó un correo.
+ * - `email_send_failed` (error): Resend rechazó un correo (`status`), o falló
+ *   un correo de acceso mandado en segundo plano (`kind`: `reset`, `signup`,
+ *   `already-registered`). Un rechazo de Resend de esos sale con los dos.
  * - `env_missing` (error): falta una variable de entorno y se usa un respaldo.
  * - `settle_release_failed` (error): `settleDay` no pudo devolver una reserva.
  *   Su marca (`adjustment.pending`) se queda y el siguiente asentamiento la

@@ -117,3 +117,67 @@ describe("requestSignupConfirmationHandler", () => {
     expect(box.sent[0]!.html).not.toContain("auth.example/confirm");
   });
 });
+
+// SEC-S-10: si la respuesta esperase al correo, que solo se manda cuando la
+// cuenta existe, el tiempo de respuesta diría quién tiene cuenta.
+describe("el correo no retrasa la respuesta", () => {
+  const never = () => new Promise<void>(() => {});
+  const settles = (p: Promise<unknown>) =>
+    Promise.race([p.then(() => "ok"), new Promise((r) => setTimeout(() => r("colgada"), 50))]);
+
+  it("reset: responde sin esperar al envío y lo deja en waitUntil", async () => {
+    adminWith(() => link("https://auth.example/recover?t=9"));
+    const background: Promise<unknown>[] = [];
+    const result = requestPasswordResetHandler(
+      { email: "lenta@example.com", platform: "web" },
+      { sendEmail: never, waitUntil: (p) => void background.push(p) },
+    );
+    expect(await settles(result)).toBe("ok");
+    expect(background).toHaveLength(1);
+  });
+
+  it("alta: tampoco espera, ni al enlace nuevo ni al aviso de cuenta existente", async () => {
+    const background: Promise<unknown>[] = [];
+    const deps = { sendEmail: never, waitUntil: (p: Promise<unknown>) => void background.push(p) };
+    adminWith(() => link("https://auth.example/confirm?t=9"));
+    expect(
+      await settles(
+        requestSignupConfirmationHandler(
+          { email: "lenta-nueva@example.com", password: "secreta123", platform: "web" },
+          deps,
+        ),
+      ),
+    ).toBe("ok");
+    adminWith(() => ({ data: null, error: { code: "email_exists" } }));
+    expect(
+      await settles(
+        requestSignupConfirmationHandler(
+          { email: "lenta-existe@example.com", password: "secreta123", platform: "web" },
+          deps,
+        ),
+      ),
+    ).toBe("ok");
+    expect(background).toHaveLength(2);
+  });
+
+  it("un envío que falla en segundo plano queda en el log, no rompe nada", async () => {
+    adminWith(() => link("https://auth.example/recover?t=10"));
+    const quiet = spyOn(console, "error").mockImplementation(() => {});
+    const background: Promise<unknown>[] = [];
+    await requestPasswordResetHandler(
+      { email: "falla-fondo@example.com", platform: "web" },
+      {
+        sendEmail: async () => {
+          throw new Error("Resend 500");
+        },
+        waitUntil: (p) => void background.push(p),
+      },
+    );
+    await Promise.all(background);
+    const lines = quiet.mock.calls.map((c) => String(c[0]));
+    expect(
+      lines.some((l) => l.includes('"event":"email_send_failed"') && l.includes('"kind":"reset"')),
+    ).toBe(true);
+    quiet.mockRestore();
+  });
+});

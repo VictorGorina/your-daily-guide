@@ -1,4 +1,7 @@
+import { waitUntil as vercelWaitUntil } from "@vercel/functions";
+
 import type { AuthPlatform } from "@/lib/auth.functions";
+import { errorText, logEvent } from "@/lib/log.server";
 
 /**
  * Cuerpos de `requestPasswordReset` y `requestSignupConfirmation`
@@ -7,7 +10,26 @@ import type { AuthPlatform } from "@/lib/auth.functions";
  */
 export type AuthEmailDeps = {
   sendEmail?: typeof import("@/lib/email.server").sendEmail;
+  waitUntil?: (promise: Promise<unknown>) => void;
 };
+
+/**
+ * Manda el correo sin que la respuesta lo espere (SEC-S-10). Solo hay correo
+ * cuando la cuenta existe (o, en el alta, cuando ya existía): si la respuesta
+ * esperase al envío, su tiempo diría quién tiene cuenta. `waitUntil` mantiene
+ * viva la función hasta que el envío acaba. Un rechazo de Resend sale dos
+ * veces en el log: con `status` (desde `sendEmail`) y con `kind` (desde aquí).
+ */
+function sendInBackground(
+  kind: "reset" | "signup" | "already-registered",
+  send: () => Promise<void>,
+  deps: AuthEmailDeps,
+): void {
+  const task = send().catch((error: unknown) => {
+    logEvent("error", "email_send_failed", { kind, error: errorText(error) });
+  });
+  (deps.waitUntil ?? vercelWaitUntil)(task);
+}
 
 /**
  * Momento del último envío por correo, para no permitir que se pida un enlace
@@ -76,11 +98,11 @@ export async function requestPasswordResetHandler(
     if (error || !link?.properties?.action_link) return ok;
 
     const { subject, html } = emails.passwordResetEmail(link.properties.action_link);
-    await sendEmail({ to: email, subject, html });
+    sendInBackground("reset", () => sendEmail({ to: email, subject, html }), deps);
   } catch (error) {
-    // El motivo real (p. ej. el rechazo textual de Resend) queda en el log del
-    // servidor, nunca en la respuesta: revelaría configuración y además diría
-    // si la cuenta existe.
+    // El motivo real (un fallo de `generateLink` o de la plantilla; el del
+    // correo lo registra `sendInBackground`) queda en el log del servidor, nunca
+    // en la respuesta: revelaría configuración y además diría si la cuenta existe.
     console.error("requestPasswordReset", error);
   }
 
@@ -136,15 +158,13 @@ export async function requestSignupConfirmationHandler(
       }
       if (code === "email_exists" || code === "user_already_exists") {
         const { subject, html } = emails.alreadyRegisteredEmail(`${publicUrl}/auth`);
-        await sendEmail({ to: email, subject, html }).catch((notifyError) => {
-          console.error("requestSignupConfirmation:already-registered", notifyError);
-        });
+        sendInBackground("already-registered", () => sendEmail({ to: email, subject, html }), deps);
       }
       return ok;
     }
 
     const { subject, html } = emails.signupConfirmationEmail(link.properties.action_link);
-    await sendEmail({ to: email, subject, html });
+    sendInBackground("signup", () => sendEmail({ to: email, subject, html }), deps);
   } catch (error) {
     // El motivo real queda en el log del servidor, nunca en la respuesta.
     console.error("requestSignupConfirmation", error);
