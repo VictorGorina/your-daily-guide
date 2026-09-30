@@ -30,6 +30,9 @@
  *   "comer fuera" genéricos o más de un cheat day por semana, y `concretizePlan`
  *   los arregló (`rewritten`/`replaced`) o no encontró con qué (`unresolved`).
  *   Suelto es el modelo barato; repetido, el prompt ha dejado de funcionar.
+ * - `receipt_items_dropped` (info): productos de un tiquet que no pasaron
+ *   `isCleanFood` y no fueron a la despensa extra (`count`). Suelto es una línea
+ *   mal leída; repetido, la guarda descarta comida de verdad.
  * - `email_send_failed` (error): Resend rechazó un correo.
  * - `env_missing` (error): falta una variable de entorno y se usa un respaldo.
  * - `settle_release_failed` (error): `settleDay` no pudo devolver una reserva.

@@ -1,3 +1,4 @@
+import { isCleanFood } from "@/lib/content-guard";
 import { cleanShopping, type ShoppingList, withOwnedMark } from "@/lib/plan-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { resolveShoppingRow, updateShoppingState } from "../plan/rows.server";
@@ -37,4 +38,15 @@ export async function toggleShoppingOwnedHandler({
   if (!shopping.length) throw new ValidationError("Todavía no hay lista de la compra este mes");
 
   return { shopping };
+}
+
+/**
+ * Los productos de un tiquet que pueden ir a la despensa extra (SEC-S-15). Los
+ * nombres los escribe la IA leyendo la foto y acaban junto a los que teclea la
+ * persona, así que pasan la misma guarda que `setPantryExtra`. No lanza: una
+ * línea rara no debe tumbar el tiquet entero, se queda fuera sin más.
+ */
+export function keepCleanReceiptNames(names: string[]): { kept: string[]; dropped: number } {
+  const kept = names.filter(isCleanFood);
+  return { kept, dropped: names.length - kept.length };
 }

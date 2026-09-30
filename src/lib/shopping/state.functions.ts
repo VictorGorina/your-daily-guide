@@ -40,7 +40,7 @@ import { zonedTodayISO } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
 import { readShoppingRow, resolveShoppingRow, updateShoppingState } from "../plan/rows.server";
-import { toggleShoppingOwnedHandler } from "./state.server";
+import { keepCleanReceiptNames, toggleShoppingOwnedHandler } from "./state.server";
 
 /**
  * Cambia la cadencia de compra (semanal/bisemanal/mensual). No regenera el plan
@@ -427,6 +427,12 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
       itemCount: receipt.items.length,
       scannedAt: nowIso,
     };
+    const clean = keepCleanReceiptNames(added);
+    if (clean.dropped) {
+      const { logEvent } = await import("@/lib/log.server");
+      logEvent("info", "receipt_items_dropped", { count: clean.dropped });
+    }
+    added = clean.kept;
     const fromReceipt = added.map((name) => ({
       name,
       source: "receipt" as const,

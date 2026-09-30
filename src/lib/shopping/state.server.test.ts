@@ -4,7 +4,7 @@ import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOp, type FakeTables } from "@/test/fake-supabase";
 
 import type { ShoppingList } from "./model";
-import { toggleShoppingOwnedHandler } from "./state.server";
+import { keepCleanReceiptNames, toggleShoppingOwnedHandler } from "./state.server";
 
 const MONTH = "2026-10";
 
@@ -104,5 +104,23 @@ describe("toggleShoppingOwned (ticket 21)", () => {
     );
     expect(fake.calls.some((c) => c.op === "update")).toBe(false);
     error.mockRestore();
+  });
+});
+
+// SEC-S-15: los nombres del tiquet los escribe la IA leyendo una foto, y van a
+// la despensa extra como si los hubiera tecleado la persona.
+describe("keepCleanReceiptNames", () => {
+  it("quita un producto con un término bloqueado y cuenta cuántos", () => {
+    expect(keepCleanReceiptNames(["tomate pera", "caca de vaca", "cacahuetes"])).toEqual({
+      kept: ["tomate pera", "cacahuetes"],
+      dropped: 1,
+    });
+  });
+
+  it("una lista limpia sale igual", () => {
+    expect(keepCleanReceiptNames(["penne rigate", "leche"])).toEqual({
+      kept: ["penne rigate", "leche"],
+      dropped: 0,
+    });
   });
 });
