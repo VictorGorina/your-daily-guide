@@ -1,8 +1,12 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { afterEach, describe, expect, it, setSystemTime, spyOn } from "bun:test";
 
 import { setFakeAdmin } from "@/test/admin";
 
-import { requestPasswordResetHandler, requestSignupConfirmationHandler } from "./auth.server";
+import {
+  createSendThrottle,
+  requestPasswordResetHandler,
+  requestSignupConfirmationHandler,
+} from "./auth.server";
 
 type LinkResult = {
   data: { properties?: { action_link?: string } } | null;
@@ -179,5 +183,42 @@ describe("el correo no retrasa la respuesta", () => {
       lines.some((l) => l.includes('"event":"email_send_failed"') && l.includes('"kind":"reset"')),
     ).toBe(true);
     quiet.mockRestore();
+  });
+});
+
+// ARQ-03: el freno vive en memoria de la instancia y no tenía límite; muchos
+// correos distintos lo hacían crecer sin fin.
+describe("createSendThrottle", () => {
+  afterEach(() => setSystemTime());
+  const at = (s: number) => setSystemTime(new Date(Date.UTC(2026, 8, 30, 10, 0, s)));
+
+  it("frena el mismo correo y operación durante un minuto, no otra operación", () => {
+    const t = createSendThrottle(60_000, 100);
+    at(0);
+    expect(t.throttled("password-reset", "a@x.es")).toBe(false);
+    at(30);
+    expect(t.throttled("password-reset", "a@x.es")).toBe(true);
+    expect(t.throttled("signup-confirm", "a@x.es")).toBe(false);
+    at(61);
+    expect(t.throttled("password-reset", "a@x.es")).toBe(false);
+  });
+
+  it("borra lo que ya no frena en cada llamada", () => {
+    const t = createSendThrottle(60_000, 100);
+    at(0);
+    for (const e of ["a", "b", "c"]) t.throttled("password-reset", `${e}@x.es`);
+    expect(t.size).toBe(3);
+    at(61);
+    t.throttled("password-reset", "d@x.es");
+    expect(t.size).toBe(1);
+  });
+
+  it("no pasa del tope: sale la entrada más antigua", () => {
+    const t = createSendThrottle(60_000, 3);
+    at(0);
+    for (const e of ["a", "b", "c", "d"]) t.throttled("password-reset", `${e}@x.es`);
+    expect(t.size).toBe(3);
+    expect(t.throttled("password-reset", "a@x.es")).toBe(false); // la expulsada
+    expect(t.throttled("password-reset", "d@x.es")).toBe(true);
   });
 });

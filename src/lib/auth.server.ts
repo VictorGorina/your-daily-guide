@@ -41,21 +41,43 @@ function sendInBackground(
  * aquí se queda porque es gratis y ahorra la ida y vuelta a la base de datos en
  * el caso más común.
  */
-const lastSentAt = new Map<string, number>();
-const MIN_INTERVAL_MS = 60_000;
-
-/**
- * ¿Ha pasado ya el minuto de espera para esta operación y este correo? La clave
- * lleva la operación además del correo: pedir el enlace de contraseña no debe
- * bloquear el reenvío de la confirmación, que son cosas distintas.
- */
-function throttled(bucket: string, email: string): boolean {
-  const key = `${bucket}:${email}`;
-  const previous = lastSentAt.get(key);
-  if (previous && Date.now() - previous < MIN_INTERVAL_MS) return true;
-  lastSentAt.set(key, Date.now());
-  return false;
+export function createSendThrottle(intervalMs: number, maxEntries: number) {
+  const lastSentAt = new Map<string, number>();
+  return {
+    /**
+     * ¿Ha pasado ya el minuto de espera para esta operación y este correo? La
+     * clave lleva la operación además del correo: pedir el enlace de
+     * contraseña no debe bloquear el reenvío de la confirmación.
+     */
+    throttled(bucket: string, email: string): boolean {
+      const now = Date.now();
+      // Sin límite, muchos correos distintos lo hacían crecer sin fin (ARQ-03).
+      // Una clave solo entra cuando no está, así que el orden de inserción es
+      // el del tiempo: se borra desde la más antigua hasta la primera que aún
+      // frena, sin recorrer el resto.
+      for (const [key, at] of lastSentAt) {
+        if (now - at < intervalMs) break;
+        lastSentAt.delete(key);
+      }
+      const key = `${bucket}:${email}`;
+      if (lastSentAt.has(key)) return true;
+      // Tope duro (solo con miles de correos distintos por minuto): sale la más
+      // antigua. Frenar de verdad un abuso es cosa de `checkEmailRateLimit`.
+      if (lastSentAt.size >= maxEntries) {
+        const oldest = lastSentAt.keys().next().value;
+        if (oldest !== undefined) lastSentAt.delete(oldest);
+      }
+      lastSentAt.set(key, now);
+      return false;
+    },
+    get size(): number {
+      return lastSentAt.size;
+    },
+  };
 }
+
+const sendThrottle = createSendThrottle(60_000, 10_000);
+const throttled = (bucket: string, email: string) => sendThrottle.throttled(bucket, email);
 
 export async function requestPasswordResetHandler(
   data: { email: string; platform: AuthPlatform },
