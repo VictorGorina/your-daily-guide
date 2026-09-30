@@ -57,6 +57,9 @@ async function run(): Promise<void> {
     timer = null;
   }
   const job = pending;
+  // Con otro en marcha, este se queda en `pending` (la cola, que
+  // `schedulePlanRecalc` ya funde: `"full"` gana) y sin temporizador: al acabar
+  // el que corre, el `finally` lo lanza.
   if (!job || running) return;
   running = true;
   pending = null;
@@ -65,9 +68,18 @@ async function run(): Promise<void> {
   } catch (err) {
     console.warn("plan-recalc: no se pudo actualizar el plan", err);
   } finally {
-    clearPersisted(job.month);
+    // Durante el `await` puede haber entrado otro (`schedulePlanRecalc`); TS no
+    // lo ve y daría `pending` por `null` desde arriba.
+    const queued = pending as Pending | null;
+    // La clave guardada es por mes: si hay otro del mismo mes en cola, es la
+    // suya y se queda hasta que termine él (si la app se cierra antes, Plan lo
+    // relanza al abrirse).
+    if (queued?.month !== job.month) clearPersisted(job.month);
     running = false;
     notifyDone(job.month);
+    // Sin temporizador vivo, al de la cola ya le tocaba; con él, la persona
+    // sigue editando y se respeta el debounce.
+    if (queued && !timer) void run();
   }
 }
 
