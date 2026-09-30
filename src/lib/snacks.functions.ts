@@ -17,7 +17,7 @@ import {
   type SnackEntry,
 } from "@/lib/snacks";
 import { ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 
 /**
@@ -38,12 +38,6 @@ import { requireAiKey } from "@/lib/ai-provider.server";
  */
 
 type Client = SupabaseClient<never, never, never>;
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const todayOf = (raw: unknown) => {
-  const value = String(raw ?? "");
-  return ISO_DATE.test(value) ? value : zonedTodayISO();
-};
 
 /**
  * Lee, transforma y escribe la columna de hoy con `updateDailyLogCas`,
@@ -164,7 +158,7 @@ export const estimateSnack = createServerFn({ method: "POST" })
 export const logSnack = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { today?: string; text: string; macros: MacroEstimate; source?: string }) => ({
-    today: todayOf(input?.today),
+    today: clampClientToday(input?.today),
     text: cleanText(input?.text),
     macros: cleanMacros(input?.macros),
     source: input?.source === "manual" ? ("manual" as const) : ("lookup" as const),
@@ -191,7 +185,7 @@ export const removeSnack = createServerFn({ method: "POST" })
   .validator((input: { today?: string; id: string }) => {
     const id = String(input?.id ?? "").trim();
     if (!id) throw new ValidationError("Falta el picoteo que quieres quitar.");
-    return { today: todayOf(input?.today), id };
+    return { today: clampClientToday(input?.today), id };
   })
   .handler(async ({ data, context }): Promise<{ snacks: DaySnacks }> => {
     const snacks = await patchSnacks(

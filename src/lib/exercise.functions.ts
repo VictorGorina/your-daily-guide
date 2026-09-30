@@ -20,7 +20,7 @@ import {
 import { normalizeActivity } from "@/lib/nutrition/energy";
 import { parseTraining } from "@/lib/nutrition/exercise-energy";
 import { ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 
 /**
  * Deporte de Hoy, mismo patrón que `snacks.functions.ts` (picoteo) pero al
@@ -45,12 +45,6 @@ import { zonedTodayISO } from "@/lib/zoned-date";
  */
 
 type Client = SupabaseClient<never, never, never>;
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const todayOf = (raw: unknown) => {
-  const value = String(raw ?? "");
-  return ISO_DATE.test(value) ? value : zonedTodayISO();
-};
 
 /**
  * Lee, transforma y escribe la columna de hoy con `updateDailyLogCas`,
@@ -100,7 +94,7 @@ const cleanActivityInput = (raw: unknown) => {
 export const logExercise = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { today?: string; activity: string; minutes: number; intensity: string }) => ({
-    today: todayOf(input?.today),
+    today: clampClientToday(input?.today),
     ...cleanActivityInput(input),
   }))
   .handler(async ({ data, context }): Promise<{ exercise: DayExercise; entry: ExerciseEntry }> => {
@@ -185,7 +179,7 @@ export const removeExercise = createServerFn({ method: "POST" })
   .validator((input: { today?: string; id: string }) => {
     const id = String(input?.id ?? "").trim();
     if (!id) throw new ValidationError("Falta el deporte que quieres quitar.");
-    return { today: todayOf(input?.today), id };
+    return { today: clampClientToday(input?.today), id };
   })
   .handler(async ({ data, context }): Promise<{ exercise: DayExercise }> => {
     const exercise = await patchExercise(

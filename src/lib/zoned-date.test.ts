@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, setSystemTime } from "bun:test";
 
-import { DEFAULT_TZ, zonedMinutesNow, zonedTodayISO } from "./zoned-date";
+import { clampClientToday, DEFAULT_TZ, zonedMinutesNow, zonedTodayISO } from "./zoned-date";
 
 afterEach(() => setSystemTime());
 
@@ -43,5 +43,39 @@ describe("zonedMinutesNow", () => {
     expect(zonedMinutesNow("Europe/Madrid")).toBe(12 * 60);
     expect(zonedMinutesNow("America/New_York")).toBe(6 * 60);
     expect(zonedMinutesNow()).toBe(12 * 60);
+  });
+});
+
+// SEC-S-11: el «hoy» lo manda el cliente y decide qué días son pasado. Solo se
+// acepta una fecha que exista ahora mismo en alguna zona real (UTC−12 a UTC+14).
+describe("clampClientToday", () => {
+  it("a las 23:30 UTC acepta el mismo día (UTC−12) y el siguiente (UTC+14)", () => {
+    setSystemTime(new Date("2026-09-26T23:30:00Z"));
+    expect(clampClientToday("2026-09-26")).toBe("2026-09-26");
+    expect(clampClientToday("2026-09-27")).toBe("2026-09-27");
+  });
+
+  it("a las 00:30 UTC acepta el día anterior (UTC−12)", () => {
+    setSystemTime(new Date("2026-09-26T00:30:00Z"));
+    expect(clampClientToday("2026-09-25")).toBe("2026-09-25");
+  });
+
+  it("una fecha que hoy no existe en ninguna zona cae a la del servidor", () => {
+    setSystemTime(new Date("2026-09-26T23:30:00Z"));
+    const server = zonedTodayISO();
+    expect(clampClientToday("2026-09-28")).toBe(server);
+    // A las 23:30 UTC ya no es día 25 en ninguna parte.
+    expect(clampClientToday("2026-09-25")).toBe(server);
+    expect(clampClientToday("2026-10-26")).toBe(server);
+    expect(clampClientToday("2025-09-26")).toBe(server);
+  });
+
+  it("basura o nada cae a la del servidor, en la zona que se pida", () => {
+    setSystemTime(new Date("2026-09-26T23:30:00Z"));
+    expect(clampClientToday(undefined)).toBe(zonedTodayISO());
+    expect(clampClientToday("mañana")).toBe(zonedTodayISO());
+    expect(clampClientToday("2026-09-26T00:00")).toBe(zonedTodayISO());
+    expect(clampClientToday(20260926)).toBe(zonedTodayISO());
+    expect(clampClientToday(null, "America/Mexico_City")).toBe("2026-09-26");
   });
 });

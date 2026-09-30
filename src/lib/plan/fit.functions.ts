@@ -10,7 +10,7 @@ import {
   type PlanFitMark,
 } from "@/lib/plan-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerFn } from "@tanstack/react-start";
@@ -37,7 +37,7 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; today?: string }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
-    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+    const today = clampClientToday(input?.today);
     return { month: input.month, today };
   })
   .handler(async ({ data, context }): Promise<{ fit: PlanFitMark | null }> => {

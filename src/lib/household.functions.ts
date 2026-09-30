@@ -3,7 +3,7 @@ import { assertCleanFood } from "@/lib/assert-clean-food";
 import type { MealStatus } from "@/lib/daily";
 import { cleanHomeSchedule, scheduleTarget } from "@/lib/household-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { propagateLogToFamilyHandler } from "./household-propagate.server";
 
@@ -28,7 +28,7 @@ export const syncHouseholdPlan = createServerFn({ method: "POST" })
       month: input.month,
       // `today` lo pasa el cliente ya en su zona horaria (ver `todayISO` en
       // daily.ts); el fallback a Madrid solo cubre llamadas sin ese dato.
-      today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO(),
+      today: clampClientToday(input?.today),
     };
   })
   .handler(async ({ data, context }): Promise<{ synced: number }> => {
@@ -68,7 +68,7 @@ export const propagateLogToFamily = createServerFn({ method: "POST" })
         status: input.status as MealStatus,
         // Lo que de verdad comió se propaga al resto del hogar: lo ven otros.
         actual: cleanSharedActual(input.actual),
-        today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : undefined,
+        today: clampClientToday(input?.today),
       };
     },
   )

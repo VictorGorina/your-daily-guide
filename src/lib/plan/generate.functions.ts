@@ -12,7 +12,7 @@ import {
   type ShoppingList,
 } from "@/lib/plan-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 import { createServerFn } from "@tanstack/react-start";
 import { fetchMonthConstraints, generatePlanBody } from "./generate.server";
@@ -34,7 +34,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
     // del mes que viene, y este último solo en su última semana — mismo umbral
     // con el que la pantalla Plan lo desbloquea (ver `isNextMonthUnlocked`).
     // `today` lo manda el cliente en su zona horaria; el fallback es Madrid.
-    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+    const today = clampClientToday(input?.today);
     const currentMonth = today.slice(0, 7);
     if (input.month < currentMonth) throw new ValidationError("No se planifican meses pasados");
     const nm = nextMonthISO(today);

@@ -8,6 +8,7 @@ import { parsePortionSize, type PortionSize } from "@/lib/nutrition/portion";
 import type { ResolvedServing } from "@/lib/nutrition/planned-serving.server";
 import type { PlannedServing } from "@/lib/nutrition/scale";
 import { parseJsonLoose } from "@/lib/plan-shared";
+import { clampClientToday } from "@/lib/zoned-date";
 
 /**
  * Estimación aproximada del total del día. Desde la Fase 2 de
@@ -363,7 +364,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
         })
         .filter((d) => d.dish)
         .slice(0, 4),
-      today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input!.today! : null,
+      today: clampClientToday(input?.today),
     }),
   )
   .handler(async ({ data, context }): Promise<GeneratedGuide> => {
@@ -394,7 +395,6 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     const { energyTargets, caloriesText, targetsAsMacros } = await import("@/lib/nutrition/energy");
     const { showsNutritionNumbers } = await import("@/lib/macros");
     const { portionFactors } = await import("@/lib/nutrition/portion");
-    const { zonedTodayISO } = await import("@/lib/zoned-date");
     const energy = energyTargets(profile as never);
     const targets = energy ? targetsAsMacros(energy) : null;
     const calories = caloriesText(energy, showsNutritionNumbers(profile as never));
@@ -406,7 +406,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
       supabase: context.supabase as never,
       userId: context.userId,
       profile,
-      date: data.today ?? zonedTodayISO(),
+      date: data.today,
     });
 
     const todayMeals = data.todayMeals;

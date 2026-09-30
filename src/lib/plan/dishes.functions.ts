@@ -39,7 +39,7 @@ import {
   withPlanMeal,
 } from "@/lib/plan-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
 import { askForJson } from "./ai.server";
@@ -175,7 +175,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       // Frontera de verdad: cubre a la vez la web, la app móvil (vía
       // `/api/v1/plan/meal`) y la herramienta `cambiar_plato` del coach.
       assertCleanFood(dish);
-      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+      const today = clampClientToday(input?.today);
       if (input.date < today) {
         throw new ValidationError(
           "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
@@ -312,7 +312,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
       // Vacío es legítimo aquí (quita el plato aparte y el niño vuelve a lo
       // compartido); lo que no vale es que tenga contenido y sea una broma.
       if (dish) assertCleanFood(dish);
-      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+      const today = clampClientToday(input?.today);
       if (input.date < today) {
         throw new ValidationError(
           "Los días pasados ya están cerrados: solo puedo cambiar de hoy en adelante",
@@ -416,7 +416,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
 export const fillChildMeals = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input?: { today?: string }) => ({
-    today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input!.today! : zonedTodayISO(),
+    today: clampClientToday(input?.today),
   }))
   .handler(
     async ({

@@ -9,7 +9,7 @@ import {
 import { requestDeadline } from "@/lib/deadline";
 import { showsNutritionNumbers } from "@/lib/macros";
 import { cleanPlan, cleanShopping, ingredientNames, shoppingTotal } from "@/lib/plan-shared";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
 import { askForJson } from "./ai.server";
@@ -20,7 +20,7 @@ export const goalImpact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { note: string; today?: string }) => ({
     note: String(input?.note ?? "").slice(0, 1500),
-    today: /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO(),
+    today: clampClientToday(input?.today),
   }))
   .handler(
     async ({ data, context }): Promise<{ text: string; suggested_target_date: string | null }> => {

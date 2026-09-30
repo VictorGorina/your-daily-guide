@@ -1,15 +1,9 @@
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { DayOutcome } from "@/lib/day-balance";
 import type { MealChange } from "@/lib/plan-shared";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { type DishChange, settleDayHandler, type SettleDayInput } from "./day-settle.server";
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const todayOf = (raw: unknown) => {
-  const value = String(raw ?? "");
-  return ISO_DATE.test(value) ? value : zonedTodayISO();
-};
 
 /** Cambios de plato como mucho por lote: un tope contra un bucle. */
 const DISH_CHANGE_MAX = 10;
@@ -48,6 +42,6 @@ export const settleDay = createServerFn({ method: "POST" })
             : null,
       }))
       .filter((c) => c.label);
-    return { today: todayOf(input?.today), changes };
+    return { today: clampClientToday(input?.today), changes };
   })
   .handler(({ data, context }) => settleDayHandler({ data, context }));

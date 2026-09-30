@@ -20,7 +20,7 @@ import {
   weekdayName,
 } from "@/lib/plan-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerFn } from "@tanstack/react-start";
@@ -33,7 +33,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
   .validator(
     (input: { month: string; note: string; today?: string; kcalDelta?: number | null }) => {
       if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
-      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+      const today = clampClientToday(input?.today);
       const kcal = Number(input?.kcalDelta);
       return {
         month: input.month,
@@ -89,7 +89,7 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       dish?: string;
       plannedDish?: string;
     }) => {
-      const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+      const today = clampClientToday(input?.today);
       const date = String(input?.date ?? "");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date <= today) {
         throw new ValidationError("Fecha no válida: tiene que ser un día futuro");
@@ -253,7 +253,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; today?: string; scope?: "meals" | "full" }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
-    const today = /^\d{4}-\d{2}-\d{2}$/.test(input?.today ?? "") ? input.today! : zonedTodayISO();
+    const today = clampClientToday(input?.today);
     const scope: "meals" | "full" = input?.scope === "full" ? "full" : "meals";
     return { month: input.month, today, scope };
   })

@@ -36,7 +36,7 @@ import { addDays, weekdayName } from "@/lib/plan-shared";
 import { CHAT_EDITABLE_PROFILE_FIELDS } from "@/lib/profile-fields";
 import { asPromptData } from "@/lib/prompt-data";
 import { enforceUserRateLimit } from "@/lib/rate-limit.server";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday } from "@/lib/zoned-date";
 
 /**
  * Reglas para el coach sobre quién puede tocar qué del plan del hogar, solo
@@ -311,9 +311,7 @@ export const Route = createFileRoute("/api/chat")({
         // La fecha se dice explícita (y con el día de la semana) porque el
         // modelo no la sabe: sin esto, "el desayuno de mañana" no se puede
         // convertir en la fecha que necesita cambiar_plato.
-        const today = /^\d{4}-\d{2}-\d{2}$/.test(body.today ?? "")
-          ? body.today!
-          : zonedTodayISO(profile?.timezone ?? undefined);
+        const today = clampClientToday(body.today, profile?.timezone ?? undefined);
         const tomorrow = addDays(today, 1);
 
         // Contexto del hogar (mesa, comidas compartidas, niños y quién
