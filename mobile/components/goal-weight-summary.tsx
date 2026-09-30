@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Scale } from "lucide-react-native";
 import { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
-import Svg, { Circle, G, Line, Polyline, Rect } from "react-native-svg";
+import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from "react-native-svg";
 
 import {
   goalProgress,
@@ -10,7 +10,6 @@ import {
   normalizeGoalType,
   type DailyLogHistory,
   type Profile,
-  type GoalProgress,
 } from "../lib/daily";
 
 // "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
@@ -128,6 +127,45 @@ function WeightGauge({
 
         {/* Punto del peso actual */}
         <Circle cx={10 + (currentPct / 100) * 280} cy={17} r={6} fill={dotColor} />
+
+        {/* Flecha de tendencia junto al punto (como en la web, weight-gauge.tsx) */}
+        {trendArrow ? (
+          <SvgText
+            x={10 + (currentPct / 100) * 280 + (currentKg < targetKg ? 10 : -10)}
+            y={21}
+            textAnchor="middle"
+            fontSize={8}
+            fill={dotColor}
+          >
+            {trendArrow}
+          </SvgText>
+        ) : null}
+
+        {/* Etiqueta del target */}
+        <SvgText
+          x={10 + (targetPct / 100) * 280}
+          y={38}
+          textAnchor="middle"
+          fontSize={8}
+          fontFamily="DMMono_500Medium"
+          fill="#6DBE7B"
+        >
+          {targetKg}
+        </SvgText>
+
+        {/* Etiqueta del peso actual (solo si no solapa con el target) */}
+        {Math.abs(currentPct - targetPct) > 8 ? (
+          <SvgText
+            x={10 + (currentPct / 100) * 280}
+            y={38}
+            textAnchor="middle"
+            fontSize={8}
+            fontFamily="DMMono_500Medium"
+            fill={dotColor}
+          >
+            {currentKg}
+          </SvgText>
+        ) : null}
       </Svg>
     </View>
   );
