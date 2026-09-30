@@ -37,6 +37,12 @@ const DEBOUNCE_MS = 10_000;
  * a tocar algo — y la tarjeta, con el "Ajustando…" puesto para siempre.
  */
 const RETRY_MS = 60_000;
+/**
+ * Un lote guardado como "en vuelo" de hace menos que esto puede seguir en el
+ * servidor (la app se cerró, la petición no): se espera antes de reenviarlo.
+ * Son los 300 s de `maxDuration`, como `RESERVATION_TTL_MS` del servidor.
+ */
+const FLIGHT_TTL_MS = 5 * 60_000;
 const STORAGE_PREFIX = "day-settle:";
 
 export type SettleDayResult = {
@@ -122,6 +128,19 @@ let epoch = 0;
  */
 let runningPromise: Promise<void> | null = null;
 
+/**
+ * Un lote mandado a `settleDay` y aún sin respuesta. Se guarda con la cola
+ * hasta que responde bien (ticket 27, PERF-11): si la app se cierra mientras
+ * tanto, no se pierde. Reenviarlo no compensa dos veces: el servidor ignora un
+ * plato cuyo mismo desvío ya está compensado.
+ */
+type Flight = { at: number; date: string; dishes: PendingDish[]; plain: boolean };
+/** El lote que esta sesión tiene en vuelo. */
+let flight: Flight | null = null;
+/** Lotes en vuelo de una vida anterior de la app que aún no han cumplido `FLIGHT_TTL_MS`. */
+let orphans: Flight[] = [];
+let orphanTimer: ReturnType<typeof setTimeout> | null = null;
+
 type State = {
   /** Comidas encoladas, para pintar su spinner. */
   dishes: Set<string>;
@@ -143,16 +162,34 @@ function publish() {
   for (const cb of stateListeners) cb();
 }
 
-type Persisted = { dishes: PendingDish[]; plain: boolean };
+type Persisted = { dishes: PendingDish[]; plain: boolean; inFlight?: Flight[] };
 
 function persist() {
   const key = `${STORAGE_PREFIX}${pendingDate}`;
-  if (!pendingDishes.size && !pendingPlain) {
+  // Solo los del día de la clave: un lote de ayer no se reenvía contra hoy.
+  const inFlight = [...(flight ? [flight] : []), ...orphans].filter((f) => f.date === pendingDate);
+  if (!pendingDishes.size && !pendingPlain && !inFlight.length) {
     void AsyncStorage.removeItem(key).catch(() => {});
     return;
   }
-  const value: Persisted = { dishes: [...pendingDishes.values()], plain: pendingPlain };
+  const value: Persisted = {
+    dishes: [...pendingDishes.values()],
+    plain: pendingPlain,
+    ...(inFlight.length ? { inFlight } : {}),
+  };
   void AsyncStorage.setItem(key, JSON.stringify(value)).catch(() => {});
+}
+
+function validDishes(list: unknown): PendingDish[] {
+  return (Array.isArray(list) ? list : []).filter(
+    (c): c is PendingDish => !!c?.label && !!c?.slot && !!c?.dish,
+  );
+}
+
+/** Mete un lote en la cola. Un cambio más nuevo de la misma comida manda. */
+function requeue(f: Pick<Flight, "dishes" | "plain">) {
+  for (const d of f.dishes) if (!pendingDishes.has(d.label)) pendingDishes.set(d.label, d);
+  if (f.plain) pendingPlain = true;
 }
 
 async function readPersisted(date: string): Promise<Persisted | null> {
@@ -160,10 +197,10 @@ async function readPersisted(date: string): Promise<Persisted | null> {
     const raw = await AsyncStorage.getItem(`${STORAGE_PREFIX}${date}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<Persisted>;
-    const dishes = (Array.isArray(parsed?.dishes) ? parsed.dishes : []).filter(
-      (c): c is PendingDish => !!c?.label && !!c?.slot && !!c?.dish,
-    );
-    return { dishes, plain: !!parsed?.plain };
+    const inFlight = (Array.isArray(parsed?.inFlight) ? parsed.inFlight : [])
+      .filter((f): f is Flight => typeof f?.at === "number" && f?.date === date)
+      .map((f) => ({ ...f, dishes: validDishes(f.dishes), plain: !!f.plain }));
+    return { dishes: validDishes(parsed?.dishes), plain: !!parsed?.plain, inFlight };
   } catch {
     return null;
   }
@@ -200,6 +237,7 @@ async function run(): Promise<void> {
   const batchEpoch = epoch;
   running = true;
   failed = false;
+  flight = { at: Date.now(), date: today, dishes, plain: pendingPlainBefore };
   pendingDishes = new Map();
   pendingPlain = false;
   persist();
@@ -221,6 +259,11 @@ async function run(): Promise<void> {
     }
     if (changes.length || !unresolved.length || pendingPlainBefore)
       result = await apiPost<SettleDayResult>("day/settle", { today, changes });
+    // Asentado (o de vuelta en la cola lo que no tenía cifra): ya no vuela.
+    if (batchEpoch === epoch) {
+      flight = null;
+      persist();
+    }
   } catch (err) {
     // Lo que no se pudo mandar vuelve a la cola. Los platos también: su desvío
     // lo escribe el servidor al asentar, así que si la llamada falló ese apunte
@@ -229,8 +272,8 @@ async function run(): Promise<void> {
     // mientras esto volaba, manda sobre el viejo.
     if (batchEpoch !== epoch) return;
     failed = true;
-    for (const d of dishes) if (!pendingDishes.has(d.label)) pendingDishes.set(d.label, d);
-    pendingPlain = true;
+    flight = null;
+    requeue({ dishes, plain: true });
     persist();
     if (timer) clearTimeout(timer);
     timer = setTimeout(startRun, RETRY_MS);
@@ -287,6 +330,12 @@ export function scheduleDaySettle(today: string): void {
 export function queueDishChange(today: string, change: PendingDish): void {
   const before = pendingDishes.get(change.label);
   arm(today);
+  // Un lote de antes que aún espera (`orphans`) no puede pisar este cambio
+  // cuando se reenvíe: esa comida sale de él.
+  orphans = orphans.map((f) => ({
+    ...f,
+    dishes: f.dishes.filter((d) => d.label !== change.label),
+  }));
   pendingDishes.set(change.label, {
     ...change,
     // `plannedDish` y `prevKcal` se conservan del primer cambio del día: si se
@@ -317,6 +366,10 @@ export function cancelDaySettle(): void {
   epoch++;
   if (timer) clearTimeout(timer);
   timer = null;
+  if (orphanTimer) clearTimeout(orphanTimer);
+  orphanTimer = null;
+  flight = null;
+  orphans = [];
   pendingDate = "";
   pendingDishes = new Map();
   pendingPlain = false;
@@ -354,9 +407,10 @@ export function ensureDaySettleDeps(fallback: Omit<DaySettleDeps, "resolveDishDe
 /**
  * Red de seguridad al abrir Hoy: si la app se cerró con algo por asentar, se
  * manda. Un pendiente de otro día se descarta — compensar desde ayer tocaría
- * hoy, que ya está cerrado.
+ * hoy, que ya está cerrado. Un lote que quedó en vuelo se reenvía si tiene más
+ * de `FLIGHT_TTL_MS`; si no, se espera a que los cumpla (`adoptOrphans`).
  */
-async function resume(today: string): Promise<void> {
+export async function resumeDaySettle(today: string): Promise<void> {
   wireFlushOnBackground();
   if (pendingDishes.size || pendingPlain || running) return;
   const stored = await readPersisted(today);
@@ -369,12 +423,31 @@ async function resume(today: string): Promise<void> {
   } catch {
     /* no hay nada que limpiar */
   }
-  if (!stored || (!stored.dishes.length && !stored.plain)) return;
+  if (!stored) return;
   pendingDate = today;
   pendingDishes = new Map(stored.dishes.map((c) => [c.label, c]));
   pendingPlain = stored.plain;
+  orphans = stored.inFlight ?? [];
+  adoptOrphans();
+}
+
+/**
+ * Pasa a la cola los lotes huérfanos que ya han cumplido `FLIGHT_TTL_MS`, deja
+ * un temporizador para los demás y manda lo que haya.
+ */
+function adoptOrphans(): void {
+  if (orphanTimer) clearTimeout(orphanTimer);
+  orphanTimer = null;
+  const now = Date.now();
+  for (const f of orphans) if (now - f.at >= FLIGHT_TTL_MS) requeue(f);
+  orphans = orphans.filter((f) => now - f.at < FLIGHT_TTL_MS);
+  if (orphans.length) {
+    const next = Math.min(...orphans.map((f) => f.at)) + FLIGHT_TTL_MS - now;
+    orphanTimer = setTimeout(adoptOrphans, next);
+  }
+  persist();
   publish();
-  startRun();
+  if (pendingDishes.size || pendingPlain) startRun();
 }
 
 /**
@@ -409,7 +482,7 @@ export function useDaySettle(today: string, onDone: (result: SettleDayResult | n
   useEffect(() => {
     if (resumedRef.current === today) return;
     resumedRef.current = today;
-    void resume(today);
+    void resumeDaySettle(today);
   }, [today]);
 
   return state;
