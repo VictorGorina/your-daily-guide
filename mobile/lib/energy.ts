@@ -86,6 +86,30 @@ export type EnergyProfile = {
   meals_to_plan?: string | null;
 };
 
+/**
+ * Las columnas de `profiles` que lee `energyTargets` (SEC-DB-16): quien lee el
+ * perfil de OTRA persona solo para calcular su objetivo pide estas y no `*`,
+ * que se traería también su salud. Un test obliga a que coincidan con
+ * `EnergyProfile`.
+ */
+export const ENERGY_PROFILE_COLUMNS = [
+  "sex",
+  "date_of_birth",
+  "age",
+  "height_cm",
+  "current_weight_kg",
+  "start_weight_kg",
+  "target_weight_kg",
+  "goal_type",
+  "pregnancy_status",
+  "activity_level",
+  "daily_activity",
+  "training",
+  "strength_training_experience",
+  "meal_slots",
+  "meals_to_plan",
+] as const satisfies readonly (keyof EnergyProfile)[];
+
 export type SlotTarget = { kcal: number; protein_g: number };
 
 export type EnergyTargets = {

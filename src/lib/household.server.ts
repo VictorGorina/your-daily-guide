@@ -530,16 +530,20 @@ export async function sharedMealPortionsByDate(
   if (!ids.length) return none;
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("profiles").select("*").in("id", ids);
+  const { ENERGY_PROFILE_COLUMNS, energyTargets } = await import("@/lib/nutrition/energy");
+  // Perfiles de otras personas: solo lo que pide su objetivo, no su salud.
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select(["id", ...ENERGY_PROFILE_COLUMNS].join(","))
+    .in("id", ids);
   if (error) {
     console.error("sharedMealPortions", error);
     return none;
   }
-  const { energyTargets } = await import("@/lib/nutrition/energy");
   const { portionFactors, sharedPortion } = await import("@/lib/nutrition/portion");
   const planById = new Map<string, number>();
   const targetsById = new Map<string, ReturnType<typeof energyTargets>>();
-  for (const p of (data ?? []) as { id: string; sex?: string | null }[]) {
+  for (const p of (data ?? []) as unknown as { id: string; sex?: string | null }[]) {
     const targets = energyTargets(p as never);
     targetsById.set(p.id, targets);
     planById.set(p.id, portionFactors(targets, p).plan);
@@ -590,12 +594,15 @@ export async function householdMealTargets(
   const ids = home.members.filter((m) => m.userId && m.usesApp).map((m) => m.userId!);
   if (ids.length < 2) return {};
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("profiles").select("*").in("id", ids);
+  const { ENERGY_PROFILE_COLUMNS, energyTargets } = await import("@/lib/nutrition/energy");
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select(ENERGY_PROFILE_COLUMNS.join(","))
+    .in("id", ids);
   if (error) {
     console.error("householdMealTargets", error);
     return {};
   }
-  const { energyTargets } = await import("@/lib/nutrition/energy");
   const all = (data ?? []).map((p) => energyTargets(p as never)).filter((t) => !!t);
   const out: Partial<Record<(typeof MEAL_KEYS)[number], { kcal: number; protein_g: number }>> = {};
   for (const meal of MEAL_KEYS) {

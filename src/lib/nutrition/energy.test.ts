@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   caloriesText,
+  ENERGY_PROFILE_COLUMNS,
   energyExplanation,
   energyTargets,
   normalizeActivity,
@@ -215,5 +216,66 @@ describe("una sola cifra: texto de la guía y explicación", () => {
     expect(text).toContain("basal 1395");
     expect(text).toContain("rutina 90");
     expect(text).toContain("−20 %");
+  });
+});
+
+// SEC-DB-16: el servidor lee los perfiles de OTROS miembros del hogar solo para
+// `energyTargets`; con `select("*")` se traía también su salud (medicación,
+// TCA, embarazo…). ENERGY_PROFILE_COLUMNS es lo único que hace falta.
+describe("ENERGY_PROFILE_COLUMNS", () => {
+  // `Required` obliga a rellenar TODOS los campos del tipo: si energyTargets
+  // empieza a leer uno nuevo, esto deja de compilar hasta que se añade aquí, y
+  // entonces falla el test de abajo hasta que se añade a la lista.
+  const everyField: Required<EnergyProfile> = {
+    sex: "mujer",
+    date_of_birth: "1990-04-12",
+    age: 36,
+    height_cm: 165,
+    current_weight_kg: 70,
+    start_weight_kg: 74,
+    target_weight_kg: 62,
+    goal_type: "perder",
+    pregnancy_status: "no",
+    activity_level: "moderado",
+    daily_activity: "de_pie",
+    training: "gimnasio 3x60 moderada",
+    strength_training_experience: "intermedia",
+    meal_slots: ["desayuno", "comida", "cena"],
+    meals_to_plan: "desayuno, comida y cena",
+  };
+
+  it("son exactamente los campos que lee energyTargets", () => {
+    expect([...ENERGY_PROFILE_COLUMNS].sort() as string[]).toEqual(Object.keys(everyField).sort());
+  });
+
+  const only = (p: Record<string, unknown>) =>
+    Object.fromEntries(ENERGY_PROFILE_COLUMNS.map((c) => [c, p[c]])) as EnergyProfile;
+  const sensitive = {
+    id: "u1",
+    display_name: "Ana",
+    medications: "levotiroxina",
+    eating_disorder_history: "sí",
+    disliked_foods: "coliflor",
+  };
+
+  it("con solo esas columnas el objetivo es el mismo que con el perfil entero", () => {
+    const profiles: Record<string, unknown>[] = [
+      { ...sensitive, ...everyField },
+      // Perfil antiguo: edad sin fecha, actividad heredada, objetivo por tipo.
+      {
+        ...sensitive,
+        ...everyField,
+        date_of_birth: null,
+        daily_activity: null,
+        target_weight_kg: null,
+        goal_type: "ganar",
+        meal_slots: null,
+      },
+      { ...sensitive, ...everyField, pregnancy_status: "embarazada" },
+    ];
+    for (const full of profiles) {
+      expect(energyTargets(full as EnergyProfile)).not.toBeNull();
+      expect(energyTargets(only(full))).toEqual(energyTargets(full as EnergyProfile));
+    }
   });
 });

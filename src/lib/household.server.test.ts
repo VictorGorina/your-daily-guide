@@ -389,6 +389,25 @@ describe("con el hogar ya leído (ticket 17, PERF-10)", () => {
     expect(memberReads(reuse)).toBe(readsForContext);
   });
 
+  // SEC-DB-16: son perfiles de OTRAS personas; solo se piden las columnas del objetivo.
+  it("los perfiles del hogar se leen sin `*` y sin datos de salud", async () => {
+    const tables = withProfiles();
+    for (const p of tables.profiles!) p.medications = "levotiroxina";
+    const fake = createFakeSupabase(tables);
+    setFakeAdmin(fake.client);
+    expect((await householdMealTargets(fake.client, "ana")).comida?.kcal).toBeGreaterThan(0);
+    expect(
+      (await sharedMealPortionsByDate(fake.client, "ana"))("2026-10-03").cena?.factor,
+    ).toBeGreaterThan(0);
+
+    const reads = fake.calls.filter((c) => c.table === "profiles" && c.op === "select");
+    expect(reads).toHaveLength(2);
+    for (const read of reads) {
+      expect(read.columns.length).toBeGreaterThan(0); // `[]` es `*`
+      expect(read.columns).not.toContain("medications");
+    }
+  });
+
   it("sharedMealPortionsByDate: mismo resultado y ninguna lectura más del hogar", async () => {
     const saturday = "2026-10-03";
     const fresh = createFakeSupabase(withProfiles());
