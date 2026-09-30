@@ -1,6 +1,8 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { errorText, logEvent } from "@/lib/log.server";
+import { publicError } from "@/lib/public-error";
 import { captureServerException } from "@/lib/sentry.server";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 
@@ -17,6 +19,28 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
       status: 500,
       headers: { "content-type": "text/html; charset=utf-8" },
     });
+  }
+});
+
+// SEC-S-14: lo que lanza una server function viaja a la web serializado con
+// todas sus propiedades (un error de PostgREST, con `details` y `hint`). Aquí se
+// sustituye por uno genérico lo que no está escrito para la persona, y el
+// original queda en el log y en Sentry. Va el primero: envuelve también el
+// validador y `requireSupabaseAuth`. `apiPost` recibe ya el sustituto.
+const publicErrorMiddleware = createMiddleware({ type: "function" }).server(async ({ next }) => {
+  try {
+    return await next();
+  } catch (error) {
+    const shown = publicError(error);
+    if (shown !== error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      logEvent("warn", "server_fn_failed", {
+        code: typeof code === "string" ? code : undefined,
+        error: errorText(error),
+      });
+      captureServerException(error, { where: "serverFn" });
+    }
+    throw shown;
   }
 });
 
@@ -42,6 +66,6 @@ const securityHeadersMiddleware = createMiddleware().server(async ({ next }) => 
 });
 
 export const startInstance = createStart(() => ({
-  functionMiddleware: [attachSupabaseAuth],
+  functionMiddleware: [publicErrorMiddleware, attachSupabaseAuth],
   requestMiddleware: [securityHeadersMiddleware, errorMiddleware, csrfMiddleware],
 }));

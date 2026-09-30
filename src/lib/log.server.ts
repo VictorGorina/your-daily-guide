@@ -33,6 +33,9 @@
  * - `receipt_items_dropped` (info): productos de un tiquet que no pasaron
  *   `isCleanFood` y no fueron a la despensa extra (`count`). Suelto es una línea
  *   mal leída; repetido, la guarda descarta comida de verdad.
+ * - `server_fn_failed` (warn): una server function falló con un error interno
+ *   y la web (o `apiPost`) recibió el genérico (`code` de PostgREST si lo hay).
+ *   Va a Sentry con su pila por `captureServerException`, no por aquí.
  * - `email_send_failed` (error): Resend rechazó un correo (`status`), o falló
  *   un correo de acceso mandado en segundo plano (`kind`: `reset`, `signup`,
  *   `already-registered`). Un rechazo de Resend de esos sale con los dos.

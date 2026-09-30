@@ -15,6 +15,7 @@
 /** Firma común a las server functions, con o sin `inputValidator`. */
 type ServerFn<TOutput> = (opts: { data: never }) => Promise<TOutput>;
 
+import { GENERIC_ERROR_MESSAGE, HiddenServerError } from "@/lib/public-error";
 import { RateLimitError } from "@/lib/rate-limit-error";
 import { captureServerException } from "@/lib/sentry.server";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
@@ -64,12 +65,12 @@ export function apiPost<TOutput>(fn: ServerFn<TOutput>) {
         captureServerException(error, { where: "apiPost" });
         return Response.json({ error: raw }, { status: 500 });
       }
-      console.error("apiPost", error);
-      captureServerException(error, { where: "apiPost" });
-      return Response.json(
-        { error: "No hemos podido completar la acción. Inténtalo de nuevo." },
-        { status: 500 },
-      );
+      // Lo que tapó el middleware de `start.ts` ya está en el log y en Sentry.
+      if (!(error instanceof HiddenServerError)) {
+        console.error("apiPost", error);
+        captureServerException(error, { where: "apiPost" });
+      }
+      return Response.json({ error: GENERIC_ERROR_MESSAGE }, { status: 500 });
     }
   };
 }
