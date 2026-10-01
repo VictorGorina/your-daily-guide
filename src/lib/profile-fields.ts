@@ -264,3 +264,184 @@ export function valueToChip(field: ProfileField, stored: string): string {
 export function isFieldAvailable(field: ProfileField, profile: object | null | undefined): boolean {
   return !field.pendingColumn || (!!profile && field.key in profile);
 }
+
+/**
+ * Lo que el coach puede escribir en el perfil con `actualizar_perfil`,
+ * validado campo a campo contra el catálogo: cada tipo con su formato y sus
+ * límites, y un chip solo con una de sus opciones (con `valueMap`, el modelo
+ * puede mandar la etiqueta o el valor guardado). Lo que no vale va a `invalid`,
+ * con el valor recibido y lo que se esperaba, para decírselo al modelo: sin
+ * eso, contestaba que lo había guardado.
+ */
+export function profilePatchFromTool(input: Record<string, unknown>): {
+  patch: Partial<Profile>;
+  invalid: string[];
+} {
+  const patch: Record<string, unknown> = {};
+  const invalid: string[] = [];
+  const reject = (field: ProfileField, raw: unknown, expected: string) =>
+    invalid.push(`${field.label} («${String(raw).slice(0, 60)}»; ${expected})`);
+  for (const field of CHAT_EDITABLE_PROFILE_FIELDS) {
+    const raw = input[field.key];
+    if (raw === undefined || raw === null || raw === "") continue;
+    if (field.kind === "number") {
+      const n = Number(raw);
+      const inRange =
+        Number.isFinite(n) &&
+        (field.min === undefined || n >= field.min) &&
+        (field.max === undefined || n <= field.max);
+      if (!inRange) {
+        reject(
+          field,
+          raw,
+          `entre ${field.min} y ${field.max}${field.unit ? ` ${field.unit}` : ""}`,
+        );
+        continue;
+      }
+      patch[field.key] = n;
+    } else if (field.kind === "time") {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(raw))) {
+        reject(field, raw, "hora HH:MM");
+        continue;
+      }
+      patch[field.key] = raw;
+    } else if (field.kind === "date") {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) {
+        reject(field, raw, "fecha AAAA-MM-DD");
+        continue;
+      }
+      patch[field.key] = raw;
+    } else if (field.kind === "chips" && field.valueMap) {
+      const value = chipToValue(field, String(raw).trim());
+      if (!Object.values(field.valueMap).includes(value)) {
+        reject(field, raw, `valores válidos: ${Object.values(field.valueMap).join(", ")}`);
+        continue;
+      }
+      patch[field.key] = value;
+    } else if (field.kind === "chips" && field.options?.length) {
+      // Solo una de sus opciones: el prompt y el cálculo de energía comparan
+      // con el valor exacto («embarazada», «activa»), y un texto libre dejaría
+      // el perfil diciendo una cosa y las reglas aplicando otra.
+      const text = String(raw).trim().toLowerCase();
+      const option = field.options.find((o) => o.toLowerCase() === text);
+      if (!option) {
+        reject(field, raw, `valores válidos: ${field.options.join(", ")}`);
+        continue;
+      }
+      patch[field.key] = option;
+    } else {
+      patch[field.key] = String(raw).trim();
+    }
+  }
+  return { patch: patch as Partial<Profile>, invalid };
+}
+
+/**
+ * Campos que el coach no guarda sin que la persona lo confirme (ticket 31):
+ * cambian el plan, el tono o la seguridad de forma importante, y un
+ * malentendido del modelo (o un texto inyectado) podría marcar un embarazo,
+ * una medicación o un historial de TCA que no existen.
+ */
+export const SENSITIVE_PROFILE_FIELDS = new Set<keyof Profile>([
+  "pregnancy_status",
+  "ed_history",
+  "medications",
+  "medical_conditions",
+  "restrictions",
+  "allergy_severity",
+  "nutrition_numbers",
+  "diet_pattern",
+  "target_weight_kg",
+]);
+
+export function splitProfilePatch(patch: Partial<Profile>): {
+  sensitive: Partial<Profile>;
+  normal: Partial<Profile>;
+} {
+  const sensitive: Record<string, unknown> = {};
+  const normal: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (SENSITIVE_PROFILE_FIELDS.has(key as keyof Profile)) sensitive[key] = value;
+    else normal[key] = value;
+  }
+  return { sensitive: sensitive as Partial<Profile>, normal: normal as Partial<Profile> };
+}
+
+export type SensitiveChange = { key: string; label: string; before: string; after: string };
+
+function shownValue(field: ProfileField | undefined, value: unknown): string {
+  if (value === undefined || value === null || value === "") return "sin dato";
+  if (field?.kind === "chips") return valueToChip(field, String(value));
+  if (field?.unit) return `${value} ${field.unit}`;
+  return String(value);
+}
+
+/** Cada cambio sensible como lo lee la persona: etiqueta, antes → después. */
+export function sensitiveChanges(
+  sensitive: Partial<Profile>,
+  current: Partial<Profile> | null | undefined,
+): SensitiveChange[] {
+  return Object.entries(sensitive).map(([key, value]) => {
+    const field = PROFILE_FIELDS.find((f) => f.key === key);
+    return {
+      key,
+      label: PROFILE_FIELD_LABELS[key] ?? key,
+      before: shownValue(field, current?.[key as keyof Profile]),
+      after: shownValue(field, value),
+    };
+  });
+}
+
+/**
+ * Lo que vuelve al modelo tras `actualizar_perfil`: lo guardado, lo que la
+ * persona eligió no guardar (que no insista: sin decírselo, volvía a
+ * proponerlo) y lo que no se guardó por no ser válido (que no diga que está
+ * guardado: en una prueba real lo afirmó).
+ */
+export function profileToolResult(saved: string[], declined: string[], invalid: string[]): string {
+  const parts: string[] = [];
+  if (saved.length) parts.push(`Perfil actualizado: ${saved.join(", ")}.`);
+  if (declined.length) {
+    parts.push(
+      `La persona ha elegido no guardar esto en su perfil: ${declined.join(", ")}. ` +
+        "Es su decisión, no un error: queda como estaba. No insistas ni vuelvas a proponerlo " +
+        "salvo que te lo vuelva a pedir.",
+    );
+  }
+  if (invalid.length) {
+    parts.push(
+      `No se ha guardado porque el valor no es válido: ${invalid.join("; ")}. ` +
+        "Vuelve a llamar a la herramienta con uno de los valores válidos si lo que te ha dicho " +
+        "encaja claramente en uno; si no, pregúntale. No digas que está guardado.",
+    );
+  }
+  return parts.length
+    ? parts.join(" ")
+    : "No había ningún dato válido que actualizar en el perfil.";
+}
+
+/**
+ * Texto de la confirmación, igual en la web (AlertDialog) y en el móvil
+ * (Alert nativo). Ver cifras es una preferencia explícita que también vive en
+ * Ajustes, y se recuerda.
+ */
+export function sensitiveConfirmCopy(changes: SensitiveChange[]): {
+  title: string;
+  lines: string[];
+  note: string | null;
+  confirm: string;
+  cancel: string;
+} {
+  return {
+    title:
+      changes.length === 1
+        ? "¿Guardo este cambio en tu perfil?"
+        : "¿Guardo estos cambios en tu perfil?",
+    lines: changes.map((c) => `${c.label}: ${c.before} → ${c.after}`),
+    note: changes.some((c) => c.key === "nutrition_numbers")
+      ? "Lo de ver calorías y macros también lo puedes cambiar cuando quieras en Ajustes."
+      : null,
+    confirm: "Guardar",
+    cancel: "No, déjalo como estaba",
+  };
+}
