@@ -3,7 +3,13 @@ import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchProfile, saveProfile } from "@/lib/daily";
-import { LOCALE_STORAGE_KEY, normalizeLocale, type Locale } from "@/lib/i18n";
+import {
+  ENGLISH_ENABLED,
+  htmlLang,
+  LOCALE_STORAGE_KEY,
+  normalizeLocale,
+  type Locale,
+} from "@/lib/i18n";
 
 /**
  * Fuente única del idioma y la moneda activos. `i18next.language` ya arranca en
@@ -32,14 +38,18 @@ export function useLocale() {
 
   useEffect(() => {
     if (i18n.language !== locale) void i18n.changeLanguage(locale);
-    if (typeof document !== "undefined") document.documentElement.lang = locale;
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = htmlLang(locale, ENGLISH_ENABLED);
+    }
   }, [locale, i18n]);
 
   const setLocale = useCallback(
     async (next: Locale) => {
       if (typeof localStorage !== "undefined") localStorage.setItem(LOCALE_STORAGE_KEY, next);
       await i18n.changeLanguage(next);
-      if (typeof document !== "undefined") document.documentElement.lang = next;
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = htmlLang(next, ENGLISH_ENABLED);
+      }
       // Persistir en el perfil solo si ya hay uno (post-login). Pre-login basta
       // con el dispositivo; el RegionStep lo fija en el perfil al completarse.
       if (profile) {

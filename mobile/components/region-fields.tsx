@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, TextInput, View } from "react-native";
 
-import { SUPPORTED_LOCALES, type Locale } from "../lib/i18n";
+import { ENGLISH_ENABLED, offeredLocales, type Locale } from "../lib/i18n";
 import { SUPPORTED_COUNTRIES } from "../lib/regions";
 
 type Props = {
@@ -40,36 +40,40 @@ export function RegionFields({
   onTimezoneChange,
 }: Props) {
   const { t } = useTranslation();
+  const languages = offeredLocales(ENGLISH_ENABLED, locale);
   const [editingTz, setEditingTz] = useState(false);
   const [tzDraft, setTzDraft] = useState(timezone);
 
   return (
     <View className="gap-5">
-      <View>
-        <Text className="text-xs font-sans-medium text-muted-foreground">
-          {t("region.languageLabel")}
-        </Text>
-        <View className="mt-2 flex-row gap-2">
-          {SUPPORTED_LOCALES.map((l) => {
-            const active = locale === l;
-            return (
-              <Pressable
-                key={l}
-                onPress={() => onLocaleChange(l)}
-                className={`flex-1 items-center rounded-2xl px-3 py-3 active:opacity-80 ${
-                  active ? "bg-foreground" : "bg-secondary"
-                }`}
-              >
-                <Text
-                  className={`text-sm font-sans-medium ${active ? "text-background" : "text-foreground"}`}
+      {/* B0 del ticket 34: con un solo idioma ofrecido no hay nada que elegir. */}
+      {languages.length > 1 && (
+        <View>
+          <Text className="text-xs font-sans-medium text-muted-foreground">
+            {t("region.languageLabel")}
+          </Text>
+          <View className="mt-2 flex-row gap-2">
+            {languages.map((l) => {
+              const active = locale === l;
+              return (
+                <Pressable
+                  key={l}
+                  onPress={() => onLocaleChange(l)}
+                  className={`flex-1 items-center rounded-2xl px-3 py-3 active:opacity-80 ${
+                    active ? "bg-foreground" : "bg-secondary"
+                  }`}
                 >
-                  {t(`languages.${l}`)}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    className={`text-sm font-sans-medium ${active ? "text-background" : "text-foreground"}`}
+                  >
+                    {t(`languages.${l}`)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
 
       <View>
         <Text className="text-xs font-sans-medium text-muted-foreground">

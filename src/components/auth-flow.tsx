@@ -9,7 +9,7 @@ import { authErrorText, isEmailNotConfirmed, passwordProblem } from "@/lib/auth-
 import { requestPasswordReset, requestSignupConfirmation } from "@/lib/auth.functions";
 import { saveProfile } from "@/lib/daily";
 import { randomDemoProfile } from "@/lib/demo-profile";
-import { SUPPORTED_LOCALES } from "@/lib/i18n";
+import { ENGLISH_ENABLED, offeredLocales } from "@/lib/i18n";
 import { useLocale } from "@/lib/use-locale";
 
 type Stage = "intro" | "access";
@@ -59,9 +59,12 @@ function PepperRow() {
 
 function LocaleSwitch() {
   const { locale, setLocale } = useLocale();
+  // B0 del ticket 34: con un solo idioma ofrecido no hay nada que elegir.
+  const options = offeredLocales(ENGLISH_ENABLED, locale);
+  if (options.length < 2) return null;
   return (
     <div className="flex shrink-0 gap-1 rounded-full bg-secondary p-0.5 text-[11px] font-medium">
-      {SUPPORTED_LOCALES.map((l) => (
+      {options.map((l) => (
         <button
           key={l}
           type="button"

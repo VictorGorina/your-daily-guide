@@ -2,7 +2,7 @@ import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n";
+import { ENGLISH_ENABLED, offeredLocales, type Locale } from "@/lib/i18n";
 import { SUPPORTED_COUNTRIES } from "@/lib/regions";
 
 type Props = {
@@ -38,6 +38,7 @@ export function RegionFields({
   onTimezoneChange,
 }: Props) {
   const { t } = useTranslation();
+  const languages = offeredLocales(ENGLISH_ENABLED, locale);
   const [editingTz, setEditingTz] = useState(false);
   const [tzDraft, setTzDraft] = useState(timezone);
 
@@ -53,29 +54,32 @@ export function RegionFields({
 
   return (
     <div className="space-y-5">
-      <div>
-        <span className="block text-xs font-medium text-muted-foreground">
-          {t("region.languageLabel")}
-        </span>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {SUPPORTED_LOCALES.map((l) => {
-            const active = locale === l;
-            return (
-              <button
-                key={l}
-                type="button"
-                onClick={() => onLocaleChange(l)}
-                aria-pressed={active}
-                className={`rounded-2xl px-3 py-3 text-sm font-medium transition-colors ${
-                  active ? "bg-foreground text-background" : "bg-secondary text-foreground"
-                }`}
-              >
-                {t(`languages.${l}`)}
-              </button>
-            );
-          })}
+      {/* B0 del ticket 34: con un solo idioma ofrecido no hay nada que elegir. */}
+      {languages.length > 1 && (
+        <div>
+          <span className="block text-xs font-medium text-muted-foreground">
+            {t("region.languageLabel")}
+          </span>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {languages.map((l) => {
+              const active = locale === l;
+              return (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => onLocaleChange(l)}
+                  aria-pressed={active}
+                  className={`rounded-2xl px-3 py-3 text-sm font-medium transition-colors ${
+                    active ? "bg-foreground text-background" : "bg-secondary text-foreground"
+                  }`}
+                >
+                  {t(`languages.${l}`)}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div>
         <span className="block text-xs font-medium text-muted-foreground">

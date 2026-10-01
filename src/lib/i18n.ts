@@ -28,11 +28,32 @@ export function normalizeLocale(raw: string | null | undefined): Locale {
     : DEFAULT_LOCALE;
 }
 
+/**
+ * B0 del ticket 34: la interfaz está casi toda en español, así que el inglés
+ * solo se ofrece con la variable encendida (cuando la traducción esté
+ * completa). Quien ya lo tenga elegido lo conserva y puede volver a español.
+ */
+export const ENGLISH_ENABLED = import.meta.env.VITE_I18N_EN === "1";
+
+export function offeredLocales(englishEnabled: boolean, current: Locale): readonly Locale[] {
+  return englishEnabled || current === "en" ? SUPPORTED_LOCALES : [DEFAULT_LOCALE];
+}
+
+/** `lang` del documento: la lengua real del texto (español mientras no esté traducido). */
+export function htmlLang(locale: Locale, englishEnabled: boolean): Locale {
+  return englishEnabled ? locale : DEFAULT_LOCALE;
+}
+
+/** Idioma detectado del navegador o del dispositivo, sin colar el inglés antes de tiempo. */
+export function detectedLocale(raw: string | null | undefined, englishEnabled: boolean): Locale {
+  return englishEnabled ? normalizeLocale(raw) : DEFAULT_LOCALE;
+}
+
 /** Idioma del navegador, para preseleccionar antes de conocer el perfil (pre-login y RegionStep). */
 export function detectBrowserLocale(): Locale {
   if (typeof navigator === "undefined") return DEFAULT_LOCALE;
   const nav = navigator as Navigator;
-  return normalizeLocale(nav.language ?? nav.languages?.[0]);
+  return detectedLocale(nav.language ?? nav.languages?.[0], ENGLISH_ENABLED);
 }
 
 /** Clave de `localStorage` donde se guarda la elección de idioma hecha en el dispositivo. */

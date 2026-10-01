@@ -33,11 +33,32 @@ export function normalizeLocale(raw: string | null | undefined): Locale {
     : DEFAULT_LOCALE;
 }
 
+/**
+ * B0 del ticket 34: la interfaz está casi toda en español, así que el inglés
+ * solo se ofrece con la variable encendida (cuando la traducción esté
+ * completa). Quien ya lo tenga elegido lo conserva y puede volver a español.
+ */
+export const ENGLISH_ENABLED = process.env.EXPO_PUBLIC_I18N_EN === "1";
+
+export function offeredLocales(englishEnabled: boolean, current: Locale): readonly Locale[] {
+  return englishEnabled || current === "en" ? SUPPORTED_LOCALES : [DEFAULT_LOCALE];
+}
+
+/** `lang` del documento: la lengua real del texto (español mientras no esté traducido). */
+export function htmlLang(locale: Locale, englishEnabled: boolean): Locale {
+  return englishEnabled ? locale : DEFAULT_LOCALE;
+}
+
+/** Idioma detectado del navegador o del dispositivo, sin colar el inglés antes de tiempo. */
+export function detectedLocale(raw: string | null | undefined, englishEnabled: boolean): Locale {
+  return englishEnabled ? normalizeLocale(raw) : DEFAULT_LOCALE;
+}
+
 /** Idioma del dispositivo (síncrono en expo-localization), para el arranque y el RegionStep. */
 export function detectDeviceLocale(): Locale {
   try {
     const first = getLocales()[0];
-    return normalizeLocale(first?.languageTag ?? first?.languageCode);
+    return detectedLocale(first?.languageTag ?? first?.languageCode, ENGLISH_ENABLED);
   } catch {
     return DEFAULT_LOCALE;
   }

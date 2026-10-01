@@ -24,7 +24,7 @@ import { authErrorText, isEmailNotConfirmed, passwordProblem } from "../lib/auth
 import { useAuth } from "../lib/auth-context";
 import { saveProfile } from "../lib/daily";
 import { randomDemoProfile } from "../lib/demo-profile";
-import { SUPPORTED_LOCALES } from "../lib/i18n";
+import { ENGLISH_ENABLED, offeredLocales } from "../lib/i18n";
 import { supabase } from "../lib/supabase";
 import { useLocale } from "../lib/use-locale";
 
@@ -326,9 +326,10 @@ export default function Auth() {
                   </Text>
                 </Pressable>
               )}
-              {stage === "intro" && (
+              {/* B0 del ticket 34: con un solo idioma ofrecido no hay nada que elegir. */}
+              {stage === "intro" && offeredLocales(ENGLISH_ENABLED, locale).length > 1 && (
                 <View className="flex-row gap-1 rounded-full bg-secondary p-0.5">
-                  {SUPPORTED_LOCALES.map((l) => (
+                  {offeredLocales(ENGLISH_ENABLED, locale).map((l) => (
                     <Pressable
                       key={l}
                       onPress={() => void setLocale(l)}
