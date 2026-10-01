@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { eur, formatMoney } from "./clean";
+import { currencySymbol, eur, formatMoney } from "./clean";
 
 // Espacio duro de Intl entre cifra y símbolo: se normaliza para comparar.
 const plain = (s: string) => s.replace(/\s/g, " ");
@@ -20,5 +20,14 @@ describe("formatMoney (ticket 34, I18N-02)", () => {
 
   test("un código que no existe cae a euros en vez de lanzar", () => {
     expect(formatMoney(5, "XX")).toBe(eur(5));
+  });
+});
+
+describe("currencySymbol", () => {
+  test("el mismo símbolo que formatMoney", () => {
+    expect(currencySymbol("EUR")).toBe("€");
+    expect(currencySymbol(null)).toBe("€");
+    expect(currencySymbol("GBP")).toBe("£");
+    expect(currencySymbol("MXN")).toBe("$");
   });
 });

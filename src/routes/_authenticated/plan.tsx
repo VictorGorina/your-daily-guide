@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMoney } from "@/lib/use-money";
+import { useCurrencySymbol, useMoney } from "@/lib/use-money";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -1539,6 +1539,7 @@ function ShopModeView({
   scanningReceipt: boolean;
 }) {
   const money = useMoney();
+  const currencySign = useCurrencySymbol();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
   const spendId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1768,7 +1769,7 @@ function ShopModeView({
                   disabled={savingActual}
                   className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
                 />
-                <span className="text-xs text-muted-foreground">€</span>
+                <span className="text-xs text-muted-foreground">{currencySign}</span>
               </div>
               <input
                 ref={fileRef}

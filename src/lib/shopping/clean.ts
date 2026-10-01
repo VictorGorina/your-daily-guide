@@ -198,3 +198,7 @@ export const formatMoney = (n: number, currency?: string | null) => {
     return eur(n);
   }
 };
+
+/** Solo el símbolo de la moneda del perfil, el mismo que pinta `formatMoney`. */
+export const currencySymbol = (currency?: string | null) =>
+  formatMoney(0, currency).replace(/[\d\s.,]/g, "");

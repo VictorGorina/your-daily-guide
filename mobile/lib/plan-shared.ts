@@ -1732,6 +1732,10 @@ export const formatMoney = (n: number, currency?: string | null) => {
   }
 };
 
+/** Solo el símbolo de la moneda del perfil, el mismo que pinta `formatMoney`. */
+export const currencySymbol = (currency?: string | null) =>
+  formatMoney(0, currency).replace(/[\d\s.,]/g, "");
+
 /**
  * Texto plano de un solo tramo de ingredientes, listo para compartir aparte —
  * cada tramo es una lista distinta, así que compartirlo no manda todo el mes.

@@ -1,5 +1,5 @@
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../../lib/content-guard";
-import { useMoney } from "../../lib/use-money";
+import { useCurrencySymbol, useMoney } from "../../lib/use-money";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import {
@@ -1818,6 +1818,7 @@ function ShopModeView({
   scanningReceipt: boolean;
 }) {
   const money = useMoney();
+  const currencySign = useCurrencySymbol();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
 
   // Deja elegir foto (galería o cámara), la reescala a ~1280 px JPEG y la manda
@@ -2030,7 +2031,7 @@ function ShopModeView({
                   className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm text-foreground"
                   style={savingActual ? { opacity: 0.6 } : undefined}
                 />
-                <Text className="text-xs text-muted-foreground">€</Text>
+                <Text className="text-xs text-muted-foreground">{currencySign}</Text>
               </View>
               <Pressable
                 onPress={pickReceipt}
