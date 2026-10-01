@@ -692,6 +692,21 @@ y la hoja ofrecía **poner las kcal a mano**. Ese respaldo era justo la forma de
 saltándose el cálculo, así que `SnackEstimate` tiene ahora un `notFood` distinto de `resolved`, y
 con él la hoja rechaza en vez de ofrecer el modo manual.
 
+### Lo que el coach escribe en el perfil se valida, y lo sensible se confirma
+
+`actualizar_perfil` pasa por `profilePatchFromTool` ([src/lib/profile-fields.ts](src/lib/profile-fields.ts),
+copia idéntica en `mobile/lib/`): cada campo con su formato y sus límites, y un chip **solo** con
+una de sus opciones. No es cosmética: el prompt y el cálculo de energía comparan con el valor exacto
+(«embarazada», «activa»), y un texto libre como «Primer trimestre» dejaba el perfil diciendo
+embarazo sin que se aplicara ninguna de sus reglas. Lo rechazado vuelve al modelo con los valores
+válidos, para que reintente o pregunte en vez de decir que lo ha guardado.
+
+Los campos de `SENSITIVE_PROFILE_FIELDS` (embarazo, TCA, medicación, condiciones médicas,
+alergias y su gravedad, tipo de alimentación, peso objetivo, ver cifras) no se guardan sin que la
+persona lo confirme: `useSensitiveProfileConfirm` en la web, `Alert` en el móvil, mismo texto
+(`sensitiveConfirmCopy`). Un campo nuevo que cambie la seguridad o el plan de forma importante va
+a esa lista.
+
 ### Nombres: aviso, no frontera
 
 `assertCleanName` (en `src/lib/household.ts` y su copia móvil, más `saveProfile` en `daily.ts`)
