@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { AlertCircle, Check } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
@@ -36,6 +37,7 @@ import { supabase } from "../lib/supabase";
  */
 export default function Restablecer() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { code, error_description } = useLocalSearchParams<{
     code?: string;
     error_description?: string;
@@ -108,14 +110,11 @@ export default function Restablecer() {
 
   const submit = async () => {
     if (passwordProblem(password)) {
-      Alert.alert(
-        "Contraseña no válida",
-        "Tiene que tener al menos 6 caracteres, con letras y números.",
-      );
+      Alert.alert(t("auth.reset.errInvalidTitle"), t("auth.errWeakPassword"));
       return;
     }
     if (password !== confirm) {
-      Alert.alert("No coinciden", "Las dos contraseñas tienen que ser iguales.");
+      Alert.alert(t("auth.reset.errMismatchTitle"), t("auth.reset.errMismatch"));
       return;
     }
 
@@ -129,8 +128,8 @@ export default function Restablecer() {
       setTimeout(() => router.replace("/hoy"), 1200);
     } catch (error) {
       Alert.alert(
-        "No hemos podido guardar la contraseña",
-        error instanceof Error ? error.message : "Inténtalo otra vez.",
+        t("auth.reset.errSave"),
+        error instanceof Error ? error.message : t("auth.reset.retry"),
       );
     } finally {
       setSaving(false);
@@ -151,20 +150,16 @@ export default function Restablecer() {
             <View className="items-center">
               <ActivityIndicator color="#a84a17" />
               <Text className="mt-6 text-2xl font-display text-foreground">
-                Comprobando el enlace…
+                {t("auth.reset.checkingLink")}
               </Text>
-              <Text className="mt-2 text-sm text-muted-foreground">Un momento, ya casi está.</Text>
+              <Text className="mt-2 text-sm text-muted-foreground">{t("auth.oneMoment")}</Text>
             </View>
           )}
 
           {status === "ready" && (
             <View>
-              <Text className="text-4xl font-display text-foreground">
-                Crea tu contraseña nueva
-              </Text>
-              <Text className="mt-2 text-sm text-muted-foreground">
-                Elige una de al menos 6 caracteres.
-              </Text>
+              <Text className="text-4xl font-display text-foreground">{t("auth.reset.title")}</Text>
+              <Text className="mt-2 text-sm text-muted-foreground">{t("auth.reset.subtitle")}</Text>
 
               <View className="mt-8 gap-3">
                 <TextInput
@@ -174,7 +169,7 @@ export default function Restablecer() {
                   autoComplete="new-password"
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Contraseña nueva"
+                  placeholder={t("auth.reset.newPasswordPlaceholder")}
                   placeholderTextColor="#6b6256"
                 />
                 <TextInput
@@ -184,7 +179,7 @@ export default function Restablecer() {
                   autoComplete="new-password"
                   value={confirm}
                   onChangeText={setConfirm}
-                  placeholder="Repite la contraseña"
+                  placeholder={t("auth.reset.repeatPasswordPlaceholder")}
                   placeholderTextColor="#6b6256"
                 />
 
@@ -197,7 +192,7 @@ export default function Restablecer() {
                     <ActivityIndicator color="#3e3d39" />
                   ) : (
                     <Text className="text-sm font-sans-semibold text-primary-foreground">
-                      Guardar contraseña
+                      {t("auth.reset.save")}
                     </Text>
                   )}
                 </Pressable>
@@ -211,9 +206,9 @@ export default function Restablecer() {
                 <Check color="#a84a17" size={28} />
               </View>
               <Text className="mt-6 text-2xl font-display text-foreground">
-                ¡Contraseña actualizada!
+                {t("auth.reset.done")}
               </Text>
-              <Text className="mt-2 text-sm text-muted-foreground">Entrando en Peppers…</Text>
+              <Text className="mt-2 text-sm text-muted-foreground">{t("auth.enteringApp")}</Text>
             </View>
           )}
 
@@ -223,18 +218,17 @@ export default function Restablecer() {
                 <AlertCircle color="#b8433b" size={28} />
               </View>
               <Text className="mt-6 text-2xl font-display text-foreground">
-                Este enlace ya no funciona
+                {t("auth.linkErrorTitle")}
               </Text>
               <Text className="mt-2 text-center text-sm text-muted-foreground">
-                Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar
-                y ábrelo en este mismo móvil.
+                {t("auth.linkErrorBodySameDevice")}
               </Text>
               <Pressable
                 onPress={() => router.replace("/auth")}
                 className="mt-8 w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90"
               >
                 <Text className="text-sm font-sans-semibold text-primary-foreground">
-                  Volver a entrar
+                  {t("auth.backToSignIn")}
                 </Text>
               </Pressable>
             </View>

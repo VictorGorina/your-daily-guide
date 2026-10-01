@@ -64,7 +64,10 @@
       "save": "Guardar contraseña",
       "done": "¡Contraseña actualizada!",
       "errMismatch": "Las dos contraseñas no coinciden",
-      "errSave": "No hemos podido guardar la contraseña"
+      "errSave": "No hemos podido guardar la contraseña",
+      "errInvalidTitle": "Contraseña no válida",
+      "errMismatchTitle": "No coinciden",
+      "retry": "Inténtalo otra vez."
     },
     "back": "Atrás",
     "tryNoAccount": "Probar sin cuenta",
@@ -115,7 +118,8 @@
     "oneMoment": "Un momento, ya casi está.",
     "enteringApp": "Entrando en Peppers…",
     "linkErrorTitle": "Este enlace ya no funciona",
-    "linkErrorBody": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar."
+    "linkErrorBody": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar.",
+    "linkErrorBodySameDevice": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar y ábrelo en este mismo móvil."
   },
   "errorScreen": {
     "title": "Algo no ha cargado",

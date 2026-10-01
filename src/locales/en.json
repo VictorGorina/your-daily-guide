@@ -64,7 +64,10 @@
       "save": "Save password",
       "done": "Password updated!",
       "errMismatch": "The two passwords don't match",
-      "errSave": "We couldn't save the password"
+      "errSave": "We couldn't save the password",
+      "errInvalidTitle": "Invalid password",
+      "errMismatchTitle": "They don't match",
+      "retry": "Please try again."
     },
     "back": "Back",
     "tryNoAccount": "Try without an account",
@@ -115,7 +118,8 @@
     "oneMoment": "One moment, almost there.",
     "enteringApp": "Entering Peppers…",
     "linkErrorTitle": "This link doesn't work anymore",
-    "linkErrorBody": "It may have expired or already been used. Request a new one from the sign-in screen."
+    "linkErrorBody": "It may have expired or already been used. Request a new one from the sign-in screen.",
+    "linkErrorBodySameDevice": "It may have expired or already been used. Request a new one from the sign-in screen and open it on this same phone."
   },
   "errorScreen": {
     "title": "Something didn’t load",
