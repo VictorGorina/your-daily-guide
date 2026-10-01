@@ -261,4 +261,30 @@ describe("checkEmailRateLimit", () => {
     fakeWith([], { quota: { allowed: false, retry_after_seconds: 60 } });
     expect(await checkEmailRateLimit("ana@example.com", "password-reset")).toBe(false);
   });
+
+  describe("con RATE_LIMIT_SALT (ticket 30, SEC-DB-16)", () => {
+    const previous = process.env.RATE_LIMIT_SALT;
+    afterEach(() => {
+      if (previous === undefined) delete process.env.RATE_LIMIT_SALT;
+      else process.env.RATE_LIMIT_SALT = previous;
+    });
+    const subjectFor = async (email: string) => {
+      const fake = fakeWith();
+      await checkEmailRateLimit(email, "password-reset");
+      return (fake.calls[0]?.payload as { _subject: string })._subject;
+    };
+
+    it("el hash lleva sal: probar correos sin la sal no lo revierte", async () => {
+      delete process.env.RATE_LIMIT_SALT;
+      const plain = await subjectFor("ana@example.com");
+      process.env.RATE_LIMIT_SALT = "s".repeat(64);
+      const salted = await subjectFor("ana@example.com");
+      expect(salted).toMatch(/^email:[0-9a-f]{64}$/);
+      expect(salted).not.toBe(plain);
+      // Estable con la misma sal (si no, la cuota no contaría nada).
+      expect(await subjectFor(" ANA@example.com")).toBe(salted);
+      process.env.RATE_LIMIT_SALT = "t".repeat(64);
+      expect(await subjectFor("ana@example.com")).not.toBe(salted);
+    });
+  });
 });

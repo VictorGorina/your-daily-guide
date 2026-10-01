@@ -49,6 +49,7 @@ export const Route = createFileRoute("/api/health")({
             cron: has("CRON_SECRET"),
             publicUrl: has("PUBLIC_URL"),
             usda: has("USDA_FDC_API_KEY"),
+            rateLimitSalt: has("RATE_LIMIT_SALT"),
           };
           body.email = await emailConfig();
         }

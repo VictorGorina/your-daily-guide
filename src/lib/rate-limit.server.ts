@@ -278,19 +278,50 @@ async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
+/** HMAC-SHA256 en hexadecimal, con Web Crypto como `sha256Hex`. */
+async function hmacSha256Hex(secret: string, value: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(value));
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Clave de cuota de un correo. Con sal (`RATE_LIMIT_SALT`, ticket 30,
+ * SEC-DB-16): un SHA-256 a secas se revierte probando correos, uno con sal no
+ * sin la sal. Sin la variable cae al hash de siempre y, en producción, deja
+ * `env_missing`; las filas viejas caducan solas.
+ */
+async function emailSubject(email: string): Promise<string> {
+  const normalized = email.trim().toLowerCase();
+  const salt = process.env.RATE_LIMIT_SALT;
+  if (salt) return `email:${await hmacSha256Hex(salt, normalized)}`;
+  if (process.env.VERCEL_ENV === "production") {
+    logEvent("error", "env_missing", { variable: "RATE_LIMIT_SALT", fallback: "sha256" });
+  }
+  return `email:${await sha256Hex(normalized)}`;
+}
+
 /**
  * Cuota de algo que se pide sin sesión, contada por correo. Devuelve si pasa en
  * vez de lanzar: quien la usa (recuperar contraseña) responde siempre lo mismo
  * exista o no la cuenta, y un error distinto rompería esa promesa.
  *
- * El correo se guarda hasheado, así que la tabla no acumula direcciones en
- * claro ni dice quién tiene cuenta.
+ * El correo se guarda hasheado (con sal), así que la tabla no acumula
+ * direcciones en claro ni dice quién tiene cuenta.
  */
 export async function checkEmailRateLimit(
   email: string,
   bucket: RateLimitBucket,
 ): Promise<boolean> {
-  const hashed = await sha256Hex(email.trim().toLowerCase());
-  const { allowed } = await consume(`email:${hashed}`, bucket);
+  const { allowed } = await consume(await emailSubject(email), bucket);
   return allowed;
 }
