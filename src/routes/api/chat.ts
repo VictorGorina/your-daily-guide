@@ -80,7 +80,10 @@ function householdCoachRules(home: HouseholdContext, userId: string): string {
 const actualizarPerfilShape = Object.fromEntries(
   CHAT_EDITABLE_PROFILE_FIELDS.map((f) => [
     f.key,
-    (f.kind === "number" ? z.number() : z.string())
+    // Número o texto: el modelo manda a menudo "4" en vez de 4, y con
+    // `z.number()` el SDK rechazaba la llamada entera. Qué vale lo decide
+    // `profilePatchFromTool` en el cliente, que además se lo cuenta al modelo.
+    (f.kind === "number" ? z.union([z.number(), z.string()]) : z.string())
       .nullable()
       .optional()
       .describe(
