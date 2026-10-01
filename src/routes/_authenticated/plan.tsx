@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMoney } from "@/lib/use-money";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -51,7 +52,6 @@ import {
   coverageRatio,
   daysInMonth,
   effectiveMealSlots,
-  eur,
   homeTotal,
   isMonthActionable,
   monthParts,
@@ -135,6 +135,7 @@ export const Route = createFileRoute("/_authenticated/plan")({
 });
 
 function PlanPage() {
+  const money = useMoney();
   const qc = useQueryClient();
   const today = todayISO();
   const make = useServerFn(generateMonthlyPlan);
@@ -322,7 +323,7 @@ function PlanPage() {
     },
   });
   const receiptToast = (res: ReceiptScan, where: string) => {
-    const parts = [`Gasto guardado: ${eur(res.total)}`];
+    const parts = [`Gasto guardado: ${money(res.total)}`];
     if (res.added.length) parts.push(`Añadí a ${where}: ${res.added.join(", ")}`);
     if (res.discarded.length)
       parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
@@ -1110,6 +1111,7 @@ function IngredientsTab({
    *  listas apiladas en la pantalla (compra de la casa + compra en solitario). */
   inlineCta?: boolean;
 }) {
+  const money = useMoney();
   const currentTrip = trips[selectedTrip] ?? trips[0];
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
 
@@ -1234,7 +1236,7 @@ function IngredientsTab({
       {overBudget ? (
         <div className="rounded-[20px] bg-destructive/10 px-4 py-3">
           <p className="text-xs leading-relaxed text-destructive">
-            El mes se pasa de tu presupuesto ({eur(periodBudget)}). Puedo ajustarlo: regenera el
+            El mes se pasa de tu presupuesto ({money(periodBudget)}). Puedo ajustarlo: regenera el
             plan o dímelo en el chat.
           </p>
         </div>
@@ -1279,7 +1281,7 @@ function IngredientsTab({
         <p className="text-xs font-semibold text-muted-foreground">Te falta comprar</p>
         <div className="mt-0.5 flex items-baseline gap-2">
           <span className="font-title text-4xl font-semibold tabular-nums tracking-tight text-primary-ink">
-            {eur(stillPending)}
+            {money(stillPending)}
           </span>
           <span className="text-xs text-muted-foreground">
             {needCount} artículo{needCount === 1 ? "" : "s"}
@@ -1298,24 +1300,24 @@ function IngredientsTab({
         <div className="mt-2.5 flex flex-wrap gap-3.5 text-[11.5px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className="h-[7px] w-[7px] rounded-full bg-success" />
-            En casa {eur(alreadyHome)}
+            En casa {money(alreadyHome)}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-[7px] w-[7px] rounded-full bg-success/50" />
-            Comprado {eur(alreadyBought)}
+            Comprado {money(alreadyBought)}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-[7px] w-[7px] rounded-full bg-secondary" />
-            Total {eur(total)}
+            Total {money(total)}
           </span>
         </div>
         {tripActual != null ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Gastaste en esta compra: <span className="font-semibold">{eur(tripActual)}</span>{" "}
+            Gastaste en esta compra: <span className="font-semibold">{money(tripActual)}</span>{" "}
             {tripActual !== total ? (
               <span className={tripActual > total ? "text-destructive" : "text-success"}>
                 ({tripActual > total ? "+" : ""}
-                {eur(tripActual - total)} vs. lo estimado)
+                {money(tripActual - total)} vs. lo estimado)
               </span>
             ) : null}
           </p>
@@ -1428,7 +1430,7 @@ function IngredientsTab({
                     {/* Precio y etiqueta */}
                     <span className="shrink-0 text-right">
                       <span className="block font-mono text-xs text-muted-foreground">
-                        {eur(item.price_eur)}
+                        {money(item.price_eur)}
                       </span>
                       {have ? (
                         <span className="block text-[10px] font-semibold text-success">
@@ -1536,6 +1538,7 @@ function ShopModeView({
   onScanReceipt: (imageBase64: string, mime: string) => void;
   scanningReceipt: boolean;
 }) {
+  const money = useMoney();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
   const spendId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1648,13 +1651,13 @@ function ShopModeView({
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-muted-foreground">Queda por coger</p>
                 <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary-ink">
-                  {eur(Math.round(leftTotal * 100) / 100)}
+                  {money(Math.round(leftTotal * 100) / 100)}
                 </p>
               </div>
               <div className="shrink-0 text-right">
                 <p className="font-mono text-[11px] text-muted-foreground">en el carro</p>
                 <p className="mt-0.5 font-mono text-[15px] font-medium text-success">
-                  {eur(Math.round(doneTotal * 100) / 100)}
+                  {money(Math.round(doneTotal * 100) / 100)}
                 </p>
               </div>
             </div>
@@ -1732,7 +1735,7 @@ function ShopModeView({
                             {item.name}
                           </span>
                           <span className="block font-mono text-[11px] text-muted-foreground">
-                            {item.qty} · {eur(item.price_eur)}
+                            {item.qty} · {money(item.price_eur)}
                           </span>
                         </span>
                       </li>
@@ -1761,7 +1764,7 @@ function ShopModeView({
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onBlur={commitActual}
-                  placeholder={eur(Math.round(doneTotal * 100) / 100)}
+                  placeholder={money(Math.round(doneTotal * 100) / 100)}
                   disabled={savingActual}
                   className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
                 />

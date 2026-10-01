@@ -33,6 +33,7 @@ diffFutureMeals
 dishChangeIsMine
 effectiveMealSlots
 eur
+formatMoney
 formatQty
 formatShoppingQty
 groupByTrip

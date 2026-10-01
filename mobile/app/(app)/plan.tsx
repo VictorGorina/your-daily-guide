@@ -1,4 +1,5 @@
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../../lib/content-guard";
+import { useMoney } from "../../lib/use-money";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import {
@@ -64,7 +65,6 @@ import {
   coverageRatio,
   daysInMonth,
   effectiveMealSlots,
-  eur,
   homeTotal,
   isBeforeAppStart,
   isMonthActionable,
@@ -127,6 +127,7 @@ type TripGroups = { trip: number; groups: { category: string; items: ShoppingIte
 const FULL_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
 export default function Plan() {
+  const money = useMoney();
   const qc = useQueryClient();
   const today = todayISO();
   const params = useLocalSearchParams<{ tab?: string; month?: string }>();
@@ -266,7 +267,7 @@ export default function Plan() {
     },
   });
   const receiptAlert = (res: ReceiptScanResult, where: string) => {
-    const parts = [`Gasto guardado: ${eur(res.total)}`];
+    const parts = [`Gasto guardado: ${money(res.total)}`];
     if (res.added.length) parts.push(`Añadí a ${where}: ${res.added.join(", ")}`);
     if (res.discarded.length)
       parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
@@ -1387,6 +1388,7 @@ function IngredientsTab({
    *  línea (para la vista con dos listas apiladas). */
   onEnterShopMode?: () => void;
 }) {
+  const money = useMoney();
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
 
   // Aviso de "hemos actualizado tus cantidades" tras un cambio en la mesa. Se
@@ -1532,7 +1534,7 @@ function IngredientsTab({
       {overBudget ? (
         <View className="rounded-3xl bg-destructive/10 px-4 py-3">
           <Text className="text-xs leading-relaxed text-destructive">
-            El mes se pasa de tu presupuesto ({eur(periodBudget)}). Puedo ajustarlo: regenera el
+            El mes se pasa de tu presupuesto ({money(periodBudget)}). Puedo ajustarlo: regenera el
             plan o dímelo en el chat.
           </Text>
         </View>
@@ -1576,7 +1578,7 @@ function IngredientsTab({
         <Text className="text-xs font-sans-semibold text-muted-foreground">Te falta comprar</Text>
         <View className="mt-0.5 flex-row items-baseline gap-2">
           <Text className="font-heading text-4xl tabular-nums text-primary-ink">
-            {eur(stillPending)}
+            {money(stillPending)}
           </Text>
           <Text className="text-xs text-muted-foreground">
             {needCount} artículo{needCount === 1 ? "" : "s"}
@@ -1589,28 +1591,30 @@ function IngredientsTab({
         <View className="mt-2.5 flex-row flex-wrap gap-3">
           <View className="flex-row items-center gap-1.5">
             <View className="h-[7px] w-[7px] rounded-full bg-success" />
-            <Text className="text-[11.5px] text-muted-foreground">En casa {eur(alreadyHome)}</Text>
+            <Text className="text-[11.5px] text-muted-foreground">
+              En casa {money(alreadyHome)}
+            </Text>
           </View>
           <View className="flex-row items-center gap-1.5">
             <View className="h-[7px] w-[7px] rounded-full bg-success/50" />
             <Text className="text-[11.5px] text-muted-foreground">
-              Comprado {eur(alreadyBought)}
+              Comprado {money(alreadyBought)}
             </Text>
           </View>
           <View className="flex-row items-center gap-1.5">
             <View className="h-[7px] w-[7px] rounded-full bg-secondary" />
-            <Text className="text-[11.5px] text-muted-foreground">Total {eur(total)}</Text>
+            <Text className="text-[11.5px] text-muted-foreground">Total {money(total)}</Text>
           </View>
         </View>
         {tripActual != null ? (
           <Text className="mt-2 text-xs text-muted-foreground">
             Gastaste en esta compra:{" "}
-            <Text className="font-sans-semibold text-foreground">{eur(tripActual)}</Text>
+            <Text className="font-sans-semibold text-foreground">{money(tripActual)}</Text>
             {tripActual !== total ? (
               <Text className={tripActual > total ? "text-destructive" : "text-success"}>
                 {" "}
                 ({tripActual > total ? "+" : ""}
-                {eur(tripActual - total)} vs. lo estimado)
+                {money(tripActual - total)} vs. lo estimado)
               </Text>
             ) : null}
           </Text>
@@ -1719,7 +1723,7 @@ function IngredientsTab({
                   </View>
                   <View className="items-end">
                     <Text className="font-mono text-xs text-muted-foreground">
-                      {eur(item.price_eur)}
+                      {money(item.price_eur)}
                     </Text>
                     {have ? (
                       <Text className="text-[10px] font-sans-semibold text-success">
@@ -1813,6 +1817,7 @@ function ShopModeView({
   onScanReceipt: (imageBase64: string, mime: string) => void;
   scanningReceipt: boolean;
 }) {
+  const money = useMoney();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
 
   // Deja elegir foto (galería o cámara), la reescala a ~1280 px JPEG y la manda
@@ -1924,13 +1929,13 @@ function ShopModeView({
                 Queda por coger
               </Text>
               <Text className="mt-0.5 font-heading text-3xl tabular-nums text-primary-ink">
-                {eur(leftTotal)}
+                {money(leftTotal)}
               </Text>
             </View>
             <View className="items-end">
               <Text className="font-mono text-[11px] text-muted-foreground">en el carro</Text>
               <Text className="mt-0.5 font-mono-medium text-[15px] text-success">
-                {eur(doneTotal)}
+                {money(doneTotal)}
               </Text>
             </View>
           </View>
@@ -1991,7 +1996,7 @@ function ShopModeView({
                         </Text>
                         <Text className="font-mono text-[11px] text-muted-foreground">
                           {item.qty ? `${item.qty} · ` : ""}
-                          {eur(item.price_eur)}
+                          {money(item.price_eur)}
                         </Text>
                       </View>
                     </Pressable>
@@ -2019,7 +2024,7 @@ function ShopModeView({
                   value={text}
                   onChangeText={setText}
                   onBlur={commitActual}
-                  placeholder={eur(doneTotal)}
+                  placeholder={money(doneTotal)}
                   keyboardType="decimal-pad"
                   editable={!savingActual}
                   className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm text-foreground"

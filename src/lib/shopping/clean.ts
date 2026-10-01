@@ -180,3 +180,21 @@ export const ingredientNames = (shopping: ShoppingList) =>
 
 export const eur = (n: number) =>
   new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(n);
+
+// Precios en la moneda del perfil (ticket 34, I18N-02): el plan los pide a la
+// IA en esa moneda, así que pintarlos con € era decir otra cosa. El texto sigue
+// en español: el locale solo cambia donde el formato del país lo pide.
+const MONEY_LOCALE: Record<string, string> = { MXN: "es-MX", USD: "es-US" };
+
+export const formatMoney = (n: number, currency?: string | null) => {
+  const code = (currency || "EUR").toUpperCase();
+  try {
+    return new Intl.NumberFormat(MONEY_LOCALE[code] ?? "es-ES", {
+      style: "currency",
+      currency: code,
+      currencyDisplay: "narrowSymbol",
+    }).format(n);
+  } catch {
+    return eur(n);
+  }
+};

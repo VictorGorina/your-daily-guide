@@ -1,8 +1,8 @@
 import { Wallet } from "lucide-react-native";
+import { useMoney } from "../lib/use-money";
 import { Text, View } from "react-native";
 
 import {
-  eur,
   shoppingTotal,
   tripActualsTotal,
   type PlanMonthStatus,
@@ -31,6 +31,7 @@ export function MonthSpendSummary({
   partialMonth: boolean;
   monthStatus: PlanMonthStatus;
 }) {
+  const money = useMoney();
   const trips = Object.keys(tripActuals)
     .map(Number)
     .filter((n) => Number.isFinite(n))
@@ -53,7 +54,7 @@ export function MonthSpendSummary({
 
       <View className="mt-2 flex-row items-baseline gap-2">
         <Text className="font-heading text-4xl tabular-nums text-primary-ink">
-          {hasReal ? eur(real) : "—"}
+          {hasReal ? money(real) : "—"}
         </Text>
         <Text className="text-xs text-muted-foreground">
           {hasReal
@@ -67,12 +68,12 @@ export function MonthSpendSummary({
       {estimated > 0 ? (
         <Text className="mt-1.5 text-xs text-muted-foreground">
           Estimado del plan:{" "}
-          <Text className="font-sans-medium text-foreground">{eur(estimated)}</Text>
+          <Text className="font-sans-medium text-foreground">{money(estimated)}</Text>
           {hasReal && Math.abs(real - estimated) >= 0.5 ? (
             <Text className={real > estimated ? "text-destructive" : "text-success"}>
               {" "}
               ({real > estimated ? "+" : ""}
-              {eur(real - estimated)})
+              {money(real - estimated)})
             </Text>
           ) : null}
         </Text>
@@ -82,7 +83,7 @@ export function MonthSpendSummary({
         <Text
           className={`mt-1 text-xs ${overBudget ? "text-destructive" : "text-muted-foreground"}`}
         >
-          Presupuesto{partialMonth ? " del periodo" : " del mes"}: {eur(periodBudget)}
+          Presupuesto{partialMonth ? " del periodo" : " del mes"}: {money(periodBudget)}
           {overBudget ? " · te has pasado" : hasReal ? " · dentro" : ""}
         </Text>
       ) : null}
@@ -92,7 +93,7 @@ export function MonthSpendSummary({
           {trips.map((t) => (
             <Text key={t} className="text-[11.5px] text-muted-foreground">
               Compra {t + 1}:{" "}
-              <Text className="font-mono text-foreground">{eur(tripActuals[t]!)}</Text>
+              <Text className="font-mono text-foreground">{money(tripActuals[t]!)}</Text>
               {tripReceipts[t] ? " · tiquet" : ""}
             </Text>
           ))}

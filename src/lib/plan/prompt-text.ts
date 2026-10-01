@@ -1,4 +1,4 @@
-import { eur, pendingTotal, shoppingTotal } from "../shopping/clean";
+import { formatMoney, pendingTotal, shoppingTotal } from "../shopping/clean";
 import {
   daysInMonth,
   type PantryExtra,
@@ -52,6 +52,7 @@ export const shoppingToText = (
   cadence: ShoppingCadence,
   month: string,
   coverage?: PlanCoverage,
+  currency?: string | null,
 ) => {
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "long",
@@ -62,18 +63,18 @@ export const shoppingToText = (
   const trips = tripsForCoverage(cadence, cov);
   for (const trip of projectTrips(shopping, cadence, cov)) {
     lines.push(
-      `${tripLabel(cadence, trip.trip, coverage, trips)} — ${eur(pendingTotal(trip.groups))}`,
+      `${tripLabel(cadence, trip.trip, coverage, trips)} — ${formatMoney(pendingTotal(trip.groups), currency)}`,
     );
     for (const group of trip.groups) {
       lines.push(`  ${group.category}`);
       for (const item of group.items) {
         const qty = item.qty ? ` (${item.qty})` : "";
-        lines.push(`   - ${item.name}${qty} — ${eur(item.price_eur)}`);
+        lines.push(`   - ${item.name}${qty} — ${formatMoney(item.price_eur, currency)}`);
       }
     }
     lines.push("");
   }
-  lines.push(`Total del mes: ${eur(shoppingTotal(shopping))}`);
+  lines.push(`Total del mes: ${formatMoney(shoppingTotal(shopping), currency)}`);
   return lines.join("\n");
 };
 
@@ -84,13 +85,14 @@ export const shoppingToText = (
 export const tripToText = (
   trip: { groups: { category: string; items: ShoppingItem[] }[] },
   label: string,
+  currency?: string | null,
 ) => {
-  const lines = [`${label} — ${eur(pendingTotal(trip.groups))}`, ""];
+  const lines = [`${label} — ${formatMoney(pendingTotal(trip.groups), currency)}`, ""];
   for (const group of trip.groups) {
     lines.push(group.category);
     for (const item of group.items) {
       const qty = item.qty ? ` (${item.qty})` : "";
-      lines.push(`  - ${item.name}${qty} — ${eur(item.price_eur)}`);
+      lines.push(`  - ${item.name}${qty} — ${formatMoney(item.price_eur, currency)}`);
     }
   }
   return lines.join("\n");

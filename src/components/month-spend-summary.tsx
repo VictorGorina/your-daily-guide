@@ -1,7 +1,7 @@
 import { Wallet } from "lucide-react";
+import { useMoney } from "@/lib/use-money";
 
 import {
-  eur,
   shoppingTotal,
   tripActualsTotal,
   type PlanMonthStatus,
@@ -32,6 +32,7 @@ export function MonthSpendSummary({
   partialMonth: boolean;
   monthStatus: PlanMonthStatus;
 }) {
+  const money = useMoney();
   const trips = Object.keys(tripActuals)
     .map(Number)
     .filter((n) => Number.isFinite(n))
@@ -55,7 +56,7 @@ export function MonthSpendSummary({
 
       <div className="mt-2 flex items-baseline gap-2">
         <span className="font-title text-4xl font-semibold tabular-nums tracking-tight text-primary-ink">
-          {hasReal ? eur(real) : "—"}
+          {hasReal ? money(real) : "—"}
         </span>
         <span className="text-xs text-muted-foreground">
           {hasReal
@@ -68,12 +69,12 @@ export function MonthSpendSummary({
 
       {estimated > 0 ? (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Estimado del plan: <span className="font-medium text-foreground">{eur(estimated)}</span>
+          Estimado del plan: <span className="font-medium text-foreground">{money(estimated)}</span>
           {hasReal && Math.abs(real - estimated) >= 0.5 ? (
             <span className={real > estimated ? " text-destructive" : " text-success"}>
               {" "}
               ({real > estimated ? "+" : ""}
-              {eur(real - estimated)})
+              {money(real - estimated)})
             </span>
           ) : null}
         </p>
@@ -81,7 +82,7 @@ export function MonthSpendSummary({
 
       {periodBudget > 0 ? (
         <p className={`mt-1 text-xs ${overBudget ? "text-destructive" : "text-muted-foreground"}`}>
-          Presupuesto{partialMonth ? " del periodo" : " del mes"}: {eur(periodBudget)}
+          Presupuesto{partialMonth ? " del periodo" : " del mes"}: {money(periodBudget)}
           {overBudget ? " · te has pasado" : hasReal ? " · dentro" : ""}
         </p>
       ) : null}
@@ -91,7 +92,7 @@ export function MonthSpendSummary({
           {trips.map((t) => (
             <span key={t}>
               Compra {t + 1}:{" "}
-              <span className="font-mono text-foreground">{eur(tripActuals[t]!)}</span>
+              <span className="font-mono text-foreground">{money(tripActuals[t]!)}</span>
               {tripReceipts[t] ? <span className="text-muted-foreground/70"> · tiquet</span> : null}
             </span>
           ))}
