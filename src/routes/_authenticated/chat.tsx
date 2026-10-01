@@ -48,6 +48,7 @@ import type { SnackEntry } from "@/lib/snacks";
 import { consumePendingChatMessage } from "@/lib/pending-chat-message";
 import { coachPlanContext } from "@/lib/plan-shared";
 import { useCoachActions } from "@/lib/use-coach-actions";
+import { useSensitiveProfileConfirm } from "@/components/sensitive-profile-confirm";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   component: ChatPage,
@@ -92,9 +93,12 @@ function ChatPage() {
     log: todayQ.data,
     plan: planQ.data,
   };
+  // Cambios sensibles del perfil que propone el coach: se confirman antes (ticket 31).
+  const { confirm: confirmSensitive, dialog: sensitiveDialog } = useSensitiveProfileConfirm();
   const { runTool, refresh } = useCoachActions(
     () => ctx.current.log,
     () => ctx.current.plan,
+    confirmSensitive,
   );
 
   const initial = useMemo<UIMessage[]>(
@@ -249,6 +253,7 @@ function ChatPage() {
 
   return (
     <main className="mx-auto flex h-[100dvh] max-w-lg flex-col px-4 pb-24 pt-10">
+      {sensitiveDialog}
       <header className="flex items-end justify-between px-1 pb-3">
         <div>
           <h1 className="font-title text-2xl font-semibold tracking-[-0.02em]">Tu coach</h1>

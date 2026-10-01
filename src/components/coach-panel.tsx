@@ -51,6 +51,7 @@ import {
 } from "@/lib/daily";
 import { coachPlanContext } from "@/lib/plan-shared";
 import { useCoachActions } from "@/lib/use-coach-actions";
+import { useSensitiveProfileConfirm } from "@/components/sensitive-profile-confirm";
 
 type ToolCall = { toolCallId: string; toolName: string; input: unknown };
 
@@ -140,9 +141,12 @@ export default function CoachPanel({
     log: todayQ.data,
     plan: planQ.data,
   };
+  // Cambios sensibles del perfil que propone el coach: se confirman antes (ticket 31).
+  const { confirm: confirmSensitive, dialog: sensitiveDialog } = useSensitiveProfileConfirm();
   const { runTool, refresh } = useCoachActions(
     () => ctx.current.log,
     () => ctx.current.plan,
+    confirmSensitive,
   );
 
   const transport = useMemo(
@@ -255,6 +259,7 @@ export default function CoachPanel({
 
   return (
     <>
+      {sensitiveDialog}
       {lastAction ? (
         // El aviso vive SIEMPRE en el DOM (solo cambia su visibilidad con
         // `open`) para que cerrar/abrir el coach a medio recalcular no

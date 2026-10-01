@@ -1,6 +1,7 @@
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "./content-guard";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { Alert } from "react-native";
 
 import { apiPost } from "./api";
 import {
@@ -24,9 +25,41 @@ import {
   showsNutritionNumbers,
 } from "./macros";
 import { mealsForDate, type MealChange, type MealSlot, type MonthlyPlan } from "./plan-shared";
-import { CHAT_EDITABLE_PROFILE_FIELDS, chipToValue, PROFILE_FIELD_LABELS } from "./profile-fields";
+import {
+  PROFILE_FIELD_LABELS,
+  profilePatchFromTool,
+  profileToolResult,
+  sensitiveChanges,
+  sensitiveConfirmCopy,
+  splitProfilePatch,
+  type SensitiveChange,
+} from "./profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
+
+const profileLabels = (patch: Partial<Profile>) =>
+  Object.keys(patch).map((key) => PROFILE_FIELD_LABELS[key] ?? key);
+
+/**
+ * Confirmación nativa de los cambios sensibles del perfil que propone el coach
+ * (ticket 31). En iOS una alerta no se cierra sin pulsar un botón; si el sistema
+ * la descarta (Android), cuenta como «no».
+ */
+function confirmSensitiveChanges(changes: SensitiveChange[]): Promise<boolean> {
+  const copy = sensitiveConfirmCopy(changes);
+  const message = [...copy.lines, ...(copy.note ? ["", copy.note] : [])].join("\n");
+  return new Promise((resolve) => {
+    Alert.alert(
+      copy.title,
+      message,
+      [
+        { text: copy.cancel, style: "cancel", onPress: () => resolve(false) },
+        { text: copy.confirm, onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  });
+}
 
 /**
  * Acciones que el coach puede ejecutar sobre la pantalla y sobre el plan.
@@ -303,42 +336,25 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
         return `Nueva fecha objetivo guardada: ${fecha}`;
       }
       if (toolName === "actualizar_perfil") {
-        const patch: Partial<Profile> = {};
-        const updated: string[] = [];
-        for (const field of CHAT_EDITABLE_PROFILE_FIELDS) {
-          const raw = input[field.key];
-          if (raw === undefined || raw === null || raw === "") continue;
-          if (field.kind === "number") {
-            const n = Number(raw);
-            if (!Number.isFinite(n)) continue;
-            if (field.min !== undefined && n < field.min) continue;
-            if (field.max !== undefined && n > field.max) continue;
-            (patch as Record<string, unknown>)[field.key] = n;
-          } else if (field.kind === "time") {
-            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(raw))) continue;
-            (patch as Record<string, unknown>)[field.key] = raw;
-          } else if (field.kind === "date") {
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) continue;
-            (patch as Record<string, unknown>)[field.key] = raw;
-          } else if (field.kind === "chips" && field.valueMap) {
-            // El modelo puede mandar la etiqueta ("No, prefiero no verlas") o el
-            // valor guardado ("ocultar"): se acepta cualquiera de los dos, y
-            // nada más.
-            const text = String(raw).trim();
-            const value = chipToValue(field, text);
-            if (!Object.values(field.valueMap).includes(value)) continue;
-            (patch as Record<string, unknown>)[field.key] = value;
-          } else {
-            (patch as Record<string, unknown>)[field.key] = String(raw).trim();
-          }
-          updated.push(PROFILE_FIELD_LABELS[field.key] ?? field.key);
-        }
-        if (!updated.length) return "No había ningún dato válido que actualizar en el perfil";
+        const { patch, invalid } = profilePatchFromTool(input);
+        // Lo sensible (embarazo, medicación, TCA, alergias…) no se guarda sin
+        // que la persona lo confirme; lo demás, como siempre (ticket 31).
+        const { sensitive, normal } = splitProfilePatch(patch);
+        const confirmed = Object.keys(sensitive).length
+          ? await confirmSensitiveChanges(
+              sensitiveChanges(sensitive, qc.getQueryData<Profile | null>(["profile"])),
+            )
+          : true;
+        const toSave = confirmed ? patch : normal;
         // Si el coach tocó `meals_to_plan` (texto libre), `saveProfile` limpia
         // solo el `meal_slots` estructurado del onboarding — si no,
         // `effectiveMealSlots` seguiría prefiriendo la elección vieja.
-        await saveProfile(patch);
-        return `Perfil actualizado: ${updated.join(", ")}.`;
+        if (Object.keys(toSave).length) await saveProfile(toSave);
+        return profileToolResult(
+          profileLabels(toSave),
+          confirmed ? [] : profileLabels(sensitive),
+          invalid,
+        );
       }
       return "Acción desconocida";
     },

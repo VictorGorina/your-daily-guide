@@ -35,12 +35,18 @@ import {
 } from "@/lib/plan.functions";
 import { mealsForDate, type MealSlot, type MonthlyPlan } from "@/lib/plan-shared";
 import {
-  CHAT_EDITABLE_PROFILE_FIELDS,
-  chipToValue,
   PROFILE_FIELD_LABELS,
+  profilePatchFromTool,
+  profileToolResult,
+  sensitiveChanges,
+  splitProfilePatch,
+  type SensitiveChange,
 } from "@/lib/profile-fields";
 
 const norm = (s: string) => s.toLowerCase().trim();
+
+const profileLabels = (patch: Partial<Profile>) =>
+  Object.keys(patch).map((key) => PROFILE_FIELD_LABELS[key] ?? key);
 
 /**
  * Acciones que el coach puede ejecutar sobre la pantalla y sobre el plan.
@@ -51,10 +57,15 @@ const norm = (s: string) => s.toLowerCase().trim();
  * fila propia no lleva. Al regenerar los macros tras un `cambiar_plato` de hoy se
  * usa esta vista completa (con la comida cambiada sustituida) para que la barra de
  * macros refleje TODAS las comidas, no solo las del slot que se acaba de tocar.
+ *
+ * `confirmSensitive` pregunta a la persona antes de guardar un cambio sensible
+ * del perfil (ticket 31; ver `useSensitiveProfileConfirm`). Sin él, lo sensible
+ * no se guarda.
  */
 export function useCoachActions(
   getLog: () => DailyLog | undefined,
   getPlan?: () => MonthlyPlanRow | null | undefined,
+  confirmSensitive?: (changes: SensitiveChange[]) => Promise<boolean>,
 ) {
   const qc = useQueryClient();
   const makeGuide = useServerFn(generateDailyGuide);
@@ -344,42 +355,25 @@ export function useCoachActions(
         return `Nueva fecha objetivo guardada: ${targetDate}`;
       }
       if (toolName === "actualizar_perfil") {
-        const patch: Partial<Profile> = {};
-        const updated: string[] = [];
-        for (const field of CHAT_EDITABLE_PROFILE_FIELDS) {
-          const raw = input[field.key];
-          if (raw === undefined || raw === null || raw === "") continue;
-          if (field.kind === "number") {
-            const n = Number(raw);
-            if (!Number.isFinite(n)) continue;
-            if (field.min !== undefined && n < field.min) continue;
-            if (field.max !== undefined && n > field.max) continue;
-            (patch as Record<string, unknown>)[field.key] = n;
-          } else if (field.kind === "time") {
-            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(raw))) continue;
-            (patch as Record<string, unknown>)[field.key] = raw;
-          } else if (field.kind === "date") {
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) continue;
-            (patch as Record<string, unknown>)[field.key] = raw;
-          } else if (field.kind === "chips" && field.valueMap) {
-            // El modelo puede mandar la etiqueta ("No, prefiero no verlas") o el
-            // valor guardado ("ocultar"): se acepta cualquiera de los dos, y
-            // nada más.
-            const text = String(raw).trim();
-            const value = chipToValue(field, text);
-            if (!Object.values(field.valueMap).includes(value)) continue;
-            (patch as Record<string, unknown>)[field.key] = value;
-          } else {
-            (patch as Record<string, unknown>)[field.key] = String(raw).trim();
-          }
-          updated.push(PROFILE_FIELD_LABELS[field.key] ?? field.key);
-        }
-        if (!updated.length) return "No había ningún dato válido que actualizar en el perfil";
+        const { patch, invalid } = profilePatchFromTool(input);
+        // Lo sensible (embarazo, medicación, TCA, alergias…) no se guarda sin
+        // que la persona lo confirme; lo demás, como siempre (ticket 31).
+        const { sensitive, normal } = splitProfilePatch(patch);
+        const confirmed = Object.keys(sensitive).length
+          ? ((await confirmSensitive?.(
+              sensitiveChanges(sensitive, qc.getQueryData<Profile | null>(["profile"])),
+            )) ?? false)
+          : true;
+        const toSave = confirmed ? patch : normal;
         // Si el coach tocó `meals_to_plan` (texto libre), `saveProfile` limpia
         // solo el `meal_slots` estructurado del onboarding — si no,
         // `effectiveMealSlots` seguiría prefiriendo la elección vieja.
-        await saveProfile(patch);
-        return `Perfil actualizado: ${updated.join(", ")}.`;
+        if (Object.keys(toSave).length) await saveProfile(toSave);
+        return profileToolResult(
+          profileLabels(toSave),
+          confirmed ? [] : profileLabels(sensitive),
+          invalid,
+        );
       }
       return "Acción desconocida";
     },
@@ -390,6 +384,7 @@ export function useCoachActions(
       checkGoal,
       compensate,
       compensateFuture,
+      confirmSensitive,
       date,
       getLog,
       getPlan,
