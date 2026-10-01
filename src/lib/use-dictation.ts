@@ -1,4 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
+
+import { fetchProfile } from "@/lib/daily";
+import { dictationLang } from "@/lib/i18n";
 
 export type DictationState = "idle" | "listening";
 
@@ -49,6 +53,8 @@ export function useDictation(onText: (text: string) => void) {
   const [state, setState] = useState<DictationState>("idle");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const supported = useMemo(() => getSpeechRecognitionCtor() !== null, []);
+  const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
+  const lang = dictationLang(profile?.locale, profile?.country);
 
   const start = useCallback(() => {
     if (recognitionRef.current) return;
@@ -56,7 +62,7 @@ export function useDictation(onText: (text: string) => void) {
     if (!Ctor) return;
 
     const recognition = new Ctor();
-    recognition.lang = "es-ES";
+    recognition.lang = lang;
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.onresult = (event) => {
@@ -80,7 +86,7 @@ export function useDictation(onText: (text: string) => void) {
     recognitionRef.current = recognition;
     setState("listening");
     recognition.start();
-  }, [onText]);
+  }, [lang, onText]);
 
   const stop = useCallback(() => {
     recognitionRef.current?.stop();

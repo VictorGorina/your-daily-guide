@@ -1,6 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+
+import { fetchProfile } from "./daily";
+import { dictationLang } from "./i18n";
 
 export type DictationState = "idle" | "listening";
 
@@ -16,6 +20,8 @@ export type DictationState = "idle" | "listening";
 export function useDictation(onText: (text: string) => void) {
   const [state, setState] = useState<DictationState>("idle");
   const activeRef = useRef(false);
+  const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
+  const lang = dictationLang(profile?.locale, profile?.country);
 
   useSpeechRecognitionEvent("result", (event) => {
     if (!activeRef.current || !event.isFinal) return;
@@ -48,8 +54,8 @@ export function useDictation(onText: (text: string) => void) {
     }
     activeRef.current = true;
     setState("listening");
-    ExpoSpeechRecognitionModule.start({ lang: "es-ES", interimResults: false, continuous: true });
-  }, []);
+    ExpoSpeechRecognitionModule.start({ lang, interimResults: false, continuous: true });
+  }, [lang]);
 
   const stop = useCallback(() => {
     if (!activeRef.current) return;

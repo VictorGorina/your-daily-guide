@@ -54,6 +54,21 @@ export function detectedLocale(raw: string | null | undefined, englishEnabled: b
   return englishEnabled ? normalizeLocale(raw) : DEFAULT_LOCALE;
 }
 
+/**
+ * Idioma del reconocimiento de voz (ticket 34): el de la persona y, si el país
+ * tiene variante propia, la suya (el acento de México se reconoce mejor con
+ * `es-MX`). Sin dato, español de España, como antes.
+ */
+export function dictationLang(
+  locale: string | null | undefined,
+  country: string | null | undefined,
+): string {
+  const lang = normalizeLocale(locale);
+  const c = (country ?? "").toUpperCase();
+  if (lang === "en") return c === "GB" || c === "IE" ? `en-${c}` : "en-US";
+  return c === "MX" || c === "US" ? `es-${c}` : "es-ES";
+}
+
 /** Idioma del dispositivo (síncrono en expo-localization), para el arranque y el RegionStep. */
 export function detectDeviceLocale(): Locale {
   try {
