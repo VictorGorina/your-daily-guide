@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } fro
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeRow } from "@/test/fake-supabase";
 
-import { dispatchPush, inWindow, pushDayFor } from "./push-dispatch.server";
+import { dispatchPush, dueDay, inWindow, pushDayFor } from "./push-dispatch.server";
+import { EXPECTED_DUE, FIXTURE_NOW, PUSH_FIXTURE_PROFILES } from "./push-dispatch.fixtures";
 import type { PushPayload } from "./web-push.server";
 
 // Mediados de mes (sin aviso de renovación): 06:05 UTC = 08:05 en Madrid.
@@ -384,27 +385,24 @@ describe("dispatchPush — fallos que no deben tumbar el envío (ticket 06)", ()
     expect(loggedEvents(consoleError)).toContain("push_query_failed");
   });
 
-  it("si falla la lectura del día de un perfil, ese perfil no se envía ni se marca", async () => {
+  it("si falla la lectura de los días, nadie recibe el aviso ni queda marcado", async () => {
     const { fake, sent, run } = setup(
       {
         profiles: [
           profile("ana", { morning_time: "08:00" }),
-          profile("bea", { morning_time: "08:00" }),
+          profile("bea", { evening_time: "08:00" }),
         ],
         push_subscriptions: [sub("ana"), sub("bea")],
       },
       undefined,
-      {
-        failOn: (op) =>
-          op.table === "daily_logs" &&
-          op.filters.some((f) => f.kind === "eq" && f.column === "user_id" && f.value === "ana"),
-      },
+      { failOn: (op) => op.table === "daily_logs" },
     );
     const summary = await run();
-    expect(sent.map((s) => s.endpoint)).toEqual(["https://push.example/bea/1"]);
+    expect(sent).toEqual([]);
     expect(summary.errors).toBe(1);
     expect(profileRow(fake.tables, "ana")?.morning_push_sent_on).toBeNull();
-    expect(profileRow(fake.tables, "bea")?.morning_push_sent_on).toBe("2026-09-15");
+    expect(profileRow(fake.tables, "bea")?.evening_push_sent_on).toBeNull();
+    expect(loggedEvents(consoleError)).toContain("push_query_failed");
   });
 
   it("las consultas por user_id van en grupos de 100 como mucho", async () => {
@@ -431,5 +429,132 @@ describe("dispatchPush — fallos que no deben tumbar el envío (ticket 06)", ()
     expect(sent).toHaveLength(149);
     expect(inSizes.length).toBeGreaterThanOrEqual(6);
     expect(Math.max(...inSizes)).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("dispatchPush — a escala (ticket 23)", () => {
+  it("con la función SQL solo lee los perfiles que devuelve y usa su día", async () => {
+    const selects: string[] = [];
+    const { fake, sent, run } = setup(
+      {
+        profiles: [
+          // La hora no cae en la ventana según el reloj de JS: manda la función.
+          profile("ana", { morning_time: "03:00" }),
+          profile("bea", { evening_time: "03:00" }),
+          profile("carla", { morning_time: "08:00" }),
+        ],
+        push_subscriptions: [sub("ana"), sub("bea"), sub("carla")],
+        daily_logs: [
+          { user_id: "ana", log_date: "2026-09-14", guide: { meals: [{ idea: "Gachas" }] } },
+          { user_id: "ana", log_date: "2026-09-15", guide: { meals: [{ idea: "Otro día" }] } },
+        ],
+      },
+      undefined,
+      {
+        rpc: {
+          due_push_profiles: () => [
+            { id: "ana", kind: "morning", push_day: "2026-09-14" },
+            { id: "bea", kind: "evening", push_day: "2026-09-15" },
+          ],
+        },
+        failOn: (op) => {
+          if (op.table === "profiles" && op.op === "select") {
+            selects.push(op.filters.map((f) => f.kind).join(","));
+          }
+          return null;
+        },
+      },
+    );
+    const summary = await run();
+    expect(summary).toMatchObject({ sent: 2, errors: 0 });
+    expect(sent.map((s) => s.endpoint).sort()).toEqual([
+      "https://push.example/ana/1",
+      "https://push.example/bea/1",
+    ]);
+    expect(sent.find((s) => s.endpoint.includes("ana"))?.payload.body).toBe("Hoy toca: Gachas");
+    expect(profileRow(fake.tables, "ana")?.morning_push_sent_on).toBe("2026-09-14");
+    expect(profileRow(fake.tables, "bea")?.evening_push_sent_on).toBe("2026-09-15");
+    expect(profileRow(fake.tables, "carla")?.morning_push_sent_on).toBeNull();
+    // Ningún recorrido de toda la tabla: solo la lectura por ids.
+    expect(selects.filter((kinds) => !kinds.includes("in"))).toEqual([]);
+    expect(loggedEvents(consoleWarn)).not.toContain("push_due_rpc_failed");
+  });
+
+  it("con la función SQL y nadie en la ventana no lee ninguna tabla", async () => {
+    const { fake, sent, run } = setup(
+      { profiles: [profile("ana", { morning_time: "08:00" })] },
+      undefined,
+      {
+        rpc: { due_push_profiles: () => [] },
+      },
+    );
+    await run();
+    expect(sent).toEqual([]);
+    expect(fake.calls.filter((op) => op.op !== "rpc")).toEqual([]);
+  });
+
+  it("sin la función SQL avisa en el log y recorre los perfiles con la regla de JS", async () => {
+    const { sent, run } = setup({
+      profiles: [profile("ana", { morning_time: "08:00" })],
+      push_subscriptions: [sub("ana")],
+    });
+    await run();
+    expect(sent).toHaveLength(1);
+    expect(loggedEvents(consoleWarn)).toContain("push_due_rpc_failed");
+  });
+
+  it("más de 1.000 perfiles: los de la segunda página también reciben su aviso", async () => {
+    const ids = Array.from({ length: 1005 }, (_, i) => `u${String(i).padStart(4, "0")}`);
+    const { sent, run } = setup({
+      profiles: ids.map((id) => profile(id, { morning_time: "08:00" })),
+      push_subscriptions: [sub("u0000"), sub("u1004")],
+    });
+    const summary = await run();
+    expect(sent.map((s) => s.endpoint).sort()).toEqual([
+      "https://push.example/u0000/1",
+      "https://push.example/u1004/1",
+    ]);
+    expect(summary.skippedNoSubscription).toBe(1003);
+  });
+
+  it("en la última semana del mes la renovación sale aunque la función SQL no dé a nadie", async () => {
+    setSystemTime(END_OF_MONTH);
+    const { sent, run } = setup(
+      { profiles: [profile("ana")], push_subscriptions: [sub("ana")] },
+      undefined,
+      { rpc: { due_push_profiles: () => [] } },
+    );
+    await run();
+    expect(sent.map((s) => s.payload.url)).toEqual(["/plan?month=2026-10"]);
+  });
+});
+
+describe("dueDay — perfiles de muestra en seis zonas horarias (ticket 23)", () => {
+  // Los mismos perfiles y el mismo instante sirven para comparar a mano con
+  // `due_push_profiles_at` en el SQL Editor (ver el ticket 23).
+  it("da exactamente los avisos esperados", () => {
+    setSystemTime(FIXTURE_NOW);
+    const clockOf = (timeZone: string | null) => {
+      const tz = timeZone ?? "Europe/Madrid";
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz,
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date());
+      const num = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+      return {
+        nowMinutes: num("hour") * 60 + num("minute"),
+        today: new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date()),
+      };
+    };
+    const got = PUSH_FIXTURE_PROFILES.flatMap((p) => {
+      const clock = clockOf(p.timezone);
+      return (["morning", "evening"] as const).flatMap((kind) => {
+        const day = dueDay(p[`${kind}_time`], p[`${kind}_push_sent_on`], clock);
+        return day ? [`${p.id}|${kind}|${day}`] : [];
+      });
+    });
+    expect(got.sort()).toEqual([...EXPECTED_DUE].sort());
   });
 });

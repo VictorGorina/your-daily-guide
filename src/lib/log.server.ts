@@ -26,6 +26,8 @@
  * - `push_query_failed` (error): el cron no pudo leer `query` (`next_plans`,
  *   `subscriptions`, `daily_log`, `household_members`); no envía ni marca lo
  *   que dependía de ella, y el siguiente disparo lo vuelve a intentar.
+ * - `push_due_rpc_failed` (warn): falló `due_push_profiles` (o falta su migración)
+ *   y el cron recorrió todos los perfiles con la regla de JS; el aviso sale igual.
  * - `push_claim_failed` (error): no se pudo reclamar el aviso (`column`) antes
  *   de enviarlo; no se envía y el siguiente disparo lo vuelve a intentar.
  * - `push_send_threw` (error): el envío lanzó en vez de devolver un resultado

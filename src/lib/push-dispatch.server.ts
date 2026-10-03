@@ -90,6 +90,52 @@ export function pushDayFor(target: number, nowMinutes: number, today: string): s
   return target > nowMinutes ? addDaysISO(today, -1) : today;
 }
 
+/**
+ * El día del aviso si `hhmm` cae en la ventana y aún no se envió para ese día;
+ * `null` si no toca. Es la regla que `due_push_profiles` repite en SQL.
+ */
+export function dueDay(
+  hhmm: string | null,
+  sentOn: string | null,
+  clock: { nowMinutes: number; today: string },
+): string | null {
+  const target = timeToMinutes(hhmm);
+  if (target == null || !inWindow(target, clock.nowMinutes)) return null;
+  const day = pushDayFor(target, clock.nowMinutes, clock.today);
+  return sentOn === day ? null : day;
+}
+
+/** Una fila de `due_push_profiles`: a quién le toca qué aviso y de qué día. */
+type DueRow = { id: string; kind: "morning" | "evening"; push_day: string };
+
+type DayLogRow = { user_id: string; log_date: string; guide: unknown; habits: unknown };
+
+const PROFILE_COLUMNS =
+  "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on, plan_renewal_push_sent_on, tone, timezone";
+
+// PostgREST corta cada respuesta en 1.000 filas: sin paginar, a partir de ahí
+// había perfiles que nunca recibían un aviso (PERF-03).
+const PAGE_SIZE = 1000;
+const CONCURRENCY = 25;
+
+type Admin = (typeof import("@/integrations/supabase/client.server"))["supabaseAdmin"];
+
+async function allOnboardedProfiles(supabaseAdmin: Admin): Promise<ProfileRow[]> {
+  const all: ProfileRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select(PROFILE_COLUMNS)
+      .eq("onboarding_completed", true)
+      .order("id")
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as ProfileRow[];
+    all.push(...page);
+    if (page.length < PAGE_SIZE) return all;
+  }
+}
+
 type SentColumn = "morning_push_sent_on" | "evening_push_sent_on" | "plan_renewal_push_sent_on";
 
 type ProfileRow = {
@@ -210,14 +256,37 @@ export async function dispatchPush(
     errors: 0,
   };
 
-  const { data: profiles, error } = await supabaseAdmin
-    .from("profiles")
-    .select(
-      "id, display_name, morning_time, evening_time, morning_push_sent_on, evening_push_sent_on, plan_renewal_push_sent_on, tone, timezone",
-    )
-    .eq("onboarding_completed", true);
-  if (error) throw error;
-  const rows = (profiles ?? []) as ProfileRow[];
+  // Quién tiene un aviso de mañana o de noche en su ventana lo calcula la base
+  // de datos (`due_push_profiles`, ticket 23): la mayoría de los disparos no
+  // tienen a nadie y así no se leen todos los perfiles cada 5 minutos. Si la
+  // función falla o aún no existe, se recorre la tabla aquí con la misma regla.
+  const { data: dueData, error: dueError } = await supabaseAdmin.rpc(
+    "due_push_profiles" as never,
+    { _window_minutes: WINDOW_MINUTES } as never,
+  );
+  const dueRows = dueError ? null : ((dueData ?? []) as unknown as DueRow[]);
+  if (dueError) logEvent("warn", "push_due_rpc_failed", { error: errorText(dueError) });
+
+  // El aviso de renovación sí necesita todos los perfiles, pero solo la última
+  // semana del mes. Entre UTC−12 y UTC+14 la fecha local es la de UTC, la de
+  // ayer o la de mañana: si en ninguna quedan pocos días, no hay a quién avisar.
+  const utcToday = new Date().toISOString().slice(0, 10);
+  const renewalPossible = [-1, 0, 1].some(
+    (offset) => daysLeftInMonth(addDaysISO(utcToday, offset)) <= RENEWAL_DAYS_LEFT,
+  );
+
+  let rows: ProfileRow[];
+  if (dueRows === null || renewalPossible) {
+    rows = await allOnboardedProfiles(supabaseAdmin);
+  } else {
+    const dueIds = [...new Set(dueRows.map((d) => d.id))];
+    if (!dueIds.length) return summary;
+    const { rows: found, error } = await selectByUserIds<ProfileRow>(dueIds, (ids) =>
+      supabaseAdmin.from("profiles").select(PROFILE_COLUMNS).in("id", ids),
+    );
+    if (error) throw error;
+    rows = found;
+  }
 
   // Un reloj por perfil, cada uno en su zona horaria. Todo lo que sigue ("¿cae
   // en la ventana?", "¿ya se avisó hoy?", "¿quedan pocos días de mes?") se
@@ -229,28 +298,32 @@ export async function dispatchPush(
   // Perfiles con la hora en la ventana y sin aviso todavía para SU día (el de
   // ayer si la ventana cruzó la medianoche, `pushDayFor`).
   type Due = { profile: ProfileRow; day: string };
-  const selectDue = (
-    time: "morning_time" | "evening_time",
-    sentOn: "morning_push_sent_on" | "evening_push_sent_on",
-  ): Due[] =>
-    rows.flatMap((p) => {
-      const { nowMinutes, today } = clockOf(p);
-      const target = timeToMinutes(p[time]);
-      if (target == null || !inWindow(target, nowMinutes)) return [];
-      const day = pushDayFor(target, nowMinutes, today);
-      return p[sentOn] === day ? [] : [{ profile: p, day }];
+  const byId = new Map(rows.map((p) => [p.id, p]));
+  const selectDue = (kind: "morning" | "evening"): Due[] => {
+    if (dueRows) {
+      return dueRows.flatMap((d) => {
+        const p = d.kind === kind ? byId.get(d.id) : undefined;
+        return p ? [{ profile: p, day: d.push_day }] : [];
+      });
+    }
+    return rows.flatMap((p) => {
+      const day = dueDay(p[`${kind}_time`], p[`${kind}_push_sent_on`], clockOf(p));
+      return day ? [{ profile: p, day }] : [];
     });
-  const morningMatches = selectDue("morning_time", "morning_push_sent_on");
-  const eveningMatches = selectDue("evening_time", "evening_push_sent_on");
+  };
+  const morningMatches = selectDue("morning");
+  const eveningMatches = selectDue("evening");
 
   // A `RENEWAL_DAYS_LEFT` días o menos de fin de mes, si todavía no hay plan del
   // mes siguiente (y no se avisó ya hoy), se avisa una vez al día hasta que lo
   // generen desde Plan (donde ese mismo umbral desbloquea el mes que viene y la
   // barra de abajo marca la pestaña con un punto).
-  const renewalCandidates = rows.filter((p) => {
-    const { today } = clockOf(p);
-    return daysLeftInMonth(today) <= RENEWAL_DAYS_LEFT && p.plan_renewal_push_sent_on !== today;
-  });
+  const renewalCandidates = !renewalPossible
+    ? []
+    : rows.filter((p) => {
+        const { today } = clockOf(p);
+        return daysLeftInMonth(today) <= RENEWAL_DAYS_LEFT && p.plan_renewal_push_sent_on !== today;
+      });
   let renewalMatches: ProfileRow[] = [];
   if (renewalCandidates.length) {
     const nextMonths = [...new Set(renewalCandidates.map(nextMonthOf))];
@@ -318,13 +391,21 @@ export async function dispatchPush(
     subsByUser.set(s.user_id, list);
   }
 
-  // Procesa items en lotes de `concurrency` en paralelo. JS es single-threaded,
+  // Hasta `CONCURRENCY` a la vez, sin esperar a que acabe un lote entero: un
+  // envío lento ya no frena a los nueve que iban con él. JS es single-threaded,
   // así que las mutaciones a `summary` entre awaits no hacen race conditions.
-  const CONCURRENCY = 10;
   async function batch<T>(items: T[], fn: (item: T) => Promise<void>) {
-    for (let i = 0; i < items.length; i += CONCURRENCY) {
-      await Promise.allSettled(items.slice(i, i + CONCURRENCY).map(fn));
-    }
+    let next = 0;
+    const worker = async () => {
+      while (next < items.length) {
+        const item = items[next++] as T;
+        await fn(item).catch((err) => {
+          summary.errors++;
+          logEvent("error", "push_send_threw", { error: errorText(err) });
+        });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
   }
 
   const sendTo = async (userId: string, payload: PushPayload) => {
@@ -375,52 +456,61 @@ export async function dispatchPush(
     return !!data?.length;
   };
 
-  // Sin el día no se sabe qué decir: ese perfil no recibe nada ni se marca, y
-  // el siguiente disparo lo vuelve a intentar.
-  const dailyLogFailed = (error: unknown) => {
-    summary.errors++;
-    logEvent("error", "push_query_failed", { query: "daily_log", error: errorText(error) });
-  };
-
-  await batch(morningMatches, async ({ profile: p, day }) => {
-    const { data: log, error: logError } = await supabaseAdmin
-      .from("daily_logs")
-      .select("guide")
-      .eq("user_id", p.id)
-      .eq("log_date", day)
-      .maybeSingle();
-    if (logError) return dailyLogFailed(logError);
-    // Se reclama tanto si hay suscripciones como si no, para no reintentar en
-    // bucle dentro del mismo día — igual para la noche debajo.
-    if (!(await claim("morning_push_sent_on", p.id, day))) return;
-    const firstMealIdea = (log?.guide as unknown as DailyGuide | null)?.meals?.[0]?.idea;
-    const { title, body } = morningCopy(toneOf(p.tone), p.display_name, firstMealIdea);
-    await sendTo(p.id, { title, body, url: "/hoy" });
-  });
-
-  await batch(eveningMatches, async ({ profile: p, day }) => {
-    const tone = toneOf(p.tone);
-    const { data: log, error: logError } = await supabaseAdmin
-      .from("daily_logs")
-      .select("habits")
-      .eq("user_id", p.id)
-      .eq("log_date", day)
-      .maybeSingle();
-    if (logError) return dailyLogFailed(logError);
-    if (!(await claim("evening_push_sent_on", p.id, day))) return;
-    const habits = (log?.habits as { done: boolean }[] | null) ?? [];
-    const pendingCount = Math.max(0, habits.length - habits.filter((h) => h.done).length);
-    // Tono relajado + día ya completo: se prioriza contactar menos, no un
-    // push de más que no aporta nada. Los otros tonos siempre reciben el
-    // repaso de la noche.
-    const skip = tone === "relajado" && habits.length > 0 && pendingCount === 0;
-    if (skip) {
-      summary.skippedLowNeed++;
+  // El día de cada aviso, en bloque: una consulta por cada 100 perfiles en vez
+  // de una por perfil. Trae también el día de al lado de alguien de otra zona;
+  // se queda el `push_day` de cada uno en memoria.
+  const dayMatches = [...morningMatches, ...eveningMatches];
+  const logs = new Map<string, DayLogRow>();
+  if (dayMatches.length) {
+    const days = [...new Set(dayMatches.map((d) => d.day))];
+    const { rows: logRows, error: logsError } = await selectByUserIds<DayLogRow>(
+      [...new Set(dayMatches.map((d) => d.profile.id))],
+      (ids) =>
+        supabaseAdmin
+          .from("daily_logs")
+          .select("user_id, log_date, guide, habits")
+          .in("log_date", days)
+          .in("user_id", ids),
+    );
+    if (logsError) {
+      // Sin el día no se sabe qué decir: nadie recibe el aviso de mañana ni el
+      // de noche, ni se marca, y el siguiente disparo lo vuelve a intentar.
+      summary.errors++;
+      logEvent("error", "push_query_failed", { query: "daily_log", error: errorText(logsError) });
     } else {
-      const { title, body } = eveningCopy(tone, p.display_name, pendingCount);
-      await sendTo(p.id, { title, body, url: "/hoy" });
+      for (const row of logRows) logs.set(`${row.user_id}|${row.log_date}`, row);
+
+      await batch(morningMatches, async ({ profile: p, day }) => {
+        // Se reclama tanto si hay suscripciones como si no, para no reintentar en
+        // bucle dentro del mismo día — igual para la noche debajo.
+        if (!(await claim("morning_push_sent_on", p.id, day))) return;
+        const guide = logs.get(`${p.id}|${day}`)?.guide as DailyGuide | null | undefined;
+        const { title, body } = morningCopy(
+          toneOf(p.tone),
+          p.display_name,
+          guide?.meals?.[0]?.idea,
+        );
+        await sendTo(p.id, { title, body, url: "/hoy" });
+      });
+
+      await batch(eveningMatches, async ({ profile: p, day }) => {
+        const tone = toneOf(p.tone);
+        if (!(await claim("evening_push_sent_on", p.id, day))) return;
+        const habits = (logs.get(`${p.id}|${day}`)?.habits as { done: boolean }[] | null) ?? [];
+        const pendingCount = Math.max(0, habits.length - habits.filter((h) => h.done).length);
+        // Tono relajado + día ya completo: se prioriza contactar menos, no un
+        // push de más que no aporta nada. Los otros tonos siempre reciben el
+        // repaso de la noche.
+        const skip = tone === "relajado" && habits.length > 0 && pendingCount === 0;
+        if (skip) {
+          summary.skippedLowNeed++;
+        } else {
+          const { title, body } = eveningCopy(tone, p.display_name, pendingCount);
+          await sendTo(p.id, { title, body, url: "/hoy" });
+        }
+      });
     }
-  });
+  }
 
   if (renewalMatches.length) {
     // Un no planificador del hogar recibe un aviso distinto: la renovación del
