@@ -295,10 +295,11 @@ Invariantes que un cambio suele romper sin querer:
 **Notificaciones push** (detalle en «Push notifications» de AGENTS.md)**:** Web Push real (VAPID)
 vía `@pushforge/builder`, elegido porque solo usa
 Web Crypto API (el paquete `web-push` de npm no funciona en el runtime de despliegue). El disparo
-periódico no usa un cron nativo de la plataforma — un workflow de GitHub Actions
-([.github/workflows/push-dispatch.yml](.github/workflows/push-dispatch.yml)) llama cada 15 min a
-`POST /api/cron/dispatch`, que reutiliza
-[src/lib/push-dispatch.server.ts](src/lib/push-dispatch.server.ts). El tono de perfil
+periódico vive en la base de datos — `pg_cron` + `pg_net` llaman cada 5 min a
+`POST /api/cron/dispatch` (el secreto está en Supabase Vault; el workflow de GitHub Actions queda
+solo como disparo manual, porque sus `schedule` se descartaban), que reutiliza
+[src/lib/push-dispatch.server.ts](src/lib/push-dispatch.server.ts). Cada aviso se reclama antes de
+enviarlo (marca atómica) y pertenece al día de `pushDayFor`. El tono de perfil
 (`profiles.tone`) afecta al copy y a la frecuencia en tres sitios distintos (push, repaso nocturno,
 prompt del coach) a partir de un único campo.
 

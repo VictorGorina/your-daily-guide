@@ -4,8 +4,8 @@ import { cronSecretMatches } from "@/lib/cron-secret.server";
 import { errorText, logEvent } from "@/lib/log.server";
 import { dispatchPush } from "@/lib/push-dispatch.server";
 
-// Sin auth de usuario: lo llama el workflow programado de GitHub Actions (ver
-// .github/workflows/push-dispatch.yml y AGENTS.md), no un navegador con
+// Sin auth de usuario: lo llama `pg_cron` desde Supabase cada 5 minutos (ver
+// supabase/migrations/20261003120000_push_cron.sql y AGENTS.md), no un navegador con
 // sesión. Se protege con un secreto compartido en vez de un token de sesión.
 export const Route = createFileRoute("/api/cron/dispatch")({
   server: {

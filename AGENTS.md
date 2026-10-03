@@ -592,14 +592,28 @@ Requiere en `.env` (par generado con `bun x pushforge vapid`): `VAPID_PRIVATE_KE
 JWK privado), `VITE_VAPID_PUBLIC_KEY` (cliente, la clave pública), `VAPID_CONTACT` (opcional,
 `mailto:` del remitente) y `CRON_SECRET` (protege `/api/cron/dispatch`, ver abajo).
 
-El disparo periódico no usa un cron de la plataforma: un workflow de GitHub Actions
-([.github/workflows/push-dispatch.yml](.github/workflows/push-dispatch.yml)) llama cada 15 min a
-`POST /api/cron/dispatch` (protegido por `x-cron-secret`), que reutiliza
+El disparo periódico vive en la base de datos: `pg_cron` + `pg_net`
+([supabase/migrations/20261003120000_push_cron.sql](supabase/migrations/20261003120000_push_cron.sql))
+llaman cada 5 min a `POST /api/cron/dispatch` (protegido por `x-cron-secret`), que reutiliza
 [src/lib/push-dispatch.server.ts](src/lib/push-dispatch.server.ts) para mirar qué perfiles caen en
 la ventana de su `morning_time`/`evening_time` — cada uno evaluado contra su propia
 `profiles.timezone` (detectada del dispositivo; ver [src/lib/zoned-date.ts](src/lib/zoned-date.ts)) —
 y enviar el push.
-Necesita los secrets de repo `APP_URL` y `CRON_SECRET` en GitHub una vez desplegada la app.
+Antes lo hacía un `schedule` de GitHub Actions, pero GitHub aplaza y descarta esas ejecuciones:
+corría unas 6 veces al día y solo salía ~1 de cada 10 avisos (ticket 07). Vercel Cron no sirve (una
+ejecución al día en el plan Hobby). El workflow
+([.github/workflows/push-dispatch.yml](.github/workflows/push-dispatch.yml)) queda como disparo
+manual. El secreto y la URL están en Supabase Vault (`cron_secret`, `app_url`), no en el repo: al
+rotar `CRON_SECRET` hay que cambiarlo en **tres** sitios (Vercel, Vault con `vault.update_secret` y
+el secret de GitHub), y un 401 en `net._http_response` dice que Vault se quedó atrás.
+
+La ventana es de 30 min hacia atrás (`WINDOW_MINUTES`): absorbe varias ejecuciones perdidas. Un
+aviso cuya hora es mayor que la actual (23:50 visto a las 00:10) pertenece al día anterior
+(`pushDayFor`), y ese es el día que se lee y se marca. La marca es **atómica**: cada aviso se
+reclama antes de enviarlo (`claim`, un `UPDATE` condicionado a que `*_sent_on` no lleve ya ese
+día), así que de dos ejecuciones solapadas solo envía la que se lleva la fila; si el envío falla
+después, ese aviso no se reintenta ese día.
+
 `CRON_SECRET` se compara en tiempo constante (`cronSecretMatches`) y con menos de 32 caracteres no
 vale ni acertándolo (`cron_secret_weak` en el log): se rota con `openssl rand -hex 32`.
 
