@@ -166,8 +166,8 @@ function aiSpendMiddleware(
  * Si se cancela antes de `finish` (el cliente cierra la conexión y nadie más
  * lee el stream), OpenRouter cobra igual lo generado pero ya no dice cuánto:
  * `onAbort` apunta una estimación para que no se escape del tope (ticket 08).
- * La red principal es `waitUntil(result.consumeStream())` en `/api/chat`, que
- * deja terminar al modelo; esto cubre lo que aun así se corte.
+ * La red principal es `afterResponse(result.consumeStream())` en `/api/chat`,
+ * que deja terminar al modelo; esto cubre lo que aun así se corte.
  */
 export function onFinishPart<P extends { type: string }>(
   stream: ReadableStream<P>,

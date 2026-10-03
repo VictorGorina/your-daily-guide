@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { waitUntilVia } from "@/lib/after-response.server";
 import { cronSecretMatches } from "@/lib/cron-secret.server";
 
 // Comprobación de vida para un monitor externo. No toca la base de datos ni la
 // IA: responde aunque Supabase u OpenRouter estén caídos, y no gasta nada. Con
 // el secreto del cron dice además qué variables de entorno están definidas
-// (solo sí/no, nunca su valor).
+// (solo sí/no, nunca su valor) y por qué puente se mantiene viva la función
+// tras responder (`waitUntil`: "request", "vercel-context" o "none" por cada
+// camino, ticket 15).
 
 /**
  * Lo justo para saber, sin leer los logs de Vercel, por qué no sale un correo
@@ -52,6 +55,9 @@ export const Route = createFileRoute("/api/health")({
             rateLimitSalt: has("RATE_LIMIT_SALT"),
           };
           body.email = await emailConfig();
+          // `route`: la petición que recibe la ruta (chat). `current`: la de
+          // `getRequest()`, la que usa quien no la tiene a mano (Sentry).
+          body.waitUntil = { route: waitUntilVia(request), current: waitUntilVia() };
         }
         return new Response(JSON.stringify(body), {
           headers: { "content-type": "application/json", "cache-control": "no-store" },

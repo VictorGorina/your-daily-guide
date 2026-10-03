@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
+import { VERCEL_REQUEST_CONTEXT } from "./after-response.server";
 import {
   buildEnvelope,
   captureServerEvent,
@@ -93,5 +94,25 @@ describe("envío", () => {
     });
     expect(event.extra).toEqual({ userId: "u-1", email: "[redacted]", status: 422 });
     fetchSpy.mockRestore();
+  });
+
+  // Ticket 15: el `waitUntil` de `@vercel/functions` no hacía nada en este
+  // despliegue y el envío se podía perder al congelarse la función.
+  it("el envío se entrega a waitUntil para que la función no se congele antes", async () => {
+    process.env.SENTRY_DSN = "https://abc123@o1.ingest.de.sentry.io/4507";
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+      (async () => new Response("{}")) as never,
+    );
+    const waitUntil = mock((_p: Promise<unknown>) => {});
+    const g = globalThis as Record<symbol, unknown>;
+    g[VERCEL_REQUEST_CONTEXT] = { get: () => ({ waitUntil }) };
+    try {
+      captureServerException(new Error("boom"));
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      await waitUntil.mock.calls[0]![0];
+    } finally {
+      delete g[VERCEL_REQUEST_CONTEXT];
+      fetchSpy.mockRestore();
+    }
   });
 });

@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { waitUntil } from "@vercel/functions";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -18,6 +17,7 @@ import {
   createAiProvider,
   type CoachProfile,
 } from "@/lib/ai-provider.server";
+import { afterResponse } from "@/lib/after-response.server";
 import { supabaseFromRequest, unauthorized } from "@/lib/api-auth.server";
 import { type ActionToolName, CHAT_LIMITS, type ChatBody, cleanChatBody } from "@/lib/chat-body";
 import { chatPreflight, lastUserMessage } from "@/lib/chat-preflight";
@@ -372,8 +372,13 @@ export const Route = createFileRoute("/api/chat")({
         // Si el cliente corta (cierra el chat a mitad), el modelo sigue hasta
         // el final y el middleware de gasto apunta el coste real con la parte
         // `finish` (ticket 08). Sin esto, esa llamada se cobraba sin contar
-        // para el tope de la persona.
-        waitUntil(Promise.resolve(result.consumeStream()));
+        // para el tope de la persona. El `waitUntil` de `@vercel/functions` no
+        // hacía nada en este despliegue: va por el puente de la petición
+        // (`after-response.server.ts`, ticket 15).
+        const via = afterResponse(Promise.resolve(result.consumeStream()), request);
+        if (via === "none" && process.env.VERCEL) {
+          logEvent("warn", "wait_until_unavailable", { where: "chat", userId });
+        }
 
         return result.toUIMessageStreamResponse({ originalMessages: messages });
       },

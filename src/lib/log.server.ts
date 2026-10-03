@@ -81,6 +81,10 @@
  *   Report-Only habría bloqueado (`directive`, `blocked`, `page`; sin query).
  *   Uno por directiva + `blocked` y minuto en cada instancia (ticket 16). Un
  *   origen legítimo se añade a `buildCsp`; una extensión del navegador, no.
+ * - `wait_until_unavailable` (warn): en Vercel no había ningún `waitUntil` para
+ *   seguir tras responder (`where`: `chat`), así que el gasto de un chat
+ *   cortado a medias puede escaparse del tope. Ver `after-response.server.ts`
+ *   y `waitUntil` en `/api/health`: el despliegue ha dejado de pasar el puente.
  * - `signup_weak_password_mismatch` (error): `generateLink` rechazó por débil
  *   una contraseña que `passwordProblem` aceptó: el panel de Supabase Auth y
  *   `PASSWORD_RULES` se han desalineado, y el alta no manda el correo.

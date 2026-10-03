@@ -15,6 +15,15 @@ const serverOnlyPackage = {
     "TanStack Start does not use the Next.js `server-only` package. Rename the module to `*.server.ts` or mark it with `@tanstack/react-start/server-only`.",
 };
 
+// En este despliegue (Nitro, preset `vercel`) su `waitUntil` no hace nada y no
+// avisa: así se perdió un correo (ticket 15). El puente que funciona es el de
+// la petición.
+const vercelFunctionsPackage = {
+  name: "@vercel/functions",
+  message:
+    "Su `waitUntil` no hace nada en este despliegue. Usa `afterResponse` de `@/lib/after-response.server`.",
+};
+
 const supabaseAdminStaticImport = {
   selector: 'ImportDeclaration[source.value="@/integrations/supabase/client.server"]',
   message:
@@ -63,7 +72,7 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "no-restricted-imports": ["error", { paths: [serverOnlyPackage] }],
+      "no-restricted-imports": ["error", { paths: [serverOnlyPackage, vercelFunctionsPackage] }],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": [
         "warn",
@@ -93,7 +102,7 @@ export default tseslint.config(
     rules: {
       "no-restricted-imports": [
         "error",
-        { paths: [serverOnlyPackage], patterns: [foodsDataImport] },
+        { paths: [serverOnlyPackage, vercelFunctionsPackage], patterns: [foodsDataImport] },
       ],
       "no-restricted-syntax": ["error", supabaseAdminStaticImport, foodsDataDynamicImport],
     },

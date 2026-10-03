@@ -1,5 +1,4 @@
-import { waitUntil } from "@vercel/functions";
-
+import { afterResponse } from "@/lib/after-response.server";
 import { scrubSentryEvent, type SentryEventLike } from "@/lib/sentry-scrub";
 
 /**
@@ -87,11 +86,9 @@ function send(event: SentryEventLike & { event_id: string }): void {
   })
     .then(() => undefined)
     .catch((error) => console.warn("sentry: no se pudo enviar", String(error)));
-  try {
-    waitUntil(request);
-  } catch {
-    // Fuera de Vercel no hay contexto: la promesa sigue igualmente.
-  }
+  // Con la petición en curso, que la función no se congele antes de enviarlo.
+  // Sin puente (local, tests) la promesa sigue igualmente.
+  afterResponse(request);
 }
 
 /** Un error inesperado (500) con su traza. */
