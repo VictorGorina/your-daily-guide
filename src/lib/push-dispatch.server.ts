@@ -1,4 +1,5 @@
 import type { DailyGuide } from "@/lib/daily";
+import { addDaysISO } from "@/lib/dates";
 import { errorText, logEvent } from "@/lib/log.server";
 import { daysLeftInMonth, nextMonthISO, NEXT_MONTH_UNLOCK_DAYS } from "@/lib/plan-shared";
 import { sendPushNotification, type PushPayload } from "@/lib/web-push.server";
@@ -16,10 +17,11 @@ export type DispatchSummary = {
   errors: number;
 };
 
-// Ventana de 20 min hacia atrás: algo más ancha que la cadencia del workflow
-// de GitHub Actions (cada 15 min) para absorber el jitter típico de los
-// schedules de Actions sin dejar ningún hueco sin cubrir.
-const WINDOW_MINUTES = 20;
+// Ventana de 30 min hacia atrás. El cron corre cada 5 minutos (`pg_cron`, ya no
+// el schedule de GitHub Actions, que aplazaba y descartaba ejecuciones: ticket
+// 07), así que 30 minutos absorben hasta 5 ejecuciones perdidas seguidas sin
+// llegar a mandar el aviso de la mañana a media tarde.
+const WINDOW_MINUTES = 30;
 
 // "Ahora" y "hoy" son por perfil: cada uno tiene su `timezone` (detectada del
 // dispositivo), así que el resumen matutino y el repaso nocturno se comparan
@@ -71,12 +73,24 @@ function timeToMinutes(hhmm: string | null): number | null {
 const RENEWAL_DAYS_LEFT = NEXT_MONTH_UNLOCK_DAYS;
 
 /** ¿`target` cae en (ahora - WINDOW_MINUTES, ahora]? Contempla el cruce de medianoche. */
-function inWindow(target: number | null, nowMinutes: number): boolean {
+export function inWindow(target: number | null, nowMinutes: number): boolean {
   if (target == null) return false;
   const windowStart = (nowMinutes - WINDOW_MINUTES + 1440) % 1440;
   if (windowStart < nowMinutes) return target > windowStart && target <= nowMinutes;
   return target > windowStart || target <= nowMinutes;
 }
+
+/**
+ * El día al que pertenece un aviso que cae en la ventana. Si la hora objetivo
+ * es mayor que la actual (aviso a las 23:50, ejecución a las 00:10), la ventana
+ * cruzó la medianoche y el aviso es de AYER: marcarlo con la fecha nueva dejaba
+ * sin aviso de noche el día que acaba de empezar.
+ */
+export function pushDayFor(target: number, nowMinutes: number, today: string): string {
+  return target > nowMinutes ? addDaysISO(today, -1) : today;
+}
+
+type SentColumn = "morning_push_sent_on" | "evening_push_sent_on" | "plan_renewal_push_sent_on";
 
 type ProfileRow = {
   id: string;
@@ -178,7 +192,7 @@ function renewalCopyMember(name: string | null, nextMonthLabel: string) {
  * Recorre los perfiles cuyo `morning_time`/`evening_time` cae en la ventana
  * actual y no se les ha enviado ya hoy, y envía el push correspondiente a
  * cada una de sus suscripciones. Pensado para llamarse desde
- * `POST /api/cron/dispatch`, disparado externamente (GitHub Actions) cada 15
+ * `POST /api/cron/dispatch`, disparado externamente (`pg_cron`) cada 5
  * minutos — ver "Push notifications" en AGENTS.md.
  */
 export async function dispatchPush(
@@ -212,14 +226,22 @@ export async function dispatchPush(
   const clockOf = (p: ProfileRow) => clocks.get(p.id) ?? clockFor(p.timezone);
   const nextMonthOf = (p: ProfileRow) => nextMonthISO(clockOf(p).today);
 
-  const morningMatches = rows.filter((p) => {
-    const { nowMinutes, today } = clockOf(p);
-    return p.morning_push_sent_on !== today && inWindow(timeToMinutes(p.morning_time), nowMinutes);
-  });
-  const eveningMatches = rows.filter((p) => {
-    const { nowMinutes, today } = clockOf(p);
-    return p.evening_push_sent_on !== today && inWindow(timeToMinutes(p.evening_time), nowMinutes);
-  });
+  // Perfiles con la hora en la ventana y sin aviso todavía para SU día (el de
+  // ayer si la ventana cruzó la medianoche, `pushDayFor`).
+  type Due = { profile: ProfileRow; day: string };
+  const selectDue = (
+    time: "morning_time" | "evening_time",
+    sentOn: "morning_push_sent_on" | "evening_push_sent_on",
+  ): Due[] =>
+    rows.flatMap((p) => {
+      const { nowMinutes, today } = clockOf(p);
+      const target = timeToMinutes(p[time]);
+      if (target == null || !inWindow(target, nowMinutes)) return [];
+      const day = pushDayFor(target, nowMinutes, today);
+      return p[sentOn] === day ? [] : [{ profile: p, day }];
+    });
+  const morningMatches = selectDue("morning_time", "morning_push_sent_on");
+  const eveningMatches = selectDue("evening_time", "evening_push_sent_on");
 
   // A `RENEWAL_DAYS_LEFT` días o menos de fin de mes, si todavía no hay plan del
   // mes siguiente (y no se avisó ya hoy), se avisa una vez al día hasta que lo
@@ -264,7 +286,11 @@ export async function dispatchPush(
   if (!morningMatches.length && !eveningMatches.length && !renewalMatches.length) return summary;
 
   const matchedIds = [
-    ...new Set([...morningMatches, ...eveningMatches, ...renewalMatches].map((p) => p.id)),
+    ...new Set(
+      [...morningMatches.map((d) => d.profile), ...eveningMatches.map((d) => d.profile)]
+        .concat(renewalMatches)
+        .map((p) => p.id),
+    ),
   ];
   const { rows: subs, error: subsError } = await selectByUserIds<SubscriptionRow>(
     matchedIds,
@@ -330,6 +356,25 @@ export async function dispatchPush(
     );
   };
 
+  // Marca atómica: se RECLAMA el aviso antes de enviarlo. El UPDATE solo toca la
+  // fila si todavía no lleva ese día, así que de dos ejecuciones solapadas solo
+  // una se la lleva y envía (antes se marcaba después de enviar y salían dos).
+  // Si el envío falla después de reclamar, ese aviso no se reintenta ese día.
+  const claim = async (column: SentColumn, id: string, day: string): Promise<boolean> => {
+    const { data, error: claimError } = await supabaseAdmin
+      .from("profiles")
+      .update({ [column]: day } as never)
+      .eq("id", id)
+      .or(`${column}.is.null,${column}.neq.${day}`)
+      .select("id");
+    if (claimError) {
+      summary.errors++;
+      logEvent("error", "push_claim_failed", { column, error: errorText(claimError) });
+      return false;
+    }
+    return !!data?.length;
+  };
+
   // Sin el día no se sabe qué decir: ese perfil no recibe nada ni se marca, y
   // el siguiente disparo lo vuelve a intentar.
   const dailyLogFailed = (error: unknown) => {
@@ -337,33 +382,32 @@ export async function dispatchPush(
     logEvent("error", "push_query_failed", { query: "daily_log", error: errorText(error) });
   };
 
-  await batch(morningMatches, async (p) => {
-    const { today } = clockOf(p);
+  await batch(morningMatches, async ({ profile: p, day }) => {
     const { data: log, error: logError } = await supabaseAdmin
       .from("daily_logs")
       .select("guide")
       .eq("user_id", p.id)
-      .eq("log_date", today)
+      .eq("log_date", day)
       .maybeSingle();
     if (logError) return dailyLogFailed(logError);
+    // Se reclama tanto si hay suscripciones como si no, para no reintentar en
+    // bucle dentro del mismo día — igual para la noche debajo.
+    if (!(await claim("morning_push_sent_on", p.id, day))) return;
     const firstMealIdea = (log?.guide as unknown as DailyGuide | null)?.meals?.[0]?.idea;
     const { title, body } = morningCopy(toneOf(p.tone), p.display_name, firstMealIdea);
     await sendTo(p.id, { title, body, url: "/hoy" });
-    // Se marca como enviado tanto si había suscripciones como si no, para no
-    // reintentar en bucle dentro del mismo día — igual para la noche debajo.
-    await supabaseAdmin.from("profiles").update({ morning_push_sent_on: today }).eq("id", p.id);
   });
 
-  await batch(eveningMatches, async (p) => {
-    const { today } = clockOf(p);
+  await batch(eveningMatches, async ({ profile: p, day }) => {
     const tone = toneOf(p.tone);
     const { data: log, error: logError } = await supabaseAdmin
       .from("daily_logs")
       .select("habits")
       .eq("user_id", p.id)
-      .eq("log_date", today)
+      .eq("log_date", day)
       .maybeSingle();
     if (logError) return dailyLogFailed(logError);
+    if (!(await claim("evening_push_sent_on", p.id, day))) return;
     const habits = (log?.habits as { done: boolean }[] | null) ?? [];
     const pendingCount = Math.max(0, habits.length - habits.filter((h) => h.done).length);
     // Tono relajado + día ya completo: se prioriza contactar menos, no un
@@ -376,7 +420,6 @@ export async function dispatchPush(
       const { title, body } = eveningCopy(tone, p.display_name, pendingCount);
       await sendTo(p.id, { title, body, url: "/hoy" });
     }
-    await supabaseAdmin.from("profiles").update({ evening_push_sent_on: today }).eq("id", p.id);
   });
 
   if (renewalMatches.length) {
@@ -405,6 +448,7 @@ export async function dispatchPush(
     );
     await batch(renewalMatches, async (p) => {
       const { today } = clockOf(p);
+      if (!(await claim("plan_renewal_push_sent_on", p.id, today))) return;
       const nextMonth = nextMonthOf(p);
       const nextMonthLabel = new Date(`${nextMonth}-01T00:00:00`).toLocaleDateString("es-ES", {
         month: "long",
@@ -415,10 +459,6 @@ export async function dispatchPush(
       // Lleva directo a la pantalla del plan del mes que viene (ya desbloqueada),
       // no a Hoy: el objetivo del aviso es que preparen ese plan y su compra.
       await sendTo(p.id, { title, body, url: `/plan?month=${nextMonth}` });
-      await supabaseAdmin
-        .from("profiles")
-        .update({ plan_renewal_push_sent_on: today })
-        .eq("id", p.id);
     });
   }
 

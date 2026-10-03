@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } fro
 import { setFakeAdmin } from "@/test/admin";
 import { createFakeSupabase, type FakeOptions, type FakeRow } from "@/test/fake-supabase";
 
-import { dispatchPush } from "./push-dispatch.server";
+import { dispatchPush, inWindow, pushDayFor } from "./push-dispatch.server";
 import type { PushPayload } from "./web-push.server";
 
 // Mediados de mes (sin aviso de renovación): 06:05 UTC = 08:05 en Madrid.
@@ -86,6 +86,33 @@ const loggedEvents = (spy: ReturnType<typeof spyOn>) =>
     }
   });
 
+const at = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
+
+describe("inWindow — 30 minutos hacia atrás", () => {
+  it("objetivo 08:00: a las 08:29 sí, a las 08:30 ya no, y nunca antes de la hora", () => {
+    expect(inWindow(at("08:00"), at("08:00"))).toBe(true);
+    expect(inWindow(at("08:00"), at("08:29"))).toBe(true);
+    expect(inWindow(at("08:00"), at("08:30"))).toBe(false);
+    expect(inWindow(at("08:00"), at("08:31"))).toBe(false);
+    expect(inWindow(at("08:00"), at("07:59"))).toBe(false);
+  });
+
+  it("cruza la medianoche: 23:50 visto a las 00:10 sí, a las 00:20 no", () => {
+    expect(inWindow(at("23:50"), at("00:10"))).toBe(true);
+    expect(inWindow(at("23:50"), at("00:20"))).toBe(false);
+    expect(inWindow(null, at("00:10"))).toBe(false);
+  });
+});
+
+describe("pushDayFor — a qué día pertenece el aviso", () => {
+  it("23:50 visto a las 00:10 es de ayer; 08:00 visto a las 08:10, de hoy", () => {
+    expect(pushDayFor(at("23:50"), at("00:10"), "2026-10-02")).toBe("2026-10-01");
+    expect(pushDayFor(at("08:00"), at("08:10"), "2026-10-02")).toBe("2026-10-02");
+    expect(pushDayFor(at("08:00"), at("08:00"), "2026-10-01")).toBe("2026-10-01");
+    expect(pushDayFor(at("23:50"), at("00:10"), "2026-10-01")).toBe("2026-09-30");
+  });
+});
+
 describe("dispatchPush — resumen de la mañana", () => {
   it("envía a cada suscripción con el primer plato de la guía y marca el día", async () => {
     const { fake, sent, run } = setup({
@@ -118,7 +145,7 @@ describe("dispatchPush — resumen de la mañana", () => {
       profiles: [
         profile("hoy", { morning_time: "08:00", morning_push_sent_on: "2026-09-15" }),
         profile("tarde", { morning_time: "09:00" }),
-        profile("antes", { morning_time: "07:40" }), // la ventana es (07:45, 08:05]
+        profile("antes", { morning_time: "07:30" }), // la ventana es (07:35, 08:05]
         profile("nuevo", { morning_time: "08:00", onboarding_completed: false }),
       ],
       push_subscriptions: [sub("hoy"), sub("tarde"), sub("antes"), sub("nuevo")],
@@ -234,6 +261,74 @@ describe("dispatchPush — aviso de preparar el mes que viene", () => {
     });
     await run();
     expect(sent[0]?.payload.body).toContain("El menú de tu casa lo renueva quien planifica");
+  });
+});
+
+describe("dispatchPush — cruce de medianoche y marca atómica (ticket 07)", () => {
+  // 22:10 UTC del 15 = 00:10 del 16 en Madrid.
+  const AFTER_MIDNIGHT = new Date("2026-09-15T22:10:00Z");
+
+  it("el repaso de las 23:50 visto a las 00:10 es del día anterior: lee y marca ese día", async () => {
+    setSystemTime(AFTER_MIDNIGHT);
+    const { fake, sent, run } = setup({
+      profiles: [profile("ana", { evening_time: "23:50", tone: "exigente" })],
+      push_subscriptions: [sub("ana")],
+      daily_logs: [
+        { user_id: "ana", log_date: "2026-09-15", habits: [{ done: false }] },
+        { user_id: "ana", log_date: "2026-09-16", habits: [] },
+      ],
+    });
+    await run();
+    expect(sent[0]?.payload.body).toBe("Aún te queda 1 comida por registrar hoy.");
+    expect(profileRow(fake.tables, "ana")?.evening_push_sent_on).toBe("2026-09-15");
+
+    // Esa misma noche, a las 23:55, el repaso del 16 sale: el de ayer no lo gastó.
+    setSystemTime(new Date("2026-09-16T21:55:00Z"));
+    await run();
+    expect(sent).toHaveLength(2);
+    expect(profileRow(fake.tables, "ana")?.evening_push_sent_on).toBe("2026-09-16");
+  });
+
+  it("ya avisado ayer: el disparo de las 00:10 no repite el repaso de las 23:50", async () => {
+    setSystemTime(AFTER_MIDNIGHT);
+    const { sent, run } = setup({
+      profiles: [profile("ana", { evening_time: "23:50", evening_push_sent_on: "2026-09-15" })],
+      push_subscriptions: [sub("ana")],
+    });
+    await run();
+    expect(sent).toEqual([]);
+  });
+
+  it("dos ejecuciones solapadas: solo la que reclama la fila envía", async () => {
+    setSystemTime(new Date("2026-09-26T06:05:00Z"));
+    const { fake, sent, run } = setup({
+      profiles: [profile("ana", { morning_time: "08:00", evening_time: "08:00" })],
+      push_subscriptions: [sub("ana")],
+    });
+    const summaries = await Promise.all([run(), run()]);
+    // Mañana, noche y renovación: una vez cada uno, no dos.
+    expect(sent).toHaveLength(3);
+    expect(summaries.reduce((n, s) => n + s.sent, 0)).toBe(3);
+    expect(profileRow(fake.tables, "ana")).toMatchObject({
+      morning_push_sent_on: "2026-09-26",
+      evening_push_sent_on: "2026-09-26",
+      plan_renewal_push_sent_on: "2026-09-26",
+    });
+  });
+
+  it("si falla el reclamo, no se envía y se registra", async () => {
+    const { sent, run } = setup(
+      {
+        profiles: [profile("ana", { morning_time: "08:00" })],
+        push_subscriptions: [sub("ana")],
+      },
+      undefined,
+      { failOn: (op) => op.table === "profiles" && op.op === "update" },
+    );
+    const summary = await run();
+    expect(sent).toEqual([]);
+    expect(summary.errors).toBe(1);
+    expect(loggedEvents(consoleError)).toContain("push_claim_failed");
   });
 });
 
