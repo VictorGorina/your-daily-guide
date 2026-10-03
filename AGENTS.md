@@ -614,6 +614,17 @@ reclama antes de enviarlo (`claim`, un `UPDATE` condicionado a que `*_sent_on` n
 día), así que de dos ejecuciones solapadas solo envía la que se lleva la fila; si el envío falla
 después, ese aviso no se reintenta ese día.
 
+**A quién le toca lo decide la base de datos** (ticket 23): `due_push_profiles`
+([supabase/migrations/20261004120000_due_push_profiles.sql](supabase/migrations/20261004120000_due_push_profiles.sql))
+devuelve los avisos de mañana y de noche que caen ahora en su ventana, y el servidor solo lee esos
+perfiles; la mayoría de los disparos no leen nada más. Es **la misma regla escrita dos veces**: en
+SQL y en `dueDay` (`push-dispatch.server.ts`), que es el respaldo si la función falla o falta
+(`push_due_rpc_failed`, recorre la tabla paginando de 1.000 en 1.000: PostgREST corta ahí cada
+respuesta). Si cambias una, cambia la otra; `push-dispatch.fixtures.ts` tiene 30 perfiles en seis
+zonas horarias con lo esperado escrito a mano, para comprobar las dos. El aviso de renovación sí
+recorre todos los perfiles, pero solo la última semana del mes. El día de cada aviso
+(`daily_logs`) se lee en bloque y los envíos van de 25 en 25.
+
 `CRON_SECRET` se compara en tiempo constante (`cronSecretMatches`) y con menos de 32 caracteres no
 vale ni acertándolo (`cron_secret_weak` en el log): se rota con `openssl rand -hex 32`.
 
