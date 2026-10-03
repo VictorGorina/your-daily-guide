@@ -10,17 +10,10 @@
  * Es HTTP, no SMTP, a propósito: el runtime de despliegue no tiene sockets TCP
  * crudos, igual que pasaba con las notificaciones push (ver web-push.server.ts).
  */
+import { emailFrom } from "@/lib/env.server";
 import { logEvent } from "@/lib/log.server";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
-
-/**
- * Remitente. Sin dominio verificado en Resend hay que usar `onboarding@resend.dev`,
- * que **solo entrega a la dirección con la que se registró la cuenta de Resend**;
- * para enviar a cualquier persona hace falta verificar un dominio y ponerlo en
- * `RESEND_FROM`.
- */
-const DEFAULT_FROM = "Peppers <onboarding@resend.dev>";
 
 export type EmailMessage = {
   to: string;
@@ -45,7 +38,7 @@ export async function sendEmail({ to, subject, html }: EmailMessage): Promise<vo
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: process.env.RESEND_FROM || DEFAULT_FROM,
+      from: emailFrom(),
       to: [to],
       subject,
       html,
