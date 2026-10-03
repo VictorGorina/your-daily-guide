@@ -1,27 +1,30 @@
 name: Push dispatch
 
-# Dispara el envío de notificaciones push cada 15 minutos. Ver AGENTS.md:
-# no usamos el `scheduled` nativo de Cloudflare Workers porque este proyecto
-# sustituye el entry-point autogenerado de Nitro por src/server.ts (que solo
-# expone `fetch`), así que enganchar un Cron Trigger ahí es incierto sin
-# desplegar y probar. Este workflow es independiente del hosting.
+# Disparo MANUAL del envío de notificaciones push. El periódico ya no vive
+# aquí: los `schedule` de Actions se aplazan y se descartan (corría unas 6 veces
+# al día en vez de 96), así que lo hace `pg_cron` + `pg_net` desde Supabase cada
+# 5 minutos (supabase/migrations/20261003120000_push_cron.sql, ticket 07). Esto
+# queda para lanzarlo a mano, p. ej. para comprobar el secreto tras rotarlo.
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
 # Solo hace un curl con secretos del repo: el token del workflow no necesita
 # ningún permiso.
 permissions: {}
 
+concurrency:
+  group: push-dispatch
+  cancel-in-progress: false
+
 jobs:
   dispatch:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Llamar a /api/cron/dispatch
         run: |
-          curl -fsS -X POST "${APP_URL%/}/api/cron/dispatch" \
-            -H "x-cron-secret: ${CRON_SECRET}"
+          curl -fsS --retry 2 --retry-all-errors --max-time 280 -X POST \
+            "${APP_URL%/}/api/cron/dispatch" -H "x-cron-secret: ${CRON_SECRET}"
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
