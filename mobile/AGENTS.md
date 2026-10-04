@@ -68,6 +68,11 @@ avisa ("estará disponible en la próxima versión") en vez de fallar, porque la
 en un `import()` dinámico envuelto en try/catch. La web ya lleva la función completa (usa
 `<input type="file">` + canvas).
 
+**`expo-haptics` y `expo-file-system`** (vibración al dictar; archivo del historial en Ajustes)
+siguen el mismo patrón: cargados con `import()` y con aviso si el build nativo es anterior. Hasta
+el siguiente prebuild + build, dictar funciona sin vibrar y "Descargar historial" avisa. La onda
+del dictado (`components/dictation-field.tsx`) no necesita build: usa el `Animated` clásico.
+
 ## Desarrollo
 
 ```sh

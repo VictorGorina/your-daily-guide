@@ -196,6 +196,7 @@ celebraciones.
 | Cambio de estado de fila | 350ms     | Fondo y opacidad a la vez.                                  |
 | Hover                    | 200ms     | Escala 1.08 en pulsables; cambio de fondo en superficies.   |
 | Anillo del FAB           | 2.4s ∞    | Único bucle infinito permitido en la app.                   |
+| Onda de dictado          | al pulsar | Sigue el volumen de la voz; no es un bucle, es un dato.     |
 
 ## 8. Tono de voz
 

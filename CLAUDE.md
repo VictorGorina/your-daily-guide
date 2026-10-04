@@ -207,6 +207,13 @@ guarda la nueva cadencia y la UI re-proyecta. Las listas antiguas (sin `weekQty`
 caen en el reparto de siempre (`groupByTrip`/`repartitionTrips`); se corrigen al regenerar. Las
 marcas "comprado" canónicas viven en `ShoppingItem.ownedTrips[trip]`.
 
+**Cadencia optimizada** (`"optimizada"`, detalle en AGENTS.md). Mismas salidas que la semanal, pero
+`stockUpAmounts` adelanta cada ingrediente a la compra que lo aguanta (`shelfLifeDays`, en
+`shopping/shelf-life.ts`): lo que no caduca entra entero en la primera, lo fresco cada semana y lo
+de vida media cada dos. Determinista, sin IA, y Σ no cambia. Al entrar o salir de ella
+`recadenceMonthlyPlan` quita las marcas "comprado" (`withoutStoreMarks`), la única vez que
+recadenciar toca una lista canónica. Una cadencia se valida con `asCadence`, nunca con literales.
+
 **Perecederos — se sesga el plan y se avisa, no se reestructura.** `shelfLifeDays`
 ([src/lib/perishability.ts](src/lib/perishability.ts)) da la vida útil por palabra clave/categoría;
 `freshRisksForTrip` marca los frescos de una compra cuyo tramo de días supera esa vida útil y la UI
@@ -375,6 +382,28 @@ redes:
 
 Ante la duda se **deja pasar**. `assertCleanName` avisa pero **no es frontera** (esas escrituras
 van del navegador directo a Supabase).
+
+**Dictado por voz — siempre sobre un campo** (sección del mismo nombre en AGENTS.md).
+`DictateButton` va dentro de un `DictationField` junto a su campo de texto, nunca suelto: lo
+dictado se ve y se corrige antes de enviarlo. `DictationWave` cubre el campo con el volumen real
+de la voz (`useDictation().level`, un ref) mientras se pulsa; en iOS, además, vibra
+(`expo-haptics`, antes de abrir el micro).
+
+**Exportar el historial** (Ajustes → Datos y cuenta, web y móvil). `buildHistoryCsv`
+([src/lib/history-export.ts](src/lib/history-export.ts), copia en `mobile/lib/`) arma en el cliente
+un CSV con comidas, picoteo, deporte y peso a partir de `fetchAllLogs` (RLS: solo filas propias).
+No calcula nada: las cifras son las de `guide.mealMacros` de cada día, las mismas del detalle de
+día; sin cifra, celda vacía. Con `nutrition_numbers = ocultar` no lleva columnas de kcal ni macros.
+
+**Guion del onboarding — identificadores, no texto** (ticket 34;
+[src/lib/onboarding-script.ts](src/lib/onboarding-script.ts), puro, copia en `mobile/lib/`).
+Preguntas y chips tienen un `id` estable y su texto vive en el catálogo (`onboarding.q.<id>`),
+así la pantalla sale en el idioma de la persona. Las respuestas siguen siendo texto libre: lo que
+decide algo (`meal_slots`, `nutrition_numbers`, qué pregunta va detrás) se lee con
+`chipsOfAnswer`, que reconoce la etiqueta en cualquier idioma, y se guarda en español canónico.
+Las claves de respuesta son posicionales (`si-qi`): mover una pregunta obliga a subir
+`DRAFT_STORAGE_KEY` (un test fija la lista). `parseOnboarding` devuelve los valores de lista
+siempre en español y el texto libre en el idioma de la persona.
 
 ## Convenciones de código
 

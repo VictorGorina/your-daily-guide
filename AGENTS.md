@@ -137,6 +137,18 @@ supera, y la UI lo pinta como aviso `bg-warning/20` ("cómpralos más cerca de c
 El prompt de cadencia mensual sesga hacia ingredientes de larga vida. Decisión deliberada: **no**
 se añade una compra extra de frescos a media de mes ni se cambia la lista — solo se avisa.
 
+**Cadencia optimizada — las mismas cantidades, adelantadas a la compra que las aguanta.** Cuarta
+cadencia (`"optimizada"`), con las mismas salidas que la semanal. `projectTrips` calcula lo que
+pide cada tramo igual que siempre y luego `stockUpAmounts` decide **quién lo compra**: cada compra
+se lleva de un ingrediente lo de los tramos siguientes mientras aguante (comprado el día `from`,
+dura hasta `from + shelfLifeDays`). Así lo que no caduca entra entero en la primera compra, un
+fresco de pocos días se compra cada semana y uno de vida media (huevos, zanahoria) cada dos. Es
+determinista y no llama a la IA; solo mueve cantidades entre compras, así que Σ no cambia (lo
+vigila el test de invariante). Un fresco no se compra antes de la primera semana que lo usa. La
+tabla de vida útil vive en `shopping/shelf-life.ts` (el barrel la reexporta) porque `trips.ts` la
+necesita y desde `perishability.ts` sería un ciclo. Toda cadencia nueva se añade a `CADENCES` y se
+valida con `asCadence`: no hay literales sueltos en los validadores.
+
 **Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y
 que la lista de la compra no incluye: los añade a mano en la pestaña Ingredientes (`setPantryExtra`)
 o salen del escaneo de un tiquet (`scanTripReceipt`, solo los que encajan con sus objetivos; el
@@ -175,7 +187,10 @@ Plan lo relanza al abrirse si la app se cerró antes de que saltara el debounce
   `plan-reflow` (12/h) en `RATE_LIMITS`.
 
 Cambiar de cadencia (`recadenceMonthlyPlan`) en una lista **canónica** no llama a la IA ni toca
-`shopping`: solo guarda la nueva cadencia y la UI re-proyecta. En una lista **antigua** sí rehace
+`shopping`: solo guarda la nueva cadencia y la UI re-proyecta. Única excepción: al entrar o salir de
+la **optimizada** se quitan las marcas "comprado" (`withoutStoreMarks`; las de "en casa" se
+quedan), porque la misma compra deja de llevar lo mismo — la primera pasa de una semana de arroz a
+la del mes — y un "comprado" heredado diría que ya está en casa lo que no se compró. En una lista **antigua** sí rehace
 el reparto de `trip` (`repartitionTrips`) y puede trocear un perecedero en varias filas;
 `carryOwnedByName` (`shopping/trips.ts`) reaplica "en casa"/"comprado" por nombre para que las marcas
 no se pierdan. Las listas antiguas se quedan como están: un mes no se regenera (ver "Un plan por
@@ -741,6 +756,26 @@ por medio, así que ahí no hay ningún validador donde enganchar: el guard avis
 esquivar con una llamada REST. Cerrarlo de verdad pide un trigger en Postgres o mover esas
 escrituras a server functions (ticket `01-trigger-nombres.md`). El deporte no necesita nada:
 `EXERCISE_ACTIVITIES` es una lista cerrada.
+
+## Dictado por voz: siempre sobre un campo
+
+Se dicta con el reconocimiento de voz del propio dispositivo (Web Speech API en la web,
+`expo-speech-recognition` en el móvil), manteniendo pulsado. Dos reglas:
+
+- **`DictateButton` va siempre dentro de un `DictationField`**, junto a un campo de texto. El
+  reconocimiento se equivoca: la persona tiene que ver y poder corregir lo que se ha entendido
+  antes de enviarlo. No hay dictado que guarde a ciegas.
+- **La onda es un dato, no un adorno.** `DictationWave` (dentro de un contenedor `relative` que
+  rodee al campo) cubre el campo mientras se pulsa y pinta el volumen de la voz: es la prueba de
+  que el micrófono oye. `useDictation` lo expone en `level`, un ref (cambia 60 veces por segundo y
+  solo lo lee la onda; en estado re-renderizaría el chat entero). En el móvil sale del evento
+  `volumechange`. En la web la Web Speech API no lo da: en escritorio se abre el micro en paralelo
+  con un `AnalyserNode` (solo si el permiso ya está dado, para no pedirlo dos veces), y en
+  Android/iOS —donde una segunda captura deja sin audio al reconocedor— sube y baja con
+  `onspeechstart`/`onspeechend`.
+
+En iOS vibra al empezar y al acabar (`expo-haptics`). La de inicio se lanza **antes** de abrir el
+micrófono: iOS apaga la vibración mientras la sesión de audio graba.
 
 ## Lo guardado en el dispositivo es de una persona
 
