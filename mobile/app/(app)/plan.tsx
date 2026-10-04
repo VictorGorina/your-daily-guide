@@ -101,7 +101,7 @@ import {
 } from "../../lib/plan-shared";
 import type { SharedSlots } from "../../lib/household-shared";
 import { useShoppingMutation } from "../../lib/use-shopping-mutation";
-import { freshRiskNames, freshRisksForTrip } from "../../lib/perishability";
+import { freshRisksForTrip, freshRiskText } from "../../lib/perishability";
 import {
   flushPlanRecalc,
   clearPlanUpdatedNotice,
@@ -193,6 +193,7 @@ export default function Plan() {
     plannerCadence,
     plannerCoverage ?? { fromDay: 1, toDay: daysInMonth(month) },
     WEEK_COUNT,
+    plannerPlan?.cadenceFrom,
   );
   const hhTripActuals = plannerShoppingQ.data?.trip_actuals ?? {};
   const hhPantryExtras: PantryExtra[] = plannerShoppingQ.data?.pantry_extras ?? [];
@@ -327,7 +328,7 @@ export default function Plan() {
   // El servidor guarda la nueva cadencia y devuelve el plan y la compra al día.
   const recadence = useMutation({
     mutationFn: (nextCadence: ShoppingCadence) =>
-      apiPost<GenerateResult>("plan/recadence", { month, cadence: nextCadence }),
+      apiPost<GenerateResult>("plan/recadence", { month, cadence: nextCadence, today: todayISO() }),
     onSuccess: (res) => {
       setPendingCadence(null);
       qc.setQueryData(["plan", month], (prev: typeof planQ.data) =>
@@ -385,7 +386,7 @@ export default function Plan() {
   // La compra va siempre en `WEEK_COUNT` semanas, aunque el plan tenga la fila
   // de los días 29-31: esos días cuentan en la última.
   const projCoverage = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
-  const trips = projectTrips(shopping, activeCadence, projCoverage, WEEK_COUNT);
+  const trips = projectTrips(shopping, activeCadence, projCoverage, WEEK_COUNT, plan?.cadenceFrom);
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   // Compra seleccionada: por defecto la que toca hoy (current) o la primera
@@ -505,6 +506,7 @@ export default function Plan() {
     shopSource === "household"
       ? {
           trip: hhCurrentTrip,
+          cadence: plannerCadence,
           coverage: plannerCoverage,
           tripsTotal: plannerTripsTotal,
           selectedTrip: hhClampedTrip,
@@ -520,6 +522,7 @@ export default function Plan() {
         }
       : {
           trip: currentTrip,
+          cadence: activeCadence,
           coverage,
           tripsTotal,
           selectedTrip: clampedTrip,
@@ -541,6 +544,7 @@ export default function Plan() {
       <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
         <ShopModeView
           trip={shop.trip}
+          cadence={shop.cadence}
           coverage={shop.coverage}
           tripsTotal={shop.tripsTotal}
           selectedTrip={shop.selectedTrip}
@@ -1627,9 +1631,7 @@ function IngredientsTab({
       {freshRisks.length ? (
         <View className="rounded-3xl bg-warning/20 px-4 py-3">
           <Text className="text-xs leading-relaxed text-foreground">
-            {freshRiskNames(freshRisks)} {freshRisks.length === 1 ? "no aguanta" : "no aguantan"}{" "}
-            los {tripRange.to - tripRange.from + 1} días de esta compra. Cómpralo
-            {freshRisks.length === 1 ? "" : "s"} más cerca de cuando los vayas a cocinar.
+            {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, activeCadence)}
           </Text>
         </View>
       ) : null}
@@ -1794,6 +1796,7 @@ function IngredientsTab({
 // ---------------------------------------------------------------------------
 function ShopModeView({
   trip,
+  cadence,
   coverage,
   tripsTotal,
   selectedTrip,
@@ -1807,6 +1810,7 @@ function ShopModeView({
   scanningReceipt,
 }: {
   trip: TripGroups | undefined;
+  cadence: ShoppingCadence;
   coverage: PlanCoverage | undefined;
   tripsTotal: number;
   selectedTrip: number;
@@ -1954,9 +1958,7 @@ function ShopModeView({
         {freshRisks.length ? (
           <View className="mt-3.5 rounded-2xl bg-warning/20 px-4 py-3">
             <Text className="text-xs leading-relaxed text-foreground">
-              {freshRiskNames(freshRisks)} {freshRisks.length === 1 ? "no aguanta" : "no aguantan"}{" "}
-              los {tripRange.to - tripRange.from + 1} días hasta la próxima compra. Cógelo
-              {freshRisks.length === 1 ? "" : "s"} justo para los primeros platos.
+              {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, cadence, true)}
             </Text>
           </View>
         ) : null}

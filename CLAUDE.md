@@ -210,14 +210,17 @@ marcas "comprado" canónicas viven en `ShoppingItem.ownedTrips[trip]`.
 **Cadencia optimizada** (`"optimizada"`, detalle en AGENTS.md). Mismas salidas que la semanal, pero
 `stockUpAmounts` adelanta cada ingrediente a la compra que lo aguanta (`shelfLifeDays`, en
 `shopping/shelf-life.ts`): lo que no caduca entra entero en la primera, lo fresco cada semana y lo
-de vida media cada dos. Determinista, sin IA, y Σ no cambia. Al entrar o salir de ella
-`recadenceMonthlyPlan` quita las marcas "comprado" (`withoutStoreMarks`), la única vez que
-recadenciar toca una lista canónica. Una cadencia se valida con `asCadence`, nunca con literales.
+de vida media cada dos. Determinista, sin IA, y Σ no cambia. Elegida a mitad de mes rige desde la
+compra en curso (`plan.cadenceFrom`, que `projectTrips` recibe como `stockUpFrom`); las anteriores
+se quedan como en la semanal. Al entrar o salir de ella `recadenceMonthlyPlan` (`recadencePlan`,
+puro) quita las marcas "comprado" (`withoutStoreMarks`), la única vez que recadenciar toca una
+lista canónica. Una cadencia se valida con `asCadence`, nunca con literales.
 
 **Perecederos — se sesga el plan y se avisa, no se reestructura.** `shelfLifeDays`
 ([src/lib/perishability.ts](src/lib/perishability.ts)) da la vida útil por palabra clave/categoría;
 `freshRisksForTrip` marca los frescos de una compra cuyo tramo de días supera esa vida útil y la UI
-lo muestra como aviso ("cómpralos más cerca de cuando los cocines"). El prompt de cadencia mensual
+lo muestra como aviso (`freshRiskText`; lo que llega justo al último día no avisa, y en la
+optimizada propone congelar o comprar el día). El prompt de cadencia mensual
 sesga hacia larga vida. La lista de la compra en sí no cambia y no hay compras extra.
 
 **Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y

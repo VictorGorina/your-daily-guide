@@ -210,6 +210,12 @@ export type MonthlyPlan = {
   coverage?: PlanCoverage;
   /** Cada cuánto se compra. Fuente de verdad de la cadencia; el reparto de `trip` la refleja. */
   cadence?: ShoppingCadence;
+  /**
+   * Compra (0 = primera) desde la que rige la cadencia optimizada, cuando se
+   * eligió con el mes ya empezado (`stockUpStart`). Ausente = desde la primera.
+   * Las compras anteriores se quedan con lo de su semana (`projectTrips`).
+   */
+  cadenceFrom?: number;
   /** Se generó conociendo el objetivo por comida (ticket 23). */
   targetsVersion?: number;
   /**
@@ -1488,6 +1494,24 @@ export const tripTiming = (
 };
 
 /**
+ * Compra desde la que rige la cadencia optimizada cuando se elige con el mes
+ * ya empezado: la que toca hoy (la primera que no ha pasado). Las anteriores
+ * se quedan con lo de su semana, que es lo que ya se compró. Se guarda en
+ * `MonthlyPlan.cadenceFrom` al cambiar de cadencia y no se mueve con los días.
+ */
+export const stockUpStart = (
+  trips: number,
+  todayDayOfMonth: number,
+  coverage: PlanCoverage = FULL_MONTH_COVERAGE,
+): number => {
+  const count = Math.max(1, trips);
+  for (let t = 0; t < count; t++) {
+    if (tripTiming(count, t, todayDayOfMonth, coverage) !== "past") return t;
+  }
+  return count - 1;
+};
+
+/**
  * Etiqueta legible de cada tramo de ingredientes con los días que comprende
  * (ej. "Ingredientes de la semana 2 de 4 · días 8-14"), calculada a partir de
  * la cobertura real del plan para que un plan creado a media de mes muestre
@@ -1588,7 +1612,10 @@ export const stockUpAmounts = (
  * recortados y `owned` resuelto para ese `trip`.
  *
  * Con la cadencia optimizada, esas mismas cantidades se adelantan a la compra
- * que puede llevárselas sin que se estropeen (`stockUpAmounts`).
+ * que puede llevárselas sin que se estropeen (`stockUpAmounts`). Si se eligió
+ * a mitad de mes, solo desde la compra `stockUpFrom` (`plan.cadenceFrom`): las
+ * anteriores ya pasaron y se quedan con lo de su semana, o la despensa del
+ * resto del mes caería en una compra que ya no se va a hacer.
  *
  * Una lista antigua (sin `weekQty`) no se puede recalcular: se cae al reparto
  * de siempre (`groupByTrip`), que respeta el `trip` que ya trae cada fila.
@@ -1598,6 +1625,7 @@ export const projectTrips = (
   cadence: ShoppingCadence,
   coverage: PlanCoverage,
   weekCount: number = WEEK_COUNT,
+  stockUpFrom = 0,
 ): TripGroups[] => {
   const trips = tripsForCoverage(cadence, coverage);
   if (!isCanonicalShopping(shopping)) return groupByTrip(shopping, trips);
@@ -1607,6 +1635,7 @@ export const projectTrips = (
   const ranges = Array.from({ length: Math.max(1, trips) }, (_, t) =>
     tripDayRange(coverage, trips, t),
   );
+  const start = Math.min(Math.max(0, Math.floor(stockUpFrom) || 0), ranges.length - 1);
 
   // Por ingrediente, lo que lleva cada compra; después se le da la vuelta.
   const rows = (shopping ?? []).map((group) => ({
@@ -1618,7 +1647,14 @@ export const projectTrips = (
       const needs = ranges.map((range) => tripAmount(item, range, wc, counts));
       const amounts =
         cadence === "optimizada"
-          ? stockUpAmounts(needs, ranges, shelfLifeDays(item.name, group.category, item.perishable))
+          ? [
+              ...needs.slice(0, start),
+              ...stockUpAmounts(
+                needs.slice(start),
+                ranges.slice(start),
+                shelfLifeDays(item.name, group.category, item.perishable),
+              ),
+            ]
           : needs;
       return amounts.map((amount, t) => projectedRow(item, amount, t));
     }),

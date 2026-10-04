@@ -72,7 +72,9 @@ import {
   withOverflowWeek,
   projectTrips,
   repartitionTrips,
+  recadencePlan,
   stockUpAmounts,
+  stockUpStart,
   withoutStoreMarks,
   shoppingTotal,
   type ShoppingList,
@@ -1798,6 +1800,135 @@ describe("projectTrips · cadencia optimizada", () => {
   });
 });
 
+// Elegida a mitad de mes: rige desde la compra en curso (`plan.cadenceFrom`).
+describe("projectTrips · optimizada desde una compra", () => {
+  const list = (): ShoppingList => canonical();
+  const items = (trips: ReturnType<typeof projectTrips>, trip: number) =>
+    trips[trip]!.groups.flatMap((g) => g.items);
+  const qtyAt = (trips: ReturnType<typeof projectTrips>, trip: number, name: string) =>
+    items(trips, trip).find((i) => i.name === name)?.qtyValue ?? 0;
+
+  it("las compras anteriores se quedan con lo de su semana", () => {
+    const anclada = projectTrips(list(), "optimizada", septiembre, 4, 2);
+    const semanal = projectTrips(list(), "semanal", septiembre);
+    expect(anclada[0]).toEqual(semanal[0]!);
+    expect(anclada[1]).toEqual(semanal[1]!);
+  });
+
+  it("lo que aguanta el resto del mes entra en la compra en curso, no en la primera", () => {
+    const anclada = projectTrips(list(), "optimizada", septiembre, 4, 2);
+    const semanal = projectTrips(list(), "semanal", septiembre);
+    // la cebolla aguanta el mes: sin ancla iría entera a la compra 1
+    const rest = qtyAt(semanal, 2, "Cebolla") + qtyAt(semanal, 3, "Cebolla");
+    expect(rest).toBeGreaterThan(0);
+    expect(Math.abs(qtyAt(anclada, 2, "Cebolla") - rest)).toBeLessThan(2);
+    expect(qtyAt(anclada, 3, "Cebolla")).toBe(0);
+  });
+
+  it("Σ entre compras sigue siendo el total del mes", () => {
+    for (const from of [1, 2, 3, 9]) {
+      const anclada = projectTrips(list(), "optimizada", septiembre, 4, from);
+      const mensual = projectTrips(list(), "mensual", septiembre);
+      for (const name of ["Cebolla", "Espinaca", "Arroz"]) {
+        expect(Math.abs(totalQtyOf(anclada, name) - totalQtyOf(mensual, name))).toBeLessThan(2);
+      }
+    }
+  });
+
+  it("solo afecta a la optimizada", () => {
+    expect(projectTrips(list(), "semanal", septiembre, 4, 2)).toEqual(
+      projectTrips(list(), "semanal", septiembre),
+    );
+  });
+});
+
+describe("stockUpStart", () => {
+  it("es la compra que toca hoy, o la primera si el mes no ha empezado", () => {
+    expect(stockUpStart(4, 1, septiembre)).toBe(0);
+    expect(stockUpStart(4, 17, septiembre)).toBe(2);
+    expect(stockUpStart(4, 30, septiembre)).toBe(3);
+    // plan creado el día 16: su primera compra es la que toca
+    expect(stockUpStart(2, 16, { fromDay: 16, toDay: 30 })).toBe(0);
+  });
+});
+
+describe("recadencePlan", () => {
+  const plan = (extra: Partial<MonthlyPlan> = {}): MonthlyPlan => ({
+    intro: "",
+    focus: [],
+    weeks: [],
+    coverage: septiembre,
+    cadence: "semanal",
+    ...extra,
+  });
+  const marked = (): ShoppingList => {
+    const list = canonical();
+    list[1]!.items[0]!.ownedTrips = { 0: "store", 1: "store", 2: "store", 3: "fridge" };
+    return list;
+  };
+
+  it("a mitad de mes ancla la optimizada a la compra en curso y conserva las marcas pasadas", () => {
+    const out = recadencePlan(plan(), marked(), "optimizada", "2026-09", "2026-09-17");
+    expect(out.plan.cadence).toBe("optimizada");
+    expect(out.plan.cadenceFrom).toBe(2);
+    expect(out.rewrite).toBe(true);
+    expect(out.shopping[1]!.items[0]!.ownedTrips).toEqual({ 0: "store", 1: "store", 3: "fridge" });
+  });
+
+  it("en la primera compra, o en un mes que no ha empezado, no hay ancla", () => {
+    expect(
+      recadencePlan(plan(), marked(), "optimizada", "2026-09", "2026-09-03").plan.cadenceFrom,
+    ).toBeUndefined();
+    expect(
+      recadencePlan(plan(), marked(), "optimizada", "2026-09", "2026-08-28").plan.cadenceFrom,
+    ).toBeUndefined();
+  });
+
+  it("desde otra cadencia que no es la semanal no conserva marcas: los tramos no casan", () => {
+    const out = recadencePlan(
+      plan({ cadence: "bisemanal" }),
+      marked(),
+      "optimizada",
+      "2026-09",
+      "2026-09-17",
+    );
+    expect(out.plan.cadenceFrom).toBe(2);
+    expect(out.shopping[1]!.items[0]!.ownedTrips).toEqual({ 3: "fridge" });
+  });
+
+  it("al salir quita el ancla; hacia la semanal conserva las marcas anteriores a ella", () => {
+    const from = plan({ cadence: "optimizada", cadenceFrom: 2 });
+    const semanal = recadencePlan(from, marked(), "semanal", "2026-09", "2026-09-20");
+    expect(semanal.plan.cadenceFrom).toBeUndefined();
+    expect(semanal.shopping[1]!.items[0]!.ownedTrips).toEqual({
+      0: "store",
+      1: "store",
+      3: "fridge",
+    });
+    const mensual = recadencePlan(from, marked(), "mensual", "2026-09", "2026-09-20");
+    expect(mensual.plan.cadenceFrom).toBeUndefined();
+    expect(mensual.shopping[1]!.items[0]!.ownedTrips).toEqual({ 3: "fridge" });
+  });
+
+  it("entre cadencias que no son la optimizada no reescribe la lista canónica", () => {
+    const list = marked();
+    const out = recadencePlan(plan(), list, "bisemanal", "2026-09", "2026-09-17");
+    expect(out.rewrite).toBe(false);
+    expect(out.shopping).toBe(list);
+  });
+});
+
+describe("cleanPlan · cadenceFrom", () => {
+  const raw = { weeks: [{ label: "S1", focus: "", breakfasts: [], snacks: [], days: [] }] };
+  it("solo se conserva con la cadencia optimizada", () => {
+    expect(cleanPlan({ ...raw, cadence: "optimizada", cadenceFrom: 2 })?.cadenceFrom).toBe(2);
+    expect(cleanPlan({ ...raw, cadence: "semanal", cadenceFrom: 2 })?.cadenceFrom).toBeUndefined();
+    expect(
+      cleanPlan({ ...raw, cadence: "optimizada", cadenceFrom: "x" })?.cadenceFrom,
+    ).toBeUndefined();
+  });
+});
+
 describe("stockUpAmounts", () => {
   const ranges = [
     { from: 1, to: 8 },
@@ -1835,6 +1966,12 @@ describe("withoutStoreMarks", () => {
         { category: "x", items: [{ ...list[1]!.items[0]!, owned: "fridge" }] },
       ])[0]!.items[0]!.owned,
     ).toBe("fridge");
+  });
+
+  it("conserva las marcas de las compras anteriores a la que se le pasa", () => {
+    const list = canonical();
+    list[0]!.items[0]!.ownedTrips = { 0: "store", 1: "store", 2: "store" };
+    expect(withoutStoreMarks(list, 2)[0]!.items[0]!.ownedTrips).toEqual({ 0: "store", 1: "store" });
   });
 });
 

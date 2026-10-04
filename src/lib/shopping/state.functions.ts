@@ -10,7 +10,6 @@ import { updatePlanRowCas } from "@/lib/plan-rows.server";
 import {
   asCadence,
   cadenceOf,
-  carryOwnedByName,
   cleanPantryExtras,
   cleanPlan,
   cleanShopping,
@@ -18,27 +17,25 @@ import {
   cleanTripConfirmations,
   cleanTripReceipts,
   ingredientNames,
-  isCanonicalShopping,
   monthCoverage,
   type MonthlyPlan,
   normName,
   type PantryExtra,
   parseJsonLoose,
-  repartitionTrips,
+  recadencePlan,
   type ShoppingCadence,
   type ShoppingList,
   type TripActuals,
   type TripConfirmations,
   type TripReceipts,
   tripsForCoverage,
-  withoutStoreMarks,
   withPantryExtra,
   withTripActual,
   withTripConfirmed,
 } from "@/lib/plan-shared";
 import { RateLimitError } from "@/lib/rate-limit-error";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
-import { zonedTodayISO } from "@/lib/zoned-date";
+import { clampClientToday, zonedTodayISO } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
 import { readShoppingRow, resolveShoppingRow, updateShoppingState } from "../plan/rows.server";
@@ -53,10 +50,10 @@ import { keepCleanReceiptNames, toggleShoppingOwnedHandler } from "./state.serve
  */
 export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { month: string; cadence?: ShoppingCadence }) => {
+  .validator((input: { month: string; cadence?: ShoppingCadence; today?: string }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     const cadence: ShoppingCadence = asCadence(input?.cadence) ?? "mensual";
-    return { month: input.month, cadence };
+    return { month: input.month, cadence, today: clampClientToday(input?.today) };
   })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
     let plan = null as MonthlyPlan | null;
@@ -70,33 +67,10 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
         const current = cleanPlan(row.plan);
         if (!current) throw new ValidationError("Todavía no hay plan de este mes");
         const prevShopping = cleanShopping(row.shopping);
-        plan = { ...current, cadence: data.cadence };
-        // Una lista canónica no cambia al cambiar de cadencia (la pantalla la
-        // re-proyecta): no se reescribe, para no pisar una marca que llegue a la
-        // vez. Salvo al entrar o salir de la optimizada, que cambia qué lleva
-        // cada compra: ahí se quitan las marcas "comprado" (`withoutStoreMarks`).
-        // Una antigua se reparte entre EXACTAMENTE las compras que la
-        // pantalla va a enseñar para esta cobertura: repartir entre más las
-        // dejaría fuera de la vista (ver `repartitionTrips`).
-        const before = current.cadence ?? cadenceOf(prevShopping);
-        const regrouped = (before === "optimizada") !== (data.cadence === "optimizada");
-        if (isCanonicalShopping(prevShopping)) {
-          if (!regrouped) {
-            shopping = prevShopping;
-            return { plan };
-          }
-          shopping = withoutStoreMarks(prevShopping);
-          return { plan, shopping };
-        }
-        const tripCount = tripsForCoverage(
-          data.cadence,
-          current.coverage ?? monthCoverage(data.month, zonedTodayISO()),
-        );
-        shopping = carryOwnedByName(
-          prevShopping,
-          repartitionTrips(prevShopping, data.cadence, tripCount),
-        );
-        return { plan, shopping };
+        const next = recadencePlan(current, prevShopping, data.cadence, data.month, data.today);
+        plan = next.plan;
+        shopping = next.shopping;
+        return next.rewrite ? { plan, shopping } : { plan };
       },
     ).catch((error: unknown) => {
       if (error instanceof ValidationError) throw error;

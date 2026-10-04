@@ -13,6 +13,7 @@ export * from "./shopping/shelf-life";
 export * from "./shopping/state";
 export * from "./plan/month";
 export * from "./shopping/trips";
+export * from "./shopping/recadence";
 export * from "./shopping/clean";
 export * from "./plan/grid";
 export * from "./plan/parse";

@@ -111,6 +111,12 @@ export type MonthlyPlan = {
   /** Cada cuánto se compra. Fuente de verdad de la cadencia; el reparto de `trip` la refleja. */
   cadence?: ShoppingCadence;
   /**
+   * Compra (0 = primera) desde la que rige la cadencia optimizada, cuando se
+   * eligió con el mes ya empezado (`stockUpStart`). Ausente = desde la primera.
+   * Las compras anteriores se quedan con lo de su semana (`projectTrips`).
+   */
+  cadenceFrom?: number;
+  /**
    * El plan se generó conociendo el objetivo por comida y con estructura de
    * comida (ticket 23 de `precision-nutricional`). Sin él, Hoy explica que el
    * plan del mes es anterior y que el que viene cuadrará.

@@ -134,6 +134,9 @@ mantén el test de invariante en `plan-shared.test.ts`.
 todo un mes. `shelfLifeDays` ([perishability.ts](src/lib/perishability.ts)) da la vida útil por
 palabra clave/categoría; `freshRisksForTrip` marca los frescos de una compra cuyo tramo de días la
 supera, y la UI lo pinta como aviso `bg-warning/20` ("cómpralos más cerca de cuando los cocines").
+La cuenta es la de `stockUpAmounts` (comprado el día `from`, dura hasta `from + vida`): un tomate
+de 7 días llega al último de una compra de 8 y no avisa. El texto lo escribe `freshRiskText`, que
+en la optimizada propone congelar o comprar el día (lo que no llega ya se compra en cada salida).
 El prompt de cadencia mensual sesga hacia ingredientes de larga vida. Decisión deliberada: **no**
 se añade una compra extra de frescos a media de mes ni se cambia la lista — solo se avisa.
 
@@ -146,7 +149,11 @@ fresco de pocos días se compra cada semana y uno de vida media (huevos, zanahor
 determinista y no llama a la IA; solo mueve cantidades entre compras, así que Σ no cambia (lo
 vigila el test de invariante). Un fresco no se compra antes de la primera semana que lo usa. La
 tabla de vida útil vive en `shopping/shelf-life.ts` (el barrel la reexporta) porque `trips.ts` la
-necesita y desde `perishability.ts` sería un ciclo. Toda cadencia nueva se añade a `CADENCES` y se
+necesita y desde `perishability.ts` sería un ciclo. Elegida con el mes empezado, rige desde la
+compra que toca ese día (`MonthlyPlan.cadenceFrom`, de `stockUpStart`): las anteriores se quedan
+con lo de su semana, o la despensa del resto del mes caería en una compra ya pasada. El ancla se
+guarda (no se deriva de hoy) para que el reparto no se mueva solo con los días; `projectTrips` la
+recibe como `stockUpFrom`. Toda cadencia nueva se añade a `CADENCES` y se
 valida con `asCadence`: no hay literales sueltos en los validadores.
 
 **Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y
@@ -190,7 +197,9 @@ Cambiar de cadencia (`recadenceMonthlyPlan`) en una lista **canónica** no llama
 `shopping`: solo guarda la nueva cadencia y la UI re-proyecta. Única excepción: al entrar o salir de
 la **optimizada** se quitan las marcas "comprado" (`withoutStoreMarks`; las de "en casa" se
 quedan), porque la misma compra deja de llevar lo mismo — la primera pasa de una semana de arroz a
-la del mes — y un "comprado" heredado diría que ya está en casa lo que no se compró. En una lista **antigua** sí rehace
+la del mes — y un "comprado" heredado diría que ya está en casa lo que no se compró. Entre semanal
+y optimizada, las compras anteriores a `cadenceFrom` llevan lo mismo y conservan sus marcas. La
+decisión entera es `recadencePlan` (`shopping/recadence.ts`, pura y testeada). En una lista **antigua** sí rehace
 el reparto de `trip` (`repartitionTrips`) y puede trocear un perecedero en varias filas;
 `carryOwnedByName` (`shopping/trips.ts`) reaplica "en casa"/"comprado" por nombre para que las marcas
 no se pierdan. Las listas antiguas se quedan como están: un mes no se regenera (ver "Un plan por

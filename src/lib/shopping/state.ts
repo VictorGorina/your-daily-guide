@@ -119,14 +119,19 @@ export function withPantryExtra(
  * pasar a la cadencia optimizada, o al salir de ella, la misma compra deja de
  * llevar lo mismo (la primera pasa de una semana de arroz a la del mes), así
  * que un "comprado" heredado diría que ya está en casa lo que no se compró.
+ *
+ * Las compras anteriores a `fromTrip` no cambian de contenido (la optimizada
+ * rige desde `plan.cadenceFrom`) y conservan sus marcas.
  */
-export function withoutStoreMarks(shopping: ShoppingList): ShoppingList {
+export function withoutStoreMarks(shopping: ShoppingList, fromTrip = 0): ShoppingList {
   return shopping.map((group) => ({
     category: group.category,
     items: group.items.map((item) => {
       const { owned, ownedTrips, ...rest } = item;
       const kept = Object.fromEntries(
-        Object.entries(ownedTrips ?? {}).filter(([, source]) => source !== "store"),
+        Object.entries(ownedTrips ?? {}).filter(
+          ([trip, source]) => source !== "store" || Number(trip) < fromTrip,
+        ),
       );
       return {
         ...rest,

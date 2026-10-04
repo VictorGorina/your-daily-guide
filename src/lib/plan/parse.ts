@@ -134,6 +134,7 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
   const coverage = cleanCoverage(plan.coverage);
   const cadence = asCadence(plan.cadence);
   const fit = cleanFitMark(plan.fit);
+  const cadenceFrom = cadence === "optimizada" ? Math.floor(Number(plan.cadenceFrom)) : 0;
   return withOverflowWeek({
     intro: String(plan.intro ?? ""),
     focus: (plan.focus ?? []).slice(0, 4).map(String),
@@ -146,6 +147,7 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
     })),
     ...(coverage ? { coverage } : {}),
     ...(cadence ? { cadence } : {}),
+    ...(cadenceFrom > 0 ? { cadenceFrom } : {}),
     ...(Number(plan.targetsVersion) > 0 ? { targetsVersion: Number(plan.targetsVersion) } : {}),
     ...(fit ? { fit } : {}),
   });

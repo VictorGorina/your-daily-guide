@@ -6,6 +6,7 @@ import {
   type ShoppingItem,
   type ShoppingList,
   tripsForCoverage,
+  WEEK_COUNT,
 } from "../shopping/model";
 import { projectTrips, tripLabel } from "../shopping/trips";
 import { upcomingMeals } from "./compensation";
@@ -53,6 +54,7 @@ export const shoppingToText = (
   month: string,
   coverage?: PlanCoverage,
   currency?: string | null,
+  stockUpFrom = 0,
 ) => {
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
     month: "long",
@@ -61,7 +63,7 @@ export const shoppingToText = (
   const lines = [`Ingredientes del mes · ${monthLabel}`, `Frecuencia: ${cadence}`, ""];
   const cov = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
   const trips = tripsForCoverage(cadence, cov);
-  for (const trip of projectTrips(shopping, cadence, cov)) {
+  for (const trip of projectTrips(shopping, cadence, cov, WEEK_COUNT, stockUpFrom)) {
     lines.push(
       `${tripLabel(cadence, trip.trip, coverage, trips)} — ${formatMoney(pendingTotal(trip.groups), currency)}`,
     );

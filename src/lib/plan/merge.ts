@@ -33,6 +33,7 @@ export const mergeFuturePlan = (
   return {
     ...(current.coverage ? { coverage: current.coverage } : {}),
     ...(current.cadence ? { cadence: current.cadence } : {}),
+    ...(current.cadenceFrom ? { cadenceFrom: current.cadenceFrom } : {}),
     intro: next.intro || current.intro,
     focus: next.focus.length ? next.focus : current.focus,
     weeks: current.weeks.map((week, wi) => {
