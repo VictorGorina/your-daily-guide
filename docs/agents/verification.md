@@ -53,8 +53,25 @@ Trucos útiles con el perfil demo:
 
 ## 3. Base de datos
 
-No hay Supabase CLI ni contraseña de BD en local — **acceso solo por el panel**, y las
-migraciones se aplican pegando SQL en el SQL Editor.
+Las migraciones van con la **CLI de Supabase** (ticket 24 de la auditoría), ya no pegando SQL en
+el panel. El historial remoto (`supabase_migrations.schema_migrations`) tiene registradas todas las
+de `supabase/migrations/` desde la línea base del 2026-10-04.
+
+```sh
+export SUPABASE_DB_PASSWORD="$(grep -E '^SUPABASE_DB_PASSWORD=' .env | cut -d= -f2-)"
+supabase migration list       # local frente a remoto; deben coincidir
+supabase db push --dry-run    # qué se aplicaría, sin aplicarlo
+supabase db push              # aplica SOLO lo que falta en el historial
+```
+
+- Hace falta `supabase login` (una vez por máquina) y `SUPABASE_DB_PASSWORD` en `.env`. En una red
+  sin IPv6, `supabase link --project-ref tocmrlmxrwylyniyjtlv` para que use el pooler IPv4.
+- `db push` va contra producción: antes, siempre `--dry-run`, y que lo pida la persona.
+- Si alguien aplica algo a mano en el SQL Editor, hay que registrarlo después con
+  `supabase migration repair --status applied <versión>`, o el siguiente `db push` lo repetirá.
+- Una migración que no debe aplicarse todavía vive en `supabase/pending/` (ver su README), no en
+  `migrations/`: `db push` ejecuta todo lo que encuentra ahí.
+- No hay Docker en esta máquina: `supabase db diff`, `start` y `reset` no funcionan.
 
 Para inspeccionar datos desde la terminal, `scripts/db.ts` (atajo `bun run db`) es un
 inspector de solo lectura por PostgREST — no ejecuta SQL, solo `select` / count / probe:
