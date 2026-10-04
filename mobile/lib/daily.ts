@@ -511,32 +511,7 @@ async function fetchOwnMonthlyPlan(
     .eq("user_id", userId ?? "")
     .maybeSingle();
 
-  if (error) {
-    // Compatibilidad hacia atrás: si alguna migración reciente (confirmed_trips,
-    // pantry_extras, trip_receipts) todavía no se ha aplicado, esa columna no
-    // existe y la consulta falla entera. Reintenta con el set mínimo seguro
-    // para no tumbar toda la pestaña Plan mientras tanto.
-    // Si no es un error de columna (PGRST204), lo propagamos directamente.
-    const isColumnError = typeof error === "object" && "code" in error && error.code === "PGRST204";
-    if (!isColumnError) throw error;
-    console.warn("fetchOwnMonthlyPlan: columna faltante, reintentando con set mínimo", error);
-    const retry = await supabase
-      .from("monthly_plans")
-      .select("id, month, plan, shopping, confirmed_at, trip_actuals")
-      .eq("month", month)
-      .eq("user_id", userId ?? "")
-      .maybeSingle();
-    if (retry.error) throw retry.error;
-    return retry.data
-      ? {
-          ...(retry.data as unknown as MonthlyPlanRow),
-          plan: withPlanRows(retry.data.plan),
-          confirmed_trips: null,
-          pantry_extras: null,
-          trip_receipts: null,
-        }
-      : null;
-  }
+  if (error) throw error;
   const row = (data as unknown as MonthlyPlanRow | null) ?? null;
   return row ? { ...row, plan: withPlanRows(row.plan) } : null;
 }
