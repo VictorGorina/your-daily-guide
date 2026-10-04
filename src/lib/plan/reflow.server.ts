@@ -92,34 +92,24 @@ export async function reflowMeals(opts: {
   );
   if (!current) throw new ValidationError("Todavía no hay plan de este mes");
 
-  const recentLogsQuery = (columns: string) =>
+  const [{ data: profile }, { data: logs }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase
       .from("daily_logs")
-      .select(columns)
+      .select("log_date, weight_kg, habits, mood, notes, snacks")
       .eq("user_id", userId)
       .lte("log_date", today)
       .order("log_date", { ascending: false })
-      .limit(7);
-  const [{ data: profile }, withSnacks] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-    recentLogsQuery("log_date, weight_kg, habits, mood, notes, snacks"),
+      .limit(7),
   ]);
-  // Sin la migración `daily_logs_snacks` la columna no existe (42703): se
-  // relee sin ella en vez de quedarse sin los últimos días en el prompt.
-  const { data: logs } =
-    (withSnacks.error as { code?: string } | null)?.code === "42703"
-      ? await recentLogsQuery("log_date, weight_kg, habits, mood, notes")
-      : withSnacks;
   // El picoteo va resumido: el libro de cuentas y el último ajuste no le
   // aportan nada al modelo y alargarían mucho el prompt.
-  const recentLogs = ((logs ?? []) as unknown as Record<string, unknown>[]).map(
-    ({ snacks, ...log }) => {
-      const entries = cleanDaySnacks(snacks)?.entries ?? [];
-      return entries.length
-        ? { ...log, picoteo: entries.map((e) => `${e.text} (~${e.kcal} kcal)`) }
-        : log;
-    },
-  );
+  const recentLogs = (logs ?? []).map(({ snacks, ...log }) => {
+    const entries = cleanDaySnacks(snacks)?.entries ?? [];
+    return entries.length
+      ? { ...log, picoteo: entries.map((e) => `${e.text} (~${e.kcal} kcal)`) }
+      : log;
+  });
 
   const p = (profile ?? {}) as Record<string, unknown>;
   const cursor = planCursor(today);

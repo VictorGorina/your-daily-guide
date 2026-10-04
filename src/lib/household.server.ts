@@ -120,35 +120,6 @@ export async function householdPlannerId(
   return rows.find((r) => r.is_planner)?.user_id ?? null;
 }
 
-/**
- * Lee una tabla del hogar añadiendo columnas que puede que aún no existan en la
- * BD si su migración no se ha aplicado (`home_schedule` → `20260905120000`,
- * `feeding_stage` → `20260906150000`). PostgREST devuelve un 400 si falta
- * cualquiera; en ese caso se reintenta quitándolas una a una hasta que la
- * consulta pasa, y las filas siguen sin ese campo. Sin este reintento el error
- * se tragaba en silencio y `householdContext` devolvía un contexto vacío para
- * TODO usuario del hogar (coach sin familia, plan en solitario, espejo parado).
- */
-async function selectWithOptionalColumns(
-  supabase: AnyClient,
-  table: "household_members" | "household_children",
-  baseColumns: string,
-  optionalColumns: string[],
-  householdId: string,
-): Promise<Record<string, unknown>[] | null> {
-  const run = (columns: string[]) =>
-    supabase.from(table).select(columns.join(", ")).eq("household_id", householdId);
-  // De más a menos columnas opcionales, quitando desde el final: la más nueva
-  // (`feeding_stage`) es la más probable que falte, así que se conserva
-  // `home_schedule` mientras se pueda. [a,b] → [a] → [].
-  let last: Awaited<ReturnType<typeof run>> | null = null;
-  for (let k = optionalColumns.length; k >= 0; k -= 1) {
-    last = await run([baseColumns, ...optionalColumns.slice(0, k)]);
-    if (!last.error) return (last.data ?? null) as unknown as Record<string, unknown>[] | null;
-  }
-  return (last?.data ?? null) as unknown as Record<string, unknown>[] | null;
-}
-
 /** Contexto del hogar (mesa, comidas compartidas e hijos) para los prompts del coach. */
 export async function householdContext(
   supabase: AnyClient,
@@ -157,21 +128,12 @@ export async function householdContext(
   const householdId = await ownHouseholdId(supabase, userId);
   if (!householdId) return emptyContext();
 
-  const rawMembers = await selectWithOptionalColumns(
-    supabase,
-    "household_members",
-    "user_id, display_name, uses_app, is_planner, portion",
-    ["home_schedule"],
-    householdId,
-  );
-  const rows = (rawMembers ?? []) as {
-    user_id: string | null;
-    display_name: string;
-    uses_app: boolean;
-    is_planner: boolean;
-    portion: number | string;
-    home_schedule: unknown;
-  }[];
+  const { data: rawMembers, error: membersError } = await supabase
+    .from("household_members")
+    .select("user_id, display_name, uses_app, is_planner, portion, home_schedule")
+    .eq("household_id", householdId);
+  if (membersError) console.error("householdContext: miembros", membersError);
+  const rows = rawMembers ?? [];
   // Si la lectura del hogar falla entera, lo de siempre: sin contexto.
   if (!rows.some((r) => r.user_id === userId)) return emptyContext();
 
@@ -189,30 +151,16 @@ export async function householdContext(
   // aún no tienen `home_schedule` por miembro. Si hay horarios individuales,
   // `deriveSharedSlots` los sustituye.
   // Las dos lecturas solo dependen del hogar: en paralelo (ticket 17, PERF-10).
-  const [{ data: household }, children] = await Promise.all([
+  const [{ data: household }, { data: children, error: childrenError }] = await Promise.all([
     supabase.from("households").select("shared_slots").eq("id", householdId).maybeSingle(),
-    selectWithOptionalColumns(
-      supabase,
-      "household_children",
-      "id, name, age, allergies, appetite, notes, portion",
-      ["home_schedule", "feeding_stage"],
-      householdId,
-    ),
+    supabase
+      .from("household_children")
+      .select("id, name, age, allergies, appetite, notes, portion, home_schedule, feeding_stage")
+      .eq("household_id", householdId),
   ]);
-  const legacySharedSlots = cleanSharedSlots(
-    (household as { shared_slots?: unknown } | null)?.shared_slots,
-  );
-  const kids = (children ?? []) as {
-    id: string;
-    name: string;
-    age: number | null;
-    allergies: string | null;
-    appetite: string | null;
-    notes: string | null;
-    feeding_stage: unknown;
-    portion: number | string;
-    home_schedule: unknown;
-  }[];
+  if (childrenError) console.error("householdContext: niños", childrenError);
+  const legacySharedSlots = cleanSharedSlots(household?.shared_slots);
+  const kids = children ?? [];
 
   // Notas libres de un niño ("no le gusta el pescado", "come poco a mediodía"):
   // no caben en el roster pero sí le sirven al coach. Edad y alergias ya van

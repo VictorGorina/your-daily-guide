@@ -180,30 +180,6 @@ describe("householdContext", () => {
     expect(ctx.householdId).toBe("h3");
     expect(ctx.plannerId).toBeNull();
   });
-
-  it("si falta una columna opcional (migración sin aplicar), reintenta sin ella en vez de vaciar el contexto", async () => {
-    const missing = (column: string) => ({
-      code: "42703",
-      message: `column ${column} does not exist`,
-    });
-    const { fake, run } = contextFor("bea", {
-      failOn: (op) =>
-        op.columns.includes("feeding_stage")
-          ? missing("feeding_stage")
-          : op.table === "household_members" && op.columns.includes("home_schedule")
-            ? missing("home_schedule")
-            : null,
-    });
-    const ctx = await run();
-    expect(ctx.members.map((m) => m.displayName)).toEqual(["Ana", "Bea", "Abuela"]);
-    // Sin `feeding_stage`, todos los niños cuentan como `mesa` (el default).
-    expect(ctx.children.map((c) => c.stage)).toEqual(["mesa", "mesa"]);
-    // De más a menos columnas: [home_schedule, feeding_stage] → [home_schedule].
-    const kidsColumns = fake.calls
-      .filter((c) => c.table === "household_children")
-      .map((c) => c.columns.slice(7));
-    expect(kidsColumns).toEqual([["home_schedule", "feeding_stage"], ["home_schedule"]]);
-  });
 });
 
 describe("householdPlannerId", () => {
