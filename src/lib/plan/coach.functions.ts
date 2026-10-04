@@ -89,8 +89,8 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
     const { householdContext } = await import("@/lib/household.server");
     const [{ data: profile }, { data: row }, home] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-      ownPlanRow(context.supabase as never, context.userId, data.month, "plan, shopping"),
-      householdContext(context.supabase as never, context.userId),
+      ownPlanRow(context.supabase, context.userId, data.month, "plan, shopping"),
+      householdContext(context.supabase, context.userId),
     ]);
     const plan = cleanPlan((row as { plan?: unknown } | null)?.plan);
     const shopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);

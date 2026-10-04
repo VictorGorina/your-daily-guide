@@ -28,7 +28,7 @@ import {
 } from "@/lib/plan-shared";
 import { cleanDaySnacks } from "@/lib/snacks";
 import { ValidationError } from "@/lib/validation-error";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 import { askForJson } from "./ai.server";
 import { blankUnselectedSlots, ownPlanRow } from "./rows.server";
 
@@ -48,7 +48,7 @@ import { blankUnselectedSlots, ownPlanRow } from "./rows.server";
 const FORCE_ADJUST_KCAL = 200;
 
 export async function reflowMeals(opts: {
-  supabase: SupabaseClient<never, never, never>;
+  supabase: DbClient;
   userId: string;
   key: string;
   month: string;
@@ -112,12 +112,14 @@ export async function reflowMeals(opts: {
       : withSnacks;
   // El picoteo va resumido: el libro de cuentas y el último ajuste no le
   // aportan nada al modelo y alargarían mucho el prompt.
-  const recentLogs = ((logs ?? []) as Record<string, unknown>[]).map(({ snacks, ...log }) => {
-    const entries = cleanDaySnacks(snacks)?.entries ?? [];
-    return entries.length
-      ? { ...log, picoteo: entries.map((e) => `${e.text} (~${e.kcal} kcal)`) }
-      : log;
-  });
+  const recentLogs = ((logs ?? []) as unknown as Record<string, unknown>[]).map(
+    ({ snacks, ...log }) => {
+      const entries = cleanDaySnacks(snacks)?.entries ?? [];
+      return entries.length
+        ? { ...log, picoteo: entries.map((e) => `${e.text} (~${e.kcal} kcal)`) }
+        : log;
+    },
+  );
 
   const p = (profile ?? {}) as Record<string, unknown>;
   const cursor = planCursor(today);
@@ -157,7 +159,7 @@ export async function reflowMeals(opts: {
     : "Si de lo que cuenta se deduce un exceso o un déficit de energía, compénsalo de forma suave en los días siguientes.";
 
   const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
-  const home = await householdContext(supabase as never, userId);
+  const home = await householdContext(supabase, userId);
   // Un no planificador recoloca sus comidas en solitario; las compartidas
   // las lleva quien planifica en casa (D2). Se lo decimos a la IA en el
   // prompt Y, por si no lo respeta, se congelan mecánicamente después
@@ -417,7 +419,7 @@ export async function reflowMeals(opts: {
   const { synced } =
     freezeShared && !isNonPlannerInHousehold
       ? { synced: 0 }
-      : await syncSharedMeals({ supabase: supabase as never, userId, month, today });
+      : await syncSharedMeals({ supabase: supabase, userId, month, today });
 
   const summary = isNonPlannerInHousehold
     ? `${final.intro} Las comidas compartidas de tu hogar no las toco — esas las lleva ${plannerName}.`

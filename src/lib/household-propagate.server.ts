@@ -1,3 +1,4 @@
+import type { DbClient } from "@/integrations/supabase/db-client";
 import type { MealStatus } from "@/lib/daily";
 import { isSharedSlot } from "@/lib/household-shared";
 import { ValidationError } from "@/lib/validation-error";
@@ -12,7 +13,7 @@ export async function propagateLogToFamilyHandler({
   context,
 }: {
   data: { date: string; habitLabel: string; status: MealStatus; actual?: string; today?: string };
-  context: { supabase: unknown; userId: string };
+  context: { supabase: DbClient; userId: string };
 }): Promise<{ propagated: number }> {
   // Preferimos el "hoy" del cliente (su zona horaria); si no llega, la del
   // servidor (Europe/Madrid), que puede ir un día por delante para México/EE.UU.
@@ -20,7 +21,7 @@ export async function propagateLogToFamilyHandler({
   if (data.date >= today) throw new ValidationError("Solo se pueden corregir días pasados");
 
   const { householdContext } = await import("@/lib/household.server");
-  const ctx = await householdContext(context.supabase as never, context.userId);
+  const ctx = await householdContext(context.supabase, context.userId);
   if (!ctx.householdId) throw new ValidationError("No estás en ningún hogar");
 
   // Verificar que la comida es compartida ese día de la semana.
@@ -57,7 +58,7 @@ export async function propagateLogToFamilyHandler({
     // que él mismo esté cambiando a la vez no se pisa.
     try {
       const next = await patchDailyHabits<PropagatedHabit>(
-        supabaseAdmin as never,
+        supabaseAdmin,
         uid,
         data.date,
         (habits) => {

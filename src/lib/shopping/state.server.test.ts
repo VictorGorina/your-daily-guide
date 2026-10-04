@@ -5,6 +5,7 @@ import { createFakeSupabase, type FakeOp, type FakeTables } from "@/test/fake-su
 
 import type { ShoppingList } from "./model";
 import { keepCleanReceiptNames, toggleShoppingOwnedHandler } from "./state.server";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 const MONTH = "2026-10";
 
@@ -58,7 +59,7 @@ const concurrentMark = (tables: FakeTables) => {
   };
 };
 
-const mark = (userId: string, client: unknown, itemName = "Tomate") =>
+const mark = (userId: string, client: DbClient, itemName = "Tomate") =>
   toggleShoppingOwnedHandler({
     data: { month: MONTH, itemName, trip: 0, source: "store" },
     context: { supabase: client, userId },

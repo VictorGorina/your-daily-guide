@@ -403,7 +403,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     const own = portionFactors(energy, profile as { sex?: string | null } | null);
     const { plannedServingsFor } = await import("@/lib/nutrition/planned-serving.server");
     const servings = await plannedServingsFor({
-      supabase: context.supabase as never,
+      supabase: context.supabase,
       userId: context.userId,
       profile,
       date: data.today,

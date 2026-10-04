@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 import { logEvent } from "@/lib/log.server";
 import { UserFacingError } from "@/lib/validation-error";
@@ -38,7 +38,7 @@ type CasOptions = {
  * `client` es el de sesión o `supabaseAdmin`: quien llama decide.
  */
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
-  client: SupabaseClient<never, never, never>,
+  client: DbClient,
   userId: string,
   date: string,
   columns: string,
@@ -46,7 +46,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
   options: CasOptions & { create?: false },
 ): Promise<CasResult<Row>>;
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
-  client: SupabaseClient<never, never, never>,
+  client: DbClient,
   userId: string,
   date: string,
   columns: string,
@@ -54,7 +54,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
   options: CasOptions & { create: true },
 ): Promise<CasResult<Row>>;
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
-  client: SupabaseClient<never, never, never>,
+  client: DbClient,
   userId: string,
   date: string,
   columns: string,
@@ -112,7 +112,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
  * `client` es el de sesión o `supabaseAdmin`: quien llama decide.
  */
 export async function patchDailyHabits<Habit>(
-  client: SupabaseClient<never, never, never>,
+  client: DbClient,
   userId: string,
   date: string,
   update: (current: Habit[]) => Habit[] | null,

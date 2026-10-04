@@ -321,7 +321,7 @@ export const Route = createFileRoute("/api/chat")({
         // planifica): lo mismo que reciben `generateMonthlyPlan` /
         // `adjustMonthlyPlan`, para que el coach hable del plan de la casa con
         // propiedad y sepa cuándo un cambio no es de esta persona.
-        const home = await householdContext(supabase as never, userId);
+        const home = await householdContext(supabase, userId);
 
         const system =
           coachSystemPrompt(profile, home.householdId ? home.text : null) +

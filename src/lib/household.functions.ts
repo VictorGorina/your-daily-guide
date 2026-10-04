@@ -34,7 +34,7 @@ export const syncHouseholdPlan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ synced: number }> => {
     const { syncSharedMeals } = await import("@/lib/household.server");
     return syncSharedMeals({
-      supabase: context.supabase as never,
+      supabase: context.supabase,
       userId: context.userId,
       month: data.month,
       today: data.today,
@@ -96,11 +96,11 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }): Promise<{ saved: boolean }> => {
     const { householdContext } = await import("@/lib/household.server");
-    const ctx = await householdContext(context.supabase as never, context.userId);
+    const ctx = await householdContext(context.supabase, context.userId);
     if (!ctx.householdId) throw new ValidationError("No estás en ningún hogar");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const session = context.supabase as never as typeof supabaseAdmin;
+    const session = context.supabase;
 
     // `householdContext` no trae el `id` de cada fila; la propia solo hace falta
     // para reconocer "mi memberId" (una persona tiene como mucho una fila).

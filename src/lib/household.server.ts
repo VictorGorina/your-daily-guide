@@ -1,5 +1,5 @@
 import { asPromptData } from "@/lib/prompt-data";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 import { weekdayIndex } from "@/lib/dates";
 import { effectiveSharedSlots } from "@/lib/effective-shared-slots";
@@ -33,7 +33,7 @@ import {
   type MonthlyPlan,
 } from "@/lib/plan-shared";
 
-type AnyClient = SupabaseClient<never, never, never>;
+type AnyClient = DbClient;
 
 /** Un miembro de la mesa, lo mínimo que necesitan los prompts y el espejo del plan. */
 export type HouseholdMemberLite = {
@@ -143,9 +143,9 @@ async function selectWithOptionalColumns(
   let last: Awaited<ReturnType<typeof run>> | null = null;
   for (let k = optionalColumns.length; k >= 0; k -= 1) {
     last = await run([baseColumns, ...optionalColumns.slice(0, k)]);
-    if (!last.error) return (last.data ?? null) as Record<string, unknown>[] | null;
+    if (!last.error) return (last.data ?? null) as unknown as Record<string, unknown>[] | null;
   }
-  return (last?.data ?? null) as Record<string, unknown>[] | null;
+  return (last?.data ?? null) as unknown as Record<string, unknown>[] | null;
 }
 
 /** Contexto del hogar (mesa, comidas compartidas e hijos) para los prompts del coach. */
@@ -455,7 +455,7 @@ export async function syncSharedMeals(opts: {
     // comidas propias pueden cambiar a la vez y no se deben pisar.
     try {
       const { patch } = await updatePlanRowCas(
-        supabaseAdmin as never,
+        supabaseAdmin,
         target.userId!,
         opts.month,
         "plan, confirmed_at",

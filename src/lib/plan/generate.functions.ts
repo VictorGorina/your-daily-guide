@@ -62,7 +62,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       // lo que la persona tenga que contar del mes se pregunta ANTES de generar
       // (`MonthIntakeChat`). Va antes de la cuota: un rechazo no la gasta.
       const { data: existing } = await ownPlanRow(
-        context.supabase as never,
+        context.supabase,
         context.userId,
         data.month,
         "id",
@@ -85,17 +85,13 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
 
       const [{ data: profile }, constraints] = await Promise.all([
         context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-        fetchMonthConstraints(context.supabase as never, context.userId, data.month),
+        fetchMonthConstraints(context.supabase, context.userId, data.month),
       ]);
 
       const { householdContext, householdMealTargets, syncSharedMeals } =
         await import("@/lib/household.server");
-      const home = await householdContext(context.supabase as never, context.userId);
-      const sharedTargets = await householdMealTargets(
-        context.supabase as never,
-        context.userId,
-        home,
-      );
+      const home = await householdContext(context.supabase, context.userId);
+      const sharedTargets = await householdMealTargets(context.supabase, context.userId, home);
 
       const { plan, shopping } = await generatePlanBody({
         sharedTargets,
@@ -130,7 +126,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       }
 
       await syncSharedMeals({
-        supabase: context.supabase as never,
+        supabase: context.supabase,
         userId: context.userId,
         month: data.month,
         today: data.today,

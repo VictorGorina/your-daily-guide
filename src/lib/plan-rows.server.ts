@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 import { logEvent } from "@/lib/log.server";
 import { UserFacingError } from "@/lib/validation-error";
@@ -56,7 +56,7 @@ export const PLAN_CAS_EXHAUSTED_MESSAGE =
  * `client` es el de sesión o `supabaseAdmin`: quien llama decide, como antes.
  */
 export async function updatePlanRowCas<Row extends PlanRowCas = PlanRowCas>(
-  client: SupabaseClient<never, never, never>,
+  client: DbClient,
   userId: string,
   month: string,
   columns: string,

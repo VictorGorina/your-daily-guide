@@ -32,7 +32,7 @@ import {
 } from "@/lib/plan-shared";
 import { cleanDaySnacks, type DaySnacks } from "@/lib/snacks";
 import { requireAiKey } from "@/lib/ai-provider.server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 import type { SettleDayDeps, SettleDayResult } from "./day-settle.functions";
 
 /**
@@ -63,7 +63,7 @@ import type { SettleDayDeps, SettleDayResult } from "./day-settle.functions";
  * Ruta espejo en `src/routes/api/v1/day/settle.ts`.
  */
 
-type Client = SupabaseClient<never, never, never>;
+type Client = DbClient;
 
 export type DishChange = {
   label: string;
@@ -197,11 +197,11 @@ async function patchDay(
 export type SettleDayInput = { today: string; changes: DishChange[] };
 
 export async function settleDayHandler(
-  { data, context }: { data: SettleDayInput; context: { supabase: unknown; userId: string } },
+  { data, context }: { data: SettleDayInput; context: { supabase: DbClient; userId: string } },
   deps: SettleDayDeps = {},
 ): Promise<SettleDayResult> {
   const deadline = requestDeadline();
-  const supabase = context.supabase as never as Client;
+  const supabase = context.supabase;
   const { userId } = context;
   const { today, changes } = data;
   const month = today.slice(0, 7);
@@ -308,7 +308,7 @@ export async function settleDayHandler(
   }
 
   const { householdContext } = await import("@/lib/household.server");
-  const home = await householdContext(supabase as never, userId);
+  const home = await householdContext(supabase, userId);
   const window = compensationWindow({
     today,
     sharedSlots: home.sharedSlots,

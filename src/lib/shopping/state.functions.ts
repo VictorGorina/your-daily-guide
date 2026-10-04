@@ -59,7 +59,7 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
     let plan = null as MonthlyPlan | null;
     let shopping: ShoppingList = [];
     const write = await updatePlanRowCas(
-      context.supabase as never,
+      context.supabase,
       context.userId,
       data.month,
       "plan, shopping",

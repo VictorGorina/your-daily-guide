@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 /**
  * Doble en memoria de Supabase para los tests de servidor (ticket 20 de la
@@ -443,7 +443,7 @@ export function createFakeSupabase(tables: FakeTables = {}, opts: FakeOptions = 
 
   return {
     /** Para pasárselo a las funciones de servidor: es su `AnyClient`. */
-    client: client as unknown as SupabaseClient<never, never, never>,
+    client: client as unknown as DbClient,
     /** El mismo objeto con su tipo real, para que el test consulte o siembre. */
     db: client,
     /** Registro en orden de cada operación que llegó a ejecutarse (o a fallar). */

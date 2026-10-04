@@ -13,7 +13,7 @@
  * `resolveServing` es puro; `plannedServingsFor` lee lo que haga falta.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 import { sharedMealPortions, type SharedServing } from "@/lib/household.server";
 import { cleanPlan, planDayOf, type MonthlyPlan, type PlanDay } from "@/lib/plan-shared";
@@ -94,7 +94,7 @@ export function resolveEatenServing(
   };
 }
 
-type AnyClient = SupabaseClient<never, never, never>;
+type AnyClient = DbClient;
 
 /**
  * Lo que hace falta para `resolveServing` en la fecha `date`. `planDay` se lee

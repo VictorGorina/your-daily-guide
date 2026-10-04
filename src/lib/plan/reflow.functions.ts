@@ -22,7 +22,6 @@ import {
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { clampClientToday } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerFn } from "@tanstack/react-start";
 import { fetchMonthConstraints, generatePlanBody } from "./generate.server";
 import { reflowMeals } from "./reflow.server";
@@ -51,7 +50,7 @@ export const adjustMonthlyPlan = createServerFn({ method: "POST" })
     await enforceUserRateLimit(context.userId, "plan-adjust");
 
     const { plan, summary } = await reflowMeals({
-      supabase: context.supabase as never,
+      supabase: context.supabase,
       userId: context.userId,
       key,
       deadline,
@@ -115,7 +114,7 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
       summary?: string;
       kcalDelta?: number;
     }> => {
-      const supabase = context.supabase as never as SupabaseClient<never, never, never>;
+      const supabase = context.supabase;
       const { userId } = context;
       const { today, date, label, dish, plannedDish } = data;
       const month = today.slice(0, 7);
@@ -162,7 +161,7 @@ export const compensateFutureDishChange = createServerFn({ method: "POST" })
           userId,
           deadline,
         }),
-        plannedServingsFor({ supabase: supabase as never, userId, profile, date }),
+        plannedServingsFor({ supabase: supabase, userId, profile, date }),
       ]);
       const fromRecipe = recipes.get(plannedDish.trim())?.recipe;
       const toRecipe = recipes.get(dish.trim())?.recipe;
@@ -265,14 +264,14 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     if (data.month < data.today.slice(0, 7)) return { skipped: "past" };
 
     const { householdPlannerId, householdContext } = await import("@/lib/household.server");
-    const plannerId = await householdPlannerId(context.supabase as never, context.userId);
+    const plannerId = await householdPlannerId(context.supabase, context.userId);
     if (plannerId && plannerId !== context.userId) return { skipped: "not-planner" };
 
     const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
     await enforceUserRateLimit(context.userId, "plan-reflow");
 
     const { data: row } = await ownPlanRow(
-      context.supabase as never,
+      context.supabase,
       context.userId,
       data.month,
       "plan, shopping",
@@ -282,7 +281,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
 
     if (data.scope === "meals") {
       const { plan, summary } = await reflowMeals({
-        supabase: context.supabase as never,
+        supabase: context.supabase,
         userId: context.userId,
         key,
         deadline,
@@ -299,19 +298,15 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     const { syncSharedMeals } = await import("@/lib/household.server");
     const [{ data: profile }, home, constraints] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
-      householdContext(context.supabase as never, context.userId),
-      fetchMonthConstraints(context.supabase as never, context.userId, data.month),
+      householdContext(context.supabase, context.userId),
+      fetchMonthConstraints(context.supabase, context.userId, data.month),
     ]);
     const currentShopping = cleanShopping((row as { shopping?: unknown } | null)?.shopping);
     const cadence: ShoppingCadence = current.cadence ?? cadenceOf(currentShopping);
     const coverage = current.coverage ?? monthCoverage(data.month, data.today);
 
     const { householdMealTargets } = await import("@/lib/household.server");
-    const sharedTargets = await householdMealTargets(
-      context.supabase as never,
-      context.userId,
-      home,
-    );
+    const sharedTargets = await householdMealTargets(context.supabase, context.userId, home);
     const fresh = await generatePlanBody({
       sharedTargets,
       deadline,
@@ -332,7 +327,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     let final = null as { plan: MonthlyPlan; shopping: ShoppingList } | null;
     try {
       await updatePlanRowCas(
-        context.supabase as never,
+        context.supabase,
         context.userId,
         data.month,
         "plan, shopping",
@@ -364,7 +359,7 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     const { plan: finalPlan, shopping: finalShopping } = final;
 
     const { synced } = await syncSharedMeals({
-      supabase: context.supabase as never,
+      supabase: context.supabase,
       userId: context.userId,
       month: data.month,
       today: data.today,

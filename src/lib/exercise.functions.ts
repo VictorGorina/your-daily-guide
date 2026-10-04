@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { updateDailyLogCas } from "@/lib/daily-rows.server";
@@ -44,7 +44,7 @@ import { clampClientToday } from "@/lib/zoned-date";
  * Cada operación tiene su ruta espejo en `src/routes/api/v1/exercise/`.
  */
 
-type Client = SupabaseClient<never, never, never>;
+type Client = DbClient;
 
 /**
  * Lee, transforma y escribe la columna de hoy con `updateDailyLogCas`,
@@ -98,7 +98,7 @@ export const logExercise = createServerFn({ method: "POST" })
     ...cleanActivityInput(input),
   }))
   .handler(async ({ data, context }): Promise<{ exercise: DayExercise; entry: ExerciseEntry }> => {
-    const supabase = context.supabase as never as Client;
+    const supabase = context.supabase;
     const { routine, weightKg, earlierRoutineSessions } = await routineContext(
       supabase,
       context.userId,
@@ -182,11 +182,8 @@ export const removeExercise = createServerFn({ method: "POST" })
     return { today: clampClientToday(input?.today), id };
   })
   .handler(async ({ data, context }): Promise<{ exercise: DayExercise }> => {
-    const exercise = await patchExercise(
-      context.supabase as never,
-      context.userId,
-      data.today,
-      (current) => withoutExercise(current, data.id),
+    const exercise = await patchExercise(context.supabase, context.userId, data.today, (current) =>
+      withoutExercise(current, data.id),
     );
     return { exercise };
   });

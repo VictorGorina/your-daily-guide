@@ -211,7 +211,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
 
       const month = data.date.slice(0, 7);
       const { data: row } = await ownPlanRow(
-        context.supabase as never,
+        context.supabase,
         context.userId,
         month,
         "plan, shopping, pantry_extras",
@@ -241,7 +241,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       let previousIdea = "";
       let previousPinned = false;
       try {
-        await updatePlanRowCas(context.supabase as never, context.userId, month, "plan", (r) => {
+        await updatePlanRowCas(context.supabase, context.userId, month, "plan", (r) => {
           const latest = cleanPlan(r.plan);
           const cell = latest && planSlotIndex(latest, data.date);
           const written =
@@ -267,7 +267,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
 
       const { syncSharedMeals } = await import("@/lib/household.server");
       await syncSharedMeals({
-        supabase: context.supabase as never,
+        supabase: context.supabase,
         userId: context.userId,
         month,
         today: data.today,
@@ -333,7 +333,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
       off: string[];
     }> => {
       const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
-      const home = await householdContext(context.supabase as never, context.userId);
+      const home = await householdContext(context.supabase, context.userId);
       const child =
         home.children.find((c) => c.id === data.childId) ??
         home.children.find((c) => normName(c.name) === normName(data.childId));
@@ -349,7 +349,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
 
       const month = data.date.slice(0, 7);
       const { data: row } = await ownPlanRow(
-        context.supabase as never,
+        context.supabase,
         context.userId,
         month,
         "plan, shopping, pantry_extras",
@@ -372,7 +372,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
       const meal = { childId: child.id, slot: data.slot, dish, off };
       let next = current;
       try {
-        await updatePlanRowCas(context.supabase as never, context.userId, month, "plan", (r) => {
+        await updatePlanRowCas(context.supabase, context.userId, month, "plan", (r) => {
           const latest = cleanPlan(r.plan);
           const written = latest && withChildMeal(latest, data.date, meal);
           if (!written) throw new ValidationError("Ese día todavía no tiene menú en el plan");
@@ -386,7 +386,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
       }
 
       await syncSharedMeals({
-        supabase: context.supabase as never,
+        supabase: context.supabase,
         userId: context.userId,
         month,
         today: data.today,
@@ -430,7 +430,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
       await enforceUserRateLimit(context.userId, "child-meals");
 
       const { householdContext, syncSharedMeals } = await import("@/lib/household.server");
-      const home = await householdContext(context.supabase as never, context.userId);
+      const home = await householdContext(context.supabase, context.userId);
 
       // El plato de un peque va con la comida compartida: lo pone el
       // planificador (D2), igual que `setChildMeal`.
@@ -443,7 +443,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
 
       const month = data.today.slice(0, 7);
       const { data: row } = await ownPlanRow(
-        context.supabase as never,
+        context.supabase,
         context.userId,
         month,
         "plan, shopping, pantry_extras",
@@ -566,7 +566,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
       let filled = 0;
       const filledChildIds = new Set<string>();
       try {
-        await updatePlanRowCas(context.supabase as never, context.userId, month, "plan", (r) => {
+        await updatePlanRowCas(context.supabase, context.userId, month, "plan", (r) => {
           const latest = cleanPlan(r.plan);
           if (!latest) return null;
           next = latest;
@@ -588,7 +588,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
 
       if (filled) {
         await syncSharedMeals({
-          supabase: context.supabase as never,
+          supabase: context.supabase,
           userId: context.userId,
           month,
           today: data.today,
@@ -633,7 +633,7 @@ export const dishRecipe = createServerFn({ method: "POST" })
     let pantry = "";
     if (data.month) {
       const { data: row } = await ownPlanRow(
-        context.supabase as never,
+        context.supabase,
         context.userId,
         data.month,
         "shopping",

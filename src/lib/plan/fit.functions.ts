@@ -12,7 +12,6 @@ import {
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { clampClientToday } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerFn } from "@tanstack/react-start";
 import { askPlanFit } from "./fit.server";
 import { ownPlanRow } from "./rows.server";
@@ -43,7 +42,7 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ fit: PlanFitMark | null }> => {
     const deadline = requestDeadline();
     const key = requireAiKey();
-    const supabase = context.supabase as never as SupabaseClient<never, never, never>;
+    const supabase = context.supabase;
 
     const { data: row } = await ownPlanRow(
       supabase,
@@ -67,12 +66,8 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
       import("@/lib/household.server"),
       import("@/lib/nutrition/plan-fit.server"),
     ]);
-    const home = await household.householdContext(supabase as never, context.userId);
-    const shared = await household.sharedMealPortionsByDate(
-      supabase as never,
-      context.userId,
-      home,
-    );
+    const home = await household.householdContext(supabase, context.userId);
+    const shared = await household.sharedMealPortionsByDate(supabase, context.userId, home);
     const canTouchShared = !home.plannerId || home.plannerId === context.userId;
 
     const { report } = await fitPlanMeals({
@@ -137,7 +132,7 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
     if (!fit) return { fit: existing };
     if (fit.changed.length && canTouchShared) {
       await household.syncSharedMeals({
-        supabase: supabase as never,
+        supabase: supabase,
         userId: context.userId,
         month: data.month,
         today: data.today,

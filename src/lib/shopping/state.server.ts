@@ -1,3 +1,4 @@
+import type { DbClient } from "@/integrations/supabase/db-client";
 import { isCleanFood } from "@/lib/content-guard";
 import { cleanShopping, type ShoppingList, withOwnedMark } from "@/lib/plan-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
@@ -9,7 +10,7 @@ export async function toggleShoppingOwnedHandler({
   context,
 }: {
   data: { month: string; itemName: string; trip: number; source: "fridge" | "store" | null };
-  context: { supabase: unknown; userId: string };
+  context: { supabase: DbClient; userId: string };
 }): Promise<{ shopping: ShoppingList }> {
   // La lista puede ser la de la casa: cualquier miembro con cuenta marca su
   // estado, aunque la escritura vaya a la fila del planificador (issue 06).

@@ -8,7 +8,7 @@ import {
   sharedSlotWriteBlocked,
 } from "@/lib/plan-shared";
 import { ValidationError } from "@/lib/validation-error";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 /**
  * Lee la fila `monthly_plans` PROPIA del que llama para un mes. Se filtra por
@@ -19,12 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * functions ya usa el mismo filtro `.eq("user_id", context.userId)`; esto lo
  * hace también en la lectura previa.
  */
-export function ownPlanRow(
-  supabase: SupabaseClient<never, never, never>,
-  userId: string,
-  month: string,
-  columns: string,
-) {
+export function ownPlanRow(supabase: DbClient, userId: string, month: string, columns: string) {
   return supabase
     .from("monthly_plans")
     .select(columns)
@@ -52,11 +47,11 @@ export function ownPlanRow(
  * cada marca de "lo tengo en casa".
  */
 export async function resolveShoppingRow(
-  supabase: unknown,
+  supabase: DbClient,
   userId: string,
 ): Promise<{ targetUserId: string; isMine: boolean }> {
   const { householdPlannerId } = await import("@/lib/household.server");
-  const plannerId = await householdPlannerId(supabase as never, userId);
+  const plannerId = await householdPlannerId(supabase, userId);
   if (!plannerId || plannerId === userId) {
     return { targetUserId: userId, isMine: true };
   }
@@ -66,13 +61,13 @@ export async function resolveShoppingRow(
 /** Lee la fila objetivo del estado de compra (propia con el cliente de sesión;
  *  la del planificador con `supabaseAdmin`, ver `resolveShoppingRow`). */
 export async function readShoppingRow<T>(
-  supabase: unknown,
+  supabase: DbClient,
   target: { targetUserId: string; isMine: boolean },
   month: string,
   columns: string,
 ): Promise<T | null> {
   if (target.isMine) {
-    const { data } = await ownPlanRow(supabase as never, target.targetUserId, month, columns);
+    const { data } = await ownPlanRow(supabase, target.targetUserId, month, columns);
     return (data as T | null) ?? null;
   }
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -96,7 +91,7 @@ export async function readShoppingRow<T>(
  * `latest: null` si el mes no tiene fila.
  */
 export async function updateShoppingState<Row extends Record<string, unknown>>(
-  supabase: unknown,
+  supabase: DbClient,
   target: { targetUserId: string; isMine: boolean },
   month: string,
   columns: string,
@@ -105,9 +100,8 @@ export async function updateShoppingState<Row extends Record<string, unknown>>(
   // La fila de otra persona se lee y escribe con `supabaseAdmin` (RLS solo le
   // deja leerla): ver `resolveShoppingRow`.
   const client = target.isMine
-    ? (supabase as SupabaseClient<never, never, never>)
-    : ((await import("@/integrations/supabase/client.server"))
-        .supabaseAdmin as unknown as SupabaseClient<never, never, never>);
+    ? supabase
+    : (await import("@/integrations/supabase/client.server")).supabaseAdmin;
   const { latest, patch } = await updatePlanRowCas(
     client,
     target.targetUserId,
@@ -131,14 +125,14 @@ export async function updateShoppingState<Row extends Record<string, unknown>>(
  * semana; si no hay hogar o la comida no se comparte, no hay nada que impedir.
  */
 export async function guardSharedSlotWrite(
-  supabase: unknown,
+  supabase: DbClient,
   userId: string,
   date: string,
   slot: MealSlot,
 ): Promise<void> {
   if (slot === "snack") return;
   const { householdContext } = await import("@/lib/household.server");
-  const home = await householdContext(supabase as never, userId);
+  const home = await householdContext(supabase, userId);
   const blocked = sharedSlotWriteBlocked(home, userId, date, slot);
   if (blocked) throw new ValidationError(blocked);
 }

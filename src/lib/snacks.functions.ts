@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DbClient } from "@/integrations/supabase/db-client";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertCleanFood } from "@/lib/assert-clean-food";
@@ -37,7 +37,7 @@ import { requireAiKey } from "@/lib/ai-provider.server";
  * Cada operación tiene su ruta espejo en `src/routes/api/v1/snacks/`.
  */
 
-type Client = SupabaseClient<never, never, never>;
+type Client = DbClient;
 
 /**
  * Lee, transforma y escribe la columna de hoy con `updateDailyLogCas`,
@@ -171,11 +171,8 @@ export const logSnack = createServerFn({ method: "POST" })
       ...data.macros,
       source: data.source,
     };
-    const snacks = await patchSnacks(
-      context.supabase as never,
-      context.userId,
-      data.today,
-      (current) => withSnack(current, entry),
+    const snacks = await patchSnacks(context.supabase, context.userId, data.today, (current) =>
+      withSnack(current, entry),
     );
     return { snacks, entry };
   });
@@ -188,11 +185,8 @@ export const removeSnack = createServerFn({ method: "POST" })
     return { today: clampClientToday(input?.today), id };
   })
   .handler(async ({ data, context }): Promise<{ snacks: DaySnacks }> => {
-    const snacks = await patchSnacks(
-      context.supabase as never,
-      context.userId,
-      data.today,
-      (current) => withoutSnack(current, data.id),
+    const snacks = await patchSnacks(context.supabase, context.userId, data.today, (current) =>
+      withoutSnack(current, data.id),
     );
     return { snacks };
   });
