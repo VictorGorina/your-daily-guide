@@ -17,6 +17,7 @@
     "typecheck:test": "tsc -p tsconfig.test.json",
     "test": "bun test",
     "db": "bun scripts/db.ts",
+    "db:types": "bash scripts/db-types.sh",
     "eval:recipes": "bun src/lib/plan-eval/recipe-accuracy.ts",
     "recipes:review": "bun scripts/recipes-review.ts",
     "foods:review": "bun scripts/foods-review.ts",

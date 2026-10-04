@@ -29,6 +29,13 @@ for f in age.ts food-categories.ts dates.ts auth-cache.ts log-redact.ts effectiv
   fi
 done
 
+# Los tipos de la base de datos los genera `bun run db:types` y los copia a las
+# dos apps; viven en carpetas distintas, por eso no van en la lista de arriba.
+if ! diff -q src/integrations/supabase/types.ts mobile/lib/database.types.ts > /dev/null 2>&1; then
+  echo "DRIFT (idéntico): tipos de la base de datos (regenera con \`bun run db:types\`)"
+  fail=1
+fi
+
 # --- Archivos que difieren solo en imports / cabecera ---
 # Se compara desde la primera línea que no sea import, comentario de cabecera
 # ni línea vacía. Cualquier diferencia después de eso es drift funcional.

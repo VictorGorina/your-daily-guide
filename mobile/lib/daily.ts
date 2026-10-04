@@ -24,9 +24,9 @@ import type {
  * Son consultas normales a Supabase: lo que protege los datos son las políticas
  * RLS del proyecto, las mismas por las que pasa la web.
  *
- * Ojo: esto es una copia, no código compartido. Los tipos siguen el esquema de
- * `src/integrations/supabase/types.ts`; si cambia una tabla, hay que tocarlo en
- * los dos sitios (ver AGENTS.md).
+ * Ojo: esto es una copia, no código compartido. Los tipos de aquí están escritos
+ * a mano y siguen el esquema de `./database.types.ts` (generado, `bun run
+ * db:types` en la raíz); si cambia una tabla, hay que tocarlos (ver AGENTS.md).
  */
 
 export type Profile = {
