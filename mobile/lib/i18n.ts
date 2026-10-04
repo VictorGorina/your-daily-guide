@@ -69,6 +69,14 @@ export function dictationLang(
   return c === "MX" || c === "US" ? `es-${c}` : "es-ES";
 }
 
+/**
+ * Etiqueta `Intl` de las fechas de la interfaz: la del idioma de la pantalla.
+ * En inglés, `en-GB` (día antes que mes, como el resto de la app).
+ */
+export function dateLocale(locale: string | null | undefined): string {
+  return normalizeLocale(locale) === "en" ? "en-GB" : "es-ES";
+}
+
 /** Idioma del dispositivo (síncrono en expo-localization), para el arranque y el RegionStep. */
 export function detectDeviceLocale(): Locale {
   try {

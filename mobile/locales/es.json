@@ -470,5 +470,65 @@
       "send": "Enviar",
       "close": "Cerrar"
     }
+  },
+  "hoy": {
+    "title": "Hoy",
+    "momentum": "impulso",
+    "momentumHint": "Impulso: sube con los días buenos, baja con los flojos, nunca vuelve a cero",
+    "planShort": "Tu plan de este mes se hizo antes de calcular tu objetivo y sus platos suman menos de lo que necesitas: el mes que viene cuadrará.",
+    "guide": {
+      "preparing": "Preparando tu guía del día...",
+      "label": "Guía del coach",
+      "withCalories": "Guía del coach · {{calories}}",
+      "generate": "Generar"
+    },
+    "meals": {
+      "title": "Comidas de hoy",
+      "count": "{{done}} de {{total}}",
+      "noPlanTitle": "Prepara tu plan del mes",
+      "noPlanBody": "Cinco preguntas sobre tu mes y te preparo las comidas y la compra.",
+      "loadFailed": "No hemos podido preparar las comidas de hoy. Reintentar",
+      "loading": "Preparando las comidas de hoy...",
+      "noMenu": "Sin menú todavía",
+      "vague": "Concreta qué comiste para poder calcularlo",
+      "calculating": "Calculando…",
+      "adjusting": "Ajustando el plan…",
+      "ateOther": "Comí otra cosa",
+      "ateThis": "Comí esto",
+      "undo": "Deshacer",
+      "ateOtherLabel": "{{meal}}: comí otra cosa",
+      "ateThisLabel": "{{meal}}: comí esto",
+      "undoLabel": "{{meal}}: deshacer",
+      "sharedBase": "Base común · \"Comí otra cosa\" si tu ración cambia",
+      "atHome": "Comes en casa",
+      "aloneToday": "Comes solo hoy",
+      "away": "Fuera de casa",
+      "forChild": "Para {{name}}:"
+    },
+    "addSnack": "Añadir picoteo",
+    "addExercise": "Registrar deporte",
+    "week": {
+      "hintPast": "Toca una comida para corregir lo que comiste.",
+      "hintFuture": "Toca un día para ver su menú.",
+      "noMenu": "Aún no hay menú para este día. Crea tu plan del mes en la pestaña Plan."
+    },
+    "kids": {
+      "updated": "Menú de {{names}} actualizado",
+      "upToDate": "Ya estaba al día",
+      "failed": "No hemos podido actualizar el menú de los peques"
+    },
+    "errors": {
+      "saveFailed": "No hemos podido guardar el cambio",
+      "coachFailed": "El coach no ha podido responder ahora mismo",
+      "removeExercise": "No hemos podido quitar el deporte",
+      "removeSnack": "No hemos podido quitar el picoteo"
+    }
+  },
+  "moments": {
+    "Desayuno": "Desayuno",
+    "Comida": "Comida",
+    "Merienda": "Merienda",
+    "Snack": "Snack",
+    "Cena": "Cena"
   }
 }

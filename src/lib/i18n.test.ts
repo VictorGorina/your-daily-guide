@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { detectedLocale, dictationLang, htmlLang, offeredLocales } from "./i18n";
+import { dateLocale, detectedLocale, dictationLang, htmlLang, offeredLocales } from "./i18n";
 
 describe("B0 del ticket 34: inglés solo con la interfaz traducida", () => {
   test("sin la variable solo se ofrece español", () => {
@@ -43,5 +43,24 @@ describe("dictationLang", () => {
   test("quien conserva el inglés dicta en inglés", () => {
     expect(dictationLang("en", "GB")).toBe("en-GB");
     expect(dictationLang("en", "ES")).toBe("en-US");
+  });
+});
+
+describe("dateLocale: las fechas van en el idioma de la pantalla", () => {
+  test("español por defecto y con cualquier etiqueta desconocida", () => {
+    expect(dateLocale("es")).toBe("es-ES");
+    expect(dateLocale(undefined)).toBe("es-ES");
+    expect(dateLocale("fr")).toBe("es-ES");
+  });
+
+  test("inglés con el día antes que el mes", () => {
+    expect(dateLocale("en")).toBe("en-GB");
+    expect(dateLocale("en-US")).toBe("en-GB");
+    const label = new Date("2026-10-04T00:00:00").toLocaleDateString(dateLocale("en"), {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    expect(label).toBe("Sunday 4 October");
   });
 });

@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
+import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AdjustmentInfoSheet } from "../../components/adjustment-info-sheet";
@@ -44,6 +45,7 @@ import { SnackSheet } from "../../components/snack-sheet";
 import { WeekPager } from "../../components/week-pager";
 import { classifyDish, FOOD_CATEGORIES } from "../../lib/food-categories";
 import { apiPost } from "../../lib/api";
+import { dateLocale } from "../../lib/i18n";
 import {
   ensureTodayLog,
   fetchLogs,
@@ -132,10 +134,10 @@ const MOMENT_TO_MEAL_KEY: Record<string, MealKey | undefined> = {
   Cena: "cena",
 };
 
-// Fecha formateada en español
-function formatDate(): string {
+// Fecha de hoy en el idioma de la pantalla
+function formatDate(locale: string): string {
   return new Date()
-    .toLocaleDateString("es-ES", {
+    .toLocaleDateString(dateLocale(locale), {
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -179,6 +181,7 @@ let lastCalcAttempt = 0;
 
 export default function Hoy() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -351,13 +354,12 @@ export default function Hoy() {
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
       Alert.alert(
-        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+        res.filled
+          ? t("hoy.kids.updated", { names: res.children.join(", ") })
+          : t("hoy.kids.upToDate"),
       );
     },
-    onError: (e) =>
-      Alert.alert(
-        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
-      ),
+    onError: (e) => Alert.alert(e instanceof Error ? e.message : t("hoy.kids.failed")),
   });
 
   const todayQ = useQuery({
@@ -403,7 +405,7 @@ export default function Hoy() {
       qc.invalidateQueries({ queryKey: ["today"] });
       qc.invalidateQueries({ queryKey: ["logs"] });
     },
-    onError: () => Alert.alert("No hemos podido guardar el cambio"),
+    onError: () => Alert.alert(t("hoy.errors.saveFailed")),
   });
 
   const guide = today?.guide ?? null;
@@ -444,7 +446,7 @@ export default function Hoy() {
         lastAutoGuideFailed = true;
       } else {
         lastAutoGuideFailed = false;
-        Alert.alert("El coach no ha podido responder ahora mismo");
+        Alert.alert(t("hoy.errors.coachFailed"));
       }
     } finally {
       setGenerating(false);
@@ -650,7 +652,7 @@ export default function Hoy() {
       await apiPost("exercise/remove", { today: today0, id });
       afterExerciseChange();
     } catch (e) {
-      Alert.alert(e instanceof Error ? e.message : "No hemos podido quitar el deporte");
+      Alert.alert(e instanceof Error ? e.message : t("hoy.errors.removeExercise"));
     } finally {
       setRemovingExercise(null);
     }
@@ -663,7 +665,7 @@ export default function Hoy() {
       await apiPost("snacks/remove", { today: today0, id });
       afterSnackChange();
     } catch (e) {
-      Alert.alert(e instanceof Error ? e.message : "No hemos podido quitar el picoteo");
+      Alert.alert(e instanceof Error ? e.message : t("hoy.errors.removeSnack"));
     } finally {
       setRemovingSnack(null);
     }
@@ -739,13 +741,13 @@ export default function Hoy() {
         <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
             <Text className="font-mono-medium text-[11px] uppercase tracking-widest text-muted-foreground">
-              {formatDate()}
+              {formatDate(i18n.language)}
             </Text>
             <Text
               className="font-heading text-foreground"
               style={{ fontSize: 40, lineHeight: 42, letterSpacing: -1.2 }}
             >
-              Hoy
+              {t("hoy.title")}
             </Text>
           </View>
           <View className="items-end gap-1">
@@ -759,7 +761,7 @@ export default function Hoy() {
               <Text className="font-mono-medium text-[11px] text-muted-foreground">%</Text>
             </View>
             <Text className="font-mono-medium text-[9.5px] uppercase tracking-widest text-muted-foreground">
-              impulso
+              {t("hoy.momentum")}
             </Text>
           </View>
         </View>
@@ -775,8 +777,7 @@ export default function Hoy() {
         ) : null}
         {showNumbers && planShortOfTarget ? (
           <Text className="font-body mt-1.5 text-[10.5px] text-muted-foreground">
-            Tu plan de este mes se hizo antes de calcular tu objetivo y sus platos suman menos de lo
-            que necesitas: el mes que viene cuadrará.
+            {t("hoy.planShort")}
           </Text>
         ) : null}
 
@@ -790,14 +791,16 @@ export default function Hoy() {
           />
           <Text className="min-w-0 flex-1 font-body-medium text-xs text-muted-foreground">
             {generating || (!guide && todayQ.isLoading)
-              ? "Preparando tu guía del día..."
+              ? t("hoy.guide.preparing")
               : guide
-                ? `Guía del coach · ${caloriesText(energy, showNumbers)}`
-                : "Guía del coach"}
+                ? t("hoy.guide.withCalories", { calories: caloriesText(energy, showNumbers) })
+                : t("hoy.guide.label")}
           </Text>
           {!guide && !generating && !todayQ.isLoading ? (
             <Pressable onPress={() => requestGuide()}>
-              <Text className="font-body-medium text-xs text-primary-ink">Generar</Text>
+              <Text className="font-body-medium text-xs text-primary-ink">
+                {t("hoy.guide.generate")}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -809,10 +812,10 @@ export default function Hoy() {
               className="font-heading text-foreground"
               style={{ fontSize: 21, lineHeight: 22, letterSpacing: -0.4 }}
             >
-              Comidas de hoy
+              {t("hoy.meals.title")}
             </Text>
             <Text className="font-mono-medium text-[11px] text-muted-foreground">
-              {doneCount} de {habits.length}
+              {t("hoy.meals.count", { done: doneCount, total: habits.length })}
             </Text>
           </View>
 
@@ -835,10 +838,10 @@ export default function Hoy() {
                 </View>
                 <View className="flex-1">
                   <Text className="font-body-semibold text-sm text-foreground">
-                    Prepara tu plan del mes
+                    {t("hoy.meals.noPlanTitle")}
                   </Text>
                   <Text className="font-body text-xs text-muted-foreground">
-                    Cinco preguntas sobre tu mes y te preparo las comidas y la compra.
+                    {t("hoy.meals.noPlanBody")}
                   </Text>
                 </View>
                 <ChevronRight size={16} color="#6b6256" />
@@ -848,12 +851,12 @@ export default function Hoy() {
                 {todayQ.isError ? (
                   <Pressable onPress={() => todayQ.refetch()}>
                     <Text className="font-body-medium text-sm text-primary-ink">
-                      No hemos podido preparar las comidas de hoy. Reintentar
+                      {t("hoy.meals.loadFailed")}
                     </Text>
                   </Pressable>
                 ) : (
                   <Text className="font-body text-sm text-muted-foreground">
-                    Preparando las comidas de hoy...
+                    {t("hoy.meals.loading")}
                   </Text>
                 )}
               </View>
@@ -922,7 +925,7 @@ export default function Hoy() {
                       <View className="min-w-0 flex-1">
                         <View className="flex-row items-baseline gap-1.5">
                           <Text className="font-body-semibold text-[11.5px] text-foreground">
-                            {h.label}
+                            {t(`moments.${h.label}`, { defaultValue: h.label })}
                           </Text>
                           {planned ? (
                             <Text className="font-mono text-[10.5px] text-muted-foreground">
@@ -964,8 +967,8 @@ export default function Hoy() {
                             )}
                             <Text className="font-body text-[11px] text-muted-foreground">
                               {mealNumbers?.vague
-                                ? "Concreta qué comiste para poder calcularlo"
-                                : "Calculando…"}
+                                ? t("hoy.meals.vague")
+                                : t("hoy.meals.calculating")}
                             </Text>
                           </View>
                         ) : null}
@@ -1070,16 +1073,16 @@ export default function Hoy() {
                                 })}
                               </View>
                               <Text className="font-body text-[11px] text-muted-foreground">
-                                Base común · "Comí otra cosa" si tu ración cambia
+                                {t("hoy.meals.sharedBase")}
                               </Text>
                             </>
                           ) : comp.meHome ? (
                             <Text className="font-body text-[11px] text-muted-foreground">
-                              Comes en casa
+                              {t("hoy.meals.atHome")}
                             </Text>
                           ) : (
                             <Text className="font-body text-[11px] text-muted-foreground">
-                              Fuera de casa
+                              {t("hoy.meals.away")}
                             </Text>
                           )}
                         </View>
@@ -1088,7 +1091,8 @@ export default function Hoy() {
                     {childMealsFor(h.label).map((k) => (
                       <View key={`${k.name}-${k.dish}`} className="mt-2">
                         <Text className="font-body text-[11px] leading-relaxed text-muted-foreground">
-                          Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
+                          {t("hoy.meals.forChild", { name: k.name })}{" "}
+                          <Text className="text-foreground">{k.dish}</Text>
                           {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
                         </Text>
                         <DishRecipe dish={k.dish} month={month} />
@@ -1124,7 +1128,7 @@ export default function Hoy() {
           className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
         >
           <Cookie size={16} color="#3e3d39" />
-          <Text className="font-body-semibold text-sm text-foreground">Añadir picoteo</Text>
+          <Text className="font-body-semibold text-sm text-foreground">{t("hoy.addSnack")}</Text>
         </Pressable>
 
         {/* ── Registrar deporte: pegado encima de la tira de la semana ── */}
@@ -1133,7 +1137,7 @@ export default function Hoy() {
           className="mt-2.5 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
         >
           <Activity size={16} color="#3e3d39" />
-          <Text className="font-body-semibold text-sm text-foreground">Registrar deporte</Text>
+          <Text className="font-body-semibold text-sm text-foreground">{t("hoy.addExercise")}</Text>
         </Pressable>
 
         {/* ── Balance del día: la suma de los tres orígenes y lo que ha movido
@@ -1184,9 +1188,7 @@ export default function Hoy() {
             ) : null}
           </Animated.View>
           <Text className="font-body mt-2 px-1 text-[10.5px] text-muted-foreground">
-            {openDay && openDay < todayISO()
-              ? "Toca una comida para corregir lo que comiste."
-              : "Toca un día para ver su menú."}
+            {openDay && openDay < todayISO() ? t("hoy.week.hintPast") : t("hoy.week.hintFuture")}
           </Text>
         </View>
 
@@ -1316,6 +1318,7 @@ function DayPanel({
    *  (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
+  const { i18n } = useTranslation();
   const isPast = date < todayISO();
 
   return (
@@ -1326,7 +1329,7 @@ function DayPanel({
             <ChevronDown size={16} color="#6dbe7b" />
             <Text className="font-body-semibold text-sm text-foreground">
               {capitalizeFirst(
-                new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+                new Date(`${date}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
                   weekday: "long",
                   day: "numeric",
                   month: "long",
@@ -1364,13 +1367,14 @@ function DayMenu({
   selectedSlots: readonly MealSlot[];
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
+  const { t, i18n } = useTranslation();
   const meals = mealsForDate(plan, date, selectedSlots);
   const day = planForDate(plan, date)?.day ?? null;
   const homeCtx: HouseholdPinContext | null = homePlanner
     ? { ...homePlanner, weekday: (new Date(`${date}T00:00:00`).getDay() + 6) % 7 }
     : null;
   const label = capitalizeFirst(
-    new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+    new Date(`${date}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -1388,7 +1392,7 @@ function DayMenu({
           {meals.map((m) => (
             <Field
               key={m.slot}
-              label={m.moment}
+              label={t(`moments.${m.moment}`, { defaultValue: m.moment })}
               value={m.idea}
               note={offListNote(m.off)}
               recipeMonth={date.slice(0, 7)}
@@ -1397,9 +1401,7 @@ function DayMenu({
           ))}
         </View>
       ) : (
-        <Text className="font-body mt-2 text-sm text-muted-foreground">
-          Aún no hay menú para este día. Crea tu plan del mes en la pestaña Plan.
-        </Text>
+        <Text className="font-body mt-2 text-sm text-muted-foreground">{t("hoy.week.noMenu")}</Text>
       )}
     </View>
   );

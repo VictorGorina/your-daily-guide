@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { AdjustmentInfoSheet } from "@/components/adjustment-info-sheet";
@@ -70,6 +71,7 @@ import {
   ZERO_MACROS,
 } from "@/lib/macros";
 import { weekdayIndex } from "@/lib/dates";
+import { dateLocale } from "@/lib/i18n";
 import { fetchHousehold, householdSharedSlots } from "@/lib/household";
 import {
   EMPTY_SCHEDULE,
@@ -198,6 +200,7 @@ let lastCalcAttempt = 0;
 
 function Hoy() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const makeGuide = useServerFn(generateDailyGuide);
   const fillKids = useServerFn(fillChildMeals);
@@ -381,13 +384,12 @@ function Hoy() {
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
       toast.success(
-        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+        res.filled
+          ? t("hoy.kids.updated", { names: res.children.join(", ") })
+          : t("hoy.kids.upToDate"),
       );
     },
-    onError: (e) =>
-      toast.error(
-        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
-      ),
+    onError: (e) => toast.error(e instanceof Error ? e.message : t("hoy.kids.failed")),
   });
 
   const todayQ = useQuery({
@@ -446,7 +448,7 @@ function Hoy() {
       qc.invalidateQueries({ queryKey: ["today"] });
       qc.invalidateQueries({ queryKey: ["logs"] });
     },
-    onError: () => toast.error("No hemos podido guardar el cambio"),
+    onError: () => toast.error(t("hoy.errors.saveFailed")),
   });
 
   const guide = today?.guide ?? null;
@@ -486,7 +488,7 @@ function Hoy() {
         lastAutoGuideFailed = true;
       } else {
         lastAutoGuideFailed = false;
-        toast.error("El coach no ha podido responder ahora mismo");
+        toast.error(t("hoy.errors.coachFailed"));
       }
     } finally {
       setGenerating(false);
@@ -718,7 +720,7 @@ function Hoy() {
       await removeExerciseCall({ data: { today: today0, id } });
       afterExerciseChange();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No hemos podido quitar el deporte");
+      toast.error(e instanceof Error ? e.message : t("hoy.errors.removeExercise"));
     } finally {
       setRemovingExercise(null);
     }
@@ -732,15 +734,21 @@ function Hoy() {
       await removeSnackCall({ data: { today: today0, id } });
       afterSnackChange();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No hemos podido quitar el picoteo");
+      toast.error(e instanceof Error ? e.message : t("hoy.errors.removeSnack"));
     } finally {
       setRemovingSnack(null);
     }
   };
 
+  // El momento se guarda en español canónico; aquí solo se pinta en el idioma.
+  const mealName = (label: string) => t(`moments.${label}`, { defaultValue: label });
   const quote = quoteOfTheDay();
   const dateLabel = new Date(`${today0}T00:00:00`)
-    .toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+    .toLocaleDateString(dateLocale(i18n.language), {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    })
     .replace(",", "");
 
   const setMealStatus = (index: number, status: MealStatus) => {
@@ -830,13 +838,10 @@ function Hoy() {
             {dateLabel}
           </p>
           <h1 className="mt-1.5 font-title text-[40px] font-semibold leading-[0.98] tracking-[-0.03em] text-foreground">
-            Hoy
+            {t("hoy.title")}
           </h1>
         </div>
-        <div
-          className="flex shrink-0 flex-col items-end gap-1"
-          title="Impulso: sube con los días buenos, baja con los flojos, nunca vuelve a cero"
-        >
+        <div className="flex shrink-0 flex-col items-end gap-1" title={t("hoy.momentumHint")}>
           <div className="flex items-baseline gap-[3px]">
             <span className="font-title text-[26px] font-semibold leading-none tabular-nums text-foreground">
               {impulso}
@@ -846,7 +851,7 @@ function Hoy() {
             </span>
           </div>
           <span className="font-num text-[9.5px] font-medium uppercase leading-none tracking-[0.1em] text-muted-foreground">
-            impulso
+            {t("hoy.momentum")}
           </span>
         </div>
       </header>
@@ -861,8 +866,7 @@ function Hoy() {
       ) : null}
       {showNumbers && planShortOfTarget ? (
         <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
-          Tu plan de este mes se hizo antes de calcular tu objetivo y sus platos suman menos de lo
-          que necesitas: el mes que viene cuadrará.
+          {t("hoy.planShort")}
         </p>
       ) : null}
 
@@ -875,10 +879,10 @@ function Hoy() {
           <span className="block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
             {generating || (!guide && todayQ.isLoading)
-              ? "Preparando tu guía del día..."
+              ? t("hoy.guide.preparing")
               : guide
-                ? `Guía del coach · ${caloriesText(energy, showNumbers)}`
-                : "Guía del coach"}
+                ? t("hoy.guide.withCalories", { calories: caloriesText(energy, showNumbers) })
+                : t("hoy.guide.label")}
           </span>
           {!guide && !generating && !todayQ.isLoading ? (
             <button
@@ -886,7 +890,7 @@ function Hoy() {
               onClick={() => requestGuide()}
               className="shrink-0 text-xs font-medium text-primary-ink"
             >
-              Generar
+              {t("hoy.guide.generate")}
             </button>
           ) : null}
         </div>
@@ -895,11 +899,11 @@ function Hoy() {
       <section className="animate-rise mt-6">
         <div className="flex items-baseline justify-between gap-2.5">
           <h2 className="font-title text-[21px] font-semibold leading-none tracking-[-0.02em]">
-            Comidas de hoy
+            {t("hoy.meals.title")}
           </h2>
           {habits.length ? (
             <span className="font-num text-[11px] font-medium tabular-nums text-muted-foreground">
-              {doneCount} de {habits.length}
+              {t("hoy.meals.count", { done: doneCount, total: habits.length })}
             </span>
           ) : null}
         </div>
@@ -922,9 +926,9 @@ function Hoy() {
                 <CalendarRange className="h-5 w-5" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">Prepara tu plan del mes</span>
+                <span className="block text-sm font-semibold">{t("hoy.meals.noPlanTitle")}</span>
                 <span className="block text-xs text-muted-foreground">
-                  Cinco preguntas sobre tu mes y te preparo las comidas y la compra.
+                  {t("hoy.meals.noPlanBody")}
                 </span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -935,11 +939,11 @@ function Hoy() {
               onClick={() => todayQ.refetch()}
               className="mt-3.5 text-sm font-medium text-primary-ink"
             >
-              No hemos podido preparar las comidas de hoy. Reintentar
+              {t("hoy.meals.loadFailed")}
             </button>
           ) : (
             <p className="mt-3.5 animate-pulse text-sm text-muted-foreground">
-              Preparando las comidas de hoy...
+              {t("hoy.meals.loading")}
             </p>
           )
         ) : (
@@ -1000,7 +1004,7 @@ function Hoy() {
                     <div className="min-w-0">
                       <span className="flex items-baseline gap-[7px]">
                         <span className="text-[11.5px] font-semibold tracking-[0.01em]">
-                          {h.label}
+                          {mealName(h.label)}
                         </span>
                         {MOMENT_TIME[h.label] ? (
                           <span className="font-num text-[10.5px] text-muted-foreground">
@@ -1024,7 +1028,7 @@ function Hoy() {
                             : "text-[13px] leading-snug text-muted-foreground"
                         }`}
                       >
-                        {idea || "Sin menú todavía"}
+                        {idea || t("hoy.meals.noMenu")}
                       </span>
                       {wasIdea ? (
                         <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground line-through">
@@ -1034,11 +1038,11 @@ function Hoy() {
                       {calculating ? (
                         <span className="mt-1 flex items-center gap-1 text-[11px] leading-snug text-muted-foreground">
                           {mealNumbers?.vague ? (
-                            "Concreta qué comiste para poder calcularlo"
+                            t("hoy.meals.vague")
                           ) : (
                             <>
                               <Loader2 className="h-3 w-3 animate-spin" />
-                              Calculando…
+                              {t("hoy.meals.calculating")}
                             </>
                           )}
                         </span>
@@ -1061,7 +1065,7 @@ function Hoy() {
                       {mealSwap.isAdjusting(h.label) ? (
                         <span
                           className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10"
-                          title="Ajustando el plan…"
+                          title={t("hoy.meals.adjusting")}
                         >
                           <Loader2 className="h-[14px] w-[14px] animate-spin text-primary-ink" />
                         </span>
@@ -1071,8 +1075,8 @@ function Hoy() {
                         <>
                           <button
                             type="button"
-                            title="Comí otra cosa"
-                            aria-label={`${h.label}: comí otra cosa`}
+                            title={t("hoy.meals.ateOther")}
+                            aria-label={t("hoy.meals.ateOtherLabel", { meal: mealName(h.label) })}
                             onClick={() => setSwapIndex(i)}
                             className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
                           >
@@ -1080,8 +1084,8 @@ function Hoy() {
                           </button>
                           <button
                             type="button"
-                            title="Comí esto"
-                            aria-label={`${h.label}: comí esto`}
+                            title={t("hoy.meals.ateThis")}
+                            aria-label={t("hoy.meals.ateThisLabel", { meal: mealName(h.label) })}
                             onClick={() => setMealStatus(i, "plan")}
                             className="grid h-[34px] w-[34px] place-items-center rounded-full transition-transform active:scale-95"
                             style={{
@@ -1095,8 +1099,8 @@ function Hoy() {
                       ) : h.done ? (
                         <button
                           type="button"
-                          title="Deshacer"
-                          aria-label={`${h.label}: deshacer`}
+                          title={t("hoy.meals.undo")}
+                          aria-label={t("hoy.meals.undoLabel", { meal: mealName(h.label) })}
                           onClick={() => clearMealStatus(i)}
                           className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full bg-success text-success-foreground transition-transform active:scale-95"
                         >
@@ -1105,8 +1109,8 @@ function Hoy() {
                       ) : (
                         <button
                           type="button"
-                          title="Deshacer"
-                          aria-label={`${h.label}: deshacer`}
+                          title={t("hoy.meals.undo")}
+                          aria-label={t("hoy.meals.undoLabel", { meal: mealName(h.label) })}
                           onClick={() => clearMealStatus(i)}
                           className="grid h-[34px] w-[34px] place-items-center rounded-full bg-secondary text-muted-foreground transition-transform active:scale-95"
                         >
@@ -1157,13 +1161,17 @@ function Hoy() {
                               })}
                             </span>
                             <span className="text-[11px] text-muted-foreground">
-                              Base común · "Comí otra cosa" si tu ración cambia
+                              {t("hoy.meals.sharedBase")}
                             </span>
                           </>
                         ) : comp.meHome ? (
-                          <span className="text-[11px] text-muted-foreground">Comes solo hoy</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {t("hoy.meals.aloneToday")}
+                          </span>
                         ) : (
-                          <span className="text-[11px] text-muted-foreground">Fuera de casa</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {t("hoy.meals.away")}
+                          </span>
                         )}
                       </div>
                     );
@@ -1171,7 +1179,8 @@ function Hoy() {
                   {kidMeals.map((k) => (
                     <div key={`${k.name}-${k.dish}`} className="mt-2">
                       <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                        {t("hoy.meals.forChild", { name: k.name })}{" "}
+                        <span className="text-foreground">{k.dish}</span>
                         {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
                       </p>
                       <DishRecipe dish={k.dish} month={month} />
@@ -1214,7 +1223,7 @@ function Hoy() {
         className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3.5 text-sm font-semibold text-foreground transition-transform active:scale-[0.99]"
       >
         <Cookie className="h-4 w-4" aria-hidden />
-        Añadir picoteo
+        {t("hoy.addSnack")}
       </button>
 
       {/* Registrar deporte: mismo formato que "Añadir picoteo", pegado encima
@@ -1225,7 +1234,7 @@ function Hoy() {
         className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3.5 text-sm font-semibold text-foreground transition-transform active:scale-[0.99]"
       >
         <Activity className="h-4 w-4" aria-hidden />
-        Registrar deporte
+        {t("hoy.addExercise")}
       </button>
 
       {/* Balance del día: la suma de los tres orígenes y lo que ha movido en
@@ -1278,9 +1287,7 @@ function Hoy() {
           </AnimatePresence>
         </motion.div>
         <p className="mt-2.5 px-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-          {openDay && openDay < todayISO()
-            ? "Toca una comida para corregir lo que comiste."
-            : "Toca un día para ver su menú."}
+          {openDay && openDay < todayISO() ? t("hoy.week.hintPast") : t("hoy.week.hintFuture")}
         </p>
       </section>
 
@@ -1392,6 +1399,7 @@ function DayPanel({
    *  resto del hogar (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
+  const { i18n } = useTranslation();
   const isPast = date < todayISO();
 
   return (
@@ -1405,7 +1413,7 @@ function DayPanel({
         <div className="mt-3 rounded-2xl bg-surface p-4">
           <p className="mb-3 text-xs font-semibold text-foreground">
             {capitalizeFirst(
-              new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+              new Date(`${date}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
                 weekday: "long",
                 day: "numeric",
                 month: "long",
@@ -1439,6 +1447,7 @@ function DayMenu({
   selectedSlots: readonly MealSlot[];
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
+  const { t, i18n } = useTranslation();
   // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
   // para ese día), no la lista entera de desayunos de la semana.
   const meals = mealsForDate(plan, date, selectedSlots);
@@ -1450,7 +1459,7 @@ function DayMenu({
   const weekday = weekdayIndex(date);
   const homeCtx: HouseholdPinContext | null = homePlanner ? { ...homePlanner, weekday } : null;
   const label = capitalizeFirst(
-    new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+    new Date(`${date}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -1468,7 +1477,7 @@ function DayMenu({
           {meals.map((m) => (
             <Field
               key={m.slot}
-              label={m.moment}
+              label={t(`moments.${m.moment}`, { defaultValue: m.moment })}
               value={m.idea}
               note={offListNote(m.off)}
               recipeMonth={date.slice(0, 7)}
@@ -1477,9 +1486,7 @@ function DayMenu({
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Aún no hay menú para este día. Crea tu plan del mes en la pestaña Plan.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">{t("hoy.week.noMenu")}</p>
       )}
     </div>
   );

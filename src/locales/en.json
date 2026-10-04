@@ -470,5 +470,65 @@
       "send": "Send",
       "close": "Close"
     }
+  },
+  "hoy": {
+    "title": "Today",
+    "momentum": "momentum",
+    "momentumHint": "Momentum: it goes up on good days, down on weak ones, and never drops back to zero",
+    "planShort": "This month's plan was made before your target was calculated, and its dishes add up to less than you need: next month it will match.",
+    "guide": {
+      "preparing": "Preparing your guide for today...",
+      "label": "Coach's guide",
+      "withCalories": "Coach's guide · {{calories}}",
+      "generate": "Generate"
+    },
+    "meals": {
+      "title": "Today's meals",
+      "count": "{{done}} of {{total}}",
+      "noPlanTitle": "Set up your plan for the month",
+      "noPlanBody": "Five questions about your month and I'll prepare your meals and your shopping.",
+      "loadFailed": "We couldn't prepare today's meals. Retry",
+      "loading": "Preparing today's meals...",
+      "noMenu": "No menu yet",
+      "vague": "Say exactly what you ate so we can calculate it",
+      "calculating": "Calculating…",
+      "adjusting": "Adjusting the plan…",
+      "ateOther": "I ate something else",
+      "ateThis": "I ate this",
+      "undo": "Undo",
+      "ateOtherLabel": "{{meal}}: I ate something else",
+      "ateThisLabel": "{{meal}}: I ate this",
+      "undoLabel": "{{meal}}: undo",
+      "sharedBase": "Shared base · \"I ate something else\" if your portion changes",
+      "atHome": "You eat at home",
+      "aloneToday": "You're eating alone today",
+      "away": "Away from home",
+      "forChild": "For {{name}}:"
+    },
+    "addSnack": "Add a snack",
+    "addExercise": "Log exercise",
+    "week": {
+      "hintPast": "Tap a meal to correct what you ate.",
+      "hintFuture": "Tap a day to see its menu.",
+      "noMenu": "There's no menu for this day yet. Create your plan for the month in the Plan tab."
+    },
+    "kids": {
+      "updated": "{{names}}'s menu updated",
+      "upToDate": "It was already up to date",
+      "failed": "We couldn't update the kids' menu"
+    },
+    "errors": {
+      "saveFailed": "We couldn't save the change",
+      "coachFailed": "The coach couldn't reply right now",
+      "removeExercise": "We couldn't remove the exercise",
+      "removeSnack": "We couldn't remove the snack"
+    }
+  },
+  "moments": {
+    "Desayuno": "Breakfast",
+    "Comida": "Lunch",
+    "Merienda": "Afternoon snack",
+    "Snack": "Snack",
+    "Cena": "Dinner"
   }
 }
