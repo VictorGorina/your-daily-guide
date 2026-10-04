@@ -674,7 +674,7 @@ export async function fetchChatDays(): Promise<{ date: string; count: number }[]
   if (error) throw error;
   const today = todayISO();
   const counts = new Map<string, number>();
-  for (const row of (data ?? []) as unknown as { log_date: string }[]) {
+  for (const row of data ?? []) {
     if (row.log_date === today) continue;
     counts.set(row.log_date, (counts.get(row.log_date) ?? 0) + 1);
   }
