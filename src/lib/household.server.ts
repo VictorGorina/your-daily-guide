@@ -1,5 +1,6 @@
 import { asPromptData } from "@/lib/prompt-data";
 import type { DbClient } from "@/integrations/supabase/db-client";
+import type { EnergyProfile } from "@/lib/nutrition/energy";
 
 import { weekdayIndex } from "@/lib/dates";
 import { effectiveSharedSlots } from "@/lib/effective-shared-slots";
@@ -544,7 +545,7 @@ export async function sharedMealPortionsByDate(
   const planById = new Map<string, number>();
   const targetsById = new Map<string, ReturnType<typeof energyTargets>>();
   for (const p of (data ?? []) as unknown as { id: string; sex?: string | null }[]) {
-    const targets = energyTargets(p as never);
+    const targets = energyTargets(p);
     targetsById.set(p.id, targets);
     planById.set(p.id, portionFactors(targets, p).plan);
   }
@@ -603,7 +604,11 @@ export async function householdMealTargets(
     console.error("householdMealTargets", error);
     return {};
   }
-  const all = (data ?? []).map((p) => energyTargets(p as never)).filter((t) => !!t);
+  // Las columnas se piden con una lista armada en ejecución, así que el cliente
+  // no puede tipar la fila: son las de `ENERGY_PROFILE_COLUMNS`, que ya se
+  // comprueba contra `EnergyProfile`.
+  const rows = (data ?? []) as unknown as EnergyProfile[];
+  const all = rows.map((p) => energyTargets(p)).filter((t) => !!t);
   const out: Partial<Record<(typeof MEAL_KEYS)[number], { kcal: number; protein_g: number }>> = {};
   for (const meal of MEAL_KEYS) {
     if (!home.sharedSlots[meal].length) continue;

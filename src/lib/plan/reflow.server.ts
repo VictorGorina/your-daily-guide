@@ -245,7 +245,7 @@ export async function reflowMeals(opts: {
         userId,
         model: PLAN_MODEL,
         deadline: opts.deadline,
-        system: coachSystemPrompt(profile as never, home.text),
+        system: coachSystemPrompt(profile, home.text),
         prompt:
           insist +
           `Plan actual del mes ${month} (cada día lleva su "fecha" real):\n${JSON.stringify(dated)}\n\n` +
@@ -311,7 +311,7 @@ export async function reflowMeals(opts: {
         import("@/lib/nutrition/portion"),
       ]);
     // El perfil ya se leyó al entrar (ticket 17, PERF-10): no se relee por medición.
-    const factor = portionFactors(energyTargets(profile as never), profile as never).plan;
+    const factor = portionFactors(energyTargets(profile), profile).plan;
     const recipes = await getRecipes(
       cells.flatMap((c) => [c.before, c.after]),
       { apiKey: key, userId, deadline: opts.deadline },

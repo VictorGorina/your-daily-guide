@@ -113,7 +113,7 @@ let mainMeals = 0;
 
 for (const t of TYPOLOGIES.filter((x) => !args.only || x.id === args.only)) {
   const profile = { ...t.profile, budget_month_eur: 0, meals_to_plan: null };
-  const targets = energyTargets(profile as never);
+  const targets = energyTargets(profile);
   const factor = portionFactors(targets, profile as { sex?: string }).plan;
   console.log(`\n## ${t.label} — objetivo ${targets?.kcal} kcal, ración ×${factor}`);
   const started = performance.now();

@@ -13,7 +13,7 @@
  * `resolveServing` es puro; `plannedServingsFor` lee lo que haga falta.
  */
 
-import type { DbClient } from "@/integrations/supabase/db-client";
+import type { DbClient, ProfilePart } from "@/integrations/supabase/db-client";
 
 import { sharedMealPortions, type SharedServing } from "@/lib/household.server";
 import { cleanPlan, planDayOf, type MonthlyPlan, type PlanDay } from "@/lib/plan-shared";
@@ -104,15 +104,15 @@ type AnyClient = DbClient;
 export async function plannedServingsFor(opts: {
   supabase: AnyClient;
   userId: string;
-  profile: unknown;
+  profile: ProfilePart | null;
   date: string;
   planDay?: PlanDay | null;
 }): Promise<{
   planned: (moment: string | null | undefined) => ResolvedServing;
   eaten: (moment: string | null | undefined) => PlannedServing;
 }> {
-  const energy = energyTargets(opts.profile as never);
-  const own = portionFactors(energy, opts.profile as { sex?: string | null } | null);
+  const energy = energyTargets(opts.profile);
+  const own = portionFactors(energy, opts.profile);
 
   const [shared, planDay] = await Promise.all([
     sharedMealPortions(opts.supabase, opts.userId, opts.date).catch((error) => {

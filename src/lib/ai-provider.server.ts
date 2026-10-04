@@ -399,7 +399,7 @@ export function coachSystemPrompt(
   const hideNumbers = "nutrition_numbers" in p ? !showsNutritionNumbers(p) : edFlag;
   // Un solo objetivo en toda la app (ticket 07): el que calcula el código. Con
   // él en el prompt, el chat no se inventa otra cifra que contradiga a Hoy.
-  const energy = hideNumbers ? null : energyTargets(p as never);
+  const energy = hideNumbers ? null : energyTargets(p);
   const numbersLine = hideNumbers
     ? "- No quiere ver cifras: OBLIGATORIO nunca des calorías, gramos de macros, porcentajes ni objetivos numéricos, ni aunque los tengas delante; habla de platos, raciones y sensaciones. Las cantidades de una receta sí valen (hacen falta para cocinar)."
     : energy

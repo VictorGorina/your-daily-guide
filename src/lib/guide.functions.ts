@@ -395,9 +395,9 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     const { energyTargets, caloriesText, targetsAsMacros } = await import("@/lib/nutrition/energy");
     const { showsNutritionNumbers } = await import("@/lib/macros");
     const { portionFactors } = await import("@/lib/nutrition/portion");
-    const energy = energyTargets(profile as never);
+    const energy = energyTargets(profile);
     const targets = energy ? targetsAsMacros(energy) : null;
-    const calories = caloriesText(energy, showsNutritionNumbers(profile as never));
+    const calories = caloriesText(energy, showsNutritionNumbers(profile));
     // Ración personal (ticket 21) y, para los platos del plan, el objetivo de
     // cada comida con el ajuste del día y las compartidas del hogar (D4).
     const own = portionFactors(energy, profile as { sex?: string | null } | null);
@@ -460,7 +460,7 @@ export const generateDailyGuide = createServerFn({ method: "POST" })
     const textPromise = generateText({
       model: ai(COACH_MODEL),
       abortSignal: AbortSignal.timeout(stepTimeout(Infinity, deadline)),
-      system: coachSystemPrompt(profile as never),
+      system: coachSystemPrompt(profile),
       prompt:
         "Genera la guía de HOY. Devuelve solo JSON válido con esta forma: " +
         '{"intro": string (1 frase cálida y motivadora, sin presión), "macros": string (orientación de macros en una frase, sin cifras), ' +

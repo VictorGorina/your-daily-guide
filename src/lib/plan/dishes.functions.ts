@@ -506,7 +506,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
           userId: context.userId,
           deadline,
           model: PLAN_MODEL,
-          system: coachSystemPrompt(profile as never, home.text),
+          system: coachSystemPrompt(profile, home.text),
           prompt:
             "A un plan del mes ya hecho le faltan platos de bebés de triturados (se dieron de alta después de generar el plan). NO cambies ni menciones el plato de la mesa: solo propón, para CADA hueco de esta lista, el puré o triturado de ese bebé:\n" +
             JSON.stringify(

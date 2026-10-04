@@ -356,7 +356,7 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
       try {
         const { text } = await generateText({
           model: ai(COACH_MODEL),
-          system: coachSystemPrompt(profile as never),
+          system: coachSystemPrompt(profile),
           temperature: 0.2,
           prompt:
             `Ingredientes que ya tiene comprados este mes: ${boughtList || "ninguno"}\n\n` +

@@ -15,6 +15,7 @@
  * (`fitMonthlyPlan`) y el eval con el mismo generador. Solo en servidor.
  */
 
+import type { ProfilePart } from "@/integrations/supabase/db-client";
 import type { Deadline } from "@/lib/deadline";
 import type { SharedServing } from "@/lib/household.server";
 import {
@@ -89,7 +90,7 @@ export async function fitPlanMeals(opts: {
   month: string;
   /** Solo se tocan (y se miden) los días posteriores a esta fecha. */
   after: string;
-  profile: unknown;
+  profile: ProfilePart | null;
   /** Comidas compartidas del hogar de cada fecha (`sharedMealPortionsByDate`). */
   shared: (date: string) => Partial<Record<MealKey, SharedServing>>;
   /** Quien genera puede cambiar una compartida (planificador o en solitario). */
@@ -108,14 +109,12 @@ export async function fitPlanMeals(opts: {
   ) => Promise<{ changes: PlanChange[]; ideas: WeeklyIdea[] }>;
 }): Promise<{ plan: MonthlyPlan; report: PlanFitReport }> {
   const { plan, month, after, profile } = opts;
-  const energy = energyTargets(profile as never);
+  const energy = energyTargets(profile);
   const empty = { before: 1, after: 1, measuredDays: 0, misfits: 0, changed: [], discarded: 0 };
   if (!energy) return { plan, report: { ...empty, skipped: "sin-objetivo" } };
 
-  const own = portionFactors(energy, profile as { sex?: string | null } | null);
-  const selected = effectiveMealSlots(
-    (profile ?? {}) as { meal_slots?: unknown; meals_to_plan?: string | null },
-  );
+  const own = portionFactors(energy, profile);
+  const selected = effectiveMealSlots(profile ?? {});
   const fitOptions: FitOptions = {
     canTouchShared: opts.canTouchShared,
     highProtein: energy.protein_g / Math.max(1, energy.basis.refWeightKg) >= 1.6,

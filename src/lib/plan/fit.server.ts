@@ -1,3 +1,4 @@
+import type { ProfilePart } from "@/integrations/supabase/db-client";
 import { coachSystemPrompt, PLAN_MODEL } from "@/lib/ai-provider.server";
 import type { Deadline } from "@/lib/deadline";
 import type { Misfit, WeeklyIdea } from "@/lib/nutrition/plan-fit";
@@ -21,7 +22,7 @@ import { askForJson } from "./ai.server";
 export function askPlanFit(opts: {
   key: string;
   userId: string;
-  profile: unknown;
+  profile: ProfilePart | null;
   homeText: string;
   shopping: ShoppingList;
   pantry: string[];
@@ -57,7 +58,7 @@ export function askPlanFit(opts: {
         userId: opts.userId,
         model: PLAN_MODEL,
         deadline: opts.deadline,
-        system: coachSystemPrompt(opts.profile as never, opts.homeText),
+        system: coachSystemPrompt(opts.profile, opts.homeText),
         prompt:
           "El sistema ajusta la cantidad de cada plato al objetivo de su comida, pero solo hasta " +
           "un límite para que siga siendo el mismo plato. Estos platos del plan no llegan a su " +
@@ -97,7 +98,7 @@ export async function _fitPlanForEval(opts: {
   plan: MonthlyPlan;
   shopping: ShoppingList;
   month: string;
-  profile: unknown;
+  profile: ProfilePart | null;
 }) {
   const { fitPlanMeals } = await import("@/lib/nutrition/plan-fit.server");
   return fitPlanMeals({

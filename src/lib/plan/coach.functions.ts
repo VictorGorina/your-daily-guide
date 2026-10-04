@@ -46,7 +46,7 @@ export const goalImpact = createServerFn({ method: "POST" })
           key,
           userId: context.userId,
           deadline,
-          system: coachSystemPrompt(profile as never),
+          system: coachSystemPrompt(profile),
           prompt:
             `Perfil: ${JSON.stringify(profile ?? {})}\n` +
             `Últimos días registrados: ${JSON.stringify(logs ?? [])}\n` +
@@ -56,7 +56,7 @@ export const goalImpact = createServerFn({ method: "POST" })
             "Después ofrécele dos caminos: 1) mantener el ritmo y adelantar la fecha objetivo, o 2) ser algo más laxo y mantener la fecha. Sin culpar, sin dramatizar, con números orientativos y frases cortas. " +
             // Ticket 01: con "ocultar", el cálculo se hace igual pero el texto
             // que lee la persona no lleva ninguna cifra de energía.
-            (showsNutritionNumbers(profile as never)
+            (showsNutritionNumbers(profile)
               ? ""
               : "IMPORTANTE: esta persona NO quiere ver cifras de calorías ni de macros: el campo text no puede llevar ninguna cifra de kcal ni de gramos; habla de fechas y de sensaciones. ") +
             'Devuelve solo JSON: {"kcal_delta": number (positivo = exceso, negativo = déficit), "text": string (máx. 6 líneas, sin markdown, hablándole de tú y terminando con una pregunta para que elija), "suggested_target_date": string "YYYY-MM-DD" o null (sólo si acortar el plazo es realista)}',
@@ -107,7 +107,7 @@ export const welcomeBriefing = createServerFn({ method: "POST" })
     const ai = createAiProvider(key, context.userId);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
-      system: coachSystemPrompt(profile as never, home.householdId ? home.text : null),
+      system: coachSystemPrompt(profile, home.householdId ? home.text : null),
       prompt: isNonPlanner
         ? "Escribe un mensaje de bienvenida corto (máx. 10 líneas, sin markdown) para alguien que acaba de entrar en un hogar compartido y NO es quien planifica. Explícale: " +
           `1) que el menú de las comidas compartidas de tu casa y su lista de la compra los prepara ${plannerName}, y que los ve en la app sin tener que generar nada; ` +

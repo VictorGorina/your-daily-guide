@@ -1,3 +1,4 @@
+import type { ProfilePart } from "@/integrations/supabase/db-client";
 import { coachSystemPrompt, currencySymbol, PLAN_MODEL } from "@/lib/ai-provider.server";
 import type { Deadline } from "@/lib/deadline";
 import {
@@ -67,7 +68,7 @@ export async function generatePlanBody(opts: {
   cadence: ShoppingCadence;
   coverage: PlanCoverage;
   home: HouseholdContext;
-  profile: unknown;
+  profile: ProfilePart | null;
   constraints: MonthConstraints | null;
   /** Objetivo medio de las comidas compartidas del hogar (`householdMealTargets`). */
   sharedTargets?: Awaited<
@@ -84,16 +85,14 @@ export async function generatePlanBody(opts: {
   const { energyTargets } = await import("@/lib/nutrition/energy");
   const { planTargetsPrompt } = await import("@/lib/nutrition/plan-targets");
   const targetsLine = planTargetsPrompt({
-    targets: energyTargets(profile as never),
+    targets: energyTargets(profile),
     shared: opts.sharedTargets,
   });
 
   // Qué comidas quiere que se le planifiquen (issue merienda/slots elegidos):
   // único punto de lectura, compartido con `mealsForDate` en la pantalla, así
   // que el generador y lo que se pinta nunca pueden desincronizarse.
-  const selectedSlots = effectiveMealSlots(
-    (profile ?? {}) as { meal_slots?: unknown; meals_to_plan?: string | null },
-  );
+  const selectedSlots = effectiveMealSlots(profile ?? {});
   const mealSlotsLine =
     selectedSlots.length < MEAL_SLOTS.length
       ? `COMIDAS A PLANIFICAR: solo ${selectedSlots.map((s) => MEAL_SLOT_LABEL[s].toLowerCase()).join(", ")}. No propongas nada para ${MEAL_SLOTS.filter(
@@ -108,17 +107,15 @@ export async function generatePlanBody(opts: {
   const coveredDays = coverage.toDay - coverage.fromDay + 1;
   const ratio = coverageRatio(coverage, month);
 
-  const rawBudget = Number(
-    (profile as { budget_month_eur?: number | null } | null)?.budget_month_eur,
-  );
+  const rawBudget = Number(profile?.budget_month_eur);
   const budget = Number.isFinite(rawBudget) && rawBudget > 0 ? rawBudget : 0;
   // Presupuesto prorrateado a los días que cubre el plan: un plan que empieza a
   // media de mes solo puede gastar la parte proporcional del mes que le queda.
   const proratedBudget = budget > 0 ? Math.round(budget * ratio) : 0;
   // Moneda/país para las referencias de precio (la salida estructurada del
   // plan sigue en español canónico; solo cambian el símbolo y el país).
-  const sym = currencySymbol((profile as { currency?: string | null } | null)?.currency);
-  const country = (profile as { country?: string | null } | null)?.country || "ES";
+  const sym = currencySymbol(profile?.currency);
+  const country = profile?.country || "ES";
   const marketRef = country === "ES" ? "supermercado en España" : `supermercado de ${country}`;
   const budgetLine =
     proratedBudget > 0
@@ -227,7 +224,7 @@ export async function generatePlanBody(opts: {
       userId,
       model: PLAN_MODEL,
       deadline: opts.deadline,
-      system: coachSystemPrompt(profile as never, home.text),
+      system: coachSystemPrompt(profile, home.text),
       prompt:
         `Crea el plan del mes ${month} y su lista de la compra. Devuelve solo JSON válido:\n` +
         '{"shopping": [objetos {"category": "Verdura y fruta"|"Proteína"|"Despensa"|"Lácteos"|"Otros", ' +
@@ -273,7 +270,7 @@ export async function generatePlanBody(opts: {
   const shopping = await enforceBudget(
     key,
     userId,
-    coachSystemPrompt(profile as never, home.text),
+    coachSystemPrompt(profile, home.text),
     rawShopping,
     proratedBudget,
     sym,
