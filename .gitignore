@@ -38,3 +38,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Estado local de la CLI de Supabase (enlace del proyecto, versión del pooler)
+supabase/.temp/
