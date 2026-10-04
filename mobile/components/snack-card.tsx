@@ -1,4 +1,5 @@
 import { X } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { snackTotals, type DaySnacks } from "../lib/snacks";
@@ -24,6 +25,7 @@ export function SnackCard({
   /** `false` con la preferencia de no ver cifras (ticket 01): solo la lista. */
   showNumbers?: boolean;
 }) {
+  const { t } = useTranslation();
   const entries = snacks?.entries ?? [];
   if (!entries.length) return null;
 
@@ -32,7 +34,9 @@ export function SnackCard({
   return (
     <View className="mt-6 rounded-[20px] bg-surface px-3.5 py-3">
       <View className="flex-row items-baseline justify-between">
-        <Text className="font-body-semibold text-[11.5px] text-foreground">Picoteo de hoy</Text>
+        <Text className="font-body-semibold text-[11.5px] text-foreground">
+          {t("snack.cardTitle")}
+        </Text>
         {showNumbers ? (
           <Text className="font-mono text-[10.5px] text-muted-foreground">~{total} kcal</Text>
         ) : null}
@@ -54,7 +58,7 @@ export function SnackCard({
               onPress={() => onRemove(e.id)}
               disabled={removingId != null}
               hitSlop={6}
-              accessibilityLabel={`Quitar ${e.text}`}
+              accessibilityLabel={t("common.removeNamed", { what: e.text })}
               className="h-7 w-7 items-center justify-center rounded-full bg-background active:opacity-70"
             >
               {removingId === e.id ? (

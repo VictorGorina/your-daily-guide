@@ -6,7 +6,9 @@
     "continue": "Continue",
     "loading": "One moment…",
     "back": "Back",
-    "retry": "Please try again."
+    "retry": "Please try again.",
+    "saving": "Saving…",
+    "removeNamed": "Remove {{what}}"
   },
   "languages": {
     "es": "Spanish",
@@ -587,5 +589,101 @@
     "ingredients": "Ingredients",
     "steps": "Steps",
     "failed": "We couldn't load the recipe. Try again"
+  },
+  "snack": {
+    "cardTitle": "Today's snacks",
+    "presets": {
+      "nuts": {
+        "label": "Nuts",
+        "text_one": "A handful of nuts",
+        "text_other": "{{qty}} handfuls of nuts"
+      },
+      "biscuits": {
+        "label": "Biscuits",
+        "text_one": "Two biscuits",
+        "text_other": "{{qty}} biscuits"
+      },
+      "chocolate": {
+        "label": "Chocolate",
+        "text_one": "Two squares of chocolate",
+        "text_other": "{{qty}} squares of chocolate"
+      },
+      "crisps": {
+        "label": "Crisps",
+        "text_one": "A small bag of crisps",
+        "text_other": "{{qty}} small bags of crisps"
+      },
+      "beer": {
+        "label": "Beer",
+        "text_one": "A small beer",
+        "text_other": "{{qty}} small beers"
+      },
+      "wine": {
+        "label": "Wine",
+        "text_one": "A glass of wine",
+        "text_other": "{{qty}} glasses of wine"
+      },
+      "fruit": {
+        "label": "Fruit",
+        "text_one": "A piece of fruit",
+        "text_other": "{{qty}} pieces of fruit"
+      },
+      "cheese": {
+        "label": "Cheese",
+        "text_one": "A few cubes of cheese",
+        "text_other": "{{qty}} portions of cheese cubes"
+      }
+    },
+    "listAnd": "{{rest}} and {{last}}",
+    "placeholder": "E.g. a handful of almonds",
+    "fieldLabel": "What you snacked on",
+    "tellMe": "Tell me what you snacked on.",
+    "estimateFailed": "I couldn't work it out right now.",
+    "saveFailed": "I couldn't save the snack.",
+    "calculating": "Calculating…",
+    "calculate": "Calculate",
+    "ready": "Done, I've worked it out.",
+    "describeBetter": "I couldn't work it out. Describe it in a bit more detail (what it was and roughly how much).",
+    "macrosLine": "{{protein}} g protein · {{carbs}} g carbs · {{fat}} g fat",
+    "howManyKcal": "How many kcal is it?",
+    "howManyKcalUnresolved": "I couldn't work it out. How many kcal is it? (it's on the packet)",
+    "useEstimate": "Use ≈ {{kcal}}",
+    "lowConfidence": "I didn't recognise everything you wrote: check the figure.",
+    "save": "Save snack",
+    "footPast": "This is only for your history: it doesn't change the plan or the shopping.",
+    "footToday": "Today and the shopping list don't change: if needed, I'll adjust the coming days.",
+    "descPast": "Note what you snacked on that day to complete your history.",
+    "descNumbers": "Note what you've snacked on between meals. I'll work out its kcal and, if needed, adjust the coming days.",
+    "descPlain": "Note what you've snacked on between meals. If needed, I'll adjust the coming days."
+  },
+  "exercise": {
+    "cardTitle": "Today's exercise",
+    "routine": "Part of your routine · already in your plan",
+    "routineCount": "Part of your routine ({{index}} of {{of}} this week) · already in your plan",
+    "activities": {
+      "Correr": "Running",
+      "Caminar": "Walking",
+      "Bici": "Cycling",
+      "Gimnasio / pesas": "Gym / weights",
+      "Natación": "Swimming",
+      "Otra": "Other"
+    },
+    "intensity": {
+      "Suave": "Easy",
+      "Normal": "Moderate",
+      "Fuerte": "Hard"
+    },
+    "minutesError": "Enter between {{min}} and {{max}} minutes.",
+    "saveFailed": "I couldn't save the exercise.",
+    "descNumbers": "Note your activity. I'll work out the kcal burned and, if needed, add energy back over the coming days.",
+    "descPlain": "Note your activity. If needed, I'll add energy back over the coming days.",
+    "what": "What did you do?",
+    "minutes": "Minutes ({{min}}-{{max}})",
+    "intensityLabel": "Intensity",
+    "burned": "≈ {{kcal}} kcal burned",
+    "net": "On top of what you burn at rest, at your weight.",
+    "routineHint": "If it's one of your usual sessions, it's already in your plan: only what goes beyond it counts.",
+    "save": "Save exercise",
+    "foot": "Today and the shopping list don't change: if needed, I'll add energy back over the coming days."
   }
 }

@@ -1,6 +1,8 @@
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, X } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { DictateButton } from "@/components/dictate-button";
 import { DictationField, DictationWave } from "@/components/dictation-field";
@@ -25,29 +27,20 @@ import {
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { estimateSnack, logSnack, type SnackEstimate } from "@/lib/snacks.functions";
 
-/** Atajos: la etiqueta corta del chip y la frase que rellena, con cantidad. */
-const PRESETS: { label: string; text: (n: number) => string }[] = [
-  {
-    label: "Frutos secos",
-    text: (n) => (n === 1 ? "Un puñado de frutos secos" : `${n} puñados de frutos secos`),
-  },
-  { label: "Galletas", text: (n) => (n === 1 ? "Dos galletas" : `${n * 2} galletas`) },
-  {
-    label: "Chocolate",
-    text: (n) => (n === 1 ? "Dos onzas de chocolate" : `${n * 2} onzas de chocolate`),
-  },
-  {
-    label: "Patatas de bolsa",
-    text: (n) =>
-      n === 1 ? "Una bolsa pequeña de patatas fritas" : `${n} bolsas pequeñas de patatas fritas`,
-  },
-  { label: "Cerveza", text: (n) => (n === 1 ? "Una caña de cerveza" : `${n} cañas de cerveza`) },
-  { label: "Vino", text: (n) => (n === 1 ? "Una copa de vino" : `${n} copas de vino`) },
-  { label: "Fruta", text: (n) => (n === 1 ? "Una pieza de fruta" : `${n} piezas de fruta`) },
-  {
-    label: "Queso",
-    text: (n) => (n === 1 ? "Unos taquitos de queso" : `${n} raciones de taquitos de queso`),
-  },
+/**
+ * Atajos: su identificador y cuántas unidades son N toques (dos galletas por
+ * toque). La etiqueta del chip y la frase que rellena están en el catálogo
+ * (`snack.presets.<id>`), en el idioma de la persona.
+ */
+const PRESETS: { id: string; qty: (n: number) => number }[] = [
+  { id: "nuts", qty: (n) => n },
+  { id: "biscuits", qty: (n) => n * 2 },
+  { id: "chocolate", qty: (n) => n * 2 },
+  { id: "crisps", qty: (n) => n },
+  { id: "beer", qty: (n) => n },
+  { id: "wine", qty: (n) => n },
+  { id: "fruit", qty: (n) => n },
+  { id: "cheese", qty: (n) => n },
 ];
 
 const pillGroupClass = (active: boolean) =>
@@ -56,19 +49,25 @@ const pillGroupClass = (active: boolean) =>
   }`;
 
 /** Junta frases en una lista natural: "A", "A y B", "A, B y C". */
-const joinNaturally = (parts: string[]): string => {
+const joinNaturally = (parts: string[], t: TFunction): string => {
   if (parts.length <= 1) return parts.join("");
-  return `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
+  return t("snack.listAnd", {
+    rest: parts.slice(0, -1).join(", "),
+    last: parts[parts.length - 1],
+  });
 };
 
 /** Reconstruye el texto libre a partir de los presets activos (varios a la vez). */
-const buildPresetText = (counts: Record<number, number>): string => {
+const buildPresetText = (counts: Record<number, number>, t: TFunction): string => {
   const parts = PRESETS.map((preset, idx) => {
     const count = counts[idx] ?? 0;
-    return count > 0 ? preset.text(count) : null;
+    return count > 0
+      ? t(`snack.presets.${preset.id}.text`, { count, qty: preset.qty(count) })
+      : null;
   }).filter((p): p is string => p !== null);
   return joinNaturally(
     parts.map((part, i) => (i === 0 ? part : part.charAt(0).toLowerCase() + part.slice(1))),
+    t,
   );
 };
 
@@ -101,6 +100,7 @@ type SnackFormProps = {
  * de cero. Copia en `mobile/components/snack-sheet.tsx`.
  */
 export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true }: SnackFormProps) {
+  const { t } = useTranslation();
   const estimateFn = useServerFn(estimateSnack);
   const logFn = useServerFn(logSnack);
   const [text, setText] = useState("");
@@ -134,7 +134,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
   const clickPreset = (idx: number) => {
     const next = { ...presetCounts, [idx]: (presetCounts[idx] ?? 0) + 1 };
     setPresetCounts(next);
-    setText(buildPresetText(next));
+    setText(buildPresetText(next, t));
     setEstimate(null);
     setKcalInput(null);
     setError(null);
@@ -144,7 +144,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
     const next = { ...presetCounts };
     delete next[idx];
     setPresetCounts(next);
-    setText(buildPresetText(next));
+    setText(buildPresetText(next, t));
     setEstimate(null);
     setKcalInput(null);
     setError(null);
@@ -152,7 +152,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
 
   const calculate = async () => {
     if (text.trim().length < SNACK_TEXT_MIN) {
-      setError("Cuéntame qué has picado.");
+      setError(t("snack.tellMe"));
       return;
     }
     if (!isCleanFood(text.trim())) {
@@ -174,7 +174,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       // Sin cifra fiable se pide a mano en vez de inventarla.
       setKcalInput(res.resolved ? null : "");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido calcularlo ahora mismo.");
+      setError(e instanceof Error ? e.message : t("snack.estimateFailed"));
     } finally {
       setBusy(null);
     }
@@ -201,7 +201,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       reset();
       onSaved(res.snacks, res.entry);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido guardar el picoteo.");
+      setError(e instanceof Error ? e.message : t("snack.saveFailed"));
       setBusy(null);
     }
   };
@@ -215,16 +215,16 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
           const count = presetCounts[i] ?? 0;
           const active = count > 0;
           return (
-            <div key={p.label} className={pillGroupClass(active)}>
+            <div key={p.id} className={pillGroupClass(active)}>
               <button type="button" onClick={() => clickPreset(i)} className="px-3 py-1.5">
-                {p.label}
+                {t(`snack.presets.${p.id}.label`)}
                 {active && count > 1 ? ` ×${count}` : ""}
               </button>
               {active ? (
                 <button
                   type="button"
                   onClick={() => removePreset(i)}
-                  aria-label={`Quitar ${p.label}`}
+                  aria-label={t("common.removeNamed", { what: t(`snack.presets.${p.id}.label`) })}
                   className="py-1.5 pr-2.5 opacity-80"
                 >
                   <X className="h-3 w-3" aria-hidden />
@@ -239,8 +239,8 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
         <div className="space-y-2">
           <div className="relative rounded-2xl">
             <Textarea
-              placeholder="Ej: un puñado de almendras"
-              aria-label="Qué has picoteado"
+              placeholder={t("snack.placeholder")}
+              aria-label={t("snack.fieldLabel")}
               value={text}
               onChange={(e) => changeText(e.target.value)}
               onKeyDown={(e) => {
@@ -258,7 +258,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
           {/* Debajo y no encima del campo: en web el botón lleva texto
           ("Dictar") y tapaba lo escrito. */}
           <DictateButton
-            onText={(t) => changeText(text ? `${text.trim()} ${t}` : t)}
+            onText={(said) => changeText(text ? `${text.trim()} ${said}` : said)}
             label="Dictar"
           />
         </div>
@@ -274,19 +274,17 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
           {busy === "estimate" ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-              Calculando…
+              {t("snack.calculating")}
             </>
           ) : (
-            "Calcular"
+            t("snack.calculate")
           )}
         </Button>
       ) : (
         <div className="space-y-2 rounded-2xl bg-surface px-4 py-3.5">
           {!showNumbers ? (
             <p className="text-sm text-foreground">
-              {estimate.resolved
-                ? "Listo, ya lo tengo calculado."
-                : "No he podido calcularlo. Descríbelo con algo más de detalle (qué era y cuánto, más o menos)."}
+              {estimate.resolved ? t("snack.ready") : t("snack.describeBetter")}
             </p>
           ) : estimate.resolved && kcalInput == null && estimate.macros ? (
             <>
@@ -299,20 +297,21 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                   onClick={() => setKcalInput(String(estimate.macros?.kcal ?? ""))}
                   className="text-xs font-medium text-primary-ink"
                 >
-                  Cambiar
+                  {t("common.change")}
                 </button>
               </div>
               <p className="font-num text-[11px] text-muted-foreground">
-                {estimate.macros.protein_g} g prot · {estimate.macros.carbs_g} g hidratos ·{" "}
-                {estimate.macros.fat_g} g grasa
+                {t("snack.macrosLine", {
+                  protein: estimate.macros.protein_g,
+                  carbs: estimate.macros.carbs_g,
+                  fat: estimate.macros.fat_g,
+                })}
               </p>
             </>
           ) : (
             <div className="space-y-1.5">
               <label htmlFor="snack-kcal" className="block text-sm text-foreground">
-                {estimate.resolved
-                  ? "¿Cuántas kcal son?"
-                  : "No he podido calcularlo. ¿Cuántas kcal son? (lo pone el envase)"}
+                {estimate.resolved ? t("snack.howManyKcal") : t("snack.howManyKcalUnresolved")}
               </label>
               <div className="flex items-center gap-2">
                 <Input
@@ -334,7 +333,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                     onClick={() => setKcalInput(null)}
                     className="ml-auto text-xs font-medium text-muted-foreground"
                   >
-                    Usar ≈ {estimatedKcal}
+                    {t("snack.useEstimate", { kcal: estimatedKcal })}
                   </button>
                 ) : null}
               </div>
@@ -344,9 +343,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
             <p className="text-[11px] leading-snug text-muted-foreground">{ingredientsLine}</p>
           ) : null}
           {showNumbers && estimate.lowConfidence && kcalInput == null ? (
-            <p className="text-[11px] leading-snug text-primary-ink">
-              No he reconocido todo lo que has escrito: revisa la cifra.
-            </p>
+            <p className="text-[11px] leading-snug text-primary-ink">{t("snack.lowConfidence")}</p>
           ) : null}
         </div>
       )}
@@ -358,18 +355,16 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
           {busy === "save" ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-              Guardando…
+              {t("common.saving")}
             </>
           ) : (
-            "Guardar picoteo"
+            t("snack.save")
           )}
         </Button>
       ) : null}
 
       <p className="text-center text-xs text-muted-foreground">
-        {pastDay
-          ? "Es solo para tu historial: no cambia el plan ni la compra."
-          : "Hoy y la lista de la compra no cambian: si hace falta, ajusto los próximos días."}
+        {pastDay ? t("snack.footPast") : t("snack.footToday")}
       </p>
     </div>
   );
@@ -391,20 +386,21 @@ export function SnackSheet({
   onOpenChange: (open: boolean) => void;
   onSaved: (snacks: DaySnacks) => void;
 }) {
+  const { t } = useTranslation();
   const { pastDay = false, showNumbers = true } = form;
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
-            Añadir picoteo
+            {t("hoy.addSnack")}
           </SheetTitle>
           <SheetDescription>
             {pastDay
-              ? "Apunta lo que picaste ese día para completar tu historial."
+              ? t("snack.descPast")
               : showNumbers
-                ? "Apunta lo que has picado entre horas. Calculo sus kcal y, si hace falta, ajusto los próximos días."
-                : "Apunta lo que has picado entre horas. Si hace falta, ajusto los próximos días."}
+                ? t("snack.descNumbers")
+                : t("snack.descPlain")}
           </SheetDescription>
         </SheetHeader>
 

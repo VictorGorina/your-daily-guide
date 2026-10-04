@@ -1,6 +1,7 @@
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ export function ExerciseSheet({
   /** Tiene una rutina dentro de su objetivo (D9): sus sesiones no se compensan. */
   hasRoutine?: boolean;
 }) {
+  const { t } = useTranslation();
   const logFn = useServerFn(logExercise);
   const [activity, setActivity] = useState(EXERCISE_ACTIVITIES[0]!.label);
   const [minutes, setMinutes] = useState("30");
@@ -75,7 +77,9 @@ export function ExerciseSheet({
 
   const save = async () => {
     if (!validMinutes) {
-      setError(`Indica entre ${EXERCISE_MINUTES_MIN} y ${EXERCISE_MINUTES_MAX} minutos.`);
+      setError(
+        t("exercise.minutesError", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX }),
+      );
       return;
     }
     setBusy(true);
@@ -86,7 +90,7 @@ export function ExerciseSheet({
       reset();
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido guardar el deporte.");
+      setError(e instanceof Error ? e.message : t("exercise.saveFailed"));
       setBusy(false);
     }
   };
@@ -102,18 +106,16 @@ export function ExerciseSheet({
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
-            Registrar deporte
+            {t("hoy.addExercise")}
           </SheetTitle>
           <SheetDescription>
-            {showNumbers
-              ? "Apunta tu actividad. Calculo las kcal quemadas y, si hace falta, repongo energía en los próximos días."
-              : "Apunta tu actividad. Si hace falta, repongo energía en los próximos días."}
+            {showNumbers ? t("exercise.descNumbers") : t("exercise.descPlain")}
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-8">
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">¿Qué has hecho?</Label>
+            <Label className="text-xs text-muted-foreground">{t("exercise.what")}</Label>
             <div className="flex flex-wrap gap-2">
               {EXERCISE_ACTIVITIES.map((a) => (
                 <button
@@ -122,7 +124,7 @@ export function ExerciseSheet({
                   onClick={() => setActivity(a.label)}
                   className={chipClass(activity === a.label)}
                 >
-                  {a.label}
+                  {t(`exercise.activities.${a.label}`)}
                 </button>
               ))}
             </div>
@@ -130,7 +132,7 @@ export function ExerciseSheet({
 
           <div className="space-y-2">
             <Label htmlFor="exercise-min" className="text-xs text-muted-foreground">
-              Minutos ({EXERCISE_MINUTES_MIN}-{EXERCISE_MINUTES_MAX})
+              {t("exercise.minutes", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX })}
             </Label>
             <Input
               id="exercise-min"
@@ -146,7 +148,7 @@ export function ExerciseSheet({
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Intensidad</Label>
+            <Label className="text-xs text-muted-foreground">{t("exercise.intensityLabel")}</Label>
             <div className="flex gap-2">
               {EXERCISE_INTENSITY.map((i) => (
                 <button
@@ -155,7 +157,7 @@ export function ExerciseSheet({
                   onClick={() => setIntensity(i.label)}
                   className={chipClass(intensity === i.label)}
                 >
-                  {i.label}
+                  {t(`exercise.intensity.${i.label}`)}
                 </button>
               ))}
             </div>
@@ -164,19 +166,14 @@ export function ExerciseSheet({
           {showNumbers && burn != null ? (
             <div className="rounded-2xl bg-surface px-4 py-3.5">
               <p className="font-title text-2xl leading-7 text-foreground">
-                ≈ {burn} kcal quemadas
+                {t("exercise.burned", { kcal: burn })}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Por encima de lo que gastas en reposo, con tu peso.
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("exercise.net")}</p>
             </div>
           ) : null}
 
           {hasRoutine ? (
-            <p className="text-xs text-muted-foreground">
-              Si es una de tus sesiones de siempre, ya va en tu plan: solo cuenta lo que pase de
-              ella.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("exercise.routineHint")}</p>
           ) : null}
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -185,16 +182,13 @@ export function ExerciseSheet({
             {busy ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                Guardando…
+                {t("common.saving")}
               </>
             ) : (
-              "Guardar deporte"
+              t("exercise.save")
             )}
           </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los próximos
-            días.
-          </p>
+          <p className="text-center text-xs text-muted-foreground">{t("exercise.foot")}</p>
         </div>
       </SheetContent>
     </Sheet>

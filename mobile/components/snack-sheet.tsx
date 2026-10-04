@@ -1,6 +1,8 @@
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
 import { X } from "lucide-react-native";
+import type { TFunction } from "i18next";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
 import { apiPost } from "../lib/api";
@@ -25,29 +27,20 @@ type SnackEstimate = {
   ingredients: { name: string; grams: number }[];
 };
 
-/** Atajos: la etiqueta corta del chip y la frase que rellena, con cantidad. */
-const PRESETS: { label: string; text: (n: number) => string }[] = [
-  {
-    label: "Frutos secos",
-    text: (n) => (n === 1 ? "Un puñado de frutos secos" : `${n} puñados de frutos secos`),
-  },
-  { label: "Galletas", text: (n) => (n === 1 ? "Dos galletas" : `${n * 2} galletas`) },
-  {
-    label: "Chocolate",
-    text: (n) => (n === 1 ? "Dos onzas de chocolate" : `${n * 2} onzas de chocolate`),
-  },
-  {
-    label: "Patatas de bolsa",
-    text: (n) =>
-      n === 1 ? "Una bolsa pequeña de patatas fritas" : `${n} bolsas pequeñas de patatas fritas`,
-  },
-  { label: "Cerveza", text: (n) => (n === 1 ? "Una caña de cerveza" : `${n} cañas de cerveza`) },
-  { label: "Vino", text: (n) => (n === 1 ? "Una copa de vino" : `${n} copas de vino`) },
-  { label: "Fruta", text: (n) => (n === 1 ? "Una pieza de fruta" : `${n} piezas de fruta`) },
-  {
-    label: "Queso",
-    text: (n) => (n === 1 ? "Unos taquitos de queso" : `${n} raciones de taquitos de queso`),
-  },
+/**
+ * Atajos: su identificador y cuántas unidades son N toques (dos galletas por
+ * toque). La etiqueta del chip y la frase que rellena están en el catálogo
+ * (`snack.presets.<id>`), en el idioma de la persona.
+ */
+const PRESETS: { id: string; qty: (n: number) => number }[] = [
+  { id: "nuts", qty: (n) => n },
+  { id: "biscuits", qty: (n) => n * 2 },
+  { id: "chocolate", qty: (n) => n * 2 },
+  { id: "crisps", qty: (n) => n },
+  { id: "beer", qty: (n) => n },
+  { id: "wine", qty: (n) => n },
+  { id: "fruit", qty: (n) => n },
+  { id: "cheese", qty: (n) => n },
 ];
 
 function Chip({
@@ -63,6 +56,7 @@ function Chip({
   onPress: () => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View
       className={`flex-row items-center rounded-full ${active ? "bg-primary" : "bg-secondary"}`}
@@ -78,7 +72,7 @@ function Chip({
           onPress={onRemove}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={`Quitar ${label}`}
+          accessibilityLabel={t("common.removeNamed", { what: label })}
           className="py-1.5 pr-2.5 active:opacity-70"
         >
           <X size={12} color="#3e3d39" />
@@ -94,19 +88,25 @@ const parseKcal = (raw: string): number | null => {
 };
 
 /** Junta frases en una lista natural: "A", "A y B", "A, B y C". */
-const joinNaturally = (parts: string[]): string => {
+const joinNaturally = (parts: string[], t: TFunction): string => {
   if (parts.length <= 1) return parts.join("");
-  return `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
+  return t("snack.listAnd", {
+    rest: parts.slice(0, -1).join(", "),
+    last: parts[parts.length - 1],
+  });
 };
 
 /** Reconstruye el texto libre a partir de los presets activos (varios a la vez). */
-const buildPresetText = (counts: Record<number, number>): string => {
+const buildPresetText = (counts: Record<number, number>, t: TFunction): string => {
   const parts = PRESETS.map((preset, idx) => {
     const count = counts[idx] ?? 0;
-    return count > 0 ? preset.text(count) : null;
+    return count > 0
+      ? t(`snack.presets.${preset.id}.text`, { count, qty: preset.qty(count) })
+      : null;
   }).filter((p): p is string => p !== null);
   return joinNaturally(
     parts.map((part, i) => (i === 0 ? part : part.charAt(0).toLowerCase() + part.slice(1))),
+    t,
   );
 };
 
@@ -133,6 +133,7 @@ type SnackFormProps = {
  * empieza de cero. Copia nativa de `src/components/snack-sheet.tsx`.
  */
 export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true }: SnackFormProps) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [estimate, setEstimate] = useState<SnackEstimate | null>(null);
   /** Cifra escrita a mano, o null si se usa la calculada. */
@@ -164,7 +165,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
   const clickPreset = (idx: number) => {
     const next = { ...presetCounts, [idx]: (presetCounts[idx] ?? 0) + 1 };
     setPresetCounts(next);
-    setText(buildPresetText(next));
+    setText(buildPresetText(next, t));
     setEstimate(null);
     setKcalInput(null);
     setError(null);
@@ -174,7 +175,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
     const next = { ...presetCounts };
     delete next[idx];
     setPresetCounts(next);
-    setText(buildPresetText(next));
+    setText(buildPresetText(next, t));
     setEstimate(null);
     setKcalInput(null);
     setError(null);
@@ -182,7 +183,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
 
   const calculate = async () => {
     if (text.trim().length < SNACK_TEXT_MIN) {
-      setError("Cuéntame qué has picado.");
+      setError(t("snack.tellMe"));
       return;
     }
     if (!isCleanFood(text.trim())) {
@@ -203,7 +204,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       // Sin cifra fiable se pide a mano en vez de inventarla.
       setKcalInput(res.resolved ? null : "");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido calcularlo ahora mismo.");
+      setError(e instanceof Error ? e.message : t("snack.estimateFailed"));
     } finally {
       setBusy(null);
     }
@@ -235,7 +236,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       reset();
       onSaved(res.snacks, res.entry);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido guardar el picoteo.");
+      setError(e instanceof Error ? e.message : t("snack.saveFailed"));
       setBusy(null);
     }
   };
@@ -247,8 +248,8 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       <View className="flex-row flex-wrap gap-2">
         {PRESETS.map((p, i) => (
           <Chip
-            key={p.label}
-            label={p.label}
+            key={p.id}
+            label={t(`snack.presets.${p.id}.label`)}
             active={(presetCounts[i] ?? 0) > 0}
             count={presetCounts[i] ?? 0}
             onPress={() => clickPreset(i)}
@@ -259,7 +260,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
 
       <View className="relative">
         <TextInput
-          placeholder="Ej: un puñado de almendras"
+          placeholder={t("snack.placeholder")}
           placeholderTextColor="#a8a096"
           value={text}
           onChangeText={changeText}
@@ -268,7 +269,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
           className="min-h-[64px] rounded-2xl bg-secondary px-3.5 py-3 pr-11 text-sm text-foreground"
         />
         <DictateButton
-          onText={(t) => changeText(text ? `${text.trim()} ${t}` : t)}
+          onText={(said) => changeText(text ? `${text.trim()} ${said}` : said)}
           className="absolute right-2 top-2"
         />
       </View>
@@ -283,16 +284,14 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
         >
           {busy === "estimate" ? <ActivityIndicator size="small" color="#6b6256" /> : null}
           <Text className="text-sm font-semibold text-foreground">
-            {busy === "estimate" ? "Calculando…" : "Calcular"}
+            {busy === "estimate" ? t("snack.calculating") : t("snack.calculate")}
           </Text>
         </Pressable>
       ) : (
         <View className="gap-2 rounded-2xl bg-surface px-4 py-3.5">
           {!showNumbers ? (
             <Text className="text-sm text-foreground">
-              {estimate.resolved
-                ? "Listo, ya lo tengo calculado."
-                : "No he podido calcularlo. Descríbelo con algo más de detalle (qué era y cuánto, más o menos)."}
+              {estimate.resolved ? t("snack.ready") : t("snack.describeBetter")}
             </Text>
           ) : estimate.resolved && kcalInput == null && estimate.macros ? (
             <>
@@ -308,20 +307,21 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                   hitSlop={8}
                   className="active:opacity-70"
                 >
-                  <Text className="text-xs font-medium text-primary-ink">Cambiar</Text>
+                  <Text className="text-xs font-medium text-primary-ink">{t("common.change")}</Text>
                 </Pressable>
               </View>
               <Text className="font-mono text-[11px] text-muted-foreground">
-                {estimate.macros.protein_g} g prot · {estimate.macros.carbs_g} g hidratos ·{" "}
-                {estimate.macros.fat_g} g grasa
+                {t("snack.macrosLine", {
+                  protein: estimate.macros.protein_g,
+                  carbs: estimate.macros.carbs_g,
+                  fat: estimate.macros.fat_g,
+                })}
               </Text>
             </>
           ) : (
             <View className="gap-1.5">
               <Text className="text-sm text-foreground">
-                {estimate.resolved
-                  ? "¿Cuántas kcal son?"
-                  : "No he podido calcularlo. ¿Cuántas kcal son? (lo pone el envase)"}
+                {estimate.resolved ? t("snack.howManyKcal") : t("snack.howManyKcalUnresolved")}
               </Text>
               <View className="flex-row items-center gap-2">
                 <TextInput
@@ -341,7 +341,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                     className="ml-auto active:opacity-70"
                   >
                     <Text className="text-xs font-medium text-muted-foreground">
-                      Usar ≈ {estimatedKcal}
+                      {t("snack.useEstimate", { kcal: estimatedKcal })}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -355,7 +355,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
           ) : null}
           {showNumbers && estimate.lowConfidence && kcalInput == null ? (
             <Text className="text-[11px] leading-snug text-primary-ink">
-              No he reconocido todo lo que has escrito: revisa la cifra.
+              {t("snack.lowConfidence")}
             </Text>
           ) : null}
         </View>
@@ -373,15 +373,13 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
         >
           {busy === "save" ? <ActivityIndicator size="small" color="#fff" /> : null}
           <Text className="text-sm font-semibold text-primary-foreground">
-            {busy === "save" ? "Guardando…" : "Guardar picoteo"}
+            {busy === "save" ? t("common.saving") : t("snack.save")}
           </Text>
         </Pressable>
       ) : null}
 
       <Text className="text-center text-xs text-muted-foreground">
-        {pastDay
-          ? "Es solo para tu historial: no cambia el plan ni la compra."
-          : "Hoy y la lista de la compra no cambian: si hace falta, ajusto los próximos días."}
+        {pastDay ? t("snack.footPast") : t("snack.footToday")}
       </Text>
     </View>
   );
@@ -403,18 +401,15 @@ export function SnackSheet({
   onOpenChange: (open: boolean) => void;
   onSaved: (snacks: DaySnacks) => void;
 }) {
+  const { t } = useTranslation();
   const { pastDay = false, showNumbers = true } = form;
   return (
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Añadir picoteo"
+      title={t("hoy.addSnack")}
       description={
-        pastDay
-          ? "Apunta lo que picaste ese día para completar tu historial."
-          : showNumbers
-            ? "Apunta lo que has picado entre horas. Calculo sus kcal y, si hace falta, ajusto los próximos días."
-            : "Apunta lo que has picado entre horas. Si hace falta, ajusto los próximos días."
+        pastDay ? t("snack.descPast") : showNumbers ? t("snack.descNumbers") : t("snack.descPlain")
       }
     >
       <View className="px-4 pb-8 pt-2">

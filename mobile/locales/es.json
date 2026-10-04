@@ -6,7 +6,9 @@
     "continue": "Continuar",
     "loading": "Un momento…",
     "back": "Atrás",
-    "retry": "Inténtalo otra vez."
+    "retry": "Inténtalo otra vez.",
+    "saving": "Guardando…",
+    "removeNamed": "Quitar {{what}}"
   },
   "languages": {
     "es": "Español",
@@ -587,5 +589,101 @@
     "ingredients": "Ingredientes",
     "steps": "Pasos",
     "failed": "No hemos podido cargar la receta. Reintentar"
+  },
+  "snack": {
+    "cardTitle": "Picoteo de hoy",
+    "presets": {
+      "nuts": {
+        "label": "Frutos secos",
+        "text_one": "Un puñado de frutos secos",
+        "text_other": "{{qty}} puñados de frutos secos"
+      },
+      "biscuits": {
+        "label": "Galletas",
+        "text_one": "Dos galletas",
+        "text_other": "{{qty}} galletas"
+      },
+      "chocolate": {
+        "label": "Chocolate",
+        "text_one": "Dos onzas de chocolate",
+        "text_other": "{{qty}} onzas de chocolate"
+      },
+      "crisps": {
+        "label": "Patatas de bolsa",
+        "text_one": "Una bolsa pequeña de patatas fritas",
+        "text_other": "{{qty}} bolsas pequeñas de patatas fritas"
+      },
+      "beer": {
+        "label": "Cerveza",
+        "text_one": "Una caña de cerveza",
+        "text_other": "{{qty}} cañas de cerveza"
+      },
+      "wine": {
+        "label": "Vino",
+        "text_one": "Una copa de vino",
+        "text_other": "{{qty}} copas de vino"
+      },
+      "fruit": {
+        "label": "Fruta",
+        "text_one": "Una pieza de fruta",
+        "text_other": "{{qty}} piezas de fruta"
+      },
+      "cheese": {
+        "label": "Queso",
+        "text_one": "Unos taquitos de queso",
+        "text_other": "{{qty}} raciones de taquitos de queso"
+      }
+    },
+    "listAnd": "{{rest}} y {{last}}",
+    "placeholder": "Ej: un puñado de almendras",
+    "fieldLabel": "Qué has picoteado",
+    "tellMe": "Cuéntame qué has picado.",
+    "estimateFailed": "No he podido calcularlo ahora mismo.",
+    "saveFailed": "No he podido guardar el picoteo.",
+    "calculating": "Calculando…",
+    "calculate": "Calcular",
+    "ready": "Listo, ya lo tengo calculado.",
+    "describeBetter": "No he podido calcularlo. Descríbelo con algo más de detalle (qué era y cuánto, más o menos).",
+    "macrosLine": "{{protein}} g prot · {{carbs}} g hidratos · {{fat}} g grasa",
+    "howManyKcal": "¿Cuántas kcal son?",
+    "howManyKcalUnresolved": "No he podido calcularlo. ¿Cuántas kcal son? (lo pone el envase)",
+    "useEstimate": "Usar ≈ {{kcal}}",
+    "lowConfidence": "No he reconocido todo lo que has escrito: revisa la cifra.",
+    "save": "Guardar picoteo",
+    "footPast": "Es solo para tu historial: no cambia el plan ni la compra.",
+    "footToday": "Hoy y la lista de la compra no cambian: si hace falta, ajusto los próximos días.",
+    "descPast": "Apunta lo que picaste ese día para completar tu historial.",
+    "descNumbers": "Apunta lo que has picado entre horas. Calculo sus kcal y, si hace falta, ajusto los próximos días.",
+    "descPlain": "Apunta lo que has picado entre horas. Si hace falta, ajusto los próximos días."
+  },
+  "exercise": {
+    "cardTitle": "Deporte de hoy",
+    "routine": "Dentro de tu rutina · ya está en tu plan",
+    "routineCount": "Dentro de tu rutina ({{index}} de {{of}} esta semana) · ya está en tu plan",
+    "activities": {
+      "Correr": "Correr",
+      "Caminar": "Caminar",
+      "Bici": "Bici",
+      "Gimnasio / pesas": "Gimnasio / pesas",
+      "Natación": "Natación",
+      "Otra": "Otra"
+    },
+    "intensity": {
+      "Suave": "Suave",
+      "Normal": "Normal",
+      "Fuerte": "Fuerte"
+    },
+    "minutesError": "Indica entre {{min}} y {{max}} minutos.",
+    "saveFailed": "No he podido guardar el deporte.",
+    "descNumbers": "Apunta tu actividad. Calculo las kcal quemadas y, si hace falta, repongo energía en los próximos días.",
+    "descPlain": "Apunta tu actividad. Si hace falta, repongo energía en los próximos días.",
+    "what": "¿Qué has hecho?",
+    "minutes": "Minutos ({{min}}-{{max}})",
+    "intensityLabel": "Intensidad",
+    "burned": "≈ {{kcal}} kcal quemadas",
+    "net": "Por encima de lo que gastas en reposo, con tu peso.",
+    "routineHint": "Si es una de tus sesiones de siempre, ya va en tu plan: solo cuenta lo que pase de ella.",
+    "save": "Guardar deporte",
+    "foot": "Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los próximos días."
   }
 }

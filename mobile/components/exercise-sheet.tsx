@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
 import { apiPost } from "../lib/api";
@@ -54,6 +55,7 @@ export function ExerciseSheet({
   /** Tiene una rutina dentro de su objetivo (D9): sus sesiones no se compensan. */
   hasRoutine?: boolean;
 }) {
+  const { t } = useTranslation();
   const [activity, setActivity] = useState(EXERCISE_ACTIVITIES[0]!.label);
   const [minutes, setMinutes] = useState("30");
   const [intensity, setIntensity] = useState(EXERCISE_INTENSITY[1]!.label);
@@ -75,7 +77,9 @@ export function ExerciseSheet({
 
   const save = async () => {
     if (!validMinutes) {
-      setError(`Indica entre ${EXERCISE_MINUTES_MIN} y ${EXERCISE_MINUTES_MAX} minutos.`);
+      setError(
+        t("exercise.minutesError", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX }),
+      );
       return;
     }
     setBusy(true);
@@ -91,7 +95,7 @@ export function ExerciseSheet({
       reset();
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido guardar el deporte.");
+      setError(e instanceof Error ? e.message : t("exercise.saveFailed"));
       setBusy(false);
     }
   };
@@ -103,21 +107,17 @@ export function ExerciseSheet({
         onOpenChange(v);
         if (!v) reset();
       }}
-      title="Registrar deporte"
-      description={
-        showNumbers
-          ? "Apunta tu actividad. Calculo las kcal quemadas y, si hace falta, repongo energía en los próximos días."
-          : "Apunta tu actividad. Si hace falta, repongo energía en los próximos días."
-      }
+      title={t("hoy.addExercise")}
+      description={showNumbers ? t("exercise.descNumbers") : t("exercise.descPlain")}
     >
       <View className="gap-5 px-4 pb-8 pt-2">
         <View className="gap-2">
-          <Text className="text-xs text-muted-foreground">¿Qué has hecho?</Text>
+          <Text className="text-xs text-muted-foreground">{t("exercise.what")}</Text>
           <View className="flex-row flex-wrap gap-2">
             {EXERCISE_ACTIVITIES.map((a) => (
               <Chip
                 key={a.label}
-                label={a.label}
+                label={t(`exercise.activities.${a.label}`)}
                 active={activity === a.label}
                 onPress={() => setActivity(a.label)}
               />
@@ -127,7 +127,7 @@ export function ExerciseSheet({
 
         <View className="gap-2">
           <Text className="text-xs text-muted-foreground">
-            Minutos ({EXERCISE_MINUTES_MIN}-{EXERCISE_MINUTES_MAX})
+            {t("exercise.minutes", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX })}
           </Text>
           <TextInput
             className="h-12 w-28 rounded-2xl bg-muted px-4 text-sm text-foreground"
@@ -143,12 +143,12 @@ export function ExerciseSheet({
         </View>
 
         <View className="gap-2">
-          <Text className="text-xs text-muted-foreground">Intensidad</Text>
+          <Text className="text-xs text-muted-foreground">{t("exercise.intensityLabel")}</Text>
           <View className="flex-row gap-2">
             {EXERCISE_INTENSITY.map((i) => (
               <Chip
                 key={i.label}
-                label={i.label}
+                label={t(`exercise.intensity.${i.label}`)}
                 active={intensity === i.label}
                 onPress={() => setIntensity(i.label)}
               />
@@ -159,18 +159,14 @@ export function ExerciseSheet({
         {showNumbers && burn != null ? (
           <View className="rounded-2xl bg-surface px-4 py-3.5">
             <Text className="font-heading text-foreground" style={{ fontSize: 24, lineHeight: 28 }}>
-              ≈ {burn} kcal quemadas
+              {t("exercise.burned", { kcal: burn })}
             </Text>
-            <Text className="mt-1 text-xs text-muted-foreground">
-              Por encima de lo que gastas en reposo, con tu peso.
-            </Text>
+            <Text className="mt-1 text-xs text-muted-foreground">{t("exercise.net")}</Text>
           </View>
         ) : null}
 
         {hasRoutine ? (
-          <Text className="text-xs text-muted-foreground">
-            Si es una de tus sesiones de siempre, ya va en tu plan: solo cuenta lo que pase de ella.
-          </Text>
+          <Text className="text-xs text-muted-foreground">{t("exercise.routineHint")}</Text>
         ) : null}
 
         {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
@@ -182,13 +178,10 @@ export function ExerciseSheet({
         >
           {busy ? <ActivityIndicator size="small" color="#fff" /> : null}
           <Text className="text-sm font-sans-semibold text-primary-foreground">
-            {busy ? "Guardando…" : "Guardar deporte"}
+            {busy ? t("common.saving") : t("exercise.save")}
           </Text>
         </Pressable>
-        <Text className="text-center text-xs text-muted-foreground">
-          Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los próximos
-          días.
-        </Text>
+        <Text className="text-center text-xs text-muted-foreground">{t("exercise.foot")}</Text>
       </View>
     </Sheet>
   );

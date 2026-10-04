@@ -1,11 +1,8 @@
 import { X } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { exerciseTotals, type DayExercise } from "../lib/exercise";
-
-/** "Dentro de tu rutina (2 de 3 esta semana) · ya está en tu plan" (ticket 16). */
-const routineLine = (index?: number, of?: number) =>
-  `Dentro de tu rutina${index && of ? ` (${index} de ${of} esta semana)` : ""} · ya está en tu plan`;
 
 /**
  * "Deporte de hoy" en Hoy: lo apuntado, con sus kcal quemadas y una X para
@@ -28,6 +25,7 @@ export function ExerciseCard({
   /** `false` con la preferencia de no ver cifras (ticket 01): solo la lista. */
   showNumbers?: boolean;
 }) {
+  const { t } = useTranslation();
   const entries = exercise?.entries ?? [];
   if (!entries.length) return null;
 
@@ -38,7 +36,9 @@ export function ExerciseCard({
   return (
     <View className="mt-6 rounded-[20px] bg-surface px-3.5 py-3">
       <View className="flex-row items-baseline justify-between">
-        <Text className="font-body-semibold text-[11.5px] text-foreground">Deporte de hoy</Text>
+        <Text className="font-body-semibold text-[11.5px] text-foreground">
+          {t("exercise.cardTitle")}
+        </Text>
         {showNumbers ? (
           <Text className="font-mono text-[10.5px] text-muted-foreground">
             ~{total} kcal{anyRoutine ? " extra" : ""}
@@ -51,11 +51,17 @@ export function ExerciseCard({
           <View key={e.id} className="flex-row items-center gap-2">
             <View className="min-w-0 flex-1">
               <Text className="font-body text-[13px] text-foreground" numberOfLines={2}>
-                {e.activity} · {e.minutes} min · {e.intensity.toLowerCase()}
+                {t(`exercise.activities.${e.activity}`, { defaultValue: e.activity })} · {e.minutes}{" "}
+                min ·{" "}
+                {t(`exercise.intensity.${e.intensity}`, {
+                  defaultValue: e.intensity,
+                }).toLowerCase()}
               </Text>
               {e.routine ? (
                 <Text className="font-body text-[11px] text-muted-foreground">
-                  {routineLine(e.routineIndex, e.routineOf)}
+                  {e.routineIndex && e.routineOf
+                    ? t("exercise.routineCount", { index: e.routineIndex, of: e.routineOf })
+                    : t("exercise.routine")}
                   {showNumbers && e.kcal < 0 ? ` · ${-e.kcal} kcal extra` : ""}
                 </Text>
               ) : null}
@@ -67,7 +73,9 @@ export function ExerciseCard({
               onPress={() => onRemove(e.id)}
               disabled={removingId != null}
               hitSlop={6}
-              accessibilityLabel={`Quitar ${e.activity}`}
+              accessibilityLabel={t("common.removeNamed", {
+                what: t(`exercise.activities.${e.activity}`, { defaultValue: e.activity }),
+              })}
               className="h-7 w-7 items-center justify-center rounded-full bg-background active:opacity-70"
             >
               {removingId === e.id ? (

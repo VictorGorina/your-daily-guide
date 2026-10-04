@@ -1,10 +1,7 @@
 import { Loader2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { exerciseTotals, type DayExercise } from "@/lib/exercise";
-
-/** "Dentro de tu rutina (2 de 3 esta semana) · ya está en tu plan" (ticket 16). */
-const routineLine = (index?: number, of?: number) =>
-  `Dentro de tu rutina${index && of ? ` (${index} de ${of} esta semana)` : ""} · ya está en tu plan`;
 
 /**
  * "Deporte de hoy" en Hoy: lo apuntado, con sus kcal quemadas y una X para
@@ -26,6 +23,7 @@ export function ExerciseCard({
   /** `false` con la preferencia de no ver cifras (ticket 01): solo la lista. */
   showNumbers?: boolean;
 }) {
+  const { t } = useTranslation();
   const entries = exercise?.entries ?? [];
   if (!entries.length) return null;
 
@@ -37,7 +35,7 @@ export function ExerciseCard({
     <section className="animate-rise mt-6 rounded-[20px] bg-surface px-3.5 py-3">
       <div className="flex items-baseline justify-between">
         <h3 className="text-[11.5px] font-semibold tracking-[0.01em] text-foreground">
-          Deporte de hoy
+          {t("exercise.cardTitle")}
         </h3>
         {showNumbers ? (
           <span className="font-num text-[10.5px] tabular-nums text-muted-foreground">
@@ -51,11 +49,17 @@ export function ExerciseCard({
           <li key={e.id} className="flex items-center gap-2">
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 text-[13px] text-foreground">
-                {e.activity} · {e.minutes} min · {e.intensity.toLowerCase()}
+                {t(`exercise.activities.${e.activity}`, { defaultValue: e.activity })} · {e.minutes}{" "}
+                min ·{" "}
+                {t(`exercise.intensity.${e.intensity}`, {
+                  defaultValue: e.intensity,
+                }).toLowerCase()}
               </span>
               {e.routine ? (
                 <span className="block text-[11px] text-muted-foreground">
-                  {routineLine(e.routineIndex, e.routineOf)}
+                  {e.routineIndex && e.routineOf
+                    ? t("exercise.routineCount", { index: e.routineIndex, of: e.routineOf })
+                    : t("exercise.routine")}
                   {showNumbers && e.kcal < 0 ? ` · ${-e.kcal} kcal extra` : ""}
                 </span>
               ) : null}
@@ -69,7 +73,9 @@ export function ExerciseCard({
               type="button"
               onClick={() => onRemove(e.id)}
               disabled={removingId != null}
-              aria-label={`Quitar ${e.activity}`}
+              aria-label={t("common.removeNamed", {
+                what: t(`exercise.activities.${e.activity}`, { defaultValue: e.activity }),
+              })}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-background text-muted-foreground transition-opacity hover:text-foreground disabled:opacity-60"
             >
               {removingId === e.id ? (
