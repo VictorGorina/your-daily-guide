@@ -62,7 +62,7 @@ strip_portable() {
 for f in perishability.ts quotes.ts profile-fields.ts day-log-ack.ts auth-errors.ts \
   demo-profile.ts regions.ts snacks.ts week-nav.ts content-guard.ts day-balance.ts \
   month-intake.ts use-shopping-mutation.ts sentry-scrub.ts history-export.ts \
-  onboarding-script.ts; do
+  onboarding-script.ts day-row.ts; do
   a=$(strip_portable "src/lib/$f")
   b=$(strip_portable "mobile/lib/$f")
   if [ "$a" != "$b" ]; then
