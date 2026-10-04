@@ -289,8 +289,6 @@ Cosas que un cambio suele romper sin querer:
 - **La cadencia es corta a propósito.** Se descartó un cierre nocturno, que sería más exacto, porque
   la persona tiene que ver el efecto mientras sigue en la app. Varias pasadas en un día no se pisan
   porque `mergeDayAdjustment` las acumula.
-- **La columna `adjustment` puede no existir todavía** (migración de panel): `readDayRow` detecta el
-  42703 una vez y sigue sin ella. Se compensa igual; solo no se puede enseñar lo movido.
 - `/api/v1/snacks/settle` y `/api/v1/exercise/settle` se conservan como alias de `day/settle` para
   las builds móviles ya instaladas.
 
@@ -336,8 +334,7 @@ sesiones de la rutina, que ya van en el objetivo — ticket 16, D9):
 Los tres libros siguen donde estaban y son la PROCEDENCIA (`habits[].swapKcalDelta`,
 `snacks.compensatedKcal`, `exercise.compensatedKcal`): de ahí sale el desglose que se enseña, y
 mantienen la garantía de no compensar dos veces. El RESULTADO se guarda una sola vez, en
-`daily_logs.adjustment` — el código tolera que la columna no exista todavía (42703), como
-`reflowMeals` con `snacks`. `dayReversing` generaliza a todo el día las reglas que picoteo y
+`daily_logs.adjustment`. `dayReversing` generaliza a todo el día las reglas que picoteo y
 deporte tenían por separado para "esto deshace un ajuste ya aplicado".
 
 ### Cambio de plato en Hoy
@@ -533,8 +530,8 @@ un cambio suele romper sin querer:
 - **Caché global `dish_recipes`** (`getRecipes` en `recipes.server.ts`, clave `dishKey`: palabras
   ordenadas y en singular, sin quitar nunca "sin" ni "fresco"). Solo escribe el servidor. Las
   macros NO se guardan: `macrosOfRecipe(receta, factor)` al leer. Una receta de un
-  `PIPELINE_VERSION` antiguo sin `reviewed` se vuelve a descomponer. Sin la migración aplicada
-  (PGRST205), todo funciona con una caché por proceso. `bun run recipes:review` lista las más
+  `PIPELINE_VERSION` antiguo sin `reviewed` se vuelve a descomponer. Si la tabla no se puede leer, todo
+  funciona con una caché por proceso y el error queda en el log. `bun run recipes:review` lista las más
   usadas con calidad < 0,95 o flags.
 - **Precalentamiento**: la pantalla Plan manda los platos del mes de hoy en adelante a
   `POST /api/v1/recipes/warm` en trozos de 8 (`recipe-warm.ts`, web y móvil) y enseña "Calculando tus

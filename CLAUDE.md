@@ -150,9 +150,8 @@ deporte) y no se suma rutina.
 **Ver cifras es una preferencia** (ticket 01, D3): `profiles.nutrition_numbers` (`mostrar` |
 `ocultar`) se lee SOLO con `showsNutritionNumbers`. Con `ocultar` no hay kcal, macros ni
 objetivos en Hoy, el detalle de día, las tarjetas de picoteo/deporte/balance, `goalImpact` ni el
-coach; los platos se calculan igual. Las columnas nuevas de `profiles` (`nutrition_numbers`,
-`daily_activity`, `training`) llegan con migración manual: hasta aplicarla, `saveProfile` las
-omite (PGRST204) y la UI no las enseña (`hasProfileColumn`, `ProfileField.pendingColumn`).
+coach; los platos se calculan igual. El código ya no tolera columnas o tablas sin migrar
+(ticket 24): una migración se aplica con la CLI antes de desplegar el código que la usa.
 
 **Pestaña Hoy — el registro del día se reconcilia al leerlo.** La tira de comidas se pinta desde
 `daily_logs.habits`, que se escribe UNA vez al crear el día y lo crea quien toque el día primero
