@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { freshRiskNames, freshRisksForTrip, freshRiskText, shelfLifeDays } from "./perishability";
+import {
+  freezesWell,
+  freshRiskNames,
+  freshRisksForTrip,
+  freshRiskText,
+  shelfLifeDays,
+} from "./perishability";
 import type { ShoppingItem } from "./plan-shared";
 
 const item = (name: string, perishable: boolean, owned?: "fridge" | "store"): ShoppingItem => ({
@@ -79,6 +85,35 @@ describe("freshRisksForTrip", () => {
     expect(freshRiskText(["Merluza"], 8, "optimizada", true)).toBe(
       "Merluza no aguanta hasta la próxima compra. Congélalo al llegar o cómpralo el día que lo cocines.",
     );
+  });
+
+  it("en la optimizada solo propone congelar lo que se congela", () => {
+    expect(freshRiskText(["Lechuga", "Plátano"], 8, "optimizada")).toBe(
+      "Lechuga y Plátano no aguantan hasta la próxima compra. Cómpralos el día que los vayas a usar.",
+    );
+    expect(freshRiskText(["Fresas"], 8, "optimizada", true)).toBe(
+      "Fresas no aguanta hasta la próxima compra. Cómpralo el día que lo vayas a usar.",
+    );
+    // de los dos tipos en la misma compra: cada uno con su consejo
+    expect(
+      freshRiskText(["Merluza", "Lechuga", "Pechuga de pollo", "Plátano"], 8, "optimizada"),
+    ).toBe(
+      "Merluza y Pechuga de pollo no aguantan hasta la próxima compra: congélalos al llegar. " +
+        "Lechuga y Plátano tampoco y no se congelan bien: cómpralos el día que los vayas a usar.",
+    );
+    expect(freshRiskText(["Merluza", "Aguacate"], 8, "optimizada")).toBe(
+      "Merluza no aguanta hasta la próxima compra: congélalo al llegar. " +
+        "Aguacate tampoco y no se congela bien: cómpralo el día que lo vayas a usar.",
+    );
+  });
+
+  it("freezesWell: carne, pescado, pan y verdura de cocinar; lo dudoso, no", () => {
+    for (const name of ["Merluza", "Carne picada", "Pan integral", "Brócoli", "Espinacas"]) {
+      expect(freezesWell(name)).toBe(true);
+    }
+    for (const name of ["Lechuga", "Plátano", "Tomate", "Yogur natural", "Tofu"]) {
+      expect(freezesWell(name)).toBe(false);
+    }
   });
 
   it("resume la lista de nombres para el aviso", () => {

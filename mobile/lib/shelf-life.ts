@@ -117,3 +117,21 @@ export const shelfLifeDays = (name: string, category: string, perishable: boolea
   }
   return SHELF_LIFE_BY_CATEGORY[category] ?? 10;
 };
+
+/**
+ * Lo que se congela en casa sin estropearse: carne, pescado, pan y la verdura
+ * que se cocina. La hoja de ensalada, la fruta, el tomate o el yogur no, y un
+ * nombre que no se reconoce tampoco: el aviso de frescos solo propone congelar
+ * cuando tiene sentido.
+ */
+const FREEZES_WELL = [
+  ...["pescado", "merluza", "salmon", "atun fresco", "dorada", "lubina", "bacalao"],
+  ...["marisco", "gamba", "langostino", "mejillon", "almeja", "calamar", "sepia", "pulpo"],
+  ...["carne", "pollo", "pavo", "higado", "ternera", "cerdo", "cordero", "filete", "solomillo"],
+  ...["pan", "espinaca", "acelga", "brocoli", "judia verde", "guisante", "haba"],
+];
+
+export const freezesWell = (name: string): boolean => {
+  const n = norm(name);
+  return FREEZES_WELL.some((kw) => n.includes(kw));
+};

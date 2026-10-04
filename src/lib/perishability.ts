@@ -1,4 +1,5 @@
 import {
+  freezesWell,
   normName,
   shelfLifeDays,
   tripDayRange,
@@ -9,7 +10,7 @@ import {
 
 // La tabla de vida útil vive en `shopping/shelf-life.ts`: también la usa
 // `projectTrips` para la cadencia optimizada, y desde aquí habría un ciclo.
-export { shelfLifeDays };
+export { freezesWell, shelfLifeDays };
 
 /**
  * Nombres de los frescos de una compra que no aguantan todos los días que esa
@@ -54,7 +55,9 @@ export const freshRiskNames = (names: string[], shown = 2): string => {
 /**
  * El aviso entero. Con la cadencia optimizada lo que no llega ya se compra en
  * cada salida, así que "cómpralo más cerca" no dice nada: se propone congelar
- * o comprarlo el día. `shop` es el modo compra, con la lista ya en la mano.
+ * o comprarlo el día. Congelar, solo lo que se congela (`freezesWell`): a una
+ * lechuga o un plátano se les dice que se compren el día, y si hay de los dos
+ * el aviso los separa. `shop` es el modo compra, con la lista ya en la mano.
  */
 export const freshRiskText = (
   names: string[],
@@ -66,7 +69,19 @@ export const freshRiskText = (
   const s = one ? "" : "s";
   const head = `${freshRiskNames(names)} no ${one ? "aguanta" : "aguantan"}`;
   if (cadence === "optimizada") {
-    return `${head} hasta la próxima compra. Congélalo${s} al llegar o cómpralo${s} el día que lo${s} cocines.`;
+    const frozen = names.filter(freezesWell);
+    const fresh = names.filter((name) => !freezesWell(name));
+    if (!fresh.length) {
+      return `${head} hasta la próxima compra. Congélalo${s} al llegar o cómpralo${s} el día que lo${s} cocines.`;
+    }
+    const p = fresh.length === 1 ? "" : "s";
+    const buy = `ómpralo${p} el día que lo${p} vayas a usar.`;
+    if (!frozen.length) return `${head} hasta la próxima compra. C${buy}`;
+    const f = frozen.length === 1 ? "" : "s";
+    return (
+      `${freshRiskNames(frozen)} no aguanta${f ? "n" : ""} hasta la próxima compra: congélalo${f} al llegar. ` +
+      `${freshRiskNames(fresh)} tampoco y no se congela${p ? "n" : ""} bien: c${buy}`
+    );
   }
   return shop
     ? `${head} los ${spanDays} días hasta la próxima compra. Cógelo${s} justo para los primeros platos.`
