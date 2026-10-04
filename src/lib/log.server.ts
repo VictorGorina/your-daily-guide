@@ -64,8 +64,6 @@
  * - `settle_reservation_expired` (warn): un asentamiento encontró la reserva
  *   caducada de otro que murió a medias y la devolvió. Suelto es una función
  *   cortada; repetido, `settleDay` se pasa de tiempo.
- * - `settle_no_adjustment_column` (warn): falta la columna `daily_logs.adjustment`
- *   (migración pendiente); las reservas no caducan. Una vez por proceso.
  * - `settle_outcome_failed` (warn): `settleDay` no pudo guardar `lastOutcome`;
  *   solo se pierde la nota de la tarjeta "Balance de hoy".
  * - `plan_cas_exhausted` (warn): cinco escrituras seguidas de la fila del mes

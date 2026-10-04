@@ -1,5 +1,5 @@
 import { goalDirection } from "@/lib/goal";
-import { updateDailyLogCas } from "@/lib/daily-rows.server";
+import { type DailyLogPatch, updateDailyLogCas } from "@/lib/daily-rows.server";
 import {
   cleanDayAdjustment,
   type DayAdjustmentRecord,
@@ -93,23 +93,7 @@ type DayPatch = {
   pending?: PendingReservation[];
 };
 
-/**
- * `daily_logs.adjustment` es la columna nueva de esta feature. Mientras la
- * migración no esté aplicada, PostgREST responde 42703: se detecta una vez y se
- * sigue sin ella (se compensa igual, solo que la tarjeta no puede enseñar los
- * platos movidos). Mismo criterio que `reflowMeals` con `snacks` — un despliegue
- * por delante de la migración no debe dejar la app sin compensar.
- *
- * Es estado del módulo, compartido por las peticiones que atiende a la vez una
- * instancia, y está bien así (ARQ-03): guarda un hecho del esquema, el mismo
- * para todas, no nada de una persona o de una petición.
- */
-let hasAdjustmentColumn = true;
-let warnedNoAdjustmentColumn = false;
 const DAY_COLUMNS = "habits, snacks, exercise, adjustment, updated_at";
-const DAY_COLUMNS_LEGACY = "habits, snacks, exercise, updated_at";
-
-const isMissingColumn = (error: unknown) => (error as { code?: string } | null)?.code === "42703";
 
 function toDayRow(row: Record<string, unknown>): DayRow {
   return {
@@ -122,15 +106,15 @@ function toDayRow(row: Record<string, unknown>): DayRow {
 }
 
 /** Las columnas que escribe `patch`; `null` si no cambia ninguna. */
-function dayColumns(row: DayRow, patch: DayPatch): Record<string, unknown> | null {
-  const update: Record<string, unknown> = {};
+function dayColumns(row: DayRow, patch: DayPatch): DailyLogPatch | null {
+  const update: DailyLogPatch = {};
   if (patch.habits !== undefined) update.habits = patch.habits;
   if (patch.snacks !== undefined) update.snacks = patch.snacks;
   if (patch.exercise !== undefined) update.exercise = patch.exercise;
   // Registro y reservas comparten columna: se escribe siempre la pareja, con lo
   // leído en la parte que el parche no cambia (si no, guardar el resultado de
   // un asentamiento borraría la reserva en vuelo de otro).
-  if ((patch.record !== undefined || patch.pending !== undefined) && hasAdjustmentColumn) {
+  if (patch.record !== undefined || patch.pending !== undefined) {
     update.adjustment = adjustmentColumn(
       patch.record !== undefined ? patch.record : row.record,
       patch.pending ?? row.pending,
@@ -159,29 +143,18 @@ async function patchDay(
 ): Promise<DayRow | null> {
   // Lo que se leyó y se aplicó en el último intento (el que escribió).
   const last: { row?: DayRow; patch: DayPatch } = { patch: {} };
-  const write = () =>
-    updateDailyLogCas(
-      supabase,
-      userId,
-      date,
-      hasAdjustmentColumn ? DAY_COLUMNS : DAY_COLUMNS_LEGACY,
-      (latest) => {
-        last.row = toDayRow(latest);
-        last.patch = update(last.row);
-        return dayColumns(last.row, last.patch);
-      },
-      { exhaustedMessage: "No hemos podido guardar el ajuste del día. Inténtalo de nuevo." },
-    );
-
-  try {
-    await write();
-  } catch (error) {
-    // La migración todavía no está: se repite sin la columna nueva.
-    if (!hasAdjustmentColumn || !isMissingColumn(error)) throw error;
-    hasAdjustmentColumn = false;
-    last.row = undefined;
-    await write();
-  }
+  await updateDailyLogCas(
+    supabase,
+    userId,
+    date,
+    DAY_COLUMNS,
+    (latest) => {
+      last.row = toDayRow(latest);
+      last.patch = update(last.row);
+      return dayColumns(last.row, last.patch);
+    },
+    { exhaustedMessage: "No hemos podido guardar el ajuste del día. Inténtalo de nuevo." },
+  );
   const { row, patch } = last;
   if (!row) return null;
   return {
@@ -343,11 +316,6 @@ export async function settleDayHandler(
   if (!reserved || (!reservation.total && !reservation.protein)) {
     return { outcome: "nothing", kcal: 0 };
   }
-  if (!hasAdjustmentColumn && !warnedNoAdjustmentColumn) {
-    // Sin la columna no hay dónde dejar la marca: la reserva no caduca.
-    warnedNoAdjustmentColumn = true;
-    logEvent("warn", "settle_no_adjustment_column", {});
-  }
   /** Quita la marca de esta reserva (el resto de reservas en vuelo se queda). */
   const withoutMine = (current: DayRow) => current.pending.filter((p) => p.id !== pendingId);
 
@@ -355,7 +323,7 @@ export async function settleDayHandler(
     await patchDay(supabase, userId, today, (current) => {
       // Ya devuelta por otro asentamiento (caducada): devolverla otra vez
       // restaría el picoteo y el deporte dos veces.
-      if (hasAdjustmentColumn && !current.pending.some((p) => p.id === pendingId)) return {};
+      if (!current.pending.some((p) => p.id === pendingId)) return {};
       return { ...releaseDay(current, reservation), pending: withoutMine(current) };
     }).catch((err) =>
       // La marca se queda: el siguiente asentamiento la devuelve al caducar.
