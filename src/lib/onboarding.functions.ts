@@ -105,8 +105,13 @@ export const parseOnboarding = createServerFn({ method: "POST" })
     const ai = createAiProvider(key, context.userId);
     const { text } = await generateText({
       model: ai(COACH_MODEL),
+      // La conversación sale en el idioma de la persona (ticket 34), pero lo
+      // que se guarda como valor de lista cerrada es español canónico: de esos
+      // valores dependen el plan, el objetivo y el tono.
       system:
-        "Extraes datos estructurados de una conversación de bienvenida en español. Nunca inventas: si algo no se dice, usa null.",
+        "Extraes datos estructurados de una conversación de bienvenida, que puede estar en español o en inglés. Nunca inventas: si algo no se dice, usa null. " +
+        "Los valores de lista cerrada (las opciones entre comillas del esquema) van SIEMPRE tal cual, en español, sea cual sea el idioma de la conversación. " +
+        "Los campos de texto libre, también los resúmenes que redactas tú (exercise, meal_schedule, life_context, family_context), van en el idioma en que respondió la persona: si respondió en inglés, en inglés.",
       prompt:
         `Conversación:\n${data.transcript}\n\n` +
         "Devuelve solo JSON válido con estas claves: " +

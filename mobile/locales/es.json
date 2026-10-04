@@ -127,5 +127,348 @@
     "bodyRoot": "Puedes volver a intentarlo.",
     "retry": "Reintentar",
     "home": "Inicio"
+  },
+  "onboarding": {
+    "screens": {
+      "about": {
+        "title": "Sobre ti",
+        "subtitle": "Datos biométricos y de salud"
+      },
+      "routine": {
+        "title": "Tu día a día",
+        "subtitle": "Estilo de vida y actividad"
+      },
+      "eating": {
+        "title": "Cómo comes hoy",
+        "subtitle": "Alimentación actual"
+      },
+      "home": {
+        "title": "Tu casa",
+        "subtitle": "Entorno familiar"
+      },
+      "goals": {
+        "title": "Hacia dónde vamos",
+        "subtitle": "Objetivos"
+      },
+      "coaching": {
+        "title": "Cómo te acompaño",
+        "subtitle": "Preferencias de acompañamiento"
+      }
+    },
+    "q": {
+      "name": {
+        "text": "Hola, soy Peppers, tu asistente de alimentación con IA. Te acompañaré cada día con ideas flexibles, nunca con dietas rígidas ni prisas. Para empezar, ¿cómo te llamo?",
+        "hint": "Tu nombre"
+      },
+      "birthdate": {
+        "text": "¿Cuál es tu fecha de nacimiento? Así ajusto tu edad sola con el tiempo y adapto el menú según vas cumpliendo años.",
+        "hint": "Elige el día con el calendario",
+        "hintTyped": "Escríbela como DD/MM/AAAA"
+      },
+      "bio": {
+        "text": "Encantado. Cuéntame tu sexo biológico, peso actual y altura.",
+        "hint": "Ej.: hombre, 78 kg, 172 cm"
+      },
+      "pregnancy": {
+        "text": "¿Estás embarazada o en periodo de lactancia ahora mismo?",
+        "hint": "Cambia lo que es seguro recomendarte",
+        "chips": {
+          "pregnant": "Sí, embarazada",
+          "breastfeeding": "Sí, en lactancia",
+          "no": "No",
+          "undisclosed": "Prefiero no decirlo"
+        }
+      },
+      "cycle": {
+        "text": "¿Notas que tu ciclo menstrual te afecta al apetito, la energía o los antojos?",
+        "hint": "Ej.: los días antes de la regla me apetece picar más (o 'no lo noto' / 'prefiero no decirlo')"
+      },
+      "medical": {
+        "text": "¿Alguna condición médica, medicación o suplemento que deba tener en cuenta?",
+        "hint": "Opcional: condiciones bajo supervisión médica, fármacos que afecten al apetito o la energía, y suplementos (proteína, creatina, vitaminas...). Si no hay nada, pulsa Saltar"
+      },
+      "smoking": {
+        "text": "¿Fumas?",
+        "chips": {
+          "no": "No",
+          "sometimes": "Ocasionalmente",
+          "yes": "Sí"
+        }
+      },
+      "allergies": {
+        "text": "¿Tienes alergias o intolerancias alimentarias?",
+        "hint": "Si no hay ninguna, dime 'ninguna'"
+      },
+      "allergySeverity": {
+        "text": "De esas alergias o intolerancias, ¿alguna es grave (tipo anafilaxia) o son más llevaderas?",
+        "hint": "Ej.: el marisco es grave, la lactosa la llevo bien"
+      },
+      "activity": {
+        "text": "¿Cómo describirías tu actividad física habitual y qué ejercicio haces?",
+        "hint": "Nivel de base (sedentario, activo, muy activo...) y tipo y frecuencia. Ej.: trabajo de oficina pero voy al gimnasio 3 días y juego al pádel los domingos"
+      },
+      "schedule": {
+        "text": "¿Cómo es tu horario laboral o diario? Turnos fijos, viajes, oficina...",
+        "hint": "Ej.: oficina de 9 a 18, viajo una semana al mes"
+      },
+      "mealsPerDay": {
+        "text": "¿Cuántas comidas sueles hacer al día actualmente?"
+      },
+      "mealsToPlan": {
+        "text": "¿Qué comidas quieres que te planifique y te incluya en la compra?",
+        "chips": {
+          "breakfast": "Desayuno",
+          "lunch": "Comida",
+          "dinner": "Cena",
+          "snack": "Merienda"
+        }
+      },
+      "cooking": {
+        "text": "¿Cocinas tú habitualmente o comes fuera y pides con frecuencia? Concreta qué días y comidas.",
+        "hint": "Ej.: cocino de lunes a viernes por la noche, como fuera al mediodía"
+      },
+      "kitchen": {
+        "text": "¿Con qué cuentas en la cocina?",
+        "chips": {
+          "oven": "Horno",
+          "airFryer": "Air fryer",
+          "slowCooker": "Olla lenta",
+          "cookingRobot": "Robot de cocina",
+          "stoveOnly": "Solo fuego",
+          "microwave": "Microondas"
+        }
+      },
+      "cookingSkill": {
+        "text": "¿Cómo te llevas con la cocina?",
+        "chips": {
+          "basic": "Me apaño con lo básico",
+          "good": "Cocino bien",
+          "great": "Se me da genial"
+        }
+      },
+      "dietPattern": {
+        "text": "¿Sigues algún patrón alimentario?",
+        "chips": {
+          "omnivore": "Omnívoro",
+          "flexitarian": "Flexitariano / poca carne roja",
+          "vegetarian": "Vegetariano",
+          "vegan": "Vegano",
+          "pescatarian": "Pescetariano",
+          "glutenFree": "Sin gluten"
+        }
+      },
+      "foods": {
+        "text": "¿Hay algún alimento intocable que no piensas dejar, y alguno que no quieres ver en tus platos?",
+        "hint": "Lo que no negocias (ej.: mi café con leche de la mañana) y lo que rechazas (ej.: cilantro, hígado, pescado azul). Si en alguno no hay nada, dilo."
+      },
+      "cuisine": {
+        "text": "¿Qué tipo de comida te gusta más?",
+        "chips": {
+          "mediterranean": "Mediterránea",
+          "homestyle": "Casera de siempre",
+          "asian": "Asiática",
+          "mexican": "Mexicana",
+          "italian": "Italiana",
+          "everything": "Un poco de todo"
+        }
+      },
+      "alcohol": {
+        "text": "¿Sueles tomar alcohol?",
+        "chips": {
+          "never": "Nunca",
+          "sometimes": "De vez en cuando",
+          "often": "Con bastante frecuencia"
+        }
+      },
+      "foodRelationship": {
+        "text": "¿Cómo describirías tu relación con la comida hoy en día?",
+        "hint": "Sin filtros, aquí no se juzga nada",
+        "chips": {
+          "calm": "Tranquila",
+          "anxious": "Ansiosa",
+          "noTime": "Sin tiempo para pensarlo"
+        }
+      },
+      "edHistory": {
+        "text": "Antes de seguir: ¿tienes ahora, o has tenido antes, una relación muy difícil con la comida — atracones, restricción muy estricta, purgas? Te lo pregunto para acompañarte mejor, nunca para juzgarte.",
+        "hint": "Sin filtros, aquí no se juzga nada",
+        "chips": {
+          "now": "Sí, ahora",
+          "past": "Sí, en el pasado",
+          "no": "No",
+          "undisclosed": "Prefiero no decirlo"
+        }
+      },
+      "livesWith": {
+        "text": "¿Con quién vives? Dime si compartes las comidas con alguien y cuáles (por ejemplo, cenáis siempre juntos).",
+        "hint": "Ej.: vivo con mi pareja, cenamos juntos todos los días"
+      },
+      "partnerApp": {
+        "text": "¿Tu pareja también va a usar Peppers? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
+        "hint": "Así sé si el presupuesto que me des luego es solo tuyo o el de los dos",
+        "chips": {
+          "yes": "Sí, también la usará",
+          "no": "No, de momento no"
+        }
+      },
+      "kids": {
+        "text": "¿Hay niños en casa? Cuéntame su edad, alergias o intolerancias y cómo comen.",
+        "hint": "Opcional: si no hay peques, pulsa Saltar"
+      },
+      "othersDiet": {
+        "text": "¿Alguien más en casa tiene alergias, intolerancias o algo que no come?",
+        "hint": "Opcional"
+      },
+      "portions": {
+        "text": "¿Para cuántas raciones cocinas normalmente cada comida?",
+        "hint": "Ej.: 2 entre semana, 4 el sábado — puede variar"
+      },
+      "targetWeight": {
+        "text": "¿En qué peso te gustaría mantenerte? Si ya estás en tu peso, pon ese número.",
+        "hint": "Ej.: 75 kg"
+      },
+      "trainingExperience": {
+        "text": "Como tu objetivo es ganar músculo: ¿cuánta experiencia tienes entrenando fuerza?",
+        "chips": {
+          "none": "Ninguna",
+          "under1": "Menos de 1 año",
+          "from1to3": "1-3 años",
+          "over3": "Más de 3 años"
+        }
+      },
+      "numbers": {
+        "text": "¿Quieres ver calorías y macros en la app?",
+        "hint": "Los platos se calculan igual en los dos casos. Puedes cambiarlo cuando quieras en Ajustes.",
+        "chips": {
+          "show": "Sí, enséñamelas",
+          "hide": "No, prefiero no verlas"
+        }
+      },
+      "deadline": {
+        "text": "¿Para cuándo te gustaría alcanzar ese peso? Sin presión — es para calcular un ritmo saludable.",
+        "hint": "Ej.: para junio, en 6 meses, sin prisa"
+      },
+      "scope": {
+        "text": "Aparte del peso, ¿quieres que te ayude con algo más?",
+        "chips": {
+          "food": "Solo la comida",
+          "habits": "Comida y hábitos saludables",
+          "energy": "Comida, energía y sueño"
+        }
+      },
+      "struggles": {
+        "text": "¿Qué es lo que más te ha costado mantener en intentos anteriores? Y de paso: ¿has probado antes a contar calorías o macros, o con otras dietas? ¿Te ayudó o te obsesionó?",
+        "hint": "Saberlo me ayuda a no repetir lo que no te funciona"
+      },
+      "budget": {
+        "text": "¿Cuánto tiempo tienes para cocinar al día y cuánto te quieres gastar en comida al mes?",
+        "hint": "Ej.: 20 min al día y unos 250 {{currency}} al mes"
+      },
+      "budgetHousehold": {
+        "text": "¿Cuánto tiempo tienes para cocinar al día y cuál es el presupuesto mensual TOTAL de la casa (contando a tu pareja) en comida?",
+        "hint": "Como tu pareja no va a usar la app, planificamos la compra para los dos. Ej.: 20 min al día y unos 400 {{currency}} al mes en total"
+      },
+      "tone": {
+        "text": "¿Prefieres que sea más motivador y relajado o más exigente y directo?",
+        "chips": {
+          "relaxed": "Relajado",
+          "neutral": "Neutro",
+          "demanding": "Exigente"
+        }
+      },
+      "times": {
+        "text": "Última: ¿a qué hora te gustaría recibir el resumen matutino y el repaso nocturno?",
+        "hint": "Ej.: a las 8:00 y a las 22:00"
+      }
+    },
+    "errors": {
+      "bioBoth": "Para calcular bien tu progreso necesito tu peso y tu altura. ¿Me los dices así? Ej.: hombre, 78 kg, 172 cm",
+      "bioWeight": "Me falta tu peso actual en kg (ej.: 78 kg). Es la base del progreso, sin juicios.",
+      "bioHeight": "Me falta tu altura en cm (ej.: 172 cm) para ajustar las cantidades.",
+      "times": "Dime las dos horas para poder avisarte a tiempo. Ej.: a las 8:00 y a las 22:00",
+      "meals": "Dime un número de comidas al día entre 1 y 8 (ej.: 3).",
+      "dobFormat": "Elige tu fecha de nacimiento con el calendario.",
+      "dobFormatTyped": "Escribe tu fecha de nacimiento como DD/MM/AAAA.",
+      "dobAge": "Revisa la fecha, esa edad no parece real.",
+      "gapRequired": "Necesito {{field}} para poder guardar.",
+      "weightRange": "El peso debe estar entre 25 y 350 kg.",
+      "heightRange": "La altura debe estar entre 100 y 250 cm.",
+      "timeFormat": "{{field}} debe tener formato HH:MM.",
+      "reviewFailed": "No hemos podido preparar la revisión",
+      "saveFailed": "No hemos podido guardar",
+      "rereadFailed": "No he podido releer tus cambios, guardo con lo que ya tenía",
+      "profileFailed": "No hemos podido preparar tu perfil. Inténtalo de nuevo."
+    },
+    "gaps": {
+      "current_weight_kg": {
+        "label": "Peso actual (kg)",
+        "help": "Sin él no puedo calcular tu progreso."
+      },
+      "height_cm": {
+        "label": "Altura (cm)",
+        "help": "Me ayuda a ajustar cantidades y consejos."
+      },
+      "morning_time": {
+        "label": "Resumen de la mañana",
+        "help": "Cuándo te doy la guía del día."
+      },
+      "evening_time": {
+        "label": "Repaso de la noche",
+        "help": "Cuándo hacemos el cierre del día."
+      }
+    },
+    "intro": {
+      "title": "Vamos a conocerte",
+      "body": "Son unas {{count}} preguntas (~10 minutos). Puedes saltar cualquiera, volver atrás y corregir lo que quieras — y si lo dejas a medias, retomas justo donde ibas.",
+      "start": "Empezar"
+    },
+    "index": {
+      "eyebrow": "índice",
+      "title": "Todo el recorrido",
+      "body": "Ve a cualquier etapa cuando quieras. Lo respondido se guarda tal cual.",
+      "seeSummary": "Ver mi resumen"
+    },
+    "summary": {
+      "eyebrow": "resumen · {{done}} de {{total}}",
+      "title": "Repasa tus respuestas",
+      "body": "Toca cualquier respuesta para corregirla. Sin prisa: cuando esté bien, confirmamos.",
+      "keyData": "Datos clave",
+      "missing": "falta",
+      "pending": "Pendientes · {{count}}",
+      "answer": "Responder",
+      "empty": "Aún no hay respuestas guardadas. Vuelve al chat y empieza por donde quieras.",
+      "remaining_one": "Te queda {{count}} pregunta por responder antes de guardar.",
+      "remaining_other": "Te quedan {{count}} preguntas por responder antes de guardar.",
+      "saving": "Guardando...",
+      "confirm": "Confirmar y guardar mi perfil",
+      "backToChat": "Volver al chat"
+    },
+    "saved": {
+      "title": "Guardado",
+      "body": "Llevas {{done}} de {{total}} respuestas. Cuando vuelvas, retomas justo aquí — nada se pierde.",
+      "continue": "Seguir ahora",
+      "review": "Ver lo que llevo"
+    },
+    "chat": {
+      "back": "Atrás",
+      "stage": "etapa {{n}} de {{total}}",
+      "saveAndExit": "Guardar y salir",
+      "question": "pregunta {{n}} de {{total}}",
+      "left": "quedan {{count}}",
+      "skipped": "Saltada — la retomo luego",
+      "stageDone": "Etapa completa:",
+      "lastStage": "Es la última: ya podemos repasarlo todo.",
+      "nextStage": "Seguimos con {{stage}}.",
+      "review": "Repasar",
+      "continue": "Continuar",
+      "answerLabel": "Tu respuesta",
+      "placeholder": "Escribe aquí...",
+      "placeholderSaving": "Preparando tu plan...",
+      "datePlaceholder": "DD/MM/AAAA",
+      "dictate": "Dictar",
+      "skip": "Saltar y volver luego",
+      "send": "Enviar",
+      "close": "Cerrar"
+    }
   }
 }

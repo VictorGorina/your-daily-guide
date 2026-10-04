@@ -17,133 +17,52 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { DictateButton } from "@/components/dictate-button";
+import { DictationField, DictationWave } from "@/components/dictation-field";
 import { RegionStep } from "@/components/region-step";
 import { ageFromDOB } from "@/lib/age";
 import { localISODate } from "@/lib/dates";
 import { fetchProfile, hasProfileColumn, saveProfile, todayISO } from "@/lib/daily";
 import { deriveGoalType } from "@/lib/goal";
 import { parseOnboarding } from "@/lib/onboarding.functions";
-import { type MealSlot } from "@/lib/plan-shared";
+import {
+  BIO_Q,
+  buildFlat,
+  chipKey,
+  chipsOfAnswer,
+  displayQuestion,
+  errorKey,
+  type FlatNode,
+  formatDatePretty,
+  GAP_TYPE,
+  gapHelpKey,
+  gapLabelKey,
+  hintKey,
+  KEY_FIELDS,
+  MEALS_TO_PLAN_Q,
+  mealSlotsFromAnswer,
+  NUMBERS_Q,
+  nutritionNumbersFromAnswer,
+  parseBiometrics,
+  parseDatePretty,
+  PARTNER_APP_Q,
+  partnerUsesApp,
+  type GapKey,
+  type Question,
+  questionKey,
+  SCREENS,
+  screenSubtitleKey,
+  screenTitleKey,
+} from "@/lib/onboarding-script";
+import { useCurrencySymbol } from "@/lib/use-money";
 import { resolveDeviceTimeZone } from "@/lib/zoned-date";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
 });
-
-type Question = {
-  q: string;
-  hint?: string;
-  chips?: string[];
-  /** Los chips son de selección única salvo que se marque explícitamente lo contrario:
-   * casi todas estas preguntas mapean a un único valor (nivel de actividad, tono...),
-   * así que combinar varias opciones a la vez no tendría sentido. */
-  multi?: boolean;
-  optional?: boolean;
-  /** Sustituye el textarea por un selector de fecha nativo (usado en la fecha de nacimiento). */
-  dateInput?: boolean;
-  validate?: (text: string) => string | null;
-  /** Pregunta que se inserta justo después de esta si `test` devuelve true sobre la
-   * respuesta dada — no consume un "step" del flujo fijo (ver PARTNER_APP_Q, el
-   * primer caso de este patrón). */
-  followUp?: { test: (answerText: string) => boolean; question: Question };
-};
-type Screen = { title: string; subtitle: string; questions: Question[] };
-
-/** Detecta una respuesta con contenido real frente a un "no"/"ninguna"/"nada"
- * (se usa para follow-ups condicionales: alergias -> gravedad). */
-const mentionsSomething = (t: string) => !/^\s*(ning[uú]n[ao]?s?|no|nada)\b/i.test(t.trim());
-
-const num = (t: string) => t.replace(",", ".");
-
-type Biometrics = { age: number | null; weight: number | null; height: number | null };
-
-/** Lee edad, peso y altura de una frase libre, con o sin unidades. */
-const parseBiometrics = (raw: string): Biometrics => {
-  const t = num(raw).toLowerCase();
-  let age: number | null = null;
-  let weight: number | null = null;
-  let height: number | null = null;
-
-  const unit = (re: RegExp) => {
-    const m = t.match(re);
-    return m ? Number(m[1]) : null;
-  };
-
-  age = unit(/(\d{1,3})\s*(?:años|anos|año|a\b)/);
-  weight = unit(/(\d{2,3}(?:\.\d+)?)\s*(?:kg|kilos?|kilogramos?)/);
-  height = unit(/(\d{2,3}(?:\.\d+)?)\s*(?:cm|cent[ií]metros?|centimetros?)/);
-  const meters = unit(/([12](?:\.\d{1,2}))\s*(?:m|metros?)\b/);
-  if (!height && meters) height = Math.round(meters * 100);
-
-  // Números sueltos: los asignamos por rango plausible.
-  const numbers = (t.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
-  const used = new Set<number>(
-    [age, weight, height, meters].filter((n): n is number => n !== null),
-  );
-  for (const n of numbers) {
-    if (used.has(n)) continue;
-    if (!height && ((n >= 120 && n <= 250) || (n >= 1.2 && n <= 2.5))) {
-      height = n <= 2.5 ? Math.round(n * 100) : n;
-      used.add(n);
-      continue;
-    }
-    if (!weight && n >= 30 && n <= 350) {
-      weight = n;
-      used.add(n);
-      continue;
-    }
-    if (!age && n >= 10 && n <= 100) {
-      age = n;
-      used.add(n);
-    }
-  }
-  return { age, weight, height };
-};
-
-const validateBiometrics = (raw: string) => {
-  const { weight, height } = parseBiometrics(raw);
-  if (!weight && !height)
-    return "Para calcular bien tu progreso necesito tu peso y tu altura. ¿Me los dices así? Ej.: hombre, 78 kg, 172 cm";
-  if (!weight)
-    return "Me falta tu peso actual en kg (ej.: 78 kg). Es la base del progreso, sin juicios.";
-  if (!height) return "Me falta tu altura en cm (ej.: 172 cm) para ajustar las cantidades.";
-  return null;
-};
-
-const validateTimes = (raw: string) => {
-  const hours = num(raw).match(/\b([01]?\d|2[0-3])(?:[:.]\d{2})?\s*(h|am|pm)?\b/gi) ?? [];
-  if (hours.length < 2)
-    return "Dime las dos horas para poder avisarte a tiempo. Ej.: a las 8:00 y a las 22:00";
-  return null;
-};
-
-const validateMeals = (raw: string) => {
-  const n = Number((num(raw).match(/\d+(?:\.\d+)?/) ?? [])[0]);
-  if (!n || n < 1 || n > 8) return "Dime un número de comidas al día entre 1 y 8 (ej.: 3).";
-  return null;
-};
-
-const validateDOB = (raw: string) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "Elige tu fecha de nacimiento con el calendario.";
-  const age = ageFromDOB(raw);
-  if (age === null || age < 12 || age > 110) return "Revisa la fecha, esa edad no parece real.";
-  return null;
-};
-
-const formatDatePretty = (iso: string) => {
-  const [y, m, d] = iso.split("-");
-  return y && m && d ? `${d}/${m}/${y}` : iso;
-};
-
-const parseDatePretty = (pretty: string): string | null => {
-  const m = pretty.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!m) return null;
-  const [, d, mo, y] = m;
-  return `${y}-${mo}-${d}`;
-};
 
 // Fechas locales: `toISOString()` es la de UTC, y por la noche en América ya es mañana.
 const DOB_MAX = localISODate(new Date());
@@ -153,398 +72,13 @@ const DOB_MIN = (() => {
   return localISODate(d);
 })();
 
-// --- Preguntas "hoja" (sin follow-up propio) usadas como follow-up de otras o
-// insertadas directamente en SCREENS. Van primero porque BIO_Q, LIVES_WITH_Q y la
-// pregunta de objetivo las referencian en su propio `followUp`. Ver "Radiografía
-// del onboarding" para el porqué de cada una.
-
-const ALLERGY_SEVERITY_Q: Question = {
-  q: "De esas alergias o intolerancias, ¿alguna es grave (tipo anafilaxia) o son más llevaderas?",
-  hint: "Ej.: el marisco es grave, la lactosa la llevo bien",
-  optional: true,
-};
-
-const MENSTRUAL_CYCLE_Q: Question = {
-  q: "¿Notas que tu ciclo menstrual te afecta al apetito, la energía o los antojos?",
-  hint: "Ej.: los días antes de la regla me apetece picar más (o 'no lo noto' / 'prefiero no decirlo')",
-  optional: true,
-};
-
-const PREGNANCY_Q: Question = {
-  q: "¿Estás embarazada o en periodo de lactancia ahora mismo?",
-  hint: "Cambia lo que es seguro recomendarte",
-  chips: ["Sí, embarazada", "Sí, en lactancia", "No", "Prefiero no decirlo"],
-  // Si no está embarazada ni en lactancia, encadenamos la pregunta del ciclo;
-  // si lo está, no tiene sentido preguntarla ahora.
-  followUp: { test: (t) => !/embarazad|lactancia/i.test(t), question: MENSTRUAL_CYCLE_Q },
-};
-
-const ED_HISTORY_Q: Question = {
-  q: "Antes de seguir: ¿tienes ahora, o has tenido antes, una relación muy difícil con la comida — atracones, restricción muy estricta, purgas? Te lo pregunto para acompañarte mejor, nunca para juzgarte.",
-  hint: "Sin filtros, aquí no se juzga nada",
-  chips: ["Sí, ahora", "Sí, en el pasado", "No", "Prefiero no decirlo"],
-};
-
-const ALCOHOL_Q: Question = {
-  q: "¿Sueles tomar alcohol?",
-  chips: ["Nunca", "De vez en cuando", "Con bastante frecuencia"],
-};
-
-const CUISINE_Q: Question = {
-  q: "¿Qué tipo de comida te gusta más?",
-  chips: [
-    "Mediterránea",
-    "Casera de siempre",
-    "Asiática",
-    "Mexicana",
-    "Italiana",
-    "Un poco de todo",
-  ],
-  multi: true,
-};
-
-const MEALS_TO_PLAN_Q: Question = {
-  q: "¿Qué comidas quieres que te planifique y te incluya en la compra?",
-  chips: ["Desayuno", "Comida", "Cena", "Merienda"],
-  multi: true,
-};
-
-/**
- * De la etiqueta de cada chip a la clave interna de la comida. Se
- * usa para guardar `meal_slots` directamente de la respuesta elegida, sin
- * pasar por `parseOnboarding`: ese paso manda toda la conversación a la IA
- * para resumirla en frases, y una selección de chips clara ("Comida, Cena")
- * podía volver convertida en una frase que ya no se podía interpretar de
- * vuelta con seguridad. Aquí no hace falta adivinar nada — el chip ya dice
- * exactamente qué slot es.
- */
-const MEAL_CHIP_TO_SLOT: Record<string, MealSlot> = {
-  Desayuno: "desayuno",
-  Comida: "comida",
-  Cena: "cena",
-  Merienda: "snack",
-};
-
-/** `meal_slots` a partir de la respuesta cruda a `MEALS_TO_PLAN_Q` ("Comida, Cena"). */
-function mealSlotsFromRawAnswer(raw: string | undefined): MealSlot[] | null {
-  if (!raw) return null;
-  const slots = raw
-    .split(",")
-    .map((s) => MEAL_CHIP_TO_SLOT[s.trim()])
-    .filter((s): s is MealSlot => !!s);
-  return slots.length ? slots : null;
-}
-
-const KITCHEN_EQUIPMENT_Q: Question = {
-  q: "¿Con qué cuentas en la cocina?",
-  chips: ["Horno", "Air fryer", "Olla lenta", "Robot de cocina", "Solo fuego", "Microondas"],
-  multi: true,
-};
-
-const COOKING_SKILL_Q: Question = {
-  q: "¿Cómo te llevas con la cocina?",
-  chips: ["Me apaño con lo básico", "Cocino bien", "Se me da genial"],
-};
-
-const TRAINING_EXPERIENCE_Q: Question = {
-  q: "Como tu objetivo es ganar músculo: ¿cuánta experiencia tienes entrenando fuerza?",
-  chips: ["Ninguna", "Menos de 1 año", "1-3 años", "Más de 3 años"],
-};
-
-const SMOKING_Q: Question = {
-  q: "¿Fumas?",
-  chips: ["No", "Ocasionalmente", "Sí"],
-};
-
-/**
- * Solo se pregunta si la respuesta a LIVES_WITH_Q menciona a la pareja: así sabemos
- * si el presupuesto que se pida más adelante (BUDGET_Q) debe ser el de una persona
- * o, si la pareja no va a usar la app para sincronizar, el total de la casa.
- */
-const PARTNER_APP_Q: Question = {
-  q: "¿Tu pareja también va a usar Peppers? Si la instala, podéis uniros en Tu hogar y compartir comidas y compra.",
-  hint: "Así sé si el presupuesto que me des luego es solo tuyo o el de los dos",
-  chips: ["Sí, también la usará", "No, de momento no"],
-};
-
-/** Pedimos la fecha exacta (no la edad suelta) para poder recalcularla sola con el
- * tiempo y adaptar el menú según la persona va cumpliendo años, en vez de quedarnos
- * con una edad fija del día del onboarding. */
-const BIRTHDATE_Q: Question = {
-  q: "¿Cuál es tu fecha de nacimiento? Así ajusto tu edad sola con el tiempo y adapto el menú según vas cumpliendo años.",
-  hint: "Elige el día con el calendario",
-  dateInput: true,
-  validate: validateDOB,
-};
-
-const BIO_Q: Question = {
-  q: "Encantado. Cuéntame tu sexo biológico, peso actual y altura.",
-  hint: "Ej.: hombre, 78 kg, 172 cm",
-  validate: validateBiometrics,
-  // Solo relevante para quien se identifica como mujer — mismo patrón de follow-up
-  // condicional que PARTNER_APP_Q más abajo, aplicado aquí por primera vez.
-  followUp: { test: (t) => /\bmujer\b/i.test(t), question: PREGNANCY_Q },
-};
-
-const LIVES_WITH_Q: Question = {
-  q: "¿Con quién vives? Dime si compartes las comidas con alguien y cuáles (por ejemplo, cenáis siempre juntos).",
-  hint: "Ej.: vivo con mi pareja, cenamos juntos todos los días",
-  followUp: { test: (t) => /\bpareja\b/i.test(t), question: PARTNER_APP_Q },
-};
-
-/**
- * Ticket 01 de `precision-nutricional` (D3): ver cifras es una preferencia que
- * elige la persona, no algo que la app deduzca. Cambia lo que enseña toda la
- * app, así que se gana su sitio pese a la memoria `onboarding-direction`
- * (recortar preguntas). Solo se pregunta cuando la columna existe
- * (`hasProfileColumn`): una respuesta que no se pudiera guardar sería una
- * promesa rota.
- */
-const NUMBERS_CHIP_TO_VALUE: Record<string, "mostrar" | "ocultar"> = {
-  "Sí, enséñamelas": "mostrar",
-  "No, prefiero no verlas": "ocultar",
-};
-
-const NUMBERS_Q: Question = {
-  q: "¿Quieres ver calorías y macros en la app?",
-  hint: "Los platos se calculan igual en los dos casos. Puedes cambiarlo cuando quieras en Ajustes.",
-  chips: Object.keys(NUMBERS_CHIP_TO_VALUE),
-};
-
-const BUDGET_Q: Question = {
-  q: "¿Cuánto tiempo tienes para cocinar al día y cuánto te quieres gastar en comida al mes?",
-  hint: "Ej.: 20 min al día y unos 250 € al mes",
-};
-
-const SCREENS: Screen[] = [
-  {
-    title: "Sobre ti",
-    subtitle: "Datos biométricos y de salud",
-    questions: [
-      {
-        q: "Hola, soy Peppers, tu asistente de alimentación con IA. Te acompañaré cada día con ideas flexibles, nunca con dietas rígidas ni prisas. Para empezar, ¿cómo te llamo?",
-        hint: "Tu nombre",
-      },
-      BIRTHDATE_Q,
-      BIO_Q,
-      {
-        q: "¿Alguna condición médica, medicación o suplemento que deba tener en cuenta?",
-        hint: "Opcional: condiciones bajo supervisión médica, fármacos que afecten al apetito o la energía, y suplementos (proteína, creatina, vitaminas...). Si no hay nada, pulsa Saltar",
-        optional: true,
-      },
-      SMOKING_Q,
-      {
-        q: "¿Tienes alergias o intolerancias alimentarias?",
-        hint: "Si no hay ninguna, dime 'ninguna'",
-        followUp: { test: mentionsSomething, question: ALLERGY_SEVERITY_Q },
-      },
-    ],
-  },
-  {
-    title: "Tu día a día",
-    subtitle: "Estilo de vida y actividad",
-    questions: [
-      {
-        q: "¿Cómo describirías tu actividad física habitual y qué ejercicio haces?",
-        hint: "Nivel de base (sedentario, activo, muy activo...) y tipo y frecuencia. Ej.: trabajo de oficina pero voy al gimnasio 3 días y juego al pádel los domingos",
-      },
-      {
-        q: "¿Cómo es tu horario laboral o diario? Turnos fijos, viajes, oficina...",
-        hint: "Ej.: oficina de 9 a 18, viajo una semana al mes",
-      },
-      {
-        q: "¿Cuántas comidas sueles hacer al día actualmente?",
-        chips: ["2", "3", "4", "5"],
-        validate: validateMeals,
-      },
-      MEALS_TO_PLAN_Q,
-    ],
-  },
-  {
-    title: "Cómo comes hoy",
-    subtitle: "Alimentación actual",
-    questions: [
-      {
-        q: "¿Cocinas tú habitualmente o comes fuera y pides con frecuencia? Concreta qué días y comidas.",
-        hint: "Ej.: cocino de lunes a viernes por la noche, como fuera al mediodía",
-      },
-      KITCHEN_EQUIPMENT_Q,
-      COOKING_SKILL_Q,
-      {
-        q: "¿Sigues algún patrón alimentario?",
-        chips: [
-          "Omnívoro",
-          "Flexitariano / poca carne roja",
-          "Vegetariano",
-          "Vegano",
-          "Pescetariano",
-          "Sin gluten",
-        ],
-        multi: true,
-      },
-      {
-        q: "¿Hay algún alimento intocable que no piensas dejar, y alguno que no quieres ver en tus platos?",
-        hint: "Lo que no negocias (ej.: mi café con leche de la mañana) y lo que rechazas (ej.: cilantro, hígado, pescado azul). Si en alguno no hay nada, dilo.",
-      },
-      CUISINE_Q,
-      ALCOHOL_Q,
-      {
-        q: "¿Cómo describirías tu relación con la comida hoy en día?",
-        hint: "Sin filtros, aquí no se juzga nada",
-        chips: ["Tranquila", "Ansiosa", "Sin tiempo para pensarlo"],
-      },
-      ED_HISTORY_Q,
-    ],
-  },
-  {
-    title: "Tu casa",
-    subtitle: "Entorno familiar",
-    questions: [
-      LIVES_WITH_Q,
-      {
-        q: "¿Hay niños en casa? Cuéntame su edad, alergias o intolerancias y cómo comen.",
-        hint: "Opcional: si no hay peques, pulsa Saltar",
-        optional: true,
-      },
-      {
-        q: "¿Alguien más en casa tiene alergias, intolerancias o algo que no come?",
-        hint: "Opcional",
-        optional: true,
-      },
-      {
-        q: "¿Para cuántas raciones cocinas normalmente cada comida?",
-        hint: "Ej.: 2 entre semana, 4 el sábado — puede variar",
-      },
-    ],
-  },
-  {
-    title: "Hacia dónde vamos",
-    subtitle: "Objetivos",
-    questions: [
-      {
-        q: "¿En qué peso te gustaría mantenerte? Si ya estás en tu peso, pon ese número.",
-        hint: "Ej.: 75 kg",
-        followUp: {
-          test: (t) => /músculo|musculo|fuerza|gym|gimnasio|pesas/i.test(t),
-          question: TRAINING_EXPERIENCE_Q,
-        },
-      },
-      NUMBERS_Q,
-      {
-        q: "¿Para cuándo te gustaría alcanzar ese peso? Sin presión — es para calcular un ritmo saludable.",
-        hint: "Ej.: para junio, en 6 meses, sin prisa",
-      },
-      {
-        q: "Aparte del peso, ¿quieres que te ayude con algo más?",
-        chips: ["Solo la comida", "Comida y hábitos saludables", "Comida, energía y sueño"],
-      },
-      {
-        q: "¿Qué es lo que más te ha costado mantener en intentos anteriores? Y de paso: ¿has probado antes a contar calorías o macros, o con otras dietas? ¿Te ayudó o te obsesionó?",
-        hint: "Saberlo me ayuda a no repetir lo que no te funciona",
-      },
-      BUDGET_Q,
-    ],
-  },
-  {
-    title: "Cómo te acompaño",
-    subtitle: "Preferencias de acompañamiento",
-    questions: [
-      {
-        q: "¿Prefieres que sea más motivador y relajado o más exigente y directo?",
-        chips: ["Relajado", "Neutro", "Exigente"],
-      },
-      {
-        q: "Última: ¿a qué hora te gustaría recibir el resumen matutino y el repaso nocturno?",
-        hint: "Ej.: a las 8:00 y a las 22:00",
-        validate: validateTimes,
-      },
-    ],
-  },
-];
-
 type Draft = Awaited<ReturnType<typeof parseOnboarding>>;
-type GapKey = "current_weight_kg" | "height_cm" | "morning_time" | "evening_time";
 
-const GAP_LABEL: Record<GapKey, { label: string; help: string; type: "number" | "time" }> = {
-  current_weight_kg: {
-    label: "Peso actual (kg)",
-    help: "Sin él no puedo calcular tu progreso.",
-    type: "number",
-  },
-  height_cm: {
-    label: "Altura (cm)",
-    help: "Me ayuda a ajustar cantidades y consejos.",
-    type: "number",
-  },
-  morning_time: {
-    label: "Resumen de la mañana",
-    help: "Cuándo te doy la guía del día.",
-    type: "time",
-  },
-  evening_time: {
-    label: "Repaso de la noche",
-    help: "Cuándo hacemos el cierre del día.",
-    type: "time",
-  },
-};
-
-const KEY_FIELDS: GapKey[] = ["current_weight_kg", "height_cm", "morning_time", "evening_time"];
-
-// --- Modelo plano y navegable -------------------------------------------------
-// El rediseño (proyecto de Claude Design "Onboarding Peppers", artboard 1b) pasa
-// de un chat de una sola dirección a un recorrido navegable: se puede saltar a
-// cualquier pregunta, corregir cualquier respuesta y aparcar preguntas. Para eso
-// aplanamos SCREENS a una lista de nodos con clave estable. Los follow-ups
-// condicionales (embarazo, pareja, gravedad de alergia...) se insertan justo
-// detrás de su pregunta madre cuando la respuesta cumple el `test`, así que la
-// lista crece y encoge con las respuestas — de ahí que se recalcule con useMemo.
-
-type FlatNode = {
-  q: Question;
-  key: string;
-  si: number;
-  screenTitle: string;
-  screenSub: string;
-  isFollowUp: boolean;
-  lastOfScreen: boolean;
-};
-
-/**
- * `numbersQuestion`: ¿se pregunta por ver cifras? (solo si la columna existe).
- * Omitirla no mueve las claves de las demás: `qi` sale del array completo.
- */
-const buildFlat = (answers: Record<string, string>, numbersQuestion = false): FlatNode[] => {
-  const out: FlatNode[] = [];
-
-  const pushChain = (q: Question, key: string, si: number, screen: Screen, isFollowUp: boolean) => {
-    out.push({
-      q,
-      key,
-      si,
-      screenTitle: screen.title,
-      screenSub: screen.subtitle,
-      isFollowUp,
-      lastOfScreen: false,
-    });
-    const ans = answers[key];
-    if (q.followUp && ans !== undefined && ans.trim() !== "" && q.followUp.test(ans)) {
-      pushChain(q.followUp.question, `${key}>fu`, si, screen, true);
-    }
-  };
-
-  SCREENS.forEach((screen, si) => {
-    screen.questions.forEach((baseQ, qi) => {
-      if (baseQ === NUMBERS_Q && !numbersQuestion) return;
-      pushChain(baseQ, `${si}-${qi}`, si, screen, false);
-    });
-  });
-
-  for (let i = 0; i < out.length; i++) {
-    const next = out[i + 1];
-    out[i].lastOfScreen = !next || next.si !== out[i].si;
-  }
-  return out;
-};
+// El guion (preguntas, chips, follow-ups, validaciones) vive en
+// `lib/onboarding-script.ts` y su texto en el catálogo (`onboarding.*`): aquí
+// solo queda la pantalla. El rediseño (proyecto de Claude Design "Onboarding
+// Peppers", artboard 1b) es un recorrido navegable: se puede saltar a cualquier
+// pregunta, corregir cualquier respuesta y aparcar preguntas.
 
 // v2: el recorte de preguntas (issue 06) desplaza las claves posicionales `si-qi`,
 // así que un borrador guardado con el guion anterior restauraría respuestas en la
@@ -559,6 +93,8 @@ function Onboarding() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const parse = useServerFn(parseOnboarding);
+  const { t } = useTranslation();
+  const currency = useCurrencySymbol();
 
   // País e idioma van antes del chat guionizado: mientras `profile.country` no
   // esté fijado, se muestra el RegionStep en lugar del onboarding conversacional.
@@ -653,25 +189,17 @@ function Onboarding() {
   // gasto: pedimos el presupuesto total de la casa en vez del personal.
   const partnerNode = flat.find((n) => n.q === PARTNER_APP_Q);
   const partnerAnswer = partnerNode ? answers[partnerNode.key] : undefined;
-  const partnerHasApp =
-    partnerAnswer == null
-      ? null
-      : /^\s*s[ií]\b/i.test(partnerAnswer)
-        ? true
-        : /^\s*no\b/i.test(partnerAnswer)
-          ? false
-          : null;
+  const partnerHasApp = partnerUsesApp(partnerAnswer);
 
-  const displayQ = (node: FlatNode): Question => {
-    if (node.q === BUDGET_Q && partnerHasApp === false) {
-      return {
-        ...node.q,
-        q: "¿Cuánto tiempo tienes para cocinar al día y cuál es el presupuesto mensual TOTAL de la casa (contando a tu pareja) en comida?",
-        hint: "Como tu pareja no va a usar la app, planificamos la compra para los dos. Ej.: 20 min al día y unos 400 € al mes en total",
-      };
-    }
-    return node.q;
+  // La pregunta tal como se enseña (la de presupuesto cambia si la pareja no
+  // usa la app) y su texto en el idioma de la persona.
+  const displayQ = (node: FlatNode): Question => displayQuestion(node.q, partnerHasApp);
+  const qText = (node: FlatNode) => t(questionKey(displayQ(node)), { currency });
+  const qHint = (q: Question) => {
+    const key = hintKey(q);
+    return key ? t(key, { currency }) : null;
   };
+  const chipLabel = (q: Question, chip: string) => (q.literalChips ? chip : t(chipKey(q, chip)));
 
   const answeredNodes = flat.filter((n) => answers[n.key] !== undefined);
   const answeredCount = answeredNodes.length;
@@ -680,8 +208,7 @@ function Onboarding() {
   const allAnswered = flat.every((n) => answers[n.key] !== undefined || n.q.optional === true);
   const requiredPending = flat.filter((n) => answers[n.key] === undefined && n.q.optional !== true);
 
-  const chipsForAnswer = (node: FlatNode, text: string) =>
-    new Set((node.q.chips ?? []).filter((c) => text.split(", ").includes(c)));
+  const chipsForAnswer = (node: FlatNode, text: string) => new Set(chipsOfAnswer(node.q, text));
 
   // El textarea guarda el texto tal cual; el `<input type="date">` necesita ISO,
   // pero la respuesta almacenada está en dd/mm/aaaa (más legible en el chat).
@@ -729,7 +256,7 @@ function Onboarding() {
     const q = displayQ(cur);
     const problem = q.validate?.(text);
     if (problem) {
-      setError(problem);
+      setError(t(errorKey(problem)));
       return;
     }
     if (cur.q.dateInput) setDob(text);
@@ -757,7 +284,7 @@ function Onboarding() {
   const toggleChip = (c: string) => {
     if (!cur?.q.multi) {
       setSelectedChips(new Set([c]));
-      setValue(c);
+      setValue(chipLabel(cur.q, c));
       inputRef.current?.focus();
       return;
     }
@@ -766,7 +293,7 @@ function Onboarding() {
       if (next.has(c)) next.delete(c);
       else next.add(c);
       const ordered = cur.q.chips?.filter((chip) => next.has(chip)) ?? [];
-      setValue(ordered.join(", "));
+      setValue(ordered.map((chip) => chipLabel(cur.q, chip)).join(", "));
       return next;
     });
     inputRef.current?.focus();
@@ -801,11 +328,13 @@ function Onboarding() {
     if (first) goTo(first.key);
   };
 
+  // Lo que lee `parseOnboarding`. Las marcas "Coach"/"Persona" y el "nada que
+  // destacar" son material del prompt, no interfaz: se quedan en español.
   const transcriptFromAnswers = (map: Record<string, string>) =>
     buildFlat(map, numbersQuestion)
       .map((n) => {
-        if (map[n.key] !== undefined) return `Coach: ${displayQ(n).q}\nPersona: ${map[n.key]}`;
-        if (n.q.optional) return `Coach: ${displayQ(n).q}\nPersona: Nada que destacar`;
+        if (map[n.key] !== undefined) return `Coach: ${qText(n)}\nPersona: ${map[n.key]}`;
+        if (n.q.optional) return `Coach: ${qText(n)}\nPersona: Nada que destacar`;
         return null;
       })
       .filter(Boolean)
@@ -838,7 +367,7 @@ function Onboarding() {
       });
       setError(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No hemos podido preparar la revisión");
+      toast.error(err instanceof Error ? err.message : t("onboarding.errors.reviewFailed"));
     }
     setSaving(false);
   };
@@ -850,11 +379,11 @@ function Onboarding() {
     // por identidad del objeto Question en vez de asumir una posición fija.
     const flatNow = buildFlat(answers, numbersQuestion);
     const mealsKey = flatNow.find((n) => n.q === MEALS_TO_PLAN_Q)?.key;
-    const meal_slots = mealSlotsFromRawAnswer(mealsKey ? answers[mealsKey] : undefined);
+    const meal_slots = mealSlotsFromAnswer(mealsKey ? answers[mealsKey] : undefined);
     // Del chip al valor, sin pasar por la IA (mismo motivo que `meal_slots`).
     const numbersKey = flatNow.find((n) => n.q === NUMBERS_Q)?.key;
     const nutrition_numbers = numbersKey
-      ? NUMBERS_CHIP_TO_VALUE[answers[numbersKey]?.trim() ?? ""]
+      ? nutritionNumbersFromAnswer(answers[numbersKey])
       : undefined;
     try {
       const existing = await fetchProfile();
@@ -932,7 +461,7 @@ function Onboarding() {
       setSaving(false);
       navigate({ to: "/plan", replace: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No hemos podido guardar");
+      toast.error(err instanceof Error ? err.message : t("onboarding.errors.saveFailed"));
       setSaving(false);
     }
   };
@@ -942,24 +471,26 @@ function Onboarding() {
     for (const key of KEY_FIELDS) {
       const rawVal = (gapValues[key] ?? "").trim();
       if (!rawVal) {
-        setError(`Necesito ${GAP_LABEL[key].label.toLowerCase()} para poder guardar.`);
+        setError(t("onboarding.errors.gapRequired", { field: t(gapLabelKey(key)).toLowerCase() }));
         return;
       }
-      if (GAP_LABEL[key].type === "number") {
+      if (GAP_TYPE[key] === "number") {
         const n = Number(rawVal.replace(",", "."));
         const ok = key === "current_weight_kg" ? n >= 25 && n <= 350 : n >= 100 && n <= 250;
         if (!ok) {
           setError(
-            key === "current_weight_kg"
-              ? "El peso debe estar entre 25 y 350 kg."
-              : "La altura debe estar entre 100 y 250 cm.",
+            t(
+              key === "current_weight_kg"
+                ? "onboarding.errors.weightRange"
+                : "onboarding.errors.heightRange",
+            ),
           );
           return;
         }
         (extra as Record<string, unknown>)[key] = n;
       } else {
         if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(rawVal)) {
-          setError(`${GAP_LABEL[key].label} debe tener formato HH:MM.`);
+          setError(t("onboarding.errors.timeFormat", { field: t(gapLabelKey(key)) }));
           return;
         }
         (extra as Record<string, unknown>)[key] = rawVal;
@@ -984,11 +515,11 @@ function Onboarding() {
         height_cm: reparsed.height_cm ?? bio.height,
       };
     } catch {
-      toast.error("No he podido releer tus cambios, guardo con lo que ya tenía");
+      toast.error(t("onboarding.errors.rereadFailed"));
     }
     if (!draft) {
       setSaving(false);
-      setError("No hemos podido preparar tu perfil. Inténtalo de nuevo.");
+      setError(t("onboarding.errors.profileFailed"));
       return;
     }
     setView("chat");
@@ -1008,18 +539,17 @@ function Onboarding() {
         <div className="w-full space-y-6 text-center">
           <Sparkles className="mx-auto h-10 w-10 text-primary-ink" aria-hidden />
           <h1 className="font-title text-2xl font-semibold tracking-tight text-foreground">
-            Vamos a conocerte
+            {t("onboarding.intro.title")}
           </h1>
           <p className="mx-auto max-w-xs text-sm leading-relaxed text-muted-foreground">
-            Son unas {total} preguntas (~10 minutos). Puedes saltar cualquiera, volver atrás y
-            corregir lo que quieras — y si lo dejas a medias, retomas justo donde ibas.
+            {t("onboarding.intro.body", { count: total })}
           </p>
           <button
             type="button"
             onClick={() => setIntroDismissed(true)}
             className="mx-auto flex items-center gap-2 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
           >
-            Empezar <ArrowRight className="h-4 w-4" />
+            {t("onboarding.intro.start")} <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </main>
@@ -1043,9 +573,14 @@ function Onboarding() {
   if (view === "index") {
     return (
       <Shell>
-        <OverlayHeader eyebrow="índice" title="Todo el recorrido" onClose={closeToChat} />
+        <OverlayHeader
+          eyebrow={t("onboarding.index.eyebrow")}
+          title={t("onboarding.index.title")}
+          closeLabel={t("onboarding.chat.close")}
+          onClose={closeToChat}
+        />
         <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
-          Ve a cualquier etapa cuando quieras. Lo respondido se guarda tal cual.
+          {t("onboarding.index.body")}
         </p>
         <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pb-2">
           {SCREENS.map((s, si) => {
@@ -1056,7 +591,7 @@ function Onboarding() {
             const first = nodes[0];
             return (
               <button
-                key={s.title}
+                key={s.id}
                 type="button"
                 onClick={() => first && goTo(first.key)}
                 className="flex w-full items-center gap-3.5 rounded-2xl bg-surface p-4 text-left transition-transform active:scale-[0.99]"
@@ -1074,10 +609,10 @@ function Onboarding() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold tracking-tight">
-                    {s.title}
+                    {t(screenTitleKey(s))}
                   </span>
                   <span className="font-num text-[10.5px] text-muted-foreground">
-                    {s.subtitle.toLowerCase()} · {doneN}/{nodes.length}
+                    {t(screenSubtitleKey(s)).toLowerCase()} · {doneN}/{nodes.length}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1090,7 +625,7 @@ function Onboarding() {
           onClick={() => void openResumen()}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
         >
-          Ver mi resumen <ArrowRight className="h-4 w-4" />
+          {t("onboarding.index.seeSummary")} <ArrowRight className="h-4 w-4" />
         </button>
       </Shell>
     );
@@ -1099,7 +634,8 @@ function Onboarding() {
   if (view === "resumen") {
     const pending = flat.filter((n) => skipped[n.key]);
     const sections = SCREENS.map((s, si) => ({
-      title: s.title,
+      id: s.id,
+      title: t(screenTitleKey(s)),
       items: flat.filter((n) => n.si === si && answers[n.key] !== undefined),
     })).filter((s) => s.items.length);
     const emptyResumen = pending.length === 0 && sections.length === 0;
@@ -1108,34 +644,35 @@ function Onboarding() {
     return (
       <Shell>
         <OverlayHeader
-          eyebrow={`resumen · ${answeredCount} de ${total}`}
-          title="Repasa tus respuestas"
+          eyebrow={t("onboarding.summary.eyebrow", { done: answeredCount, total })}
+          title={t("onboarding.summary.title")}
+          closeLabel={t("onboarding.chat.close")}
           onClose={closeToChat}
         />
         <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
-          Toca cualquier respuesta para corregirla. Sin prisa: cuando esté bien, confirmamos.
+          {t("onboarding.summary.body")}
         </p>
 
         <div className="mt-4 min-h-0 flex-1 space-y-5 overflow-y-auto pb-2">
           {canConfirm ? (
             <section className="space-y-3 rounded-3xl bg-surface p-4">
-              <p className="text-sm font-medium">Datos clave</p>
+              <p className="text-sm font-medium">{t("onboarding.summary.keyData")}</p>
               {KEY_FIELDS.map((key) => (
                 <label key={key} className="block text-xs text-muted-foreground">
-                  {GAP_LABEL[key].label}
+                  {t(gapLabelKey(key))}
                   {gapMissing.includes(key) ? (
                     <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary-ink">
-                      falta
+                      {t("onboarding.summary.missing")}
                     </span>
                   ) : null}
                   <input
-                    type={GAP_LABEL[key].type === "time" ? "time" : "text"}
-                    inputMode={GAP_LABEL[key].type === "number" ? "decimal" : undefined}
+                    type={GAP_TYPE[key] === "time" ? "time" : "text"}
+                    inputMode={GAP_TYPE[key] === "number" ? "decimal" : undefined}
                     value={gapValues[key] ?? ""}
                     onChange={(e) => setGapValues((v) => ({ ...v, [key]: e.target.value }))}
                     className="mt-1 h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
                   />
-                  <span className="mt-1 block text-[11px]">{GAP_LABEL[key].help}</span>
+                  <span className="mt-1 block text-[11px]">{t(gapHelpKey(key))}</span>
                 </label>
               ))}
             </section>
@@ -1144,7 +681,7 @@ function Onboarding() {
           {pending.length ? (
             <section className="space-y-2.5 rounded-3xl bg-primary-soft p-4">
               <p className="text-[13px] font-semibold text-foreground">
-                Pendientes · {pending.length}
+                {t("onboarding.summary.pending", { count: pending.length })}
               </p>
               {pending.map((n) => (
                 <button
@@ -1154,16 +691,18 @@ function Onboarding() {
                   className="flex w-full items-center gap-3 rounded-2xl bg-surface p-3.5 text-left"
                 >
                   <span className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
-                    {displayQ(n).q}
+                    {qText(n)}
                   </span>
-                  <span className="shrink-0 text-xs font-semibold text-primary-ink">Responder</span>
+                  <span className="shrink-0 text-xs font-semibold text-primary-ink">
+                    {t("onboarding.summary.answer")}
+                  </span>
                 </button>
               ))}
             </section>
           ) : null}
 
           {sections.map((s) => (
-            <section key={s.title} className="space-y-2">
+            <section key={s.id} className="space-y-2">
               <p className="px-1 font-num text-[10.5px] uppercase tracking-wide text-muted-foreground">
                 {s.title}
               </p>
@@ -1175,7 +714,7 @@ function Onboarding() {
                   className="block w-full rounded-3xl bg-surface p-4 text-left"
                 >
                   <span className="block text-xs leading-relaxed text-muted-foreground">
-                    {displayQ(n).q}
+                    {qText(n)}
                   </span>
                   <span className="mt-1.5 flex items-start justify-between gap-3">
                     <span className="text-sm text-foreground">{answers[n.key]}</span>
@@ -1188,7 +727,7 @@ function Onboarding() {
 
           {emptyResumen ? (
             <p className="px-1 py-6 text-[13px] leading-relaxed text-muted-foreground">
-              Aún no hay respuestas guardadas. Vuelve al chat y empieza por donde quieras.
+              {t("onboarding.summary.empty")}
             </p>
           ) : null}
         </div>
@@ -1200,8 +739,8 @@ function Onboarding() {
         ) : null}
         {!canConfirm && requiredPending.length ? (
           <p className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-ink" /> Te quedan{" "}
-            {requiredPending.length} preguntas por responder antes de guardar.
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-ink" />{" "}
+            {t("onboarding.summary.remaining", { count: requiredPending.length })}
           </p>
         ) : null}
 
@@ -1211,11 +750,13 @@ function Onboarding() {
           onClick={() => (canConfirm ? void confirmAndSave() : closeToChat())}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
         >
-          {saving
-            ? "Guardando..."
-            : canConfirm
-              ? "Confirmar y guardar mi perfil"
-              : "Volver al chat"}
+          {t(
+            saving
+              ? "onboarding.summary.saving"
+              : canConfirm
+                ? "onboarding.summary.confirm"
+                : "onboarding.summary.backToChat",
+          )}
           {saving ? null : canConfirm ? (
             <Check className="h-4 w-4" strokeWidth={2.6} />
           ) : (
@@ -1236,10 +777,11 @@ function Onboarding() {
               <Check className="h-6 w-6" strokeWidth={2.6} />
             </span>
           </span>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Guardado</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">
+            {t("onboarding.saved.title")}
+          </h1>
           <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-            Llevas {answeredCount} de {total} respuestas. Cuando vuelvas, retomas justo aquí — nada
-            se pierde.
+            {t("onboarding.saved.body", { done: answeredCount, total })}
           </p>
           <div className="flex w-full max-w-xs flex-col gap-2.5">
             <button
@@ -1247,14 +789,14 @@ function Onboarding() {
               onClick={closeToChat}
               className="rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
             >
-              Seguir ahora
+              {t("onboarding.saved.continue")}
             </button>
             <button
               type="button"
               onClick={() => void openResumen()}
               className="rounded-full bg-surface py-4 text-sm font-semibold text-muted-foreground transition-transform active:scale-[0.98]"
             >
-              Ver lo que llevo
+              {t("onboarding.saved.review")}
             </button>
           </div>
         </div>
@@ -1269,7 +811,7 @@ function Onboarding() {
         <button
           type="button"
           onClick={back}
-          aria-label="Atrás"
+          aria-label={t("onboarding.chat.back")}
           disabled={curIndex <= 0 && !stageEnd}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-foreground transition-transform active:scale-95 disabled:opacity-40"
         >
@@ -1282,10 +824,10 @@ function Onboarding() {
         >
           <span className="flex min-w-0 flex-col">
             <span className="font-num text-[9.5px] uppercase tracking-[0.09em] text-muted-foreground">
-              etapa {cur.si + 1} de {SCREENS.length}
+              {t("onboarding.chat.stage", { n: cur.si + 1, total: SCREENS.length })}
             </span>
             <span className="truncate text-[13.5px] font-semibold tracking-tight">
-              {stage.title}
+              {t(screenTitleKey(stage))}
             </span>
           </span>
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2.4} />
@@ -1293,7 +835,7 @@ function Onboarding() {
         <button
           type="button"
           onClick={() => setView("saved")}
-          aria-label="Guardar y salir"
+          aria-label={t("onboarding.chat.saveAndExit")}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
         >
           <Save className="h-[18px] w-[18px]" strokeWidth={2.2} />
@@ -1316,9 +858,11 @@ function Onboarding() {
       </div>
       <div className="mt-2 flex items-baseline justify-between gap-2.5">
         <p className="font-num text-[11px] text-muted-foreground">
-          pregunta {Math.max(1, curIndex + 1)} de {total}
+          {t("onboarding.chat.question", { n: Math.max(1, curIndex + 1), total })}
         </p>
-        <p className="font-num text-[11px] text-muted-foreground">quedan {remaining}</p>
+        <p className="font-num text-[11px] text-muted-foreground">
+          {t("onboarding.chat.left", { count: remaining })}
+        </p>
       </div>
 
       <div className="mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto pb-2">
@@ -1326,7 +870,7 @@ function Onboarding() {
           <div key={n.key} className="space-y-3">
             <div className="animate-rise flex justify-start">
               <p className="max-w-[85%] rounded-3xl bg-surface px-4 py-3 text-sm leading-relaxed text-foreground">
-                {displayQ(n).q}
+                {qText(n)}
               </p>
             </div>
             {answers[n.key] !== undefined ? (
@@ -1348,7 +892,7 @@ function Onboarding() {
                   className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2.5 text-[13px] font-medium text-muted-foreground transition-transform active:scale-95"
                 >
                   <SkipForward className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  Saltada — la retomo luego
+                  {t("onboarding.chat.skipped")}
                 </button>
               </div>
             ) : null}
@@ -1367,11 +911,16 @@ function Onboarding() {
       {stageEnd ? (
         <div className="animate-rise space-y-3.5 rounded-3xl bg-surface p-4">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Etapa completa:{" "}
-            <span className="font-medium text-foreground">{stage.subtitle.toLowerCase()}</span>.{" "}
+            {t("onboarding.chat.stageDone")}{" "}
+            <span className="font-medium text-foreground">
+              {t(screenSubtitleKey(stage)).toLowerCase()}
+            </span>
+            .{" "}
             {isLastStage
-              ? "Es la última: ya podemos repasarlo todo."
-              : `Seguimos con ${SCREENS[cur.si + 1].subtitle.toLowerCase()}.`}
+              ? t("onboarding.chat.lastStage")
+              : t("onboarding.chat.nextStage", {
+                  stage: t(screenSubtitleKey(SCREENS[cur.si + 1])).toLowerCase(),
+                })}
           </p>
           <div className="flex gap-2.5">
             <button
@@ -1380,14 +929,14 @@ function Onboarding() {
               className="flex items-center justify-center gap-1.5 rounded-full bg-secondary px-4 py-3 text-[13.5px] font-semibold text-muted-foreground transition-transform active:scale-95"
             >
               <ArrowLeft className="h-[15px] w-[15px]" strokeWidth={2.2} />
-              Repasar
+              {t("onboarding.chat.review")}
             </button>
             <button
               type="button"
               onClick={advanceStage}
               className="flex flex-1 items-center justify-center gap-2 rounded-full bg-primary py-3 text-[13.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
             >
-              {isLastStage ? "Ver mi resumen" : "Continuar"}
+              {t(isLastStage ? "onboarding.index.seeSummary" : "onboarding.chat.continue")}
               <ArrowRight className="h-4 w-4" strokeWidth={2.2} />
             </button>
           </div>
@@ -1417,72 +966,79 @@ function Onboarding() {
                     }`}
                   >
                     {active ? <Check className="h-3.5 w-3.5" strokeWidth={2.6} /> : null}
-                    {c}
+                    {chipLabel(currentQ, c)}
                   </button>
                 );
               })}
             </div>
           ) : null}
 
-          <div className="rounded-3xl bg-surface p-2 focus-within:ring-2 focus-within:ring-ring/40">
-            {currentQ.dateInput ? (
-              <input
-                type="date"
-                autoFocus
-                disabled={saving}
-                value={value}
-                min={DOB_MIN}
-                max={DOB_MAX}
-                onChange={(e) => setValue(e.target.value)}
-                className="w-full bg-transparent px-2 py-2.5 text-sm outline-none"
-              />
-            ) : (
-              <textarea
-                ref={inputRef}
-                rows={2}
-                disabled={saving}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    commit(value);
-                  }
-                }}
-                aria-label="Tu respuesta"
-                placeholder={
-                  saving ? "Preparando tu plan..." : (currentQ.hint ?? "Escribe aquí...")
-                }
-                className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
-              />
-            )}
-            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-1">
-                {currentQ.dateInput ? null : (
-                  <DictateButton
-                    onText={(t) => setValue((v) => (v ? `${v.trim()} ${t}` : t))}
-                    label="Dictar"
+          <DictationField>
+            <div className="rounded-3xl bg-surface p-2 focus-within:ring-2 focus-within:ring-ring/40">
+              <div className="relative rounded-2xl">
+                {currentQ.dateInput ? (
+                  <input
+                    type="date"
+                    autoFocus
+                    disabled={saving}
+                    value={value}
+                    min={DOB_MIN}
+                    max={DOB_MAX}
+                    onChange={(e) => setValue(e.target.value)}
+                    className="w-full bg-transparent px-2 py-2.5 text-sm outline-none"
+                  />
+                ) : (
+                  <textarea
+                    ref={inputRef}
+                    rows={2}
+                    disabled={saving}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        commit(value);
+                      }
+                    }}
+                    aria-label={t("onboarding.chat.answerLabel")}
+                    placeholder={
+                      saving
+                        ? t("onboarding.chat.placeholderSaving")
+                        : (qHint(currentQ) ?? t("onboarding.chat.placeholder"))
+                    }
+                    className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
                   />
                 )}
+                <DictationWave />
+              </div>
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-1">
+                  {currentQ.dateInput ? null : (
+                    <DictateButton
+                      onText={(t) => setValue((v) => (v ? `${v.trim()} ${t}` : t))}
+                      label={t("onboarding.chat.dictate")}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={skipCurrent}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
+                  >
+                    <SkipForward className="h-3.5 w-3.5" /> {t("onboarding.chat.skip")}
+                  </button>
+                </div>
                 <button
-                  type="button"
-                  onClick={skipCurrent}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
+                  type="submit"
+                  disabled={saving || !value.trim()}
+                  aria-label={t("onboarding.chat.send")}
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
                 >
-                  <SkipForward className="h-3.5 w-3.5" /> Saltar y volver luego
+                  <Send className="h-4 w-4" />
                 </button>
               </div>
-              <button
-                type="submit"
-                disabled={saving || !value.trim()}
-                aria-label="Enviar"
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
-              >
-                <Send className="h-4 w-4" />
-              </button>
             </div>
-          </div>
+          </DictationField>
         </form>
       )}
     </Shell>
@@ -1498,10 +1054,12 @@ function Shell({ children }: { children: ReactNode }) {
 function OverlayHeader({
   eyebrow,
   title,
+  closeLabel,
   onClose,
 }: {
   eyebrow: string;
   title: string;
+  closeLabel: string;
   onClose: () => void;
 }) {
   return (
@@ -1515,7 +1073,7 @@ function OverlayHeader({
       <button
         type="button"
         onClick={onClose}
-        aria-label="Cerrar"
+        aria-label={closeLabel}
         className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-foreground transition-transform active:scale-95"
       >
         <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
