@@ -71,7 +71,7 @@ export type Profile = {
    * trae y todo se enseña como hasta ahora. Se lee SOLO con
    * `showsNutritionNumbers`.
    */
-  nutrition_numbers?: "mostrar" | "ocultar" | null;
+  nutrition_numbers?: "mostrar" | "ocultar";
   /**
    * Actividad del día a día SIN deporte (ticket 07): sentado · de_pie · fisico ·
    * muy_fisico. Opcional por la misma razón que `nutrition_numbers`.
