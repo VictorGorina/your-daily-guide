@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react";
+import { AlertCircle, ChevronRight, Download, Info, Pencil, Users } from "lucide-react";
 import * as React from "react";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,8 +23,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAccount } from "@/lib/account.functions";
-import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
+import { fetchAllLogs, fetchProfile, saveProfile, todayISO, type Profile } from "@/lib/daily";
+import { buildHistoryCsv, historyFileName } from "@/lib/history-export";
 import { clearLocalUserData } from "@/lib/local-user-data";
+import { showsNutritionNumbers } from "@/lib/macros";
 import {
   getPushSubscriptionState,
   isIosNonStandalone,
@@ -179,6 +181,32 @@ function Ajustes() {
     qc.clear();
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
+  };
+
+  // El historial se arma en el navegador con lo que la persona ya puede leer
+  // (RLS: solo sus filas); ver `buildHistoryCsv`.
+  const [exporting, setExporting] = useState(false);
+  const exportHistory = async () => {
+    setExporting(true);
+    try {
+      const logs = await fetchAllLogs();
+      if (!logs.length) {
+        toast.info("Todavía no hay nada que exportar");
+        return;
+      }
+      const csv = buildHistoryCsv(logs, { numbers: showsNutritionNumbers(profile) });
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = historyFileName(todayISO());
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.warn("ajustes: exportar el historial", error);
+      toast.error("No hemos podido preparar tu historial");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const callDeleteAccount = useServerFn(deleteAccount);
@@ -446,9 +474,26 @@ function Ajustes() {
         Datos y cuenta
       </span>
 
+      <div className="surface-card mt-2 p-5">
+        <h2 className="text-sm font-semibold">Tu historial</h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          Descarga en un archivo CSV todo lo que has registrado: comidas, picoteo, deporte y peso.
+          Se abre con Excel, Numbers o Google Sheets.
+        </p>
+        <button
+          type="button"
+          onClick={exportHistory}
+          disabled={exporting}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium text-foreground disabled:opacity-60"
+        >
+          <Download className="h-4 w-4" />
+          {exporting ? "Preparando…" : "Descargar historial"}
+        </button>
+      </div>
+
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <button className="mt-2 w-full rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground">
+          <button className="mt-3 w-full rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground">
             Cerrar sesión
           </button>
         </AlertDialogTrigger>

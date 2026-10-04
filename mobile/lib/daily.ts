@@ -328,6 +328,28 @@ export async function fetchLogsForMonth(month: string): Promise<DailyLog[]> {
   return (data ?? []) as unknown as DailyLog[];
 }
 
+/** Filas por petición de `fetchAllLogs`. */
+const ALL_LOGS_PAGE = 500;
+
+/**
+ * Todo el historial de la persona, de antiguo a reciente, para exportarlo
+ * (`buildHistoryCsv`). Por páginas: PostgREST corta cada respuesta en 1000
+ * filas y `fetchLogs` se queda en los últimos 120 días.
+ */
+export async function fetchAllLogs(): Promise<DailyLog[]> {
+  const out: DailyLog[] = [];
+  for (let from = 0; ; from += ALL_LOGS_PAGE) {
+    const { data, error } = await supabase
+      .from("daily_logs")
+      .select(LOG_COLUMNS)
+      .order("log_date", { ascending: true })
+      .range(from, from + ALL_LOGS_PAGE - 1);
+    if (error) throw error;
+    out.push(...((data ?? []) as unknown as DailyLog[]));
+    if ((data ?? []).length < ALL_LOGS_PAGE) return out;
+  }
+}
+
 export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
   const userId = await currentUserId();
   if (!userId) throw new Error("Sin sesión");

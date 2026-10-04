@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { AlertCircle, ChevronRight, Info, Pencil, Users } from "lucide-react-native";
+import { AlertCircle, ChevronRight, Download, Info, Pencil, Users } from "lucide-react-native";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
 import { RegionFields } from "../../components/region-fields";
 import { apiPost } from "../../lib/api";
-import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
+import { fetchAllLogs, fetchProfile, saveProfile, todayISO, type Profile } from "../../lib/daily";
+import { buildHistoryCsv, historyFileName } from "../../lib/history-export";
 import { clearLocalUserData } from "../../lib/local-user-data";
+import { showsNutritionNumbers } from "../../lib/macros";
 import { currencyForCountry, DEFAULT_COUNTRY } from "../../lib/regions";
 import { supabase } from "../../lib/supabase";
 import { useLocale } from "../../lib/use-locale";
@@ -103,6 +105,42 @@ export default function Ajustes() {
       { text: "Cancelar", style: "cancel" },
       { text: "Cerrar sesión", style: "destructive", onPress: () => void signOut() },
     ]);
+
+  // El historial se arma en el dispositivo con lo que la persona ya puede leer
+  // (RLS: solo sus filas) y se entrega por la hoja de compartir de iOS.
+  const [exporting, setExporting] = useState(false);
+  const exportHistory = async () => {
+    setExporting(true);
+    try {
+      const logs = await fetchAllLogs();
+      if (!logs.length) {
+        Alert.alert("Tu historial", "Todavía no hay nada que exportar.");
+        return;
+      }
+      const csv = buildHistoryCsv(logs, { numbers: showsNutritionNumbers(profile) });
+      // Módulo nativo: en un build anterior a su prebuild el `import()` falla,
+      // y se avisa en vez de romper la pantalla (ver AGENTS.md).
+      let uri: string;
+      try {
+        const { File, Paths } = await import("expo-file-system");
+        const file = new File(Paths.cache, historyFileName(todayISO()));
+        if (file.exists) file.delete();
+        file.create();
+        file.write(csv);
+        uri = file.uri;
+      } catch (error) {
+        console.warn("ajustes: escribir el archivo del historial", error);
+        Alert.alert("Tu historial", "Estará disponible en la próxima versión de la app.");
+        return;
+      }
+      await Share.share({ url: uri });
+    } catch (error) {
+      console.warn("ajustes: exportar el historial", error);
+      Alert.alert("Tu historial", "No hemos podido preparar tu historial.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const [deleting, setDeleting] = useState(false);
   const removeAccount = async () => {
@@ -358,9 +396,27 @@ export default function Ajustes() {
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
           Datos y cuenta
         </Text>
+        <View className="mt-2 rounded-3xl bg-surface p-5">
+          <Text className="text-sm font-sans-semibold text-foreground">Tu historial</Text>
+          <Text className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Descarga en un archivo CSV todo lo que has registrado: comidas, picoteo, deporte y peso.
+            Se abre con Excel, Numbers o Google Sheets.
+          </Text>
+          <Pressable
+            onPress={() => void exportHistory()}
+            disabled={exporting}
+            className="mt-4 w-full flex-row items-center justify-center gap-2 rounded-full bg-secondary py-3 active:opacity-80"
+            style={exporting ? { opacity: 0.6 } : undefined}
+          >
+            <Download size={16} color="#3e3d39" />
+            <Text className="text-sm font-sans-medium text-foreground">
+              {exporting ? "Preparando…" : "Descargar historial"}
+            </Text>
+          </Pressable>
+        </View>
         <Pressable
           onPress={confirmSignOut}
-          className="mt-2 w-full items-center rounded-full bg-surface py-4 active:opacity-80"
+          className="mt-3 w-full items-center rounded-full bg-surface py-4 active:opacity-80"
         >
           <Text className="text-sm font-sans-medium text-muted-foreground">Cerrar sesión</Text>
         </Pressable>
