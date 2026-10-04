@@ -17,6 +17,7 @@ PRODUCE_UNIT_GRAMS
 WEEK_COUNT
 addMonths
 approxUnitGrams
+asCadence
 boughtTotal
 cadenceOf
 cadenceScopeLabel
@@ -66,8 +67,8 @@ planForDate
 planMonthStatus
 planNavBounds
 planSlotIndex
-projectItemForTrip
 projectTrips
+projectedRow
 reconcileHabits
 roundForBuying
 sameHabits
@@ -75,8 +76,10 @@ sameJson
 shoppingTotal
 sortByPending
 splitTripByStatus
+stockUpAmounts
 suggestedDish
 tripActualsTotal
+tripAmount
 tripCount
 tripDayRange
 tripLabel

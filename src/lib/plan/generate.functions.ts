@@ -2,6 +2,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requestDeadline } from "@/lib/deadline";
 import { cleanIntakeText, type IntakeAnswers, monthIntakeNotes } from "@/lib/month-intake";
 import {
+  asCadence,
   isNextMonthUnlocked,
   type MonthConstraints,
   monthCoverage,
@@ -44,8 +45,7 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
         "Aún no toca preparar el mes que viene; podrás la última semana del mes",
       );
     }
-    const cadence: ShoppingCadence =
-      input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
+    const cadence: ShoppingCadence = asCadence(input?.cadence) ?? "mensual";
     return { month: input.month, cadence, today };
   })
   .handler(

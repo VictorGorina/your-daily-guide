@@ -1201,7 +1201,7 @@ function IngredientsTab({
             <CalendarSync className="h-[15px] w-[15px] shrink-0 text-primary-ink" />
             <h3 className="flex-1 text-[12.5px] font-semibold">Cada cuánto compras</h3>
           </div>
-          <div className="mt-2.5 grid grid-cols-3 gap-1 rounded-full bg-secondary/70 p-1">
+          <div className="mt-2.5 grid grid-cols-2 gap-1 rounded-[22px] bg-secondary/70 p-1">
             {CADENCES.map((c) => {
               const selected = (pendingCadence ?? activeCadence) === c.key;
               return (
@@ -1225,9 +1225,11 @@ function IngredientsTab({
           <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
             {recadence.isPending
               ? "Actualizando…"
-              : tripsTotal > 1
-                ? `${tripsTotal} compras separadas, cada una con lo de sus semanas.`
-                : "1 sola compra: apóyate en despensa y congelados; los frescos, sobre la marcha."}
+              : activeCadence === "optimizada" && tripsTotal > 1
+                ? `${tripsTotal} compras: la primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.`
+                : tripsTotal > 1
+                  ? `${tripsTotal} compras separadas, cada una con lo de sus semanas.`
+                  : "1 sola compra: apóyate en despensa y congelados; los frescos, sobre la marcha."}
           </p>
         </div>
       )}

@@ -1492,7 +1492,7 @@ function IngredientsTab({
               Cada cuánto compras
             </Text>
           </View>
-          <View className="mt-2.5 flex-row gap-1 rounded-full bg-secondary/70 p-1">
+          <View className="mt-2.5 flex-row flex-wrap rounded-[22px] bg-secondary/70 p-1">
             {CADENCES.map((c) => {
               const active = (pendingCadence ?? activeCadence) === c.key;
               return (
@@ -1504,7 +1504,7 @@ function IngredientsTab({
                     recadence.mutate(c.key);
                   }}
                   disabled={recadence.isPending}
-                  className={`flex-1 items-center rounded-full py-2.5 active:opacity-80 ${
+                  className={`w-1/2 items-center rounded-full py-2.5 active:opacity-80 ${
                     active ? "bg-foreground" : ""
                   }`}
                   style={recadence.isPending ? { opacity: 0.6 } : undefined}
@@ -1523,9 +1523,11 @@ function IngredientsTab({
           <Text className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
             {recadence.isPending
               ? "Actualizando…"
-              : tripsTotal > 1
-                ? `${tripsTotal} compras separadas, cada una con lo de sus semanas.`
-                : "1 sola compra: apóyate en despensa y congelados; los frescos, sobre la marcha."}
+              : activeCadence === "optimizada" && tripsTotal > 1
+                ? `${tripsTotal} compras: la primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.`
+                : tripsTotal > 1
+                  ? `${tripsTotal} compras separadas, cada una con lo de sus semanas.`
+                  : "1 sola compra: apóyate en despensa y congelados; los frescos, sobre la marcha."}
           </Text>
         </View>
       )}

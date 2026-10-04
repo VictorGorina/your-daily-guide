@@ -72,6 +72,8 @@ import {
   withOverflowWeek,
   projectTrips,
   repartitionTrips,
+  stockUpAmounts,
+  withoutStoreMarks,
   shoppingTotal,
   type ShoppingList,
   tripActualsTotal,
@@ -1694,6 +1696,145 @@ describe("projectTrips", () => {
       expect(Math.abs(bisemanal - mensual)).toBeLessThan(6);
       expect(Math.abs(semanal - mensual)).toBeLessThan(6);
     }
+  });
+});
+
+// Cadencia optimizada: las mismas cantidades que la semanal, adelantadas a la
+// compra que puede llevárselas sin que se estropeen.
+describe("projectTrips · cadencia optimizada", () => {
+  const withExtras = (): ShoppingList => [
+    ...canonical(),
+    {
+      category: "Proteína",
+      items: [
+        {
+          name: "Huevos",
+          qty: "24 ud",
+          price_eur: 6,
+          trip: 0,
+          perishable: true,
+          unit: "ud",
+          weekQty: [6, 6, 6, 6],
+          weekPrice: [1.5, 1.5, 1.5, 1.5],
+        },
+        {
+          name: "Merluza",
+          qty: "1,2 kg",
+          price_eur: 16,
+          trip: 0,
+          perishable: true,
+          unit: "g",
+          weekQty: [300, 300, 300, 300],
+          weekPrice: [4, 4, 4, 4],
+        },
+      ],
+    },
+  ];
+  const tripsOf = (trips: ReturnType<typeof projectTrips>, name: string) =>
+    trips
+      .filter((t) => t.groups.some((g) => g.items.some((i) => i.name === name)))
+      .map((t) => t.trip);
+  const qtyAt = (trips: ReturnType<typeof projectTrips>, trip: number, name: string) =>
+    trips[trip]!.groups.flatMap((g) => g.items).find((i) => i.name === name)?.qtyValue ?? 0;
+
+  it("sale a comprar las mismas veces que la semanal", () => {
+    expect(projectTrips(withExtras(), "optimizada", septiembre)).toHaveLength(4);
+  });
+
+  it("no mueve el total del mes de ningún ingrediente, ni en cantidad ni en precio", () => {
+    const optimizada = projectTrips(withExtras(), "optimizada", septiembre);
+    const mensual = projectTrips(withExtras(), "mensual", septiembre);
+    for (const name of ["Cebolla", "Espinaca", "Arroz", "Huevos", "Merluza"]) {
+      expect(Math.abs(totalQtyOf(optimizada, name) - totalQtyOf(mensual, name))).toBeLessThan(2);
+    }
+    const money = (trips: ReturnType<typeof projectTrips>) =>
+      trips
+        .flatMap((t) => t.groups.flatMap((g) => g.items))
+        .reduce((sum, i) => sum + i.price_eur, 0);
+    expect(Math.abs(money(optimizada) - money(mensual))).toBeLessThan(0.1);
+  });
+
+  it("lo que no caduca entra entero en la primera compra", () => {
+    const trips = projectTrips(withExtras(), "optimizada", septiembre);
+    expect(tripsOf(trips, "Arroz")).toEqual([0]);
+    expect(qtyAt(trips, 0, "Arroz")).toBe(1000);
+    // la cebolla es fresca pero aguanta el mes: también va entera
+    expect(tripsOf(trips, "Cebolla")).toEqual([0]);
+    expect(qtyAt(trips, 0, "Cebolla")).toBe(2000);
+  });
+
+  it("un fresco de pocos días se compra cada semana, igual que en la semanal", () => {
+    const optimizada = projectTrips(withExtras(), "optimizada", septiembre);
+    const semanal = projectTrips(withExtras(), "semanal", septiembre);
+    expect(tripsOf(optimizada, "Merluza")).toEqual([0, 1, 2, 3]);
+    for (const name of ["Merluza", "Espinaca"]) {
+      for (let t = 0; t < 4; t++) {
+        expect(qtyAt(optimizada, t, name)).toBe(qtyAt(semanal, t, name));
+      }
+    }
+  });
+
+  it("uno de vida media se compra cada dos semanas", () => {
+    const trips = projectTrips(withExtras(), "optimizada", septiembre);
+    expect(tripsOf(trips, "Huevos")).toEqual([0, 2]);
+    expect(qtyAt(trips, 0, "Huevos") + qtyAt(trips, 2, "Huevos")).toBeCloseTo(24, 1);
+  });
+
+  it("un fresco no se compra antes de la primera semana que lo usa", () => {
+    const list = withExtras();
+    list[2]!.items[0]!.weekQty = [0, 0, 6, 6];
+    const trips = projectTrips(list, "optimizada", septiembre);
+    expect(tripsOf(trips, "Huevos")[0]).toBeGreaterThan(0);
+    expect(Math.abs(totalQtyOf(trips, "Huevos") - 12)).toBeLessThan(0.1);
+  });
+
+  it("las marcas siguen yendo por compra", () => {
+    const list = withExtras();
+    list[1]!.items[0]!.ownedTrips = { 0: "fridge" };
+    const trips = projectTrips(list, "optimizada", septiembre);
+    expect(trips[0]!.groups.flatMap((g) => g.items).find((i) => i.name === "Arroz")!.owned).toBe(
+      "fridge",
+    );
+  });
+});
+
+describe("stockUpAmounts", () => {
+  const ranges = [
+    { from: 1, to: 8 },
+    { from: 9, to: 16 },
+    { from: 17, to: 23 },
+    { from: 24, to: 30 },
+  ];
+  const needs = [1, 2, 3, 4].map((qty) => ({ qty, price: qty * 10 }));
+  const qtys = (shelf: number) => stockUpAmounts(needs, ranges, shelf).map((a) => a.qty);
+
+  it("reparte según lo que aguanta el ingrediente", () => {
+    expect(qtys(Infinity)).toEqual([10, 0, 0, 0]);
+    expect(qtys(2)).toEqual([1, 2, 3, 4]);
+    // comprado el día 1 llega al 16; el día 17 se compra para lo que queda
+    expect(qtys(15)).toEqual([3, 0, 7, 0]);
+  });
+
+  it("el precio viaja con la cantidad", () => {
+    expect(stockUpAmounts(needs, ranges, 15).map((a) => a.price)).toEqual([30, 0, 70, 0]);
+  });
+});
+
+describe("withoutStoreMarks", () => {
+  it('quita "comprado" y conserva "en casa", en las dos formas de la lista', () => {
+    const list = canonical();
+    list[0]!.items[0]!.ownedTrips = { 0: "store", 1: "fridge" };
+    list[0]!.items[1]!.ownedTrips = { 2: "store" };
+    list[1]!.items[0]!.owned = "store";
+    const out = withoutStoreMarks(list);
+    expect(out[0]!.items[0]!.ownedTrips).toEqual({ 1: "fridge" });
+    expect(out[0]!.items[1]!.ownedTrips).toBeUndefined();
+    expect(out[1]!.items[0]!.owned).toBeUndefined();
+    expect(
+      withoutStoreMarks([
+        { category: "x", items: [{ ...list[1]!.items[0]!, owned: "fridge" }] },
+      ])[0]!.items[0]!.owned,
+    ).toBe("fridge");
   });
 });
 

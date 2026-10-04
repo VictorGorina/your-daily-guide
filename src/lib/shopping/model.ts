@@ -1,7 +1,7 @@
 import type { PlanCoverage } from "../plan/types";
 import { daysInMonth } from "@/lib/dates";
 
-export type ShoppingCadence = "semanal" | "bisemanal" | "mensual";
+export type ShoppingCadence = "semanal" | "bisemanal" | "mensual" | "optimizada";
 
 export const CADENCES: {
   key: ShoppingCadence;
@@ -17,7 +17,14 @@ export const CADENCES: {
   { key: "semanal", label: "Semanal", trips: 4, periodDays: 7 },
   { key: "bisemanal", label: "Cada 2 semanas", trips: 2, periodDays: 14 },
   { key: "mensual", label: "Mensual", trips: 1, periodDays: 31 },
+  // Mismas salidas que la semanal, pero cada compra se lleva de cada ingrediente
+  // todo lo que aguanta: ver `stockUpAmounts` en trips.ts.
+  { key: "optimizada", label: "Optimizada", trips: 4, periodDays: 7 },
 ];
+
+/** La cadencia si `raw` es una de las que existen; si no, `undefined`. */
+export const asCadence = (raw: unknown): ShoppingCadence | undefined =>
+  CADENCES.find((c) => c.key === raw)?.key;
 
 /** Unidad canónica de una cantidad de compra. Todo se normaliza a estas tres. */
 export type QtyUnit = "g" | "ml" | "ud";

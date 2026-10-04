@@ -9,6 +9,7 @@
 export * from "./plan/slots";
 export * from "./plan/types";
 export * from "./shopping/model";
+export * from "./shopping/shelf-life";
 export * from "./shopping/state";
 export * from "./plan/month";
 export * from "./shopping/trips";

@@ -1,6 +1,6 @@
 import { MEAL_KEYS, type MealKey } from "@/lib/household-shared";
 import type { PlanFitChange, PlanFitMark } from "./fit-mark";
-import type { ShoppingCadence } from "../shopping/model";
+import { asCadence } from "../shopping/model";
 import { DAY_NAMES, PLAN_ROWS, withOverflowWeek } from "./grid";
 import { MEAL_SLOTS, type MealSlot } from "./slots";
 import type { ChildMeal, MonthlyPlan, PlanCoverage, PlanDay } from "./types";
@@ -128,14 +128,11 @@ const cleanFitMark = (raw: unknown): PlanFitMark | undefined => {
   return { at, before: share(o.before), after: share(o.after), changed };
 };
 
-const cleanCadence = (raw: unknown): ShoppingCadence | undefined =>
-  raw === "semanal" || raw === "bisemanal" || raw === "mensual" ? raw : undefined;
-
 export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
   const plan = (raw ?? {}) as Partial<MonthlyPlan>;
   if (!plan.weeks?.length) return null;
   const coverage = cleanCoverage(plan.coverage);
-  const cadence = cleanCadence(plan.cadence);
+  const cadence = asCadence(plan.cadence);
   const fit = cleanFitMark(plan.fit);
   return withOverflowWeek({
     intro: String(plan.intro ?? ""),

@@ -8,6 +8,7 @@ import {
 import { assertCleanFood } from "@/lib/assert-clean-food";
 import { updatePlanRowCas } from "@/lib/plan-rows.server";
 import {
+  asCadence,
   cadenceOf,
   carryOwnedByName,
   cleanPantryExtras,
@@ -30,6 +31,7 @@ import {
   type TripConfirmations,
   type TripReceipts,
   tripsForCoverage,
+  withoutStoreMarks,
   withPantryExtra,
   withTripActual,
   withTripConfirmed,
@@ -53,8 +55,7 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { month: string; cadence?: ShoppingCadence }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
-    const cadence: ShoppingCadence =
-      input?.cadence === "semanal" || input?.cadence === "bisemanal" ? input.cadence : "mensual";
+    const cadence: ShoppingCadence = asCadence(input?.cadence) ?? "mensual";
     return { month: input.month, cadence };
   })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
@@ -72,12 +73,20 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
         plan = { ...current, cadence: data.cadence };
         // Una lista canónica no cambia al cambiar de cadencia (la pantalla la
         // re-proyecta): no se reescribe, para no pisar una marca que llegue a la
-        // vez. Una antigua se reparte entre EXACTAMENTE las compras que la
+        // vez. Salvo al entrar o salir de la optimizada, que cambia qué lleva
+        // cada compra: ahí se quitan las marcas "comprado" (`withoutStoreMarks`).
+        // Una antigua se reparte entre EXACTAMENTE las compras que la
         // pantalla va a enseñar para esta cobertura: repartir entre más las
         // dejaría fuera de la vista (ver `repartitionTrips`).
+        const before = current.cadence ?? cadenceOf(prevShopping);
+        const regrouped = (before === "optimizada") !== (data.cadence === "optimizada");
         if (isCanonicalShopping(prevShopping)) {
-          shopping = prevShopping;
-          return { plan };
+          if (!regrouped) {
+            shopping = prevShopping;
+            return { plan };
+          }
+          shopping = withoutStoreMarks(prevShopping);
+          return { plan, shopping };
         }
         const tripCount = tripsForCoverage(
           data.cadence,

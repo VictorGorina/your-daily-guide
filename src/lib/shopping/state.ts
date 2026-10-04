@@ -113,3 +113,26 @@ export function withPantryExtra(
     },
   ].slice(0, 40);
 }
+
+/**
+ * La lista sin las marcas "comprado" ("store"); las de "en casa" se quedan. Al
+ * pasar a la cadencia optimizada, o al salir de ella, la misma compra deja de
+ * llevar lo mismo (la primera pasa de una semana de arroz a la del mes), así
+ * que un "comprado" heredado diría que ya está en casa lo que no se compró.
+ */
+export function withoutStoreMarks(shopping: ShoppingList): ShoppingList {
+  return shopping.map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => {
+      const { owned, ownedTrips, ...rest } = item;
+      const kept = Object.fromEntries(
+        Object.entries(ownedTrips ?? {}).filter(([, source]) => source !== "store"),
+      );
+      return {
+        ...rest,
+        ...(owned && owned !== "store" ? { owned } : {}),
+        ...(Object.keys(kept).length ? { ownedTrips: kept } : {}),
+      };
+    }),
+  }));
+}

@@ -10,6 +10,7 @@ import {
   tripsOfCadence,
   WEEK_COUNT,
 } from "./model";
+import { shelfLifeDays } from "./shelf-life";
 
 const FULL_MONTH_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
@@ -41,7 +42,9 @@ export const cadenceScopeLabel = (cadence: ShoppingCadence) =>
     ? "de la semana"
     : cadence === "bisemanal"
       ? "de las dos semanas"
-      : "del mes";
+      : cadence === "optimizada"
+        ? "de la compra"
+        : "del mes";
 
 /**
  * Cuándo cae un tramo respecto a hoy: "past" si sus días ya han pasado (ya no
@@ -158,12 +161,45 @@ export const weekDayCounts = (coverage: PlanCoverage, weekCount: number): number
   return counts;
 };
 
+type TripAmount = { qty: number; price: number };
+type DayRange = { from: number; to: number };
+
+/**
+ * Cadencia optimizada: quién compra lo de cada tramo. Cada compra se lleva de
+ * un ingrediente lo de los tramos siguientes mientras aguante (comprado el día
+ * `from`, dura hasta `from + shelf`); cuando ya no llega, compra el tramo al
+ * que le toca. Así lo que no caduca entra entero en la primera compra, un
+ * fresco de pocos días se compra cada semana y uno de vida media (huevos,
+ * zanahoria) cada dos. Solo mueve cantidades entre compras: Σ no cambia.
+ *
+ * Un fresco no se compra antes de la primera semana que lo usa; lo que no
+ * caduca va siempre a la primera compra, que es la de llenar la despensa.
+ */
+export const stockUpAmounts = (
+  amounts: TripAmount[],
+  ranges: DayRange[],
+  shelf: number,
+): TripAmount[] => {
+  const out = amounts.map(() => ({ qty: 0, price: 0 }));
+  let buyer = 0;
+  for (let t = 0; t < amounts.length; t++) {
+    const idle = Number.isFinite(shelf) && out[buyer]!.qty <= 0.0001;
+    if (idle || ranges[t]!.to - ranges[buyer]!.from > shelf) buyer = t;
+    out[buyer]!.qty += amounts[t]!.qty;
+    out[buyer]!.price += amounts[t]!.price;
+  }
+  return out;
+};
+
 /**
  * Proyecta la lista canónica sobre las compras de una cadencia: para cada
  * compra suma, ingrediente a ingrediente, la parte de `weekQty`/`weekPrice` de
  * los días que esa compra cubre (rango de `tripDayRange`). El resultado es la
  * forma que consume la UI — una fila por compra con `qty`/`price_eur` ya
  * recortados y `owned` resuelto para ese `trip`.
+ *
+ * Con la cadencia optimizada, esas mismas cantidades se adelantan a la compra
+ * que puede llevárselas sin que se estropeen (`stockUpAmounts`).
  *
  * Una lista antigua (sin `weekQty`) no se puede recalcular: se cae al reparto
  * de siempre (`groupByTrip`), que respeta el `trip` que ya trae cada fila.
@@ -179,41 +215,62 @@ export const projectTrips = (
 
   const wc = Math.max(1, weekCount);
   const counts = weekDayCounts(coverage, wc);
+  const ranges = Array.from({ length: Math.max(1, trips) }, (_, t) =>
+    tripDayRange(coverage, trips, t),
+  );
 
-  return Array.from({ length: Math.max(1, trips) }, (_, t) => {
-    const { from, to } = tripDayRange(coverage, trips, t);
-    const groups = (shopping ?? [])
+  // Por ingrediente, lo que lleva cada compra; después se le da la vuelta.
+  const rows = (shopping ?? []).map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => {
+      // Fila antigua colada en una lista canónica: se queda en su propia compra.
+      if (!Array.isArray(item.weekQty))
+        return ranges.map((_, t) => (item.trip === t ? item : null));
+      const needs = ranges.map((range) => tripAmount(item, range, wc, counts));
+      const amounts =
+        cadence === "optimizada"
+          ? stockUpAmounts(needs, ranges, shelfLifeDays(item.name, group.category, item.perishable))
+          : needs;
+      return amounts.map((amount, t) => projectedRow(item, amount, t));
+    }),
+  }));
+
+  return ranges.map((_, t) => ({
+    trip: t,
+    groups: rows
       .map((group) => ({
         category: group.category,
-        items: group.items
-          .map((item) => projectItemForTrip(item, from, to, wc, counts, t))
-          .filter((i): i is ShoppingItem => i !== null),
+        items: group.items.map((perTrip) => perTrip[t]).filter((i): i is ShoppingItem => !!i),
       }))
-      .filter((group) => group.items.length);
-    return { trip: t, groups };
-  });
+      .filter((group) => group.items.length),
+  }));
 };
 
-const projectItemForTrip = (
+/** Lo que piden de un ingrediente los días `from`-`to`, según su `weekQty`. */
+const tripAmount = (
   item: ShoppingItem,
-  from: number,
-  to: number,
+  { from, to }: DayRange,
   weekCount: number,
   weekDays: number[],
-  trip: number,
-): ShoppingItem | null => {
-  // Fila antigua colada en una lista canónica: se queda si es su propia compra.
-  if (!Array.isArray(item.weekQty)) return item.trip === trip ? item : null;
-
+): TripAmount => {
+  const weekQty = item.weekQty ?? [];
   const weekPrice = item.weekPrice ?? [];
   let qty = 0;
   let price = 0;
   for (let d = from; d <= to; d++) {
     const w = weekOfDay(d, weekCount);
     const share = weekDays[w] || 1;
-    qty += (item.weekQty[w] ?? 0) / share;
+    qty += (weekQty[w] ?? 0) / share;
     price += (weekPrice[w] ?? 0) / share;
   }
+  return { qty, price };
+};
+
+const projectedRow = (
+  item: ShoppingItem,
+  { qty, price }: TripAmount,
+  trip: number,
+): ShoppingItem | null => {
   if (qty <= 0.0001) return null;
 
   const unit = item.unit ?? "ud";
