@@ -1,4 +1,5 @@
 import type { DbClient } from "@/integrations/supabase/db-client";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 
 import { logEvent } from "@/lib/log.server";
 import { UserFacingError } from "@/lib/validation-error";
@@ -22,6 +23,8 @@ import { UserFacingError } from "@/lib/validation-error";
  */
 
 export type PlanRowCas = { updated_at: string } & Record<string, unknown>;
+/** Lo que se escribe en la fila del mes: solo columnas que existen en `monthly_plans`. */
+export type PlanRowPatch = TablesUpdate<"monthly_plans">;
 
 /**
  * Cinco intentos con una pausa aleatoria corta entre ellos. Con tres y sin
@@ -60,8 +63,8 @@ export async function updatePlanRowCas<Row extends PlanRowCas = PlanRowCas>(
   userId: string,
   month: string,
   columns: string,
-  rebuild: (latest: Row) => Record<string, unknown> | null,
-): Promise<{ patch: Record<string, unknown> | null; latest: Row | null; attempts: number }> {
+  rebuild: (latest: Row) => PlanRowPatch | null,
+): Promise<{ patch: PlanRowPatch | null; latest: Row | null; attempts: number }> {
   const select = /\bupdated_at\b/.test(columns) ? columns : `${columns}, updated_at`;
   for (let attempt = 1; attempt <= PLAN_CAS_ATTEMPTS; attempt++) {
     if (attempt > 1) await retryPause();
@@ -80,7 +83,7 @@ export async function updatePlanRowCas<Row extends PlanRowCas = PlanRowCas>(
 
     const { data: written, error } = await client
       .from("monthly_plans")
-      .update(patch as never)
+      .update(patch)
       .eq("user_id", userId)
       .eq("month", month)
       .eq("updated_at", latest.updated_at)

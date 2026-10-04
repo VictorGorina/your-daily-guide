@@ -113,10 +113,10 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       const { error } = await context.supabase.from("monthly_plans").insert({
         user_id: context.userId,
         month: data.month,
-        plan: plan as never,
-        shopping: shopping as never,
+        plan,
+        shopping,
         confirmed_at: null,
-      } as never);
+      });
       if ((error as { code?: string } | null)?.code === "23505") {
         throw alreadyPlanned(data.month);
       }
@@ -192,7 +192,7 @@ export const setMonthConstraints = createServerFn({ method: "POST" })
         away_start: data.awayStart,
         away_end: data.awayEnd,
         notes: data.notes,
-      } as never,
+      },
       { onConflict: "user_id,month" },
     );
     if (error) {

@@ -374,7 +374,7 @@ export async function saveProfile(patch: Partial<Profile>) {
   const next =
     "meals_to_plan" in patch && !("meal_slots" in patch) ? { ...patch, meal_slots: null } : patch;
   const upsert = (row: Partial<Profile>) =>
-    supabase.from("profiles").upsert({ id: userId, ...row } as never, { onConflict: "id" });
+    supabase.from("profiles").upsert({ id: userId, ...row }, { onConflict: "id" });
   let { error } = await upsert(next);
   // Una columna que llega con una migración aún sin aplicar (PGRST204): se
   // guarda el resto del cambio en vez de fallar entero. La UI ya no enseña esos
@@ -504,7 +504,7 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
         user_id: userId,
         log_date: date,
         habits: habits.map((label) => ({ label, done: false })),
-      } as never,
+      },
       { onConflict: "user_id,log_date", ignoreDuplicates: true },
     )
     .select("*")
@@ -514,10 +514,7 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
 }
 
 export async function updateTodayLog(patch: Partial<DailyLog>) {
-  const { error } = await supabase
-    .from("daily_logs")
-    .update(patch as never)
-    .eq("log_date", todayISO());
+  const { error } = await supabase.from("daily_logs").update(patch).eq("log_date", todayISO());
   if (error) throw error;
 }
 
@@ -571,7 +568,7 @@ export async function patchTodayHabits(
     if (!next) return null;
     const { data: written, error: writeError } = await supabase
       .from("daily_logs")
-      .update({ habits: next } as never)
+      .update({ habits: next })
       .eq("log_date", date)
       .eq("updated_at", row.updated_at)
       .select("id");
@@ -601,7 +598,7 @@ export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
   if (date >= todayISO()) throw new Error("Solo se pueden corregir días pasados");
   const { data, error } = await supabase
     .from("daily_logs")
-    .update(patch as never)
+    .update(patch)
     .eq("log_date", date)
     .select("id");
   if (error) throw error;
@@ -614,7 +611,7 @@ export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
   if (!userId) throw new Error("Sin sesión");
   const { error: insertError } = await supabase
     .from("daily_logs")
-    .insert({ user_id: userId, log_date: date, habits: [], ...patch } as never);
+    .insert({ user_id: userId, log_date: date, habits: [], ...patch });
   if (insertError) {
     throw new Error("Este día es demasiado antiguo para rellenarlo");
   }
@@ -637,7 +634,7 @@ export async function logTodayWeight(kg: number) {
   }
   const { data, error } = await supabase
     .from("daily_logs")
-    .update({ weight_kg: kg } as never)
+    .update({ weight_kg: kg })
     .eq("log_date", todayISO())
     .select("id");
   if (error) throw error;
@@ -691,7 +688,7 @@ export async function addMessage(role: "user" | "assistant", content: string) {
   if (!userId) throw new Error("Sin sesión");
   const { error } = await supabase
     .from("chat_messages")
-    .insert({ user_id: userId, role, content, log_date: todayISO() } as never);
+    .insert({ user_id: userId, role, content, log_date: todayISO() });
   if (error) throw error;
 }
 

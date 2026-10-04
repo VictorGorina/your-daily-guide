@@ -1,3 +1,4 @@
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import type { DailyGuide } from "@/lib/daily";
 import { addDaysISO } from "@/lib/dates";
 import { errorText, logEvent } from "@/lib/log.server";
@@ -441,9 +442,11 @@ export async function dispatchPush(
   // una se la lleva y envía (antes se marcaba después de enviar y salían dos).
   // Si el envío falla después de reclamar, ese aviso no se reintenta ese día.
   const claim = async (column: SentColumn, id: string, day: string): Promise<boolean> => {
+    const mark: TablesUpdate<"profiles"> = {};
+    mark[column] = day;
     const { data, error: claimError } = await supabaseAdmin
       .from("profiles")
-      .update({ [column]: day } as never)
+      .update(mark)
       .eq("id", id)
       .or(`${column}.is.null,${column}.neq.${day}`)
       .select("id");

@@ -127,7 +127,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
     if (target.kind === "child") {
       const { data: rows, error } = await supabaseAdmin
         .from("household_children")
-        .update({ home_schedule: data.schedule as never } as never)
+        .update({ home_schedule: data.schedule })
         .eq("id", target.childId)
         .eq("household_id", ctx.householdId)
         .select("id");
@@ -139,7 +139,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
     if (target.kind === "member") {
       const { data: rows, error } = await supabaseAdmin
         .from("household_members")
-        .update({ home_schedule: data.schedule as never } as never)
+        .update({ home_schedule: data.schedule })
         .eq("id", target.memberId)
         .eq("household_id", ctx.householdId)
         .is("user_id", null)
@@ -156,7 +156,7 @@ export const saveHomeSchedule = createServerFn({ method: "POST" })
     // Propio horario: siempre permitido.
     const { error } = await session
       .from("household_members")
-      .update({ home_schedule: data.schedule as never } as never)
+      .update({ home_schedule: data.schedule })
       .eq("user_id", context.userId);
     if (error) throw new UserFacingError("No hemos podido guardar el horario");
     return { saved: true };

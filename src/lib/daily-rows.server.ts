@@ -1,15 +1,18 @@
 import type { DbClient } from "@/integrations/supabase/db-client";
+import type { Json, TablesUpdate } from "@/integrations/supabase/types";
 
 import { logEvent } from "@/lib/log.server";
 import { UserFacingError } from "@/lib/validation-error";
 
 export type DailyLogCas = { updated_at: string } & Record<string, unknown>;
+/** Lo que se escribe en la fila del día: solo columnas que existen en `daily_logs`. */
+export type DailyLogPatch = TablesUpdate<"daily_logs">;
 
 export const DAILY_CAS_ATTEMPTS = 3;
 
 type CasResult<Row> = {
   /** Lo escrito (o insertado), o `null` si no se escribió nada. */
-  patch: Record<string, unknown> | null;
+  patch: DailyLogPatch | null;
   /** La versión sobre la que se aplicó `patch`; `null` si no había fila. */
   latest: Row | null;
   attempts: number;
@@ -42,7 +45,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
   userId: string,
   date: string,
   columns: string,
-  rebuild: (latest: Row) => Record<string, unknown> | null,
+  rebuild: (latest: Row) => DailyLogPatch | null,
   options: CasOptions & { create?: false },
 ): Promise<CasResult<Row>>;
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
@@ -50,7 +53,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
   userId: string,
   date: string,
   columns: string,
-  rebuild: (latest: Row | null) => Record<string, unknown> | null,
+  rebuild: (latest: Row | null) => DailyLogPatch | null,
   options: CasOptions & { create: true },
 ): Promise<CasResult<Row>>;
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
@@ -58,7 +61,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
   userId: string,
   date: string,
   columns: string,
-  rebuild: (latest: Row | null) => Record<string, unknown> | null,
+  rebuild: (latest: Row | null) => DailyLogPatch | null,
   options: CasOptions & { create?: boolean },
 ): Promise<CasResult<Row>> {
   const select = /\bupdated_at\b/.test(columns) ? columns : `${columns}, updated_at`;
@@ -79,7 +82,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
     if (!latest) {
       const { error } = await client
         .from("daily_logs")
-        .insert({ user_id: userId, log_date: date, ...patch } as never);
+        .insert({ user_id: userId, log_date: date, ...patch });
       if (!error) return { patch, latest: null, attempts: attempt };
       // 23505: el cliente creó la fila a la vez. Se relee y se actualiza.
       if ((error as { code?: string }).code !== "23505") throw error;
@@ -88,7 +91,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
 
     const { data: written, error } = await client
       .from("daily_logs")
-      .update(patch as never)
+      .update(patch)
       .eq("user_id", userId)
       .eq("log_date", date)
       .eq("updated_at", latest.updated_at)
@@ -111,7 +114,7 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
  *
  * `client` es el de sesión o `supabaseAdmin`: quien llama decide.
  */
-export async function patchDailyHabits<Habit>(
+export async function patchDailyHabits<Habit extends Json>(
   client: DbClient,
   userId: string,
   date: string,
