@@ -14,7 +14,6 @@ import {
   hintKey,
   MEALS_TO_PLAN_Q,
   mealSlotsFromAnswer,
-  NUMBERS_Q,
   nutritionNumbersFromAnswer,
   parseBiometrics,
   parseDatePretty,
@@ -44,7 +43,7 @@ const allQuestions = (): Question[] => {
 };
 
 const keyOf = (q: Question, answers: Record<string, string> = {}) =>
-  buildFlat(answers, true).find((n) => n.q === q)!.key;
+  buildFlat(answers).find((n) => n.q === q)!.key;
 
 describe("guion del onboarding · catálogo", () => {
   it("cada pregunta, ayuda y chip tiene texto en los dos idiomas", () => {
@@ -141,7 +140,7 @@ describe("lo que se guarda sale del chip, en español canónico", () => {
 
 describe("buildFlat", () => {
   it("las claves no se mueven: un progreso guardado sigue apuntando a su pregunta", () => {
-    expect(buildFlat({}, true).map((n) => `${n.key}:${n.q.id}`)).toEqual([
+    expect(buildFlat({}).map((n) => `${n.key}:${n.q.id}`)).toEqual([
       "0-0:name",
       "0-1:birthdate",
       "0-2:bio",
@@ -176,21 +175,15 @@ describe("buildFlat", () => {
     ]);
   });
 
-  it("sin la columna, la pregunta de las cifras no sale y las demás no se mueven", () => {
-    const flat = buildFlat({});
-    expect(flat.some((n) => n.q === NUMBERS_Q)).toBe(false);
-    expect(flat.find((n) => n.q === BUDGET_Q)!.key).toBe("4-5");
-  });
-
   it("marca la última pregunta de cada pantalla", () => {
-    const last = buildFlat({}, true)
+    const last = buildFlat({})
       .filter((n) => n.lastOfScreen)
       .map((n) => n.q.id);
     expect(last).toEqual(["allergies", "mealsToPlan", "edHistory", "portions", "budget", "times"]);
   });
 
   const followUps = (answers: Record<string, string>) =>
-    buildFlat(answers, true)
+    buildFlat(answers)
       .filter((n) => n.isFollowUp)
       .map((n) => n.q.id);
 

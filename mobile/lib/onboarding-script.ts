@@ -305,9 +305,7 @@ const LIVES_WITH_Q: Question = {
  * Ticket 01 de `precision-nutricional` (D3): ver cifras es una preferencia que
  * elige la persona, no algo que la app deduzca. Cambia lo que enseña toda la
  * app, así que se gana su sitio pese a la memoria `onboarding-direction`
- * (recortar preguntas). Solo se pregunta cuando la columna existe
- * (`hasProfileColumn`): una respuesta que no se pudiera guardar sería una
- * promesa rota.
+ * (recortar preguntas).
  */
 export const NUMBERS_Q: Question = { id: "numbers", hint: true, chips: ["show", "hide"] };
 
@@ -456,11 +454,7 @@ export type FlatNode = {
   lastOfScreen: boolean;
 };
 
-/**
- * `numbersQuestion`: ¿se pregunta por ver cifras? (solo si la columna existe).
- * Omitirla no mueve las claves de las demás: `qi` sale del array completo.
- */
-export const buildFlat = (answers: Record<string, string>, numbersQuestion = false): FlatNode[] => {
+export const buildFlat = (answers: Record<string, string>): FlatNode[] => {
   const out: FlatNode[] = [];
 
   const pushChain = (q: Question, key: string, si: number, isFollowUp: boolean) => {
@@ -473,7 +467,6 @@ export const buildFlat = (answers: Record<string, string>, numbersQuestion = fal
 
   SCREENS.forEach((screen, si) => {
     screen.questions.forEach((baseQ, qi) => {
-      if (baseQ === NUMBERS_Q && !numbersQuestion) return;
       pushChain(baseQ, `${si}-${qi}`, si, false);
     });
   });

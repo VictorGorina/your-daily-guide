@@ -15,7 +15,6 @@ import { portionExplanation, portionFactors } from "@/lib/nutrition/portion";
 import {
   PROFILE_SECTIONS,
   chipToValue,
-  isFieldAvailable,
   valueToChip,
   type ProfileField as Field,
 } from "@/lib/profile-fields";
@@ -172,122 +171,116 @@ function Perfil() {
         <section key={section.title} className="surface-card mt-5 p-4">
           <h2 className="px-1 text-sm font-semibold">{section.title}</h2>
           <ul className="mt-2 divide-y divide-border">
-            {section.fields
-              .filter((field) => isFieldAvailable(field, profile))
-              .map((field) => {
-                const isEditing = editing === String(field.key);
-                const shown = display(field, profile);
-                return (
-                  <li key={String(field.key)} className="py-2">
-                    {isEditing ? (
-                      <div className="rounded-2xl bg-primary-soft/40 p-3">
-                        <p className="text-xs font-medium">{field.label}</p>
-                        {field.kind === "chips" ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {field.options?.map((opt) => (
-                              <button
-                                key={opt}
-                                onClick={() => commit(field, opt)}
-                                className={`rounded-full px-3 py-2 text-xs capitalize ${
-                                  draft === opt ? "bg-primary-soft text-primary-ink" : "bg-surface"
-                                }`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-                        ) : field.kind === "long" ? (
-                          <DictationField>
-                            <div className="relative mt-2 rounded-2xl">
-                              <textarea
-                                autoFocus
-                                rows={3}
-                                value={draft}
-                                onChange={(e) => setDraft(e.target.value)}
-                                className="block w-full rounded-2xl bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
-                              />
-                              <DictationWave />
-                            </div>
-                            <DictateButton
-                              className="mt-2"
-                              onText={(t) => setDraft((d) => (d ? `${d} ${t}` : t))}
+            {section.fields.map((field) => {
+              const isEditing = editing === String(field.key);
+              const shown = display(field, profile);
+              return (
+                <li key={String(field.key)} className="py-2">
+                  {isEditing ? (
+                    <div className="rounded-2xl bg-primary-soft/40 p-3">
+                      <p className="text-xs font-medium">{field.label}</p>
+                      {field.kind === "chips" ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {field.options?.map((opt) => (
+                            <button
+                              key={opt}
+                              onClick={() => commit(field, opt)}
+                              className={`rounded-full px-3 py-2 text-xs capitalize ${
+                                draft === opt ? "bg-primary-soft text-primary-ink" : "bg-surface"
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      ) : field.kind === "long" ? (
+                        <DictationField>
+                          <div className="relative mt-2 rounded-2xl">
+                            <textarea
+                              autoFocus
+                              rows={3}
+                              value={draft}
+                              onChange={(e) => setDraft(e.target.value)}
+                              className="block w-full rounded-2xl bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
                             />
-                          </DictationField>
-                        ) : (
-                          <input
-                            autoFocus
-                            className={`${input} mt-2`}
-                            type={
-                              field.kind === "time"
-                                ? "time"
-                                : field.kind === "date"
-                                  ? "date"
-                                  : "text"
-                            }
-                            inputMode={field.kind === "number" ? "decimal" : undefined}
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commit(field);
-                            }}
-                          />
-                        )}
-
-                        {field.help ? (
-                          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                            {field.help}
-                          </p>
-                        ) : null}
-
-                        {error ? (
-                          <p className="mt-2 flex items-start gap-1 text-[11px] text-destructive">
-                            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {error}
-                          </p>
-                        ) : null}
-
-                        {field.kind !== "chips" ? (
-                          <div className="mt-3 flex gap-2">
-                            <button
-                              onClick={() => commit(field)}
-                              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-xs font-semibold text-primary-foreground"
-                            >
-                              <Check className="h-3.5 w-3.5" /> Guardar
-                            </button>
-                            <button
-                              onClick={() => setEditing(null)}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 text-xs font-medium text-muted-foreground"
-                            >
-                              <X className="h-3.5 w-3.5" /> Cancelar
-                            </button>
+                            <DictationWave />
                           </div>
-                        ) : (
+                          <DictateButton
+                            className="mt-2"
+                            onText={(t) => setDraft((d) => (d ? `${d} ${t}` : t))}
+                          />
+                        </DictationField>
+                      ) : (
+                        <input
+                          autoFocus
+                          className={`${input} mt-2`}
+                          type={
+                            field.kind === "time" ? "time" : field.kind === "date" ? "date" : "text"
+                          }
+                          inputMode={field.kind === "number" ? "decimal" : undefined}
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commit(field);
+                          }}
+                        />
+                      )}
+
+                      {field.help ? (
+                        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                          {field.help}
+                        </p>
+                      ) : null}
+
+                      {error ? (
+                        <p className="mt-2 flex items-start gap-1 text-[11px] text-destructive">
+                          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {error}
+                        </p>
+                      ) : null}
+
+                      {field.kind !== "chips" ? (
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={() => commit(field)}
+                            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-xs font-semibold text-primary-foreground"
+                          >
+                            <Check className="h-3.5 w-3.5" /> Guardar
+                          </button>
                           <button
                             onClick={() => setEditing(null)}
-                            className="mt-3 text-[11px] font-medium text-muted-foreground"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 text-xs font-medium text-muted-foreground"
                           >
-                            Cancelar
+                            <X className="h-3.5 w-3.5" /> Cancelar
                           </button>
-                        )}
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => open(field)}
-                        className="flex w-full items-start gap-3 rounded-2xl px-1 py-2 text-left transition-colors active:bg-primary-soft/40"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-xs text-muted-foreground">{field.label}</span>
-                          <span
-                            className={`mt-0.5 block text-sm ${shown ? "" : "text-muted-foreground"}`}
-                          >
-                            {shown ?? "Sin responder — toca para añadir"}
-                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setEditing(null)}
+                          className="mt-3 text-[11px] font-medium text-muted-foreground"
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => open(field)}
+                      className="flex w-full items-start gap-3 rounded-2xl px-1 py-2 text-left transition-colors active:bg-primary-soft/40"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs text-muted-foreground">{field.label}</span>
+                        <span
+                          className={`mt-0.5 block text-sm ${shown ? "" : "text-muted-foreground"}`}
+                        >
+                          {shown ?? "Sin responder — toca para añadir"}
                         </span>
-                        <Pencil className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
+                      </span>
+                      <Pencil className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}

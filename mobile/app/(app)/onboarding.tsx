@@ -35,13 +35,7 @@ import { DictationField, DictationWave } from "../../components/dictation-field"
 import { RegionStep } from "../../components/region-step";
 import { apiPost } from "../../lib/api";
 import { ageFromDOB } from "../../lib/age";
-import {
-  deriveGoalType,
-  fetchProfile,
-  hasProfileColumn,
-  saveProfile,
-  todayISO,
-} from "../../lib/daily";
+import { deriveGoalType, fetchProfile, saveProfile, todayISO } from "../../lib/daily";
 import type { OnboardingDraft } from "../../lib/onboarding";
 import {
   BIO_Q,
@@ -155,8 +149,7 @@ export default function Onboarding() {
 
   const scrollRef = useRef<ScrollView | null>(null);
 
-  const numbersQuestion = hasProfileColumn(profileQ.data, "nutrition_numbers");
-  const flat = useMemo(() => buildFlat(answers, numbersQuestion), [answers, numbersQuestion]);
+  const flat = useMemo(() => buildFlat(answers), [answers]);
   const curIndex = flat.findIndex((n) => n.key === curKey);
   const cur = curIndex >= 0 ? flat[curIndex]! : flat[0]!;
 
@@ -244,7 +237,7 @@ export default function Onboarding() {
   };
 
   const advanceFrom = (key: string, nextAnswers: Record<string, string>) => {
-    const nextFlat = buildFlat(nextAnswers, numbersQuestion);
+    const nextFlat = buildFlat(nextAnswers);
     const idx = nextFlat.findIndex((n) => n.key === key);
     const node = nextFlat[idx];
     setError(null);
@@ -350,7 +343,7 @@ export default function Onboarding() {
   // Lo que lee `parseOnboarding`. Las marcas "Coach"/"Persona" y el "nada que
   // destacar" son material del prompt, no interfaz: se quedan en español.
   const transcriptFromAnswers = (map: Record<string, string>) =>
-    buildFlat(map, numbersQuestion)
+    buildFlat(map)
       .map((n) => {
         if (map[n.key] !== undefined) return `Coach: ${qText(n)}\nPersona: ${map[n.key]}`;
         if (n.q.optional) return `Coach: ${qText(n)}\nPersona: Nada que destacar`;
@@ -396,7 +389,7 @@ export default function Onboarding() {
     const d = { ...draft, ...extra };
     // La clave en `answers` es posicional ("2-5"), así que se busca el nodo
     // por identidad del objeto Question en vez de asumir una posición fija.
-    const flatNow = buildFlat(answers, numbersQuestion);
+    const flatNow = buildFlat(answers);
     const mealsKey = flatNow.find((n) => n.q === MEALS_TO_PLAN_Q)?.key;
     const meal_slots = mealSlotsFromAnswer(mealsKey ? answers[mealsKey] : undefined);
     // Del chip al valor, sin pasar por la IA (mismo motivo que `meal_slots`).

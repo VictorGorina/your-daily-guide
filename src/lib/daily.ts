@@ -61,15 +61,15 @@ export type Profile = {
   menstrual_cycle: string | null;
   ed_history: string | null;
   /**
-   * ¿Quiere ver kcal, macros y objetivos? (ticket 01, D3). Opcional porque la
-   * columna llega con una migración: mientras no esté aplicada, el perfil no la
-   * trae y todo se enseña como hasta ahora. Se lee SOLO con
-   * `showsNutritionNumbers`.
+   * ¿Quiere ver kcal, macros y objetivos? (ticket 01, D3). Se lee SOLO con
+   * `showsNutritionNumbers`. Opcional en el tipo porque los perfiles parciales
+   * (un parche de `saveProfile`, un fixture) no la traen; en la tabla no admite
+   * null.
    */
   nutrition_numbers?: "mostrar" | "ocultar";
   /**
    * Actividad del día a día SIN deporte (ticket 07): sentado · de_pie · fisico ·
-   * muy_fisico. Opcional por la misma razón que `nutrition_numbers`.
+   * muy_fisico.
    */
   daily_activity?: string | null;
   /** Rutina de entrenamiento habitual, forma corta ("3 × 45 min · Gimnasio / pesas · Normal"). */
@@ -377,36 +377,9 @@ export async function saveProfile(patch: Partial<Profile>) {
     "meals_to_plan" in patch && !("meal_slots" in patch) ? { ...patch, meal_slots: null } : patch;
   const upsert = (row: Partial<Profile>) =>
     supabase.from("profiles").upsert({ id: userId, ...row }, { onConflict: "id" });
-  let { error } = await upsert(next);
-  // Una columna que llega con una migración aún sin aplicar (PGRST204): se
-  // guarda el resto del cambio en vez de fallar entero. La UI ya no enseña esos
-  // campos mientras el perfil no los traiga (`hasProfileColumn`).
-  if (error?.code === "PGRST204") {
-    const rest = Object.fromEntries(
-      Object.entries(next).filter(([k]) => !PENDING_MIGRATION_COLUMNS.includes(k as never)),
-    ) as Partial<Profile>;
-    if (!Object.keys(rest).length) return;
-    ({ error } = await upsert(rest));
-  }
+  const { error } = await upsert(next);
   if (error) throw error;
 }
-
-/**
- * Columnas de `profiles` que llegan con migraciones de `precision-nutricional`
- * (tickets 01 y 07). Supabase se migra a mano desde el dashboard, así que el
- * código puede ir por delante: mientras no estén, no se escriben ni se enseñan.
- */
-export const PENDING_MIGRATION_COLUMNS = [
-  "nutrition_numbers",
-  "daily_activity",
-  "training",
-] as const;
-
-/** ¿El perfil trae ya esta columna? (`select("*")` solo trae las que existen). */
-export const hasProfileColumn = (
-  profile: object | null | undefined,
-  column: (typeof PENDING_MIGRATION_COLUMNS)[number],
-): boolean => !!profile && column in profile;
 
 /**
  * Las columnas de `daily_logs` que se leen: las de `DailyLog`, sin
