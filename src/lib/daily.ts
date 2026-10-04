@@ -4,6 +4,11 @@ import { currentUserId } from "@/lib/auth-headers";
 import { fetchHousehold, householdSharedSlots } from "@/lib/household";
 import { resolveDeviceTimeZone, zonedTodayISO } from "@/lib/zoned-date";
 import {
+  cleanPantryExtras,
+  cleanShopping,
+  cleanTripActuals,
+  cleanTripConfirmations,
+  cleanTripReceipts,
   composeMonthlyPlanForMember,
   effectiveMealSlots,
   mealsForDate,
@@ -14,6 +19,7 @@ import {
   withOverflowWeek,
 } from "@/lib/plan-shared";
 import { addDaysISO, dateInMonth, daysInMonth } from "@/lib/dates";
+import { toChatMessage, toDailyLog, toDailyLogHistory, toDailyLogs } from "@/lib/day-row";
 
 export type Profile = {
   id: string;
@@ -145,6 +151,25 @@ export const monthISO = () => todayISO().slice(0, 7);
  * (`withOverflowWeek`). La fila se lee sin `cleanPlan`, y un plan guardado antes
  * de esa fila solo tiene 4 semanas: sin esto, el 29 enseñaría el plato del 22.
  */
+/**
+ * El estado de la compra de una fila `monthly_plans`, leído con los mismos
+ * limpiadores con los que se escribe (CAL-02, ticket 24). `null` se conserva:
+ * la pantalla distingue "sin lista" de "lista vacía".
+ */
+const shoppingState = (row: {
+  shopping?: unknown;
+  trip_actuals?: unknown;
+  confirmed_trips?: unknown;
+  pantry_extras?: unknown;
+  trip_receipts?: unknown;
+}) => ({
+  shopping: row.shopping == null ? null : cleanShopping(row.shopping),
+  trip_actuals: row.trip_actuals == null ? null : cleanTripActuals(row.trip_actuals),
+  confirmed_trips: row.confirmed_trips == null ? null : cleanTripConfirmations(row.confirmed_trips),
+  pantry_extras: row.pantry_extras == null ? null : cleanPantryExtras(row.pantry_extras),
+  trip_receipts: row.trip_receipts == null ? null : cleanTripReceipts(row.trip_receipts),
+});
+
 const withPlanRows = (plan: unknown): MonthlyPlan | null => {
   const p = (plan ?? null) as MonthlyPlan | null;
   return p && Array.isArray(p.weeks) ? withOverflowWeek(p) : p;
@@ -186,16 +211,13 @@ async function fetchOwnMonthlyPlan(
     if (retry.error) throw retry.error;
     return retry.data
       ? {
-          ...(retry.data as unknown as MonthlyPlanRow),
+          ...retry.data,
+          ...shoppingState(retry.data),
           plan: withPlanRows(retry.data.plan),
-          confirmed_trips: null,
-          pantry_extras: null,
-          trip_receipts: null,
         }
       : null;
   }
-  const row = (data as unknown as MonthlyPlanRow | null) ?? null;
-  return row ? { ...row, plan: withPlanRows(row.plan) } : null;
+  return data ? { ...data, ...shoppingState(data), plan: withPlanRows(data.plan) } : null;
 }
 
 /**
@@ -293,8 +315,12 @@ export async function fetchPlannerShopping(month: string): Promise<PlannerShoppi
     .maybeSingle();
   if (error || !data) return null;
 
-  const row = data as unknown as Omit<PlannerShoppingRow, "plannerId">;
-  return { plannerId: info.plannerId, ...row, plan: withPlanRows(row.plan) };
+  return {
+    plannerId: info.plannerId,
+    ...data,
+    ...shoppingState(data),
+    plan: withPlanRows(data.plan),
+  };
 }
 
 export type { MealHabit, MealStatus } from "@/lib/plan-shared";
@@ -446,7 +472,7 @@ export async function fetchLogs(): Promise<DailyLogHistory[]> {
     .order("log_date", { ascending: false })
     .limit(120);
   if (error) throw error;
-  return (data ?? []) as unknown as DailyLogHistory[];
+  return (data ?? []).map(toDailyLogHistory).filter((l): l is DailyLogHistory => !!l);
 }
 
 /**
@@ -462,7 +488,7 @@ export async function fetchLogsForMonth(month: string): Promise<DailyLog[]> {
     .lte("log_date", dateInMonth(month, daysInMonth(month)))
     .order("log_date", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as unknown as DailyLog[];
+  return toDailyLogs(data);
 }
 
 /** Filas por petición de `fetchAllLogs`. */
@@ -482,7 +508,7 @@ export async function fetchAllLogs(): Promise<DailyLog[]> {
       .order("log_date", { ascending: true })
       .range(from, from + ALL_LOGS_PAGE - 1);
     if (error) throw error;
-    out.push(...((data ?? []) as unknown as DailyLog[]));
+    out.push(...toDailyLogs(data));
     if ((data ?? []).length < ALL_LOGS_PAGE) return out;
   }
 }
@@ -496,7 +522,8 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
     .select("*")
     .eq("log_date", date)
     .maybeSingle();
-  if (existing) return existing as unknown as DailyLog;
+  const found = toDailyLog(existing);
+  if (found) return found;
   const { data, error } = await supabase
     .from("daily_logs")
     .upsert(
@@ -510,7 +537,9 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
     .select("*")
     .single();
   if (error) throw error;
-  return data as unknown as DailyLog;
+  const created = toDailyLog(data);
+  if (!created) throw new Error("El registro de hoy ha llegado sin fecha");
+  return created;
 }
 
 export async function updateTodayLog(patch: Partial<DailyLog>) {
@@ -525,7 +554,7 @@ export async function fetchTodayLog(): Promise<DailyLog | null> {
     .select("*")
     .eq("log_date", todayISO())
     .maybeSingle();
-  return (data as unknown as DailyLog) ?? null;
+  return toDailyLog(data);
 }
 
 const HABITS_WRITE_ATTEMPTS = 3;
@@ -662,7 +691,7 @@ export async function fetchMessages(date: string): Promise<ChatMessage[]> {
     .eq("log_date", date)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as unknown as ChatMessage[];
+  return (data ?? []).map(toChatMessage).filter((m): m is ChatMessage => !!m);
 }
 
 export async function fetchChatDays(): Promise<{ date: string; count: number }[]> {

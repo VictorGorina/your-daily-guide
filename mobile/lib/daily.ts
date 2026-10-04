@@ -6,6 +6,7 @@ import {
   mealsForDate,
   withOverflowWeek,
 } from "./plan-shared";
+import { toChatMessage, toDailyLog, toDailyLogHistory, toDailyLogs } from "./day-row";
 import { currentUserId, supabase } from "./supabase";
 import type {
   MealHabit,
@@ -307,7 +308,7 @@ export async function fetchLogs(): Promise<DailyLogHistory[]> {
     .order("log_date", { ascending: false })
     .limit(120);
   if (error) throw error;
-  return (data ?? []) as unknown as DailyLogHistory[];
+  return (data ?? []).map(toDailyLogHistory).filter((l): l is DailyLogHistory => !!l);
 }
 
 /**
@@ -325,7 +326,7 @@ export async function fetchLogsForMonth(month: string): Promise<DailyLog[]> {
     .lte("log_date", `${month}-${String(lastDay).padStart(2, "0")}`)
     .order("log_date", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as unknown as DailyLog[];
+  return toDailyLogs(data);
 }
 
 /** Filas por petición de `fetchAllLogs`. */
@@ -345,7 +346,7 @@ export async function fetchAllLogs(): Promise<DailyLog[]> {
       .order("log_date", { ascending: true })
       .range(from, from + ALL_LOGS_PAGE - 1);
     if (error) throw error;
-    out.push(...((data ?? []) as unknown as DailyLog[]));
+    out.push(...toDailyLogs(data));
     if ((data ?? []).length < ALL_LOGS_PAGE) return out;
   }
 }
@@ -360,7 +361,8 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
     .select("*")
     .eq("log_date", date)
     .maybeSingle();
-  if (existing) return existing as unknown as DailyLog;
+  const found = toDailyLog(existing);
+  if (found) return found;
 
   const { data, error } = await supabase
     .from("daily_logs")
@@ -372,7 +374,9 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
     .select("*")
     .single();
   if (error) throw error;
-  return data as unknown as DailyLog;
+  const created = toDailyLog(data);
+  if (!created) throw new Error("El registro de hoy ha llegado sin fecha");
+  return created;
 }
 
 export async function updateTodayLog(patch: Partial<DailyLog>) {
@@ -387,7 +391,7 @@ export async function fetchTodayLog(): Promise<DailyLog | null> {
     .select("*")
     .eq("log_date", todayISO())
     .maybeSingle();
-  return (data as unknown as DailyLog) ?? null;
+  return toDailyLog(data);
 }
 
 const HABITS_WRITE_ATTEMPTS = 3;
@@ -459,7 +463,7 @@ export async function fetchMessages(date: string): Promise<ChatMessage[]> {
     .eq("log_date", date)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as unknown as ChatMessage[];
+  return (data ?? []).map(toChatMessage).filter((m): m is ChatMessage => !!m);
 }
 
 // --- Plan mensual (solo lectura, lo que Hoy necesita) ---
