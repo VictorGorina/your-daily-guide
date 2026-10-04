@@ -968,13 +968,45 @@ export const CADENCES: {
   /** Cada cuántos días se va a comprar. Es lo que da sentido a la cadencia:
    *  "semanal" son compras de ~7 días, no "un cuarto de lo que quede de mes". */
   periodDays: number;
+  /** Etiqueta corta para el selector de una fila. */
+  short: string;
+  /** Cómo reparte la compra, en una línea. */
+  desc: string;
 }[] = [
-  { key: "semanal", label: "Semanal", trips: 4, periodDays: 7 },
-  { key: "bisemanal", label: "Cada 2 semanas", trips: 2, periodDays: 14 },
-  { key: "mensual", label: "Mensual", trips: 1, periodDays: 31 },
+  {
+    key: "semanal",
+    label: "Semanal",
+    short: "Semanal",
+    trips: 4,
+    periodDays: 7,
+    desc: "Una por semana, cada una con lo de sus 7 días.",
+  },
+  {
+    key: "bisemanal",
+    label: "Cada 2 semanas",
+    short: "2 semanas",
+    trips: 2,
+    periodDays: 14,
+    desc: "Cada compra cubre 14 días; los frescos más delicados pueden no llegar.",
+  },
+  {
+    key: "mensual",
+    label: "Mensual",
+    short: "Mensual",
+    trips: 1,
+    periodDays: 31,
+    desc: "Todo el mes de una vez. Lo fresco tendrás que congelarlo.",
+  },
   // Mismas salidas que la semanal, pero cada compra se lleva de cada ingrediente
   // todo lo que aguanta: ver `stockUpAmounts`.
-  { key: "optimizada", label: "Optimizada", trips: 4, periodDays: 7 },
+  {
+    key: "optimizada",
+    label: "Optimizada",
+    short: "Optimizada",
+    trips: 4,
+    periodDays: 7,
+    desc: "La primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.",
+  },
 ];
 
 /** La cadencia si `raw` es una de las que existen; si no, `undefined`. */
@@ -1470,6 +1502,29 @@ export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number
   const from = Math.min(coverage.toDay, coverage.fromDay + start);
   const to = Math.max(from, Math.min(coverage.toDay, from + size - 1));
   return { from, to };
+};
+
+/**
+ * Mini gráfico del reparto del mes: una barra por compra. `days` es cuántos
+ * días cubre (el ancho) y `pct` cuánto cuesta frente a la compra más cara del
+ * mes, de 0 a 100 (el alto). Sale de los euros de cada compra, así que la
+ * optimizada enseña una primera barra alta y las demás bajas.
+ */
+export const tripSpendBars = (
+  trips: { groups: { items: { price_eur?: number }[] }[] }[],
+  coverage: PlanCoverage,
+): { days: number; pct: number }[] => {
+  const totals = trips.map((t) =>
+    t.groups.reduce(
+      (sum, g) => sum + g.items.reduce((s, i) => s + (Number(i.price_eur) || 0), 0),
+      0,
+    ),
+  );
+  const max = Math.max(0, ...totals);
+  return totals.map((total, i) => {
+    const { from, to } = tripDayRange(coverage, trips.length, i);
+    return { days: to - from + 1, pct: max > 0 ? Math.round((total / max) * 100) : 0 };
+  });
 };
 
 /**

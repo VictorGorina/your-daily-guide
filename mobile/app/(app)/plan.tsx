@@ -80,6 +80,7 @@ import {
   projectTrips,
   shoppingTotal,
   tripDayRange,
+  tripSpendBars,
   tripsForCoverage,
   tripTiming,
   WEEK_COUNT,
@@ -410,6 +411,7 @@ export default function Plan() {
 
   const clampedTrip = Math.min(selectedTrip, Math.max(0, tripsTotal - 1));
   const currentTrip = trips[clampedTrip] ?? trips[0];
+  const spendBars = tripSpendBars(trips, projCoverage);
   const readOnlyMonth = monthStatus === "past";
 
   // Al cambiar de mes, el índice de compra y el modo compra dejan de tener
@@ -793,6 +795,7 @@ export default function Plan() {
                     <IngredientsTab
                       shopping={plannerShopping}
                       currentTrip={hhCurrentTrip}
+                      spendBars={[]}
                       tripsTotal={plannerTripsTotal}
                       activeCadence={plannerCadence}
                       pendingCadence={null}
@@ -837,6 +840,7 @@ export default function Plan() {
                     <IngredientsTab
                       shopping={shopping}
                       currentTrip={currentTrip}
+                      spendBars={spendBars}
                       tripsTotal={tripsTotal}
                       activeCadence={activeCadence}
                       pendingCadence={pendingCadence}
@@ -900,6 +904,7 @@ export default function Plan() {
               <IngredientsTab
                 shopping={shopping}
                 currentTrip={currentTrip}
+                spendBars={spendBars}
                 tripsTotal={tripsTotal}
                 activeCadence={activeCadence}
                 pendingCadence={pendingCadence}
@@ -1334,6 +1339,7 @@ function PantryExtrasCard({
 function IngredientsTab({
   shopping,
   currentTrip,
+  spendBars,
   tripsTotal,
   activeCadence,
   coverage,
@@ -1360,6 +1366,8 @@ function IngredientsTab({
 }: {
   shopping: ShoppingList | null;
   currentTrip: TripGroups | undefined;
+  /** Mini gráfico del selector de cadencia: una barra por compra (`tripSpendBars`). */
+  spendBars: { days: number; pct: number }[];
   tripsTotal: number;
   activeCadence: ShoppingCadence;
   pendingCadence: ShoppingCadence | null;
@@ -1475,6 +1483,10 @@ function IngredientsTab({
   const barHome = total > 0 ? (alreadyHome / total) * 100 : 0;
   const barBought = total > 0 ? (alreadyBought / total) * 100 : 0;
 
+  // La cadencia que enseña el selector: la recién pulsada mientras se guarda.
+  const shownCadence =
+    CADENCES.find((c) => c.key === (pendingCadence ?? activeCadence)) ?? CADENCES[0];
+
   return (
     <View className="mt-5 gap-2.5">
       {/* "Tus ingredientes se han actualizado": la mesa cambió y el recálculo
@@ -1489,16 +1501,16 @@ function IngredientsTab({
         </View>
       ) : plannerLocked ? null : (
         /* Cadencia */
-        <View className="rounded-3xl bg-surface px-4 py-3.5">
-          <View className="flex-row items-center gap-2">
+        <View className="rounded-3xl bg-surface p-4">
+          <View className="flex-row items-center gap-2 px-0.5">
             <CalendarSync size={15} color="#a84a17" />
-            <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
+            <Text className="flex-1 text-sm font-sans-semibold text-foreground">
               Cada cuánto compras
             </Text>
           </View>
-          <View className="mt-2.5 flex-row flex-wrap rounded-[22px] bg-secondary/70 p-1">
+          <View className="mt-2.5 flex-row gap-0.5 rounded-full bg-secondary p-[3px]">
             {CADENCES.map((c) => {
-              const active = (pendingCadence ?? activeCadence) === c.key;
+              const active = shownCadence.key === c.key;
               return (
                 <Pressable
                   key={c.key}
@@ -1508,31 +1520,58 @@ function IngredientsTab({
                     recadence.mutate(c.key);
                   }}
                   disabled={recadence.isPending}
-                  className={`w-1/2 items-center rounded-full py-2.5 active:opacity-80 ${
-                    active ? "bg-foreground" : ""
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  className={`flex-1 items-center rounded-full py-2 active:opacity-80 ${
+                    active ? "bg-surface" : ""
                   }`}
-                  style={recadence.isPending ? { opacity: 0.6 } : undefined}
+                  style={[
+                    active && {
+                      shadowColor: "#3e3d39",
+                      shadowOpacity: 0.12,
+                      shadowRadius: 2,
+                      shadowOffset: { width: 0, height: 1 },
+                    },
+                    recadence.isPending && { opacity: 0.6 },
+                  ]}
                 >
                   <Text
-                    className={`text-[11.5px] font-sans-semibold ${
-                      active ? "text-background" : "text-muted-foreground"
+                    numberOfLines={1}
+                    className={`text-xs font-sans-semibold ${
+                      active ? "text-primary-ink" : "text-muted-foreground"
                     }`}
                   >
-                    {c.label}
+                    {c.short}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-          <Text className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
-            {recadence.isPending
-              ? "Actualizando…"
-              : activeCadence === "optimizada" && tripsTotal > 1
-                ? `${tripsTotal} compras: la primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.`
-                : tripsTotal > 1
-                  ? `${tripsTotal} compras separadas, cada una con lo de sus semanas.`
-                  : "1 sola compra: apóyate en despensa y congelados; los frescos, sobre la marcha."}
-          </Text>
+          {/* Reparto del mes: una barra por compra, tan ancha como los días
+              que cubre y tan alta como los euros que cuesta. */}
+          <View className="mt-3 flex-row items-center gap-3 px-0.5">
+            <View className="h-[30px] w-16 flex-row items-end gap-[3px]">
+              {spendBars.map((bar, i) => (
+                <View
+                  key={i}
+                  className="rounded bg-primary"
+                  style={{ flex: bar.days, height: `${bar.pct}%`, minHeight: 4 }}
+                />
+              ))}
+            </View>
+            <Text className="flex-1 text-[12.5px] leading-[18px] text-muted-foreground">
+              {recadence.isPending ? (
+                "Actualizando…"
+              ) : (
+                <>
+                  <Text className="font-sans-semibold text-foreground">
+                    {tripsTotal} {tripsTotal === 1 ? "compra" : "compras"}.
+                  </Text>{" "}
+                  {shownCadence.desc}
+                </>
+              )}
+            </Text>
+          </View>
         </View>
       )}
 

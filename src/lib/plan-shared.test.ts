@@ -81,6 +81,7 @@ import {
   tripActualsTotal,
   tripCount,
   tripDayRange,
+  tripSpendBars,
   tripLabel,
   tripsForCoverage,
   weekDayCounts,
@@ -1618,6 +1619,36 @@ describe("isCanonicalShopping", () => {
     expect(isCanonicalShopping(canonical())).toBe(true);
     expect(isCanonicalShopping(shopping())).toBe(false);
     expect(isCanonicalShopping(null)).toBe(false);
+  });
+});
+
+describe("tripSpendBars", () => {
+  const euros = (cadence: "semanal" | "bisemanal" | "mensual" | "optimizada") =>
+    tripSpendBars(projectTrips(canonical(), cadence, septiembre), septiembre);
+
+  it("da una barra por compra, tan ancha como los días que cubre", () => {
+    expect(euros("mensual")).toEqual([{ days: 30, pct: 100 }]);
+    expect(euros("bisemanal").map((b) => b.days)).toEqual([15, 15]);
+    expect(euros("semanal").map((b) => b.days)).toEqual([8, 8, 7, 7]);
+  });
+
+  it("la altura es el gasto de cada compra frente a la más cara", () => {
+    const bars = euros("semanal");
+    expect(Math.max(...bars.map((b) => b.pct))).toBe(100);
+    for (const b of bars) expect(b.pct).toBeGreaterThan(0);
+  });
+
+  it("en la optimizada la primera compra es la más alta", () => {
+    const [first, ...rest] = euros("optimizada");
+    expect(first.pct).toBe(100);
+    for (const b of rest) expect(b.pct).toBeLessThan(100);
+  });
+
+  it("sin precios no inventa alturas", () => {
+    expect(tripSpendBars([{ groups: [] }, { groups: [] }], septiembre)).toEqual([
+      { days: 15, pct: 0 },
+      { days: 15, pct: 0 },
+    ]);
   });
 });
 

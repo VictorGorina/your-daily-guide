@@ -36,6 +36,29 @@ export const tripDayRange = (coverage: PlanCoverage, trips: number, trip: number
   return { from, to };
 };
 
+/**
+ * Mini gráfico del reparto del mes: una barra por compra. `days` es cuántos
+ * días cubre (el ancho) y `pct` cuánto cuesta frente a la compra más cara del
+ * mes, de 0 a 100 (el alto). Sale de los euros de cada compra, así que la
+ * optimizada enseña una primera barra alta y las demás bajas.
+ */
+export const tripSpendBars = (
+  trips: { groups: { items: { price_eur?: number }[] }[] }[],
+  coverage: PlanCoverage,
+): { days: number; pct: number }[] => {
+  const totals = trips.map((t) =>
+    t.groups.reduce(
+      (sum, g) => sum + g.items.reduce((s, i) => s + (Number(i.price_eur) || 0), 0),
+      0,
+    ),
+  );
+  const max = Math.max(0, ...totals);
+  return totals.map((total, i) => {
+    const { from, to } = tripDayRange(coverage, trips.length, i);
+    return { days: to - from + 1, pct: max > 0 ? Math.round((total / max) * 100) : 0 };
+  });
+};
+
 /** A quién se refiere cada tramo de ingredientes, en palabras, según la cadencia. */
 export const cadenceScopeLabel = (cadence: ShoppingCadence) =>
   cadence === "semanal"

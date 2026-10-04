@@ -61,6 +61,7 @@ import {
   planNavBounds,
   projectTrips,
   tripDayRange,
+  tripSpendBars,
   tripsForCoverage,
   WEEK_COUNT,
   tripTiming,
@@ -1187,6 +1188,11 @@ function IngredientsTab({
   const barHome = total > 0 ? (alreadyHome / total) * 100 : 0;
   const barBought = total > 0 ? (alreadyBought / total) * 100 : 0;
 
+  // La cadencia que enseña el selector: la recién pulsada mientras se guarda.
+  const shownCadence =
+    CADENCES.find((c) => c.key === (pendingCadence ?? activeCadence)) ?? CADENCES[0];
+  const spendBars = tripSpendBars(trips, covOrFull);
+
   return (
     <section className="mt-5 space-y-3 pb-40">
       {/* "Tus ingredientes se han actualizado": la mesa cambió y el recálculo
@@ -1201,41 +1207,61 @@ function IngredientsTab({
         </div>
       ) : plannerLocked ? null : (
         /* Cadencia */
-        <div className="surface-card px-4 py-3.5">
-          <div className="flex items-center gap-2">
+        <div className="surface-card p-4">
+          <div className="flex items-center gap-2 px-0.5">
             <CalendarSync className="h-[15px] w-[15px] shrink-0 text-primary-ink" />
-            <h3 className="flex-1 text-[12.5px] font-semibold">Cada cuánto compras</h3>
+            <h3 className="flex-1 text-sm font-semibold">Cada cuánto compras</h3>
           </div>
-          <div className="mt-2.5 grid grid-cols-2 gap-1 rounded-[22px] bg-secondary/70 p-1">
+          <div className="mt-2.5 flex gap-0.5 rounded-full bg-secondary p-[3px]">
             {CADENCES.map((c) => {
-              const selected = (pendingCadence ?? activeCadence) === c.key;
+              const selected = shownCadence.key === c.key;
               return (
                 <button
                   key={c.key}
+                  type="button"
+                  aria-pressed={selected}
                   onClick={() => {
                     if (recadence.isPending || c.key === activeCadence) return;
                     setPendingCadence(c.key);
                     recadence.mutate(c.key);
                   }}
                   disabled={recadence.isPending}
-                  className={`rounded-full py-2.5 text-[11.5px] font-semibold transition-colors disabled:opacity-60 ${
-                    selected ? "bg-foreground text-background" : "text-muted-foreground"
+                  className={`min-w-0 flex-1 truncate rounded-full py-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
+                    selected
+                      ? "bg-surface text-primary-ink shadow-[0_1px_2px_rgba(62,61,57,0.12)]"
+                      : "text-muted-foreground"
                   }`}
                 >
-                  {c.label}
+                  {c.short}
                 </button>
               );
             })}
           </div>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
-            {recadence.isPending
-              ? "Actualizando…"
-              : activeCadence === "optimizada" && tripsTotal > 1
-                ? `${tripsTotal} compras: la primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.`
-                : tripsTotal > 1
-                  ? `${tripsTotal} compras separadas, cada una con lo de sus semanas.`
-                  : "1 sola compra: apóyate en despensa y congelados; los frescos, sobre la marcha."}
-          </p>
+          {/* Reparto del mes: una barra por compra, tan ancha como los días
+              que cubre y tan alta como los euros que cuesta. */}
+          <div className="mt-3 flex items-center gap-3 px-0.5">
+            <div className="flex h-[30px] w-16 shrink-0 items-end gap-[3px]" aria-hidden="true">
+              {spendBars.map((bar, i) => (
+                <div
+                  key={i}
+                  className="min-h-1 rounded bg-primary"
+                  style={{ flex: bar.days, height: `${bar.pct}%` }}
+                />
+              ))}
+            </div>
+            <p className="flex-1 text-[12.5px] leading-[18px] text-pretty text-muted-foreground">
+              {recadence.isPending ? (
+                "Actualizando…"
+              ) : (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {tripsTotal} {tripsTotal === 1 ? "compra" : "compras"}.
+                  </span>{" "}
+                  {shownCadence.desc}
+                </>
+              )}
+            </p>
+          </div>
         </div>
       )}
 

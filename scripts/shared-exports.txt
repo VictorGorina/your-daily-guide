@@ -84,6 +84,7 @@ tripAmount
 tripCount
 tripDayRange
 tripLabel
+tripSpendBars
 tripTiming
 tripToText
 tripsForCoverage

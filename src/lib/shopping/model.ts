@@ -13,13 +13,45 @@ export const CADENCES: {
   /** Cada cuántos días se va a comprar. Es lo que da sentido a la cadencia:
    *  "semanal" son compras de ~7 días, no "un cuarto de lo que quede de mes". */
   periodDays: number;
+  /** Etiqueta corta para el selector de una fila. */
+  short: string;
+  /** Cómo reparte la compra, en una línea. */
+  desc: string;
 }[] = [
-  { key: "semanal", label: "Semanal", trips: 4, periodDays: 7 },
-  { key: "bisemanal", label: "Cada 2 semanas", trips: 2, periodDays: 14 },
-  { key: "mensual", label: "Mensual", trips: 1, periodDays: 31 },
+  {
+    key: "semanal",
+    label: "Semanal",
+    short: "Semanal",
+    trips: 4,
+    periodDays: 7,
+    desc: "Una por semana, cada una con lo de sus 7 días.",
+  },
+  {
+    key: "bisemanal",
+    label: "Cada 2 semanas",
+    short: "2 semanas",
+    trips: 2,
+    periodDays: 14,
+    desc: "Cada compra cubre 14 días; los frescos más delicados pueden no llegar.",
+  },
+  {
+    key: "mensual",
+    label: "Mensual",
+    short: "Mensual",
+    trips: 1,
+    periodDays: 31,
+    desc: "Todo el mes de una vez. Lo fresco tendrás que congelarlo.",
+  },
   // Mismas salidas que la semanal, pero cada compra se lleva de cada ingrediente
   // todo lo que aguanta: ver `stockUpAmounts` en trips.ts.
-  { key: "optimizada", label: "Optimizada", trips: 4, periodDays: 7 },
+  {
+    key: "optimizada",
+    label: "Optimizada",
+    short: "Optimizada",
+    trips: 4,
+    periodDays: 7,
+    desc: "La primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.",
+  },
 ];
 
 /** La cadencia si `raw` es una de las que existen; si no, `undefined`. */
