@@ -89,8 +89,9 @@ cliente se lee siempre con `clampClientToday` (decide qué días son pasado).
 cliente de navegador; `client.server.ts` el de servidor. `auth-middleware.ts` valida la sesión (web
 y, vía cabecera `Authorization`, también las peticiones de `/api/v1/*`). Las migraciones SQL viven
 en `supabase/migrations/` y se aplican con la CLI (`supabase db push`, siempre tras `--dry-run`),
-no pegándolas en el panel; las que aún no tocan, en `supabase/pending/`. Flujo en
-`docs/agents/verification.md`.
+no pegándolas en el panel; las que aún no tocan, en `supabase/pending/`. Después, `bun run
+db:types` regenera `types.ts` y su copia del móvil (`mobile/lib/database.types.ts`): no se editan
+a mano. Flujo en `docs/agents/verification.md`.
 
 **Plan de comidas — dos caminos deliberadamente separados** (detalle en «Platos del plan: cambio
 a mano vs. recolocación» de AGENTS.md). `setPlanMeal` cambia un plato tal cual lo pide la persona,

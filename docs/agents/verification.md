@@ -62,6 +62,7 @@ export SUPABASE_DB_PASSWORD="$(grep -E '^SUPABASE_DB_PASSWORD=' .env | cut -d= -
 supabase migration list       # local frente a remoto; deben coincidir
 supabase db push --dry-run    # qué se aplicaría, sin aplicarlo
 supabase db push              # aplica SOLO lo que falta en el historial
+bun run db:types              # después: regenera los tipos de las dos apps
 ```
 
 - Hace falta `supabase login` (una vez por máquina) y `SUPABASE_DB_PASSWORD` en `.env`. En una red
@@ -71,6 +72,10 @@ supabase db push              # aplica SOLO lo que falta en el historial
   `supabase migration repair --status applied <versión>`, o el siguiente `db push` lo repetirá.
 - Una migración que no debe aplicarse todavía vive en `supabase/pending/` (ver su README), no en
   `migrations/`: `db push` ejecuta todo lo que encuentra ahí.
+- `bun run db:types` (`scripts/db-types.sh`) lee el esquema de producción y escribe
+  `src/integrations/supabase/types.ts` y su copia `mobile/lib/database.types.ts`, ya formateados.
+  No se editan a mano: una tabla o columna nueva llega con su migración y con esta orden, en el
+  mismo commit. `check-shared-drift.sh` falla si las dos copias difieren.
 - No hay Docker en esta máquina: `supabase db diff`, `start` y `reset` no funcionan.
 
 Para inspeccionar datos desde la terminal, `scripts/db.ts` (atajo `bun run db`) es un
