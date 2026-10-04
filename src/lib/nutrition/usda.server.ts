@@ -101,7 +101,7 @@ export function ensureExtraFoods(): Promise<void> {
     try {
       const db = await admin();
       const { data, error } = await db
-        .from("foods_extra" as never)
+        .from("foods_extra")
         .select("key, label, aliases, category, kcal, protein_g, carbs_g, fat_g, fiber_g");
       if (error) {
         if (isMissingTable(error)) return;
@@ -189,7 +189,7 @@ export async function resolveWithUsda(
     registerExtraFoods(fresh.map((f) => f.food));
     try {
       const db = await admin();
-      const { error } = await db.from("foods_extra" as never).upsert(
+      const { error } = await db.from("foods_extra").upsert(
         fresh.map(({ food, candidate }) => ({
           key: food.key,
           label: food.label,
@@ -203,7 +203,7 @@ export async function resolveWithUsda(
           source: "usda",
           source_id: String(candidate.fdcId),
           source_label: candidate.description,
-        })) as never,
+        })),
         { onConflict: "key", ignoreDuplicates: true },
       );
       if (error && !isMissingTable(error)) console.error("foods_extra: escritura", error);

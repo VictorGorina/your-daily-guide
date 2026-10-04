@@ -16,9 +16,9 @@ export async function deleteAccountHandler({ context }: { context: { userId: str
   // fila caduca sola con la retención: no se le devuelve un error.
   // Sin tipos generados para `rate_limits` (ticket 24), como `dish_recipes`.
   const { error: limitsError } = await supabaseAdmin
-    .from("rate_limits" as never)
+    .from("rate_limits")
     .delete()
-    .eq("subject" as never, `user:${context.userId}` as never);
+    .eq("subject", `user:${context.userId}`);
   if (limitsError) {
     logEvent("warn", "account_rate_limits_left", { error: errorText(limitsError) });
   }

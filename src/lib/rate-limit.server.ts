@@ -173,7 +173,7 @@ async function globalSpentToday(): Promise<number | null> {
   const now = Date.now();
   if (globalCache && now - globalCache.at < GLOBAL_CACHE_MS) return globalCache.usd;
   try {
-    const { data, error } = await supabaseAdmin.rpc("ai_spend_total_today" as never);
+    const { data, error } = await supabaseAdmin.rpc("ai_spend_total_today");
     if (error) throw error;
     globalCache = { at: now, usd: Number(data) || 0 };
     return globalCache.usd;

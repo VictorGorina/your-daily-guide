@@ -18,6 +18,7 @@
  * Server-only.
  */
 
+import type { TablesInsert } from "@/integrations/supabase/types";
 import type { Deadline } from "@/lib/deadline";
 import { errorText, logEvent } from "@/lib/log.server";
 
@@ -153,7 +154,7 @@ function recipeFromBreakdown(key: string, b: DishBreakdown): CanonicalRecipe {
 }
 
 /** La fila de `dish_recipes` de una receta recién calculada. */
-function recipeRow(key: string, b: DishBreakdown): Record<string, unknown> {
+function recipeRow(key: string, b: DishBreakdown): TablesInsert<"dish_recipes"> {
   const recipe = recipeFromBreakdown(key, b);
   return {
     dish_key: key,
@@ -224,9 +225,7 @@ async function decomposeAndSave(
     });
     if (!db || !rows.length) return;
     try {
-      const { error } = await db
-        .from("dish_recipes" as never)
-        .upsert(rows as never, { onConflict: "dish_key" });
+      const { error } = await db.from("dish_recipes").upsert(rows, { onConflict: "dish_key" });
       if (error && !isMissingTable(error)) console.error("dish_recipes: escritura", error);
     } catch (error) {
       console.error("dish_recipes: escritura", error);
@@ -310,7 +309,7 @@ export async function getRecipes(
   const cachedKeys: string[] = [];
   if (admin && byKey.size) {
     const { data, error } = await admin
-      .from("dish_recipes" as never)
+      .from("dish_recipes")
       .select(COLUMNS)
       .in("dish_key", [...byKey.keys()]);
     if (error) {
@@ -344,10 +343,7 @@ export async function getRecipes(
   if (admin && tableOk && cachedKeys.length && Math.random() < 1 / HITS_SAMPLE) {
     // `rpc` casi nunca rechaza: el fallo llega como `{ error }`, así que se mira también.
     void Promise.resolve(
-      admin.rpc(
-        "increment_dish_recipe_hits" as never,
-        { _keys: cachedKeys, _by: HITS_SAMPLE } as never,
-      ),
+      admin.rpc("increment_dish_recipe_hits", { _keys: cachedKeys, _by: HITS_SAMPLE }),
     )
       .then(({ error }) => {
         if (error) logEvent("warn", "recipe_hits_failed", { error: errorText(error) });

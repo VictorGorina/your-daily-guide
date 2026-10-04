@@ -260,10 +260,9 @@ export async function dispatchPush(
   // de datos (`due_push_profiles`, ticket 23): la mayoría de los disparos no
   // tienen a nadie y así no se leen todos los perfiles cada 5 minutos. Si la
   // función falla o aún no existe, se recorre la tabla aquí con la misma regla.
-  const { data: dueData, error: dueError } = await supabaseAdmin.rpc(
-    "due_push_profiles" as never,
-    { _window_minutes: WINDOW_MINUTES } as never,
-  );
+  const { data: dueData, error: dueError } = await supabaseAdmin.rpc("due_push_profiles", {
+    _window_minutes: WINDOW_MINUTES,
+  });
   const dueRows = dueError ? null : ((dueData ?? []) as unknown as DueRow[]);
   if (dueError) logEvent("warn", "push_due_rpc_failed", { error: errorText(dueError) });
 
