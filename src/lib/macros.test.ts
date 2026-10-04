@@ -2,11 +2,12 @@ import { describe, expect, it } from "bun:test";
 
 import type { DailyLog } from "./daily";
 import type { MacroEstimate, MealMacroEstimate } from "./guide.functions";
+import i18n from "./i18n";
 import {
   ZERO_MACROS,
   addMacros,
   daySignal,
-  daySignalLabel,
+  daySignalKey,
   daySignalOf,
   hasDayRecord,
   macroTargets,
@@ -475,30 +476,38 @@ describe("daySignal", () => {
   });
 });
 
-describe("daySignalLabel — el semáforo en palabras", () => {
-  const label = (consumed: number, target: number | null, logged = true) =>
-    daySignalLabel(daySignal(consumed, target, logged), consumed, target);
+describe("daySignalKey — el semáforo en palabras", () => {
+  const key = (consumed: number, target: number | null, logged = true) =>
+    daySignalKey(daySignal(consumed, target, logged), consumed, target);
 
   it("el ámbar dice hacia dónde: un día al 40 % no está «cerca del objetivo»", () => {
-    expect(label(800, 2000)).toBe("por debajo del objetivo");
-    expect(label(2300, 2000)).toBe("algo por encima del objetivo");
+    expect(key(800, 2000)).toBe("below");
+    expect(key(2300, 2000)).toBe("above");
   });
 
-  it("cada color tiene su texto, y sin registro no se dice nada", () => {
-    expect(label(2000, 2000)).toBe("dentro del objetivo");
-    expect(label(2600, 2000)).toBe("muy por encima del objetivo");
-    expect(label(1800, null)).toBe("sin cifras todavía");
-    expect(label(0, 2000, false)).toBeNull();
+  it("cada color tiene su clave, y sin registro no se dice nada", () => {
+    expect(key(2000, 2000)).toBe("success");
+    expect(key(2600, 2000)).toBe("over");
+    expect(key(1800, null)).toBe("muted");
+    expect(key(0, 2000, false)).toBeNull();
   });
 
-  it("el texto nunca contradice al color en todo el rango", () => {
+  it("la clave nunca contradice al color en todo el rango", () => {
     for (let kcal = 0; kcal <= 4000; kcal += 50) {
       const signal = daySignal(kcal, 2000, true);
-      const text = daySignalLabel(signal, kcal, 2000);
-      if (signal === "success") expect(text).toBe("dentro del objetivo");
-      if (signal === "over") expect(text).toBe("muy por encima del objetivo");
-      if (signal === "warning") expect(text).toContain(kcal > 2000 ? "encima" : "debajo");
+      const k = daySignalKey(signal, kcal, 2000);
+      if (signal === "success") expect(k).toBe("success");
+      if (signal === "over") expect(k).toBe("over");
+      if (signal === "warning") expect(k).toBe(kcal > 2000 ? "above" : "below");
     }
+  });
+
+  it("cada clave tiene su texto en los dos idiomas", () => {
+    for (const k of ["success", "over", "muted", "above", "below"]) {
+      expect(i18n.exists(`daySignal.${k}`, { lng: "es" })).toBe(true);
+      expect(i18n.exists(`daySignal.${k}`, { lng: "en" })).toBe(true);
+    }
+    expect(i18n.getFixedT("es")("daySignal.below")).toBe("por debajo del objetivo");
   });
 });
 

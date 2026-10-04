@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { CalendarRange, Home, Settings, Users } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { fetchMonthlyPlan, fetchProfile, todayISO } from "@/lib/daily";
 import { fetchHousehold } from "@/lib/household";
@@ -10,12 +11,12 @@ import { isNextMonthUnlocked, nextMonthISO } from "@/lib/plan-shared";
 // cualquiera de estas pantallas, siempre a un toque de distancia. Historial
 // tampoco es de primer nivel: vive como tercera sub-pestaña dentro de Plan.
 const baseItems = [
-  { to: "/hoy", label: "Hoy", icon: Home },
-  { to: "/plan", label: "Plan", icon: CalendarRange },
-  { to: "/ajustes", label: "Ajustes", icon: Settings },
+  { to: "/hoy", label: "hoy", icon: Home },
+  { to: "/plan", label: "plan", icon: CalendarRange },
+  { to: "/ajustes", label: "ajustes", icon: Settings },
 ] as const;
 
-const familyItem = { to: "/hogar", label: "Familia", icon: Users } as const;
+const familyItem = { to: "/hogar", label: "familia", icon: Users } as const;
 
 /**
  * ¿Tiene la pestaña Plan algo pendiente? El mes en curso sin plan, o el que
@@ -52,6 +53,7 @@ export function BottomNav() {
   const household = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
   const hasHousehold = Boolean(household.data?.household);
   const planNeedsAction = usePlanNeedsAction();
+  const { t } = useTranslation();
 
   // Insertamos "Familia" antes de "Ajustes" para que quede pegada al resto
   // de secciones de contenido en vez de al final, junto a la config.
@@ -84,12 +86,14 @@ export function BottomNav() {
                 <Icon className="h-[18px] w-[18px]" />
                 {to === "/plan" && planNeedsAction ? (
                   <span
-                    aria-label="Toca preparar tu plan"
+                    aria-label={t("nav.planDue")}
                     className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-surface"
                   />
                 ) : null}
               </span>
-              <span className={active ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+              <span className={active ? "text-foreground" : "text-muted-foreground"}>
+                {t(`nav.${label}`)}
+              </span>
             </Link>
           );
         })}

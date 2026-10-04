@@ -529,5 +529,63 @@
     "Merienda": "Afternoon snack",
     "Snack": "Snack",
     "Cena": "Dinner"
+  },
+  "nav": {
+    "hoy": "Today",
+    "plan": "Plan",
+    "ajustes": "Settings",
+    "familia": "Family",
+    "planDue": "Time to prepare your plan"
+  },
+  "week": {
+    "this": "This week",
+    "last": "Last week",
+    "next": "Next week",
+    "backToToday": "Back to today",
+    "previous": "Previous week",
+    "following": "Next week",
+    "rangeSameMonth": "{{from}}–{{to}} {{month}}",
+    "rangeAcrossMonths": "{{from}} {{fromMonth}} – {{to}} {{toMonth}}",
+    "dayWithSignal": "{{day}} {{weekday}}: {{signal}}"
+  },
+  "weekdaysShort": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  "monthsShort": [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
+  ],
+  "daySignal": {
+    "success": "on target",
+    "over": "well over target",
+    "muted": "no figures yet",
+    "above": "slightly over target",
+    "below": "under target"
+  },
+  "macros": {
+    "protein": "prot",
+    "carbs": "carb",
+    "fat": "fat",
+    "fiber": "fibre",
+    "eatenToday": "~{{kcal}} kcal from what you've eaten so far today",
+    "pending_one": " ({{count}} meal still being calculated)",
+    "pending_other": " ({{count}} meals still being calculated)",
+    "disclaimer": ": a rough estimate, not an exact nutritional count."
+  },
+  "recipe": {
+    "show": "See recipe",
+    "hide": "Hide recipe",
+    "loading": "Preparing the recipe…",
+    "ingredients": "Ingredients",
+    "steps": "Steps",
+    "failed": "We couldn't load the recipe. Try again"
   }
 }

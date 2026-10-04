@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, CookingPot } from "lucide-react-native";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 
 import { apiPost } from "../lib/api";
@@ -14,6 +15,7 @@ type RecipeData = { ingredients: string[]; steps: string[] };
  * la ruta espejo /api/v1/plan/recipe (dishRecipe no es invocable desde móvil).
  */
 export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const q = useQuery({
     queryKey: ["recipe", dish],
@@ -33,7 +35,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
       >
         <CookingPot size={14} color="#a84a17" />
         <Text className="font-body-semibold text-[11px] text-primary-ink">
-          {open ? "Ocultar receta" : "Ver receta"}
+          {open ? t("recipe.hide") : t("recipe.show")}
         </Text>
         <ChevronDown
           size={14}
@@ -45,13 +47,13 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
       {open ? (
         <View className="mt-2 rounded-xl bg-secondary/50 p-3">
           {q.isLoading ? (
-            <Text className="font-body text-xs text-muted-foreground">Preparando la receta…</Text>
+            <Text className="font-body text-xs text-muted-foreground">{t("recipe.loading")}</Text>
           ) : q.data ? (
             <View className="gap-2.5">
               {q.data.ingredients.length ? (
                 <View>
                   <Text className="font-mono-medium text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Ingredientes
+                    {t("recipe.ingredients")}
                   </Text>
                   <View className="mt-1 flex-row flex-wrap gap-1.5">
                     {q.data.ingredients.map((ing) => (
@@ -64,7 +66,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
               ) : null}
               <View>
                 <Text className="font-mono-medium text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Pasos
+                  {t("recipe.steps")}
                 </Text>
                 <View className="mt-1 gap-1">
                   {q.data.steps.map((step, i) => (
@@ -79,7 +81,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
           ) : (
             <Pressable onPress={() => q.refetch()}>
               <Text className="font-body-medium text-xs text-primary-ink">
-                No hemos podido cargar la receta. Reintentar
+                {t("recipe.failed")}
               </Text>
             </Pressable>
           )}

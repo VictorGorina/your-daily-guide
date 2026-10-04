@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Animated, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -54,7 +55,7 @@ import {
   type DailyLog,
 } from "../../lib/daily";
 import { fetchHousehold, householdSharedSlots } from "../../lib/household";
-import { daySignalLabelOf, daySignalOf } from "../../lib/macros";
+import { daySignalKeyOf, daySignalOf } from "../../lib/macros";
 import {
   addMonths,
   boughtTotal,
@@ -1010,6 +1011,7 @@ function PlanMonthCalendar({
    *  (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
 
@@ -1089,7 +1091,8 @@ function PlanMonthCalendar({
             const signal = daySignalOf(log);
             const bg = SIGNAL_BG[signal] ?? "bg-secondary/70";
             // El color en palabras, para VoiceOver (A11Y-06).
-            const signalLabel = daySignalLabelOf(log);
+            const signalKey = daySignalKeyOf(log);
+            const signalLabel = signalKey ? t(`daySignal.${signalKey}`) : null;
             return (
               <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
                 <Pressable

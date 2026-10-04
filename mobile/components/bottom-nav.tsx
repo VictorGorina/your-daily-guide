@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, usePathname } from "expo-router";
 import { CalendarRange, Home, Settings, Users } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 
 import { fetchMonthlyPlan, fetchProfile, todayISO } from "../lib/daily";
@@ -12,12 +13,12 @@ import { isNextMonthUnlocked, nextMonthISO } from "../lib/plan-shared";
 // las rutas de expo-router dentro del grupo (app). "Familia" solo aparece con
 // hogar creado — igual que en la web (ver src/components/bottom-nav.tsx).
 const baseItems = [
-  { href: "/hoy", label: "Hoy", icon: Home },
-  { href: "/plan", label: "Plan", icon: CalendarRange },
-  { href: "/ajustes", label: "Ajustes", icon: Settings },
+  { href: "/hoy", label: "hoy", icon: Home },
+  { href: "/plan", label: "plan", icon: CalendarRange },
+  { href: "/ajustes", label: "ajustes", icon: Settings },
 ] as const;
 
-const familyItem = { href: "/hogar", label: "Familia", icon: Users } as const;
+const familyItem = { href: "/hogar", label: "familia", icon: Users } as const;
 
 /**
  * ¿Tiene la pestaña Plan algo pendiente? El mes en curso sin plan, o el que
@@ -55,6 +56,7 @@ export function BottomNav() {
   const householdQ = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
   const hasHousehold = Boolean(householdQ.data?.household);
   const planNeedsAction = usePlanNeedsAction();
+  const { t } = useTranslation();
 
   const items = hasHousehold
     ? [...baseItems.slice(0, 2), familyItem, ...baseItems.slice(2)]
@@ -79,7 +81,7 @@ export function BottomNav() {
                 <Icon size={18} color={active ? "#f3f1ed" : "#6b6256"} />
                 {href === "/plan" && planNeedsAction ? (
                   <View
-                    accessibilityLabel="Toca preparar tu plan"
+                    accessibilityLabel={t("nav.planDue")}
                     className="absolute right-0.5 top-0 h-3 w-3 rounded-full border-2 border-surface bg-primary"
                   />
                 ) : null}
@@ -89,7 +91,7 @@ export function BottomNav() {
                   active ? "text-foreground" : "text-muted-foreground"
                 }`}
               >
-                {label}
+                {t(`nav.${label}`)}
               </Text>
             </Pressable>
           );

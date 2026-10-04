@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { DishRecipe } from "@/components/dish-recipe";
 import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { todayISO, type DailyLog } from "@/lib/daily";
 import type { SharedSlots } from "@/lib/household-shared";
-import { daySignalLabelOf, daySignalOf } from "@/lib/macros";
+import { daySignalKeyOf, daySignalOf } from "@/lib/macros";
 import {
   capitalizeFirst,
   childMealsForDate,
@@ -66,6 +67,7 @@ export function PlanMonthCalendar({
    *  resto del hogar (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
 
@@ -145,7 +147,8 @@ export function PlanMonthCalendar({
             const signal = daySignalOf(log);
             const signalClass = SIGNAL_CLASS[signal] ?? "bg-secondary/70 text-muted-foreground";
             // El color en palabras, para quien no lo ve (A11Y-06).
-            const signalLabel = daySignalLabelOf(log);
+            const signalKey = daySignalKeyOf(log);
+            const signalLabel = signalKey ? t(`daySignal.${signalKey}`) : null;
             return (
               <button
                 key={date}

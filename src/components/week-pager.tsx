@@ -2,9 +2,10 @@ import useEmblaCarousel from "embla-carousel-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { DailyLog } from "@/lib/daily";
-import { daySignalLabelOf, daySignalOf, type DaySignal } from "@/lib/macros";
+import { daySignalKeyOf, daySignalOf, type DaySignal } from "@/lib/macros";
 import {
   dayKind,
   mondayAt,
@@ -19,7 +20,6 @@ import {
   type WeekBounds,
 } from "@/lib/week-nav";
 
-const DAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 // Misma curva que el resto de la app (docs/design-guidelines.md §7) y que
 // `mobile/components/week-pager.tsx`, para que la tira se mueva igual en las
 // dos plataformas aunque una use Reanimated y la otra `motion`.
@@ -90,6 +90,7 @@ export function WeekPager({
   logsFor,
   renderBadge,
 }: WeekPagerProps) {
+  const { t } = useTranslation();
   const reducedMotion = !!useReducedMotion();
   const bounds = useMemo<WeekBounds>(
     () => weekStripBounds(today, appStartedOn),
@@ -181,7 +182,7 @@ export function WeekPager({
   const showTodayPill = visibleWeek !== weekStartOf(today);
   const atStart = visibleIndex <= 0;
   const atEnd = visibleIndex >= total - 1;
-  const label = weekLabel(visibleWeek, today);
+  const label = weekLabel(visibleWeek, today, t);
 
   return (
     <div>
@@ -191,7 +192,7 @@ export function WeekPager({
           type="button"
           onClick={() => goTo(visibleIndex - 1)}
           disabled={atStart}
-          aria-label="Semana anterior"
+          aria-label={t("week.previous")}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground transition-[opacity,transform] active:scale-95 disabled:opacity-30"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -215,7 +216,7 @@ export function WeekPager({
               onClick={() => goTo(weekIndexOf(today, bounds))}
               className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-num text-[9.5px] font-medium uppercase tracking-wide text-primary-ink transition-opacity active:opacity-70"
             >
-              Volver a hoy
+              {t("week.backToToday")}
             </button>
           ) : null}
         </div>
@@ -223,7 +224,7 @@ export function WeekPager({
           type="button"
           onClick={() => goTo(visibleIndex + 1)}
           disabled={atEnd}
-          aria-label="Semana siguiente"
+          aria-label={t("week.following")}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground transition-[opacity,transform] active:scale-95 disabled:opacity-30"
         >
           <ChevronRight className="h-4 w-4" />
@@ -284,6 +285,7 @@ function WeekPage({
   renderBadge?: (date: string) => ReactNode;
   reducedMotion: boolean;
 }) {
+  const { t } = useTranslation();
   const dates = useMemo(() => weekDates(monday), [monday]);
 
   return (
@@ -295,7 +297,8 @@ function WeekPage({
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         const signal: DaySignal = kind === "past" ? habitSignal(logsFor(date)) : "none";
         // El color en palabras, para quien no lo ve (A11Y-06); igual que el calendario del mes.
-        const signalLabel = kind === "past" ? daySignalLabelOf(logsFor(date)) : null;
+        const signalKey = kind === "past" ? daySignalKeyOf(logsFor(date)) : null;
+        const weekday = t(`weekdaysShort.${weekdayIndex(date)}`);
         const isOpen = selected === date;
 
         return (
@@ -306,7 +309,13 @@ function WeekPage({
             disabled={isBeforeStart}
             aria-expanded={isOpen}
             aria-label={
-              signalLabel ? `${d.getDate()} ${DAYS[weekdayIndex(date)]}: ${signalLabel}` : undefined
+              signalKey
+                ? t("week.dayWithSignal", {
+                    day: d.getDate(),
+                    weekday,
+                    signal: t(`daySignal.${signalKey}`),
+                  })
+                : undefined
             }
             style={isBeforeStart ? { opacity: 0.35 } : undefined}
             className={`relative rounded-[14px] px-1 pb-2 pt-2.5 text-center transition-transform active:scale-95 ${dayClasses(kind, isWeekend, signal)}`}
@@ -315,7 +324,7 @@ function WeekPage({
               {d.getDate()}
             </span>
             <span className="mt-1 block font-num text-[9.5px] font-medium uppercase tracking-[0.06em] opacity-80">
-              {DAYS[weekdayIndex(date)]}
+              {weekday}
             </span>
             {renderBadge?.(date)}
             {isOpen ? (

@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   FlatList,
   Pressable,
@@ -20,7 +21,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import type { DailyLog } from "../lib/daily";
-import { daySignalLabelOf, daySignalOf, type DaySignal } from "../lib/macros";
+import { daySignalKeyOf, daySignalOf, type DaySignal } from "../lib/macros";
 import {
   dayKind,
   mondayAt,
@@ -34,7 +35,6 @@ import {
   type WeekBounds,
 } from "../lib/week-nav";
 
-const DAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 // Misma curva que el resto de la app (docs/design-guidelines.md §7).
 const EASING = Easing.bezier(0.22, 1, 0.36, 1);
 const RING_MS = 350;
@@ -120,6 +120,7 @@ export function WeekPager({
   logsFor,
   renderBadge,
 }: WeekPagerProps) {
+  const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const bounds = useMemo<WeekBounds>(
     () => weekStripBounds(today, appStartedOn),
@@ -198,7 +199,7 @@ export function WeekPager({
   const atStart = visibleIndex <= 0;
   const atEnd = visibleIndex >= total - 1;
 
-  const label = weekLabel(visibleWeek, today);
+  const label = weekLabel(visibleWeek, today, t);
 
   const cellWidth = width > 0 ? (width - GAP * 6) / 7 : 0;
 
@@ -232,7 +233,7 @@ export function WeekPager({
               className="rounded-full bg-primary/10 px-2 py-0.5 active:opacity-70"
             >
               <Text className="font-mono-medium text-[9.5px] uppercase tracking-wide text-primary-ink">
-                Volver a hoy
+                {t("week.backToToday")}
               </Text>
             </Pressable>
           ) : null}
@@ -312,6 +313,7 @@ function WeekPage({
   renderBadge?: (date: string) => ReactNode;
   reducedMotion: boolean;
 }) {
+  const { t } = useTranslation();
   const dates = useMemo(() => weekDates(monday), [monday]);
   const selectedIndex = selected ? dates.indexOf(selected) : -1;
 
@@ -344,7 +346,8 @@ function WeekPage({
           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
           const signal: DaySignal = isPast ? habitSignal(logsFor(date)) : "none";
           // El color en palabras, para VoiceOver (A11Y-06); igual que el calendario del mes.
-          const signalLabel = isPast ? daySignalLabelOf(logsFor(date)) : null;
+          const signalKey = isPast ? daySignalKeyOf(logsFor(date)) : null;
+          const weekday = t(`weekdaysShort.${weekdayIndex(date)}`);
           const isFutureWeekend = !isToday && !isPast && !isBeforeStart && isWeekend;
 
           const containerBase = isBeforeStart
@@ -373,8 +376,12 @@ function WeekPage({
               disabled={isBeforeStart}
               accessibilityRole="button"
               accessibilityLabel={
-                signalLabel
-                  ? `${d.getDate()} ${DAYS[weekdayIndex(date)]}: ${signalLabel}`
+                signalKey
+                  ? t("week.dayWithSignal", {
+                      day: d.getDate(),
+                      weekday,
+                      signal: t(`daySignal.${signalKey}`),
+                    })
                   : undefined
               }
               style={[
@@ -393,7 +400,7 @@ function WeekPage({
                 style={isFutureWeekend ? { color: WEEKEND_TEXT } : undefined}
                 className={`text-[9.5px] font-mono-medium uppercase tracking-[0.06em] ${textBase}`}
               >
-                {DAYS[weekdayIndex(date)]}
+                {weekday}
               </Text>
               {renderBadge?.(date)}
             </Pressable>

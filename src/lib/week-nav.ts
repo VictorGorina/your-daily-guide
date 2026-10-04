@@ -60,40 +60,35 @@ export const weekIndexOf = (date: string, bounds: WeekBounds): number => {
 export const mondayAt = (index: number, bounds: WeekBounds): string =>
   addDaysISO(bounds.first, index * 7);
 
-// Abreviaturas fijas: `toLocaleDateString` con `month: "short"` da "sep", "sept"
-// o "sept." según la versión de ICU del motor, y la etiqueta tiene que ser la
-// misma en la web y en el móvil.
-const MONTH_SHORT = [
-  "ene",
-  "feb",
-  "mar",
-  "abr",
-  "may",
-  "jun",
-  "jul",
-  "ago",
-  "sep",
-  "oct",
-  "nov",
-  "dic",
-];
+/** Traductor mínimo (el `t` de i18next cabe aquí): este módulo no importa el catálogo. */
+export type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
-const shortDate = (date: string) =>
-  `${Number(date.slice(8, 10))} ${MONTH_SHORT[Number(date.slice(5, 7)) - 1]}`;
+// Los meses salen del catálogo (`monthsShort`), no de `toLocaleDateString`: con
+// `month: "short"` el motor da "sep", "sept" o "sept." según su versión de ICU,
+// y la etiqueta tiene que ser la misma en la web y en el móvil.
+const monthShort = (date: string, t: Translate) => t(`monthsShort.${Number(date.slice(5, 7)) - 1}`);
 
 /**
  * Etiqueta de la cabecera de la tira: "Esta semana", "Semana pasada",
  * "Próxima semana" o el rango ("21–27 sep"; "29 sep – 5 oct" si cruza de mes).
+ * El texto vive en el catálogo (`week.*`), en el idioma de `t`.
  */
-export function weekLabel(monday: string, today: string): string {
+export function weekLabel(monday: string, today: string, t: Translate): string {
   const offset = daysBetween(weekStartOf(today), monday) / 7;
-  if (offset === 0) return "Esta semana";
-  if (offset === -1) return "Semana pasada";
-  if (offset === 1) return "Próxima semana";
+  if (offset === 0) return t("week.this");
+  if (offset === -1) return t("week.last");
+  if (offset === 1) return t("week.next");
   const sunday = addDaysISO(monday, 6);
+  const from = Number(monday.slice(8, 10));
+  const to = Number(sunday.slice(8, 10));
   return monday.slice(0, 7) === sunday.slice(0, 7)
-    ? `${Number(monday.slice(8, 10))}–${shortDate(sunday)}`
-    : `${shortDate(monday)} – ${shortDate(sunday)}`;
+    ? t("week.rangeSameMonth", { from, to, month: monthShort(sunday, t) })
+    : t("week.rangeAcrossMonths", {
+        from,
+        fromMonth: monthShort(monday, t),
+        to,
+        toMonth: monthShort(sunday, t),
+      });
 }
 
 export type DayKind = "before-start" | "past" | "today" | "future";

@@ -261,32 +261,31 @@ function dayTargetKcal(log: DailyLog | null | undefined): number | undefined {
  * El semáforo en palabras, para quien no ve el color (lector de pantalla).
  * `warning` junta dos casos que el color no separa —quedarse corto y pasarse
  * un poco—, así que el texto dice cuál: «cerca del objetivo» para un día al
- * 40 % sería falso. Sin registro (`none`) no hay nada que decir.
+ * 40 % sería falso. Sin registro (`none`) no hay nada que decir. Devuelve la
+ * clave; el texto está en el catálogo (`daySignal.<clave>`).
  */
-export function daySignalLabel(
+export type DaySignalKey = "success" | "over" | "muted" | "above" | "below";
+
+export function daySignalKey(
   signal: DaySignal,
   consumedKcal: number,
   targetKcal: number | null | undefined,
-): string | null {
+): DaySignalKey | null {
   switch (signal) {
     case "success":
-      return "dentro del objetivo";
     case "over":
-      return "muy por encima del objetivo";
     case "muted":
-      return "sin cifras todavía";
+      return signal;
     case "warning":
-      return targetKcal && consumedKcal > targetKcal
-        ? "algo por encima del objetivo"
-        : "por debajo del objetivo";
+      return targetKcal && consumedKcal > targetKcal ? "above" : "below";
     default:
       return null;
   }
 }
 
-/** `daySignalLabel` a partir del registro del día, con las mismas cifras que el color. */
-export function daySignalLabelOf(log: DailyLog | null | undefined): string | null {
-  return daySignalLabel(daySignalOf(log), consumedMacrosOf(log).kcal, dayTargetKcal(log));
+/** `daySignalKey` a partir del registro del día, con las mismas cifras que el color. */
+export function daySignalKeyOf(log: DailyLog | null | undefined): DaySignalKey | null {
+  return daySignalKey(daySignalOf(log), consumedMacrosOf(log).kcal, dayTargetKcal(log));
 }
 
 /** Lo único que a esta capa le importa de una guía: sus cifras. */

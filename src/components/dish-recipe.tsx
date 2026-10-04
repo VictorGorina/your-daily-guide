@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, CookingPot } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { dishRecipe } from "@/lib/plan.functions";
 
@@ -11,6 +12,7 @@ import { dishRecipe } from "@/lib/plan.functions";
  * que expandir el mismo plato en otra pantalla no vuelve a llamar a la IA.
  */
 export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const fetchRecipe = useServerFn(dishRecipe);
   const q = useQuery({
@@ -32,7 +34,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
         className="flex items-center gap-1.5 text-[11px] font-semibold text-primary-ink"
       >
         <CookingPot className="h-3.5 w-3.5 shrink-0" />
-        {open ? "Ocultar receta" : "Ver receta"}
+        {open ? t("recipe.hide") : t("recipe.show")}
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
         />
@@ -41,13 +43,13 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
       {open ? (
         <div className="animate-sheet-up mt-2 rounded-xl bg-secondary/50 p-3 text-left">
           {q.isLoading ? (
-            <p className="animate-pulse text-xs text-muted-foreground">Preparando la receta…</p>
+            <p className="animate-pulse text-xs text-muted-foreground">{t("recipe.loading")}</p>
           ) : q.data ? (
             <div className="space-y-2.5">
               {q.data.ingredients.length ? (
                 <div>
                   <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Ingredientes
+                    {t("recipe.ingredients")}
                   </span>
                   <ul className="mt-1 flex flex-wrap gap-1.5">
                     {q.data.ingredients.map((ing) => (
@@ -63,7 +65,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
               ) : null}
               <div>
                 <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Pasos
+                  {t("recipe.steps")}
                 </span>
                 <ol className="mt-1 space-y-1">
                   {q.data.steps.map((step, i) => (
@@ -81,7 +83,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
               onClick={() => q.refetch()}
               className="text-xs font-medium text-primary-ink"
             >
-              No hemos podido cargar la receta. Reintentar
+              {t("recipe.failed")}
             </button>
           )}
         </div>

@@ -1,11 +1,13 @@
+import { useTranslation } from "react-i18next";
+
 import type { MacroEstimate } from "@/lib/guide.functions";
 import { macroTargets } from "@/lib/macros";
 
 const MACRO_BAR_ITEMS = [
-  { key: "protein_g", label: "prot", color: "var(--color-chart-1)" },
-  { key: "carbs_g", label: "carb", color: "var(--color-chart-2)" },
-  { key: "fat_g", label: "gras", color: "var(--color-chart-3)" },
-  { key: "fiber_g", label: "fibra", color: "var(--color-chart-4)" },
+  { key: "protein_g", label: "protein", color: "var(--color-chart-1)" },
+  { key: "carbs_g", label: "carbs", color: "var(--color-chart-2)" },
+  { key: "fat_g", label: "fat", color: "var(--color-chart-3)" },
+  { key: "fiber_g", label: "fiber", color: "var(--color-chart-4)" },
 ] as const;
 
 /**
@@ -38,6 +40,7 @@ export function MacroBars({
    */
   pending?: number;
 }) {
+  const { t } = useTranslation();
   const fallbackTargets = macroTargets(weightKg);
   return (
     <section className="animate-rise mt-[22px]">
@@ -56,7 +59,7 @@ export function MacroBars({
                 />
               </div>
               <p className="mt-[7px] truncate font-num text-[9.5px] font-medium uppercase leading-none tracking-[0.06em] text-muted-foreground">
-                {it.label}
+                {t(`macros.${it.label}`)}
               </p>
               <p className="mt-[3px] font-num text-[11px] font-medium leading-none tabular-nums text-foreground">
                 {value} g{target ? ` · ${pct}%` : ""}
@@ -66,9 +69,9 @@ export function MacroBars({
         })}
       </div>
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
-        {note ?? `~${estimate.kcal} kcal de lo que llevas comido hoy`}
-        {pending > 0 ? ` (${pending === 1 ? "1 comida" : `${pending} comidas`} por calcular)` : ""}:
-        estimación orientativa, no un conteo nutricional exacto.
+        {note ?? t("macros.eatenToday", { kcal: estimate.kcal })}
+        {pending > 0 ? t("macros.pending", { count: pending }) : ""}
+        {t("macros.disclaimer")}
       </p>
     </section>
   );

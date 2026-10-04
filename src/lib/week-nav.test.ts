@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import i18n from "./i18n";
 import {
   addDaysISO,
   BACKFILL_WINDOW_DAYS,
@@ -114,17 +115,25 @@ describe("weekCount / weekIndexOf / mondayAt", () => {
 
 describe("weekLabel", () => {
   const today = "2026-09-15";
+  const es = i18n.getFixedT("es");
+  const en = i18n.getFixedT("en");
 
   it("nombra la semana actual y sus vecinas", () => {
-    expect(weekLabel("2026-09-14", today)).toBe("Esta semana");
-    expect(weekLabel("2026-09-07", today)).toBe("Semana pasada");
-    expect(weekLabel("2026-09-21", today)).toBe("Próxima semana");
+    expect(weekLabel("2026-09-14", today, es)).toBe("Esta semana");
+    expect(weekLabel("2026-09-07", today, es)).toBe("Semana pasada");
+    expect(weekLabel("2026-09-21", today, es)).toBe("Próxima semana");
   });
 
   it("el resto va como rango, con el mes solo al final si no cruza", () => {
-    expect(weekLabel("2026-08-31", today)).toBe("31 ago – 6 sep");
-    expect(weekLabel("2026-08-24", today)).toBe("24–30 ago");
-    expect(weekLabel("2026-09-28", today)).toBe("28 sep – 4 oct");
+    expect(weekLabel("2026-08-31", today, es)).toBe("31 ago – 6 sep");
+    expect(weekLabel("2026-08-24", today, es)).toBe("24–30 ago");
+    expect(weekLabel("2026-09-28", today, es)).toBe("28 sep – 4 oct");
+  });
+
+  it("en inglés, con sus propios meses", () => {
+    expect(weekLabel("2026-09-14", today, en)).toBe("This week");
+    expect(weekLabel("2026-08-24", today, en)).toBe("24–30 Aug");
+    expect(weekLabel("2026-08-31", today, en)).toBe("31 Aug – 6 Sep");
   });
 });
 

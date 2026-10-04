@@ -1,13 +1,14 @@
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 
 import type { MacroEstimate } from "../lib/daily";
 import { macroTargets } from "../lib/macros";
 
 const MACRO_BAR_ITEMS = [
-  { key: "protein_g", label: "prot", color: "#6DBE7B" },
-  { key: "carbs_g", label: "carb", color: "#FF8A3D" },
-  { key: "fat_g", label: "gras", color: "#F2C14E" },
-  { key: "fiber_g", label: "fibra", color: "#4C9BD6" },
+  { key: "protein_g", label: "protein", color: "#6DBE7B" },
+  { key: "carbs_g", label: "carbs", color: "#FF8A3D" },
+  { key: "fat_g", label: "fat", color: "#F2C14E" },
+  { key: "fiber_g", label: "fiber", color: "#4C9BD6" },
 ] as const;
 
 /**
@@ -34,6 +35,7 @@ export function MacroBars({
   /** Comidas marcadas cuya cifra aún se está calculando (D13): no suman, y se dice. */
   pending?: number;
 }) {
+  const { t } = useTranslation();
   const fallbackTargets = macroTargets(weightKg);
 
   return (
@@ -53,7 +55,7 @@ export function MacroBars({
                 />
               </View>
               <Text className="font-mono-medium mt-1.5 text-[9.5px] uppercase tracking-wider text-muted-foreground">
-                {it.label}
+                {t(`macros.${it.label}`)}
               </Text>
               <Text className="font-mono-medium mt-0.5 text-[11px] text-foreground">
                 {value} g{target ? ` · ${pct}%` : ""}
@@ -63,9 +65,9 @@ export function MacroBars({
         })}
       </View>
       <Text className="font-body mt-2.5 text-[10.5px] text-muted-foreground">
-        {note ?? `~${estimate.kcal} kcal de lo que llevas comido hoy`}
-        {pending > 0 ? ` (${pending === 1 ? "1 comida" : `${pending} comidas`} por calcular)` : ""}:
-        estimación orientativa, no un conteo nutricional exacto.
+        {note ?? t("macros.eatenToday", { kcal: estimate.kcal })}
+        {pending > 0 ? t("macros.pending", { count: pending }) : ""}
+        {t("macros.disclaimer")}
       </Text>
     </View>
   );

@@ -529,5 +529,63 @@
     "Merienda": "Merienda",
     "Snack": "Snack",
     "Cena": "Cena"
+  },
+  "nav": {
+    "hoy": "Hoy",
+    "plan": "Plan",
+    "ajustes": "Ajustes",
+    "familia": "Familia",
+    "planDue": "Toca preparar tu plan"
+  },
+  "week": {
+    "this": "Esta semana",
+    "last": "Semana pasada",
+    "next": "Próxima semana",
+    "backToToday": "Volver a hoy",
+    "previous": "Semana anterior",
+    "following": "Semana siguiente",
+    "rangeSameMonth": "{{from}}–{{to}} {{month}}",
+    "rangeAcrossMonths": "{{from}} {{fromMonth}} – {{to}} {{toMonth}}",
+    "dayWithSignal": "{{day}} {{weekday}}: {{signal}}"
+  },
+  "weekdaysShort": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
+  "monthsShort": [
+    "ene",
+    "feb",
+    "mar",
+    "abr",
+    "may",
+    "jun",
+    "jul",
+    "ago",
+    "sep",
+    "oct",
+    "nov",
+    "dic"
+  ],
+  "daySignal": {
+    "success": "dentro del objetivo",
+    "over": "muy por encima del objetivo",
+    "muted": "sin cifras todavía",
+    "above": "algo por encima del objetivo",
+    "below": "por debajo del objetivo"
+  },
+  "macros": {
+    "protein": "prot",
+    "carbs": "carb",
+    "fat": "gras",
+    "fiber": "fibra",
+    "eatenToday": "~{{kcal}} kcal de lo que llevas comido hoy",
+    "pending_one": " ({{count}} comida por calcular)",
+    "pending_other": " ({{count}} comidas por calcular)",
+    "disclaimer": ": estimación orientativa, no un conteo nutricional exacto."
+  },
+  "recipe": {
+    "show": "Ver receta",
+    "hide": "Ocultar receta",
+    "loading": "Preparando la receta…",
+    "ingredients": "Ingredientes",
+    "steps": "Pasos",
+    "failed": "No hemos podido cargar la receta. Reintentar"
   }
 }
