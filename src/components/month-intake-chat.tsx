@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { DictateButton } from "@/components/dictate-button";
+import { DictationField, DictationWave } from "@/components/dictation-field";
 import {
   AWAY_QUESTION,
   INTAKE_TEXT_QUESTIONS,
@@ -154,26 +155,31 @@ export function MonthIntakeChat({
                   disabled={busy}
                   onPick={(chip) => setAnswer(q.key, { chip: answer?.chip === chip ? null : chip })}
                 />
-                <div className="rounded-3xl bg-muted p-2 focus-within:ring-2 focus-within:ring-ring/40">
-                  <textarea
-                    rows={2}
-                    maxLength={200}
-                    value={answer?.text ?? ""}
-                    onChange={(e) => setAnswer(q.key, { text: e.target.value })}
-                    placeholder={q.placeholder}
-                    aria-label={q.ask(monthName)}
-                    className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
-                  />
-                  <div className="flex items-center px-1">
-                    <DictateButton
-                      onText={(t) =>
-                        setAnswer(q.key, {
-                          text: answer?.text ? `${answer.text.trim()} ${t}` : t,
-                        })
-                      }
-                    />
+                <DictationField>
+                  <div className="rounded-3xl bg-muted p-2 focus-within:ring-2 focus-within:ring-ring/40">
+                    <div className="relative rounded-2xl">
+                      <textarea
+                        rows={2}
+                        maxLength={200}
+                        value={answer?.text ?? ""}
+                        onChange={(e) => setAnswer(q.key, { text: e.target.value })}
+                        placeholder={q.placeholder}
+                        aria-label={q.ask(monthName)}
+                        className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
+                      />
+                      <DictationWave />
+                    </div>
+                    <div className="flex items-center px-1">
+                      <DictateButton
+                        onText={(t) =>
+                          setAnswer(q.key, {
+                            text: answer?.text ? `${answer.text.trim()} ${t}` : t,
+                          })
+                        }
+                      />
+                    </div>
                   </div>
-                </div>
+                </DictationField>
                 <StepButtons onBack={() => setStep(qStep - 1)} onNext={() => setStep(qStep + 1)} />
               </>
             ) : (

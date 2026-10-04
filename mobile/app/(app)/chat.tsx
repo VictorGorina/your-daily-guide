@@ -22,6 +22,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DictateButton } from "../../components/dictate-button";
+import { DictationField, DictationWave } from "../../components/dictation-field";
 import { GuidedLogSheet } from "../../components/guided-log-sheet";
 import { API_BASE_URL, CLIENT_VERSION_HEADERS, getAccessToken } from "../../lib/api";
 import {
@@ -356,33 +357,38 @@ export default function Chat() {
           </ScrollView>
 
           {/* Entrada */}
-          <View className="mb-2 mt-2 flex-row items-end gap-2">
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              placeholder="Escribe a tu coach..."
-              placeholderTextColor="#a69d8f"
-              multiline
-              editable={!busy}
-              onSubmitEditing={handleSubmit}
-              className="max-h-32 flex-1 rounded-3xl bg-surface px-4 py-3 text-[15px] text-foreground"
-            />
-            <DictateButton
-              onText={(t) => setInput((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))}
-            />
-            <Pressable
-              onPress={handleSubmit}
-              disabled={busy || !input.trim()}
-              className="h-12 w-12 items-center justify-center rounded-full bg-primary active:opacity-80"
-              style={busy || !input.trim() ? { opacity: 0.4 } : undefined}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color="#3e3d39" />
-              ) : (
-                <ArrowUp size={22} color="#3e3d39" />
-              )}
-            </Pressable>
-          </View>
+          <DictationField>
+            <View className="mb-2 mt-2 flex-row items-end gap-2">
+              <View className="relative flex-1">
+                <TextInput
+                  value={input}
+                  onChangeText={setInput}
+                  placeholder="Escribe a tu coach..."
+                  placeholderTextColor="#a69d8f"
+                  multiline
+                  editable={!busy}
+                  onSubmitEditing={handleSubmit}
+                  className="max-h-32 rounded-3xl bg-surface px-4 py-3 text-[15px] text-foreground"
+                />
+                <DictationWave />
+              </View>
+              <DictateButton
+                onText={(t) => setInput((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))}
+              />
+              <Pressable
+                onPress={handleSubmit}
+                disabled={busy || !input.trim()}
+                className="h-12 w-12 items-center justify-center rounded-full bg-primary active:opacity-80"
+                style={busy || !input.trim() ? { opacity: 0.4 } : undefined}
+              >
+                {busy ? (
+                  <ActivityIndicator size="small" color="#3e3d39" />
+                ) : (
+                  <ArrowUp size={22} color="#3e3d39" />
+                )}
+              </Pressable>
+            </View>
+          </DictationField>
         </View>
       </KeyboardAvoidingView>
 

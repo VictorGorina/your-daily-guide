@@ -1,6 +1,8 @@
 import { Mic } from "lucide-react-native";
+import { useEffect } from "react";
 import { Pressable } from "react-native";
 
+import { useDictationField } from "../lib/dictation-context";
 import { useDictation } from "../lib/use-dictation";
 
 /**
@@ -14,8 +16,14 @@ export function DictateButton({
   onText: (text: string) => void;
   className?: string;
 }) {
-  const { state, start, stop } = useDictation(onText);
+  const { state, start, stop, level } = useDictation(onText);
   const listening = state === "listening";
+
+  // Va siempre dentro de un `DictationField`: la onda del campo sale de aquí.
+  const report = useDictationField()?.report;
+  useEffect(() => {
+    report?.(listening, level);
+  }, [report, listening, level]);
 
   return (
     <Pressable

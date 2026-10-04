@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { DictateButton } from "@/components/dictate-button";
+import { DictationField, DictationWave } from "@/components/dictation-field";
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import {
   PORTION_SIZE_LABEL,
@@ -158,26 +159,29 @@ export function MealSwapSheet({
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-8">
-          <div className="relative">
-            <Textarea
-              placeholder="Ej: Una pizza margarita con ensalada"
-              aria-label={`Qué has comido en ${mealLabel.toLowerCase()}`}
-              value={what}
-              onChange={(e) => {
-                setWhat(e.target.value);
-                if (error) setError(null);
-                if (vague) setVague(false);
-              }}
-              rows={2}
-              className="pr-10 text-sm"
-              disabled={locked}
-              autoFocus
-            />
-            <DictateButton
-              onText={(t) => setWhat((prev) => (prev ? `${prev} ${t}` : t))}
-              className="absolute right-2 top-2"
-            />
-          </div>
+          <DictationField>
+            <div className="relative rounded-2xl">
+              <Textarea
+                placeholder="Ej: Una pizza margarita con ensalada"
+                aria-label={`Qué has comido en ${mealLabel.toLowerCase()}`}
+                value={what}
+                onChange={(e) => {
+                  setWhat(e.target.value);
+                  if (error) setError(null);
+                  if (vague) setVague(false);
+                }}
+                rows={2}
+                className="pr-10 text-sm"
+                disabled={locked}
+                autoFocus
+              />
+              <DictateButton
+                onText={(t) => setWhat((prev) => (prev ? `${prev} ${t}` : t))}
+                className="absolute right-2 top-2"
+              />
+              <DictationWave />
+            </div>
+          </DictationField>
 
           {!textMentionsQuantity(what) ? (
             <div className="space-y-1.5">

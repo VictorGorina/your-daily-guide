@@ -3,6 +3,7 @@ import { Loader2, X } from "lucide-react";
 import { useState } from "react";
 
 import { DictateButton } from "@/components/dictate-button";
+import { DictationField, DictationWave } from "@/components/dictation-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -234,29 +235,34 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
         })}
       </div>
 
-      <div className="space-y-2">
-        <Textarea
-          placeholder="Ej: un puñado de almendras"
-          aria-label="Qué has picoteado"
-          value={text}
-          onChange={(e) => changeText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !estimate) {
-              e.preventDefault();
-              void calculate();
-            }
-          }}
-          rows={2}
-          className="text-sm"
-          disabled={busy != null}
-        />
-        {/* Debajo y no encima del campo: en web el botón lleva texto
+      <DictationField>
+        <div className="space-y-2">
+          <div className="relative rounded-2xl">
+            <Textarea
+              placeholder="Ej: un puñado de almendras"
+              aria-label="Qué has picoteado"
+              value={text}
+              onChange={(e) => changeText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !estimate) {
+                  e.preventDefault();
+                  void calculate();
+                }
+              }}
+              rows={2}
+              className="text-sm"
+              disabled={busy != null}
+            />
+            <DictationWave />
+          </div>
+          {/* Debajo y no encima del campo: en web el botón lleva texto
           ("Dictar") y tapaba lo escrito. */}
-        <DictateButton
-          onText={(t) => changeText(text ? `${text.trim()} ${t}` : t)}
-          label="Dictar"
-        />
-      </div>
+          <DictateButton
+            onText={(t) => changeText(text ? `${text.trim()} ${t}` : t)}
+            label="Dictar"
+          />
+        </div>
+      </DictationField>
 
       {!estimate ? (
         <Button

@@ -15,6 +15,7 @@ import { BottomNav } from "@/components/bottom-nav";
 import { ChatHistorySheet } from "@/components/chat-history-sheet";
 import { CoachThinking } from "@/components/coach-thinking";
 import { DictateButton } from "@/components/dictate-button";
+import { DictationField, DictationWave } from "@/components/dictation-field";
 import { GuidedLogSheet } from "@/components/guided-log-sheet";
 
 import {
@@ -320,17 +321,21 @@ function ChatPage() {
         ))}
       </div>
 
-      <PromptInput onSubmit={handleSubmit} className="mt-2">
-        <PromptInputTextarea
-          ref={textareaRef}
-          placeholder="Escribe a tu coach..."
-          aria-label="Mensaje para tu coach"
-        />
-        <PromptInputFooter className="justify-between">
-          <DictateButton onText={appendDictation} label="Dictar" />
-          <PromptInputSubmit status={status} disabled={busy} />
-        </PromptInputFooter>
-      </PromptInput>
+      <DictationField>
+        <PromptInput onSubmit={handleSubmit} className="mt-2">
+          <PromptInputTextarea
+            ref={textareaRef}
+            placeholder="Escribe a tu coach..."
+            aria-label="Mensaje para tu coach"
+          />
+          {/* Solo sobre el texto: los botones de debajo siguen a la vista. */}
+          <DictationWave className="bottom-12 rounded-none" />
+          <PromptInputFooter className="justify-between">
+            <DictateButton onText={appendDictation} label="Dictar" />
+            <PromptInputSubmit status={status} disabled={busy} />
+          </PromptInputFooter>
+        </PromptInput>
+      </DictationField>
 
       <BottomNav />
     </main>

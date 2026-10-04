@@ -39,6 +39,7 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { FAB_CLASS } from "@/components/coach-fab";
 import { DictateButton } from "@/components/dictate-button";
+import { DictationField, DictationWave } from "@/components/dictation-field";
 import {
   addMessage,
   ensureTodayLog,
@@ -385,17 +386,21 @@ export default function CoachPanel({
               <ConversationScrollButton />
             </Conversation>
 
-            <PromptInput onSubmit={handleSubmit} className="mt-3">
-              <PromptInputTextarea
-                ref={textareaRef}
-                placeholder="Habla con tu coach..."
-                aria-label="Mensaje para tu coach"
-              />
-              <PromptInputFooter className="justify-between">
-                <DictateButton onText={appendDictation} label="Dictar" />
-                <PromptInputSubmit status={status} disabled={busy} />
-              </PromptInputFooter>
-            </PromptInput>
+            <DictationField>
+              <PromptInput onSubmit={handleSubmit} className="mt-3">
+                <PromptInputTextarea
+                  ref={textareaRef}
+                  placeholder="Habla con tu coach..."
+                  aria-label="Mensaje para tu coach"
+                />
+                {/* Solo sobre el texto: los botones de debajo siguen a la vista. */}
+                <DictationWave className="bottom-12 rounded-none" />
+                <PromptInputFooter className="justify-between">
+                  <DictateButton onText={appendDictation} label="Dictar" />
+                  <PromptInputSubmit status={status} disabled={busy} />
+                </PromptInputFooter>
+              </PromptInput>
+            </DictationField>
           </div>
         </div>
       ) : null}

@@ -1,6 +1,8 @@
 import { Mic } from "lucide-react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
+import { useDictationField } from "@/lib/dictation-context";
 import { useDictation } from "@/lib/use-dictation";
 import { cn } from "@/lib/utils";
 
@@ -13,8 +15,14 @@ export function DictateButton({
   className?: string;
   label?: string;
 }) {
-  const { state, supported, start, stop } = useDictation(onText);
+  const { state, supported, start, stop, level } = useDictation(onText);
   const listening = state === "listening";
+
+  // Va siempre dentro de un `DictationField`: la onda del campo sale de aquí.
+  const report = useDictationField()?.report;
+  useEffect(() => {
+    report?.(listening, level);
+  }, [report, listening, level]);
 
   if (!supported) {
     return (
@@ -47,7 +55,7 @@ export function DictateButton({
       aria-pressed={listening}
       aria-label={`Mantén pulsado para ${label.toLowerCase()}`}
       className={cn(
-        "inline-flex touch-none items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors select-none",
+        "z-10 inline-flex touch-none items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors select-none",
         listening ? "bg-foreground text-background" : "bg-secondary text-muted-foreground",
         className,
       )}

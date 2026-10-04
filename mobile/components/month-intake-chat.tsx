@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { DictateButton } from "./dictate-button";
+import { DictationField, DictationWave } from "./dictation-field";
 import { apiPost } from "../lib/api";
 import {
   AWAY_QUESTION,
@@ -178,27 +179,32 @@ export function MonthIntakeChat({
                   disabled={busy}
                   onPick={(chip) => setAnswer(q.key, { chip: answer?.chip === chip ? null : chip })}
                 />
-                <View className="rounded-3xl bg-muted p-2">
-                  <TextInput
-                    value={answer?.text ?? ""}
-                    onChangeText={(text) => setAnswer(q.key, { text })}
-                    multiline
-                    maxLength={200}
-                    placeholder={q.placeholder}
-                    placeholderTextColor="#6b6256"
-                    className="min-h-[44px] px-2 py-2 text-sm text-foreground"
-                    textAlignVertical="top"
-                  />
-                  <View className="flex-row items-center px-1">
-                    <DictateButton
-                      onText={(t) =>
-                        setAnswer(q.key, {
-                          text: answer?.text?.trim() ? `${answer.text.trim()} ${t}` : t,
-                        })
-                      }
-                    />
+                <DictationField>
+                  <View className="rounded-3xl bg-muted p-2">
+                    <View className="relative">
+                      <TextInput
+                        value={answer?.text ?? ""}
+                        onChangeText={(text) => setAnswer(q.key, { text })}
+                        multiline
+                        maxLength={200}
+                        placeholder={q.placeholder}
+                        placeholderTextColor="#6b6256"
+                        className="min-h-[44px] px-2 py-2 text-sm text-foreground"
+                        textAlignVertical="top"
+                      />
+                      <DictationWave className="bg-muted" />
+                    </View>
+                    <View className="flex-row items-center px-1">
+                      <DictateButton
+                        onText={(t) =>
+                          setAnswer(q.key, {
+                            text: answer?.text?.trim() ? `${answer.text.trim()} ${t}` : t,
+                          })
+                        }
+                      />
+                    </View>
                   </View>
-                </View>
+                </DictationField>
                 <StepButtons onBack={() => setStep(qStep - 1)} onNext={() => setStep(qStep + 1)} />
               </>
             ) : (

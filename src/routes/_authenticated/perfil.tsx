@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { DictateButton } from "@/components/dictate-button";
+import { DictationField, DictationWave } from "@/components/dictation-field";
 import { ageFromDOB } from "@/lib/age";
 import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
 import { showsNutritionNumbers } from "@/lib/macros";
@@ -196,19 +197,22 @@ function Perfil() {
                             ))}
                           </div>
                         ) : field.kind === "long" ? (
-                          <>
-                            <textarea
-                              autoFocus
-                              rows={3}
-                              value={draft}
-                              onChange={(e) => setDraft(e.target.value)}
-                              className="mt-2 w-full rounded-2xl bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
-                            />
+                          <DictationField>
+                            <div className="relative mt-2 rounded-2xl">
+                              <textarea
+                                autoFocus
+                                rows={3}
+                                value={draft}
+                                onChange={(e) => setDraft(e.target.value)}
+                                className="block w-full rounded-2xl bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
+                              />
+                              <DictationWave />
+                            </div>
                             <DictateButton
                               className="mt-2"
                               onText={(t) => setDraft((d) => (d ? `${d} ${t}` : t))}
                             />
-                          </>
+                          </DictationField>
                         ) : (
                           <input
                             autoFocus
