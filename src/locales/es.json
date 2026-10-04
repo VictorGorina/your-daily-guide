@@ -501,7 +501,6 @@
       "undoLabel": "{{meal}}: deshacer",
       "sharedBase": "Base común · \"Comí otra cosa\" si tu ración cambia",
       "atHome": "Comes en casa",
-      "aloneToday": "Comes solo hoy",
       "away": "Fuera de casa",
       "forChild": "Para {{name}}:"
     },

@@ -1166,7 +1166,7 @@ function Hoy() {
                           </>
                         ) : comp.meHome ? (
                           <span className="text-[11px] text-muted-foreground">
-                            {t("hoy.meals.aloneToday")}
+                            {t("hoy.meals.atHome")}
                           </span>
                         ) : (
                           <span className="text-[11px] text-muted-foreground">

@@ -501,7 +501,6 @@
       "undoLabel": "{{meal}}: undo",
       "sharedBase": "Shared base · \"I ate something else\" if your portion changes",
       "atHome": "You eat at home",
-      "aloneToday": "You're eating alone today",
       "away": "Away from home",
       "forChild": "For {{name}}:"
     },
