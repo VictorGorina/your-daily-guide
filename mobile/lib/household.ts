@@ -201,7 +201,7 @@ export async function createHousehold(name: string): Promise<string> {
       name: name.trim() || "Mi casa",
       invite_code: randomCode(),
       created_by: userId,
-    } as never)
+    })
     .select("id")
     .single();
   if (error) throw error;
@@ -222,7 +222,7 @@ export async function createHousehold(name: string): Promise<string> {
     role: "adulto",
     display_name: displayName,
     is_planner: true,
-  } as never);
+  });
   if (memberError) throw memberError;
   return householdId;
 }
@@ -268,7 +268,7 @@ export async function addAdultSlot(
     display_name: slot.display_name.trim() || "Miembro",
     uses_app: slot.uses_app,
     portion: slot.portion ?? 1,
-  } as never);
+  });
   if (error) throw error;
 }
 
@@ -278,10 +278,7 @@ export async function updateMember(
   patch: Partial<Pick<HouseholdMember, "display_name" | "uses_app" | "portion">>,
 ) {
   assertCleanName(patch.display_name);
-  const { error } = await supabase
-    .from("household_members")
-    .update(patch as never)
-    .eq("id", id);
+  const { error } = await supabase.from("household_members").update(patch).eq("id", id);
   if (error) throw error;
 }
 
@@ -310,7 +307,7 @@ export async function leaveHousehold() {
 export async function renameHousehold(id: string, name: string) {
   const { error } = await supabase
     .from("households")
-    .update({ name: name.trim() || "Mi casa" } as never)
+    .update({ name: name.trim() || "Mi casa" })
     .eq("id", id);
   if (error) throw error;
 }
@@ -322,17 +319,14 @@ export async function addChild(
   assertCleanName(child.name);
   const { error } = await supabase
     .from("household_children")
-    .insert({ household_id: householdId, ...child } as never);
+    .insert({ household_id: householdId, ...child });
   if (error) throw error;
 }
 
 /** Edita a un peque: nombre, edad, alergias, o su ración/apetito. */
 export async function updateChild(id: string, patch: Partial<Omit<HouseholdChild, "id">>) {
   assertCleanName(patch.name);
-  const { error } = await supabase
-    .from("household_children")
-    .update(patch as never)
-    .eq("id", id);
+  const { error } = await supabase.from("household_children").update(patch).eq("id", id);
   if (error) throw error;
 }
 
