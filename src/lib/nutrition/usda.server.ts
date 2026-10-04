@@ -37,11 +37,6 @@ const TIMEOUT_MS = 15_000;
  */
 export const USDA_LOOKUP_MS = 3 * TIMEOUT_MS;
 
-const isMissingTable = (error: unknown) => {
-  const code = (error as { code?: string } | null)?.code;
-  return code === "PGRST205" || code === "42P01";
-};
-
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -86,7 +81,7 @@ let extraFoods: { at: number; ok: boolean; promise: Promise<void> } | null = nul
  * Carga `foods_extra` en el proceso y la relee cada `EXTRA_FOODS_TTL_MS`; tras
  * un fallo, reintenta a los `EXTRA_FOODS_RETRY_MS` (antes un fallo se memorizaba
  * y la instancia se quedaba sin esas filas hasta morir). Llamadas a la vez
- * comparten la lectura. Sin tabla (migración pendiente), nada.
+ * comparten la lectura.
  */
 export function ensureExtraFoods(): Promise<void> {
   const now = Date.now();
@@ -104,7 +99,6 @@ export function ensureExtraFoods(): Promise<void> {
         .from("foods_extra")
         .select("key, label, aliases, category, kcal, protein_g, carbs_g, fat_g, fiber_g");
       if (error) {
-        if (isMissingTable(error)) return;
         entry.ok = false;
         logEvent("warn", "foods_extra_load_failed", { error: errorText(error) });
         return;
@@ -206,7 +200,7 @@ export async function resolveWithUsda(
         })),
         { onConflict: "key", ignoreDuplicates: true },
       );
-      if (error && !isMissingTable(error)) console.error("foods_extra: escritura", error);
+      if (error) console.error("foods_extra: escritura", error);
     } catch (error) {
       console.warn("foods_extra: sin guardar", error);
     }

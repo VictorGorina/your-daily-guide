@@ -11,9 +11,8 @@
  *  4. Lo que no se consigue calcular vuelve con `recipe: null`: el llamador lo
  *     enseña "Calculando…" y lo reintenta. Nunca un promedio (D13).
  *
- * Mientras la migración `dish_recipes` no esté aplicada, la tabla no existe
- * (PGRST205): se avisa una vez y todo funciona igual, sin caché persistente
- * (solo la de este proceso).
+ * Si la tabla no se puede leer, todo funciona igual sin caché persistente
+ * (solo la de este proceso) y el error queda en el log.
  *
  * Server-only.
  */
@@ -70,20 +69,7 @@ const COLUMNS =
   "dish_key, dish_label, ingredients, methods, serving_kind, unit_label, text_quantity, quality, " +
   "flags, pipeline_version, foods_version, reviewed";
 
-/** Tabla sin crear (migración pendiente): PostgREST responde PGRST205; Postgres, 42P01. */
-const isMissingTable = (error: unknown) => {
-  const code = (error as { code?: string } | null)?.code;
-  return code === "PGRST205" || code === "42P01";
-};
-
-let warnedMissing = false;
-const warnMissing = () => {
-  if (warnedMissing) return;
-  warnedMissing = true;
-  console.warn("dish_recipes: la tabla no existe todavía (migración pendiente); sin caché global");
-};
-
-/** Recetas de este proceso: sustituyen a la tabla mientras no exista. */
+/** Recetas de este proceso: ahorran releer la tabla y la sustituyen si falla. */
 const processCache = new Map<string, RecipeLookup>();
 
 type Lookup = Omit<RecipeLookup, "dish" | "key">;
@@ -226,7 +212,7 @@ async function decomposeAndSave(
     if (!db || !rows.length) return;
     try {
       const { error } = await db.from("dish_recipes").upsert(rows, { onConflict: "dish_key" });
-      if (error && !isMissingTable(error)) console.error("dish_recipes: escritura", error);
+      if (error) console.error("dish_recipes: escritura", error);
     } catch (error) {
       console.error("dish_recipes: escritura", error);
     }
@@ -314,8 +300,7 @@ export async function getRecipes(
       .in("dish_key", [...byKey.keys()]);
     if (error) {
       tableOk = false;
-      if (isMissingTable(error)) warnMissing();
-      else console.error("dish_recipes: lectura", error);
+      console.error("dish_recipes: lectura", error);
     }
     for (const row of (data ?? []) as unknown as Row[]) {
       const fresh = row.reviewed || row.pipeline_version === PIPELINE_VERSION;
