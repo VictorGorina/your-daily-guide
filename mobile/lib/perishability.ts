@@ -9,7 +9,7 @@ import {
 } from "./plan-shared";
 import { freezesWell, shelfLifeDays } from "./shelf-life";
 
-export { shelfLifeDays };
+export { freezesWell, shelfLifeDays };
 
 /**
  * Nombres de los frescos de una compra que no aguantan todos los días que esa
