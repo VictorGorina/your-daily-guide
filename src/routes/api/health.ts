@@ -53,6 +53,11 @@ export const Route = createFileRoute("/api/health")({
             publicUrl: has("PUBLIC_URL"),
             usda: has("USDA_FDC_API_KEY"),
             rateLimitSalt: has("RATE_LIMIT_SALT"),
+            // Interruptores que se encienden solo con configuración: sin esto
+            // no hay forma de saber desde fuera si el despliegue los ha leído.
+            aiGlobalCap: has("AI_GLOBAL_DAILY_USD"),
+            chatBodyEnforce: process.env.CHAT_BODY_ENFORCE === "1",
+            sentry: has("SENTRY_DSN", "VITE_SENTRY_DSN"),
           };
           body.email = await emailConfig();
           // `route`: la petición que recibe la ruta (chat). `current`: la de
