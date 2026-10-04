@@ -1,5 +1,6 @@
 import type { AuthPlatform } from "@/lib/auth.functions";
 import { errorText, logEvent } from "@/lib/log.server";
+import { assertHuman } from "@/lib/turnstile.server";
 
 /**
  * Cuerpos de `requestPasswordReset` y `requestSignupConfirmation`
@@ -10,6 +11,8 @@ export type AuthEmailDeps = {
   sendEmail?: typeof import("@/lib/email.server").sendEmail;
   /** Tiempo mínimo de respuesta; los tests lo bajan a 0. */
   minResponseMs?: number;
+  /** Comprobación del CAPTCHA (`turnstile.server.ts`); los tests la cambian. */
+  assertHuman?: typeof assertHuman;
 };
 
 /**
@@ -86,11 +89,15 @@ const sendThrottle = createSendThrottle(60_000, 10_000);
 const throttled = (bucket: string, email: string) => sendThrottle.throttled(bucket, email);
 
 export async function requestPasswordResetHandler(
-  data: { email: string; platform: AuthPlatform },
+  data: { email: string; platform: AuthPlatform; captchaToken?: string },
   deps: AuthEmailDeps = {},
 ): Promise<{ ok: true }> {
   return atLeast(deps.minResponseMs ?? MIN_RESPONSE_MS, async () => {
     const { email, platform } = data;
+
+    // Antes que nada: un robot no gasta ni la cuota del correo. El fallo no
+    // depende de si la cuenta existe, así que no delata nada (ticket 29).
+    await (deps.assertHuman ?? assertHuman)(data.captchaToken, "password-reset");
 
     // La respuesta es siempre la misma exista o no la cuenta. Si dijéramos
     // "ese correo no está registrado" convertiríamos esto en un buscador de
@@ -140,11 +147,19 @@ export async function requestPasswordResetHandler(
 }
 
 export async function requestSignupConfirmationHandler(
-  data: { email: string; password: string; platform: AuthPlatform; next?: string },
+  data: {
+    email: string;
+    password: string;
+    platform: AuthPlatform;
+    next?: string;
+    captchaToken?: string;
+  },
   deps: AuthEmailDeps = {},
 ): Promise<{ ok: true }> {
   return atLeast(deps.minResponseMs ?? MIN_RESPONSE_MS, async () => {
     const { email, password, platform, next } = data;
+
+    await (deps.assertHuman ?? assertHuman)(data.captchaToken, "signup-confirm");
 
     // Igual que en el reset: la respuesta no cambia exista o no la cuenta, para
     // no convertir el alta en un buscador de quién está registrado.

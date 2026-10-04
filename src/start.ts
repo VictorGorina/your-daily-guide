@@ -57,6 +57,7 @@ const csrfMiddleware = createCsrfMiddleware({
 const CSP = buildCsp({
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
   sentryDsn: import.meta.env.VITE_SENTRY_DSN,
+  turnstile: Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY),
   dev: import.meta.env.DEV,
 });
 

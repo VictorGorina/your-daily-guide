@@ -13,9 +13,13 @@ type CspSources = {
   supabaseUrl?: string;
   /** DSN de Sentry del navegador; solo cuenta su origen (el ingest). */
   sentryDsn?: string;
+  /** Hay CAPTCHA de Turnstile: su script y su iframe son de Cloudflare. */
+  turnstile?: boolean;
   /** `bun run dev`: el HMR de Vite abre un websocket a localhost. */
   dev?: boolean;
 };
+
+const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
 function originOf(url: string | undefined): string | null {
   if (!url) return null;
@@ -27,25 +31,28 @@ function originOf(url: string | undefined): string | null {
   }
 }
 
-export function buildCsp({ supabaseUrl, sentryDsn, dev }: CspSources): string {
+export function buildCsp({ supabaseUrl, sentryDsn, turnstile, dev }: CspSources): string {
   const connect = ["'self'"];
   const supabase = originOf(supabaseUrl);
   if (supabase) connect.push(supabase, supabase.replace(/^http/, "ws"));
   const sentry = originOf(sentryDsn);
   if (sentry) connect.push(sentry);
   if (dev) connect.push("ws://localhost:*");
+  const cloudflare = turnstile ? ` ${TURNSTILE_ORIGIN}` : "";
 
   return [
     "default-src 'self'",
     // El SSR de TanStack inyecta scripts en línea (estado del router); se
     // cambia por nonces en el ticket 37.
-    "script-src 'self' 'unsafe-inline'",
+    `script-src 'self' 'unsafe-inline'${cloudflare}`,
     "style-src 'self' 'unsafe-inline'",
     // Tipografías servidas desde el propio dominio desde el ticket 17.
     "font-src 'self'",
     // `data:`/`blob:`: la vista previa de la foto del tiquet.
     "img-src 'self' data: blob:",
     `connect-src ${connect.join(" ")}`,
+    // El reto de Turnstile se pinta en un iframe de Cloudflare (ticket 29).
+    ...(turnstile ? [`frame-src ${TURNSTILE_ORIGIN}`] : []),
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

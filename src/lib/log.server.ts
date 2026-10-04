@@ -79,6 +79,13 @@
  * - `chat_body_rejected` (warn): el cuerpo de `/api/chat` no pasó
  *   `cleanChatBody` (`reason`). Con `CHAT_BODY_ENFORCE` sin poner solo se
  *   registra; uno legítimo significa que un tope de `CHAT_LIMITS` es corto.
+ * - `captcha_missing` (warn): un alta o un restablecimiento llegó sin token de
+ *   Turnstile (`operation`) y se dejó pasar: una app que aún no lo manda. Con
+ *   `TURNSTILE_ENFORCE=1` deja de pasar.
+ * - `captcha_rejected` (warn): Turnstile dijo que no es una persona, o faltaba
+ *   el token en modo estricto (`reason`: `invalid` | `missing`).
+ * - `captcha_failopen` (error): Cloudflare no contestó y se dejó pasar; mientras
+ *   se repita, el alta y el restablecimiento van sin CAPTCHA.
  * - `chat_profile_read_failed` (warn): `/api/chat` no pudo leer el perfil y usó
  *   el que mandó el cliente.
  * - `csp_violation` (warn): el navegador informó de algo que la CSP en modo

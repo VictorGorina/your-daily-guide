@@ -21,6 +21,18 @@ function directives(csp: string): Map<string, string> {
 }
 
 describe("buildCsp", () => {
+  test("con Turnstile, su script y su iframe son de Cloudflare", () => {
+    const d = directives(buildCsp({ supabaseUrl: SUPABASE, turnstile: true }));
+    expect(d.get("script-src")).toBe("'self' 'unsafe-inline' https://challenges.cloudflare.com");
+    expect(d.get("frame-src")).toBe("https://challenges.cloudflare.com");
+  });
+
+  test("sin Turnstile no se abre ningún origen de más", () => {
+    const d = directives(buildCsp({ supabaseUrl: SUPABASE }));
+    expect(d.get("script-src")).toBe("'self' 'unsafe-inline'");
+    expect(d.has("frame-src")).toBe(false);
+  });
+
   test("connect-src deja Supabase por https y por wss, y el ingest de Sentry", () => {
     const d = directives(buildCsp({ supabaseUrl: SUPABASE, sentryDsn: SENTRY_DSN }));
     expect(d.get("connect-src")).toBe(

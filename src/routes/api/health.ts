@@ -58,6 +58,8 @@ export const Route = createFileRoute("/api/health")({
             aiGlobalCap: has("AI_GLOBAL_DAILY_USD"),
             chatBodyEnforce: process.env.CHAT_BODY_ENFORCE === "1",
             sentry: has("SENTRY_DSN", "VITE_SENTRY_DSN"),
+            turnstile: has("TURNSTILE_SECRET_KEY", "VITE_TURNSTILE_SITE_KEY"),
+            turnstileEnforce: process.env.TURNSTILE_ENFORCE === "1",
           };
           body.email = await emailConfig();
           // `route`: la petición que recibe la ruta (chat). `current`: la de

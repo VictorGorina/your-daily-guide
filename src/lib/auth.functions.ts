@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { passwordProblem } from "@/lib/auth-errors";
 import { requestPasswordResetHandler, requestSignupConfirmationHandler } from "@/lib/auth.server";
+import { cleanCaptchaToken } from "@/lib/turnstile";
 import { ValidationError } from "@/lib/validation-error";
 
 /** A dónde lleva el enlace del correo según desde dónde se pidió. */
@@ -32,11 +33,11 @@ function safeNextPath(raw: unknown): string | undefined {
  * tiene.
  */
 export const requestPasswordReset = createServerFn({ method: "POST" })
-  .validator((input: { email: string; platform?: AuthPlatform }) => {
+  .validator((input: { email: string; platform?: AuthPlatform; captchaToken?: string }) => {
     const email = typeof input?.email === "string" ? input.email.trim().toLowerCase() : "";
     if (!email || !email.includes("@")) throw new ValidationError("Necesitamos un correo válido");
     const platform: AuthPlatform = input?.platform === "mobile" ? "mobile" : "web";
-    return { email, platform };
+    return { email, platform, captchaToken: cleanCaptchaToken(input?.captchaToken) };
   })
   .handler(({ data }) => requestPasswordResetHandler(data));
 
@@ -60,7 +61,13 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
  */
 export const requestSignupConfirmation = createServerFn({ method: "POST" })
   .validator(
-    (input: { email: string; password: string; platform?: AuthPlatform; next?: string }) => {
+    (input: {
+      email: string;
+      password: string;
+      platform?: AuthPlatform;
+      next?: string;
+      captchaToken?: string;
+    }) => {
       const email = typeof input?.email === "string" ? input.email.trim().toLowerCase() : "";
       if (!email || !email.includes("@")) throw new ValidationError("Necesitamos un correo válido");
       const password = typeof input?.password === "string" ? input.password : "";
@@ -70,7 +77,13 @@ export const requestSignupConfirmation = createServerFn({ method: "POST" })
         );
       }
       const platform: AuthPlatform = input?.platform === "mobile" ? "mobile" : "web";
-      return { email, password, platform, next: safeNextPath(input?.next) };
+      return {
+        email,
+        password,
+        platform,
+        next: safeNextPath(input?.next),
+        captchaToken: cleanCaptchaToken(input?.captchaToken),
+      };
     },
   )
   .handler(({ data }) => requestSignupConfirmationHandler(data));

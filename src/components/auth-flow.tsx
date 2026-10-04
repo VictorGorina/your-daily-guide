@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { useTurnstile } from "@/components/turnstile-widget";
 import { supabase } from "@/integrations/supabase/client";
 import { authErrorText, isEmailNotConfirmed, passwordProblem } from "@/lib/auth-errors";
 import { requestPasswordReset, requestSignupConfirmation } from "@/lib/auth.functions";
@@ -93,6 +94,8 @@ function LocaleSwitch() {
 export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: string }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  // CAPTCHA (ticket 29): un token nuevo antes de cada llamada de Auth.
+  const captcha = useTurnstile();
 
   const [stage, setStage] = useState<Stage>(initialStage);
   const [mode, setMode] = useState<Mode>("in");
@@ -164,7 +167,9 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
       // motivo de un fallo de envío queda en nuestros logs y la plantilla es
       // nuestra. La URL de destino la decide el servidor según `platform` — ver
       // requestPasswordReset en src/lib/auth.functions.ts.
-      await requestPasswordReset({ data: { email: email.trim(), platform: "web" } });
+      await requestPasswordReset({
+        data: { email: email.trim(), platform: "web", captchaToken: await captcha.getToken() },
+      });
       setSent(true);
     } catch (error) {
       toast.error(authErrorText(error, t, "auth.errSendLink"));
@@ -179,9 +184,15 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
    * enlace lo genera y lo envía nuestro backend con la plantilla de la casa —
    * ver requestSignupConfirmation en src/lib/auth.functions.ts.
    */
-  const sendConfirmation = () =>
+  const sendConfirmation = async () =>
     requestSignupConfirmation({
-      data: { email: email.trim(), password, platform: "web", next },
+      data: {
+        email: email.trim(),
+        password,
+        platform: "web",
+        next,
+        captchaToken: await captcha.getToken(),
+      },
     });
 
   const resendConfirmation = async () => {
@@ -222,6 +233,7 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
       const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
+        options: { captchaToken: await captcha.getToken() },
       });
       if (error) throw error;
       if (!goNext()) navigate({ to: "/hoy", replace: true });
@@ -241,7 +253,9 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
-        const { error } = await supabase.auth.signInAnonymously();
+        const { error } = await supabase.auth.signInAnonymously({
+          options: { captchaToken: await captcha.getToken() },
+        });
         if (error) throw error;
       }
       await saveProfile(randomDemoProfile());
@@ -483,6 +497,7 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
           al pulsarlo — el freno de 60s del servidor solo lo retrasaba, no lo
           evitaba (auditoría de auth, 2026-09-13). El bloque de "sent" de
           arriba ya da la única acción que hace falta ("Volver a entrar"). */}
+        {captcha.slot}
         {!(stage === "access" && sent) && (
           <button
             type="submit"
