@@ -1,4 +1,4 @@
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../../lib/content-guard";
+import { isCleanFood } from "../../lib/content-guard";
 import { useCurrencySymbol, useMoney } from "../../lib/use-money";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Alert, Animated, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -55,6 +55,7 @@ import {
   type DailyLog,
 } from "../../lib/daily";
 import { fetchHousehold, householdSharedSlots } from "../../lib/household";
+import { dateLocale } from "../../lib/i18n";
 import { daySignalKeyOf, daySignalOf } from "../../lib/macros";
 import {
   addMonths,
@@ -129,6 +130,8 @@ type TripGroups = { trip: number; groups: { category: string; items: ShoppingIte
 const FULL_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 
 export default function Plan() {
+  const { t, i18n } = useTranslation();
+  const locale = dateLocale(i18n.language);
   const money = useMoney();
   const qc = useQueryClient();
   const today = todayISO();
@@ -160,7 +163,7 @@ export default function Plan() {
   // de la casa en solo lectura a la pestaña Ingredientes (issue 05).
   const hh = householdQ.data;
   const isSoloPlanner = !!hh?.me && !!hh?.planner && hh.me.id !== hh.planner.id;
-  const plannerName = hh?.planner?.display_name ?? "quien lleva la cocina";
+  const plannerName = hh?.planner?.display_name ?? t("plan.plannerFallback");
   // La regla del servidor (horarios de cada persona), no la columna a pelo.
   const sharedSlots = householdSharedSlots(hh);
   // Para que el calendario del mes solo oculte "Ver receta" a quien de verdad
@@ -225,7 +228,7 @@ export default function Plan() {
         ...row,
         shopping: res.shopping,
       }),
-      onError: () => Alert.alert("No hemos podido guardar el cambio"),
+      onError: () => Alert.alert(t("plan.errors.saveChange")),
     },
     actual: {
       kind: "actual",
@@ -239,7 +242,7 @@ export default function Plan() {
         ...row,
         trip_actuals: res.trip_actuals,
       }),
-      onError: () => Alert.alert("No hemos podido guardar el gasto"),
+      onError: () => Alert.alert(t("plan.errors.saveSpend")),
     },
     pantry: {
       kind: "pantry",
@@ -253,7 +256,7 @@ export default function Plan() {
         ...row,
         pantry_extras: res.pantry_extras,
       }),
-      onError: () => Alert.alert("No hemos podido guardar el ingrediente"),
+      onError: () => Alert.alert(t("plan.errors.saveIngredient")),
     },
     receipt: {
       kind: "receipt",
@@ -266,15 +269,24 @@ export default function Plan() {
         pantry_extras: res.pantry_extras,
       }),
       onError: (e: unknown) =>
-        Alert.alert(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
+        Alert.alert(e instanceof Error ? e.message : t("plan.errors.receipt")),
     },
   });
-  const receiptAlert = (res: ReceiptScanResult, where: string) => {
-    const parts = [`Gasto guardado: ${money(res.total)}`];
-    if (res.added.length) parts.push(`Añadí a ${where}: ${res.added.join(", ")}`);
-    if (res.discarded.length)
-      parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
-    Alert.alert("Tiquet leído", parts.join("\n"));
+  const receiptAlert = (res: ReceiptScanResult, pantryOf: "own" | "house") => {
+    const parts = [t("plan.receipt.saved", { amount: money(res.total) })];
+    if (res.added.length) {
+      const names = res.added.join(", ");
+      parts.push(
+        pantryOf === "house"
+          ? t("plan.receipt.addedHouse", { names })
+          : t("plan.receipt.addedOwn", { names }),
+      );
+    }
+    if (res.discarded.length) {
+      const names = res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ");
+      parts.push(t("plan.receipt.discarded", { names }));
+    }
+    Alert.alert(t("plan.receipt.title"), parts.join("\n"));
   };
 
   type HouseRow = NonNullable<typeof plannerShoppingQ.data>;
@@ -286,7 +298,7 @@ export default function Plan() {
   const hhReceipt = useShoppingMutation({
     ...houseKey,
     ...house.receipt,
-    onSuccess: (res) => receiptAlert(res, "la despensa de la casa"),
+    onSuccess: (res) => receiptAlert(res, "house"),
   });
 
   const appStartedOn = profileQ.data?.app_started_on ?? null;
@@ -321,8 +333,7 @@ export default function Plan() {
           .catch(() => undefined);
       }
     },
-    onError: (e) =>
-      Alert.alert(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
+    onError: (e) => Alert.alert(e instanceof Error ? e.message : t("plan.errors.create")),
   });
 
   // Cambiar la cadencia no llama a la IA: la lista canónica guarda el desglose
@@ -339,7 +350,7 @@ export default function Plan() {
     },
     onError: (e) => {
       setPendingCadence(null);
-      Alert.alert(e instanceof Error ? e.message : "No hemos podido cambiar la frecuencia");
+      Alert.alert(e instanceof Error ? e.message : t("plan.errors.recadence"));
     },
   });
 
@@ -363,7 +374,7 @@ export default function Plan() {
     ...ownKey,
     ...own.receipt,
     onSuccess: (res) => {
-      receiptAlert(res, "tu despensa");
+      receiptAlert(res, "own");
       if (res.added.length) recalcFromPantry();
     },
   });
@@ -578,12 +589,14 @@ export default function Plan() {
         <View className="relative flex-row justify-center">
           <View className="items-center">
             <Text className="text-xs font-sans-medium uppercase tracking-wide text-muted-foreground">
-              Plan mensual
+              {t("plan.eyebrow")}
             </Text>
             <View className="mt-0.5 flex-row items-center gap-1">
               <Pressable
                 onPress={() => goToMonth(addMonths(month, -1))}
                 disabled={!canPrev}
+                accessibilityRole="button"
+                accessibilityLabel={t("plan.prevMonth")}
                 hitSlop={8}
                 className="h-8 w-8 items-center justify-center rounded-full"
                 style={!canPrev ? { opacity: 0.3 } : undefined}
@@ -597,22 +610,27 @@ export default function Plan() {
                   (septiembre). */}
               <View className="items-center">
                 <Text className="text-center font-heading text-[24px] text-foreground">
-                  {capitalizeFirst(monthParts(month).monthName)}
+                  {capitalizeFirst(monthParts(month, locale).monthName)}
                 </Text>
                 <Text className="text-center text-[13px] font-sans-medium text-muted-foreground">
-                  {monthParts(month).year}
+                  {monthParts(month, locale).year}
                 </Text>
               </View>
               <Pressable
                 onPress={() =>
                   nextIsLocked
                     ? Alert.alert(
-                        "Aún no toca",
-                        `Podrás preparar ${monthTitle(addMonths(month, 1))} la última semana de ${monthTitle(month)}.`,
+                        t("plan.notYetTitle"),
+                        t("plan.nextLockedInfo", {
+                          next: monthTitle(addMonths(month, 1), locale),
+                          current: monthTitle(month, locale),
+                        }),
                       )
                     : goToMonth(addMonths(month, 1))
                 }
                 disabled={!canNext && !nextIsLocked}
+                accessibilityRole="button"
+                accessibilityLabel={nextIsLocked ? t("plan.nextMonthLocked") : t("plan.nextMonth")}
                 hitSlop={8}
                 className="h-8 w-8 items-center justify-center rounded-full"
                 style={!canNext && !nextIsLocked ? { opacity: 0.3 } : undefined}
@@ -632,7 +650,7 @@ export default function Plan() {
               className="absolute right-0 mt-1 text-xs text-muted-foreground"
               style={{ top: "100%" }}
             >
-              Calculando macros…
+              {t("plan.warming")}
             </Text>
           ) : null}
         </View>
@@ -650,17 +668,17 @@ export default function Plan() {
             <CalendarRange size={28} color="#a84a17" />
             <Text className="mt-3 text-sm font-sans-semibold text-foreground">
               {isSoloPlanner
-                ? "Planifica tus comidas en solitario"
+                ? t("plan.create.titleSolo")
                 : monthStatus === "next-unlocked"
-                  ? `Prepara tu plan de ${monthTitle(month)}`
-                  : "Todavía no tienes plan de este mes"}
+                  ? t("plan.create.titleNext", { month: monthTitle(month, locale) })
+                  : t("plan.create.titleCurrent")}
             </Text>
             <Text className="mt-1.5 text-center text-sm text-muted-foreground">
               {isSoloPlanner
-                ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, meriendas y los días que no compartís).`
+                ? t("plan.create.bodySolo", { name: plannerName })
                 : monthStatus === "next-unlocked"
-                  ? "Cuéntame en cinco preguntas cómo será tu mes y tendrás el plan y la compra antes de que empiece."
-                  : "Cuéntame en cinco preguntas cómo será tu mes y te preparo sus comidas y la compra, ajustadas a tu presupuesto."}
+                  ? t("plan.create.bodyNext")
+                  : t("plan.create.bodyCurrent")}
             </Text>
             <Pressable
               onPress={() => setIntakeOpen(true)}
@@ -670,12 +688,12 @@ export default function Plan() {
             >
               <Text className="text-sm font-sans-semibold text-primary-foreground">
                 {generate.isPending
-                  ? "Preparando tu mes..."
+                  ? t("plan.create.preparing")
                   : isSoloPlanner
-                    ? "Planificar mis comidas en solitario"
+                    ? t("plan.create.ctaSolo")
                     : monthStatus === "next-unlocked"
-                      ? `Crear plan de ${monthTitle(month)}`
-                      : "Crear plan del mes"}
+                      ? t("plan.create.ctaNext", { month: monthTitle(month, locale) })
+                      : t("plan.create.ctaCurrent")}
               </Text>
             </Pressable>
           </View>
@@ -684,8 +702,8 @@ export default function Plan() {
             <View className="mt-6 flex-row gap-2 rounded-full bg-secondary/80 p-1">
               {(
                 [
-                  ["plan", "Plan", CalendarRange],
-                  ["compra", "Ingredientes", ShoppingBasket],
+                  ["plan", t("plan.tabs.plan"), CalendarRange],
+                  ["compra", t("plan.tabs.ingredients"), ShoppingBasket],
                 ] as const
               ).map(([key, label, Icon]) => {
                 const active = tab === key;
@@ -712,9 +730,11 @@ export default function Plan() {
               <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-secondary/60 px-3.5 py-2.5">
                 <Users size={14} color="#6b6256" style={{ marginTop: 2 }} />
                 <Text className="flex-1 text-[12px] leading-relaxed text-muted-foreground">
-                  Las comidas compartidas de tu casa las lleva{" "}
-                  <Text className="font-sans-medium text-foreground">{plannerName}</Text>. Aquí solo
-                  planificas y ves tus comidas en solitario.
+                  <Trans
+                    i18nKey="plan.sharedBy"
+                    values={{ name: plannerName }}
+                    components={{ b: <Text className="font-sans-medium text-foreground" /> }}
+                  />
                 </Text>
               </View>
             ) : null}
@@ -737,7 +757,7 @@ export default function Plan() {
                     <View className="flex-row items-center gap-2">
                       <Sparkles size={16} color="#a84a17" />
                       <Text className="text-sm font-sans-semibold text-foreground">
-                        Cómo enfocamos el mes
+                        {t("plan.focusTitle")}
                       </Text>
                     </View>
                     <Text className="mt-2 text-sm leading-relaxed text-foreground">
@@ -754,8 +774,7 @@ export default function Plan() {
                       </View>
                     ) : null}
                     <Text className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                      Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
-                      recoloco los siguientes.
+                      {t("plan.focusNote")}
                     </Text>
                     <PlanFitNote fit={plan.fit} fitting={fitting} />
                   </View>
@@ -775,7 +794,7 @@ export default function Plan() {
 
                 {!plan && !(monthLogsQ.data?.length ?? 0) ? (
                   <Text className="px-1 text-sm text-muted-foreground">
-                    No planificaste {monthTitle(month)}.
+                    {t("plan.notPlanned", { month: monthTitle(month, locale) })}
                   </Text>
                 ) : null}
               </View>
@@ -786,12 +805,11 @@ export default function Plan() {
                     <View className="flex-row items-center gap-2 px-0.5">
                       <Users size={16} color="#a84a17" />
                       <Text className="font-heading text-lg text-foreground">
-                        La compra de la casa
+                        {t("plan.householdShopping.title")}
                       </Text>
                     </View>
                     <Text className="px-0.5 text-xs leading-relaxed text-muted-foreground">
-                      La lleva {plannerName}. Marca lo que ya tengas y sal a comprar cuando quieras;
-                      las cantidades y la frecuencia las decide {plannerName}.
+                      {t("plan.householdShopping.body", { name: plannerName })}
                     </Text>
                     <IngredientsTab
                       shopping={plannerShopping}
@@ -833,7 +851,7 @@ export default function Plan() {
                   <View className="flex-row items-center gap-2 px-0.5">
                     <ShoppingBasket size={16} color="#a84a17" />
                     <Text className="font-heading text-lg text-foreground">
-                      Tu compra en solitario
+                      {t("plan.soloShopping.title")}
                     </Text>
                   </View>
 
@@ -880,8 +898,7 @@ export default function Plan() {
                   ) : (
                     <View className="items-center rounded-3xl bg-surface p-5">
                       <Text className="text-center text-sm text-muted-foreground">
-                        Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
-                        meriendas y los días que no compartís) y aparecerá aquí.
+                        {t("plan.soloShopping.empty")}
                       </Text>
                       {actionable ? (
                         <Pressable
@@ -892,8 +909,8 @@ export default function Plan() {
                         >
                           <Text className="text-sm font-sans-semibold text-primary-foreground">
                             {generate.isPending
-                              ? "Preparando…"
-                              : "Planificar mis comidas en solitario"}
+                              ? t("plan.create.preparingShort")
+                              : t("plan.create.ctaSolo")}
                           </Text>
                         </Pressable>
                       ) : null}
@@ -962,7 +979,7 @@ export default function Plan() {
           >
             <ShoppingCart size={17} color="#3e3d39" />
             <Text className="text-sm font-sans-bold text-primary-foreground">
-              Ir a comprar · {needCount} art.
+              {t("shopping.goShop", { count: needCount })}
             </Text>
           </Pressable>
         </View>
@@ -972,8 +989,6 @@ export default function Plan() {
     </SafeAreaView>
   );
 }
-
-const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 
 const SIGNAL_BG: Record<string, string> = {
   success: "bg-success",
@@ -1011,7 +1026,7 @@ function PlanMonthCalendar({
    *  (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
 
@@ -1049,17 +1064,17 @@ function PlanMonthCalendar({
 
   return (
     <View className="rounded-3xl bg-surface p-5">
-      <Text className="text-sm font-sans-semibold text-foreground">Calendario del mes</Text>
+      <Text className="text-sm font-sans-semibold text-foreground">{t("planCalendar.title")}</Text>
       <Text className="mt-1 text-xs text-muted-foreground">
-        {monthStatus === "past"
-          ? "Toca un día para ver lo que comiste y sus macros."
-          : "Toca un día pasado para ver lo que comiste; uno futuro para su menú."}
+        {monthStatus === "past" ? t("planCalendar.hintPast") : t("planCalendar.hintCurrent")}
       </Text>
 
       <View className="mt-4 flex-row flex-wrap">
-        {WEEKDAYS.map((d, i) => (
-          <View key={`${d}-${i}`} className="items-center py-1" style={{ width: `${100 / 7}%` }}>
-            <Text className="text-[11px] font-sans-medium text-muted-foreground">{d}</Text>
+        {Array.from({ length: 7 }, (_, i) => (
+          <View key={i} className="items-center py-1" style={{ width: `${100 / 7}%` }}>
+            <Text className="text-[11px] font-sans-medium text-muted-foreground">
+              {t(`weekdaysInitial.${i}`)}
+            </Text>
           </View>
         ))}
         {cells.map((date, i) => {
@@ -1098,7 +1113,14 @@ function PlanMonthCalendar({
                 <Pressable
                   onPress={() => onOpenDay(date)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ver el día ${Number(date.slice(8, 10))}${signalLabel ? `: ${signalLabel}` : ""}`}
+                  accessibilityLabel={
+                    signalLabel
+                      ? t("planCalendar.openDayWithSignal", {
+                          day: Number(date.slice(8, 10)),
+                          signal: signalLabel,
+                        })
+                      : t("planCalendar.openDay", { day: Number(date.slice(8, 10)) })
+                  }
                   className={`aspect-square items-center justify-center rounded-xl active:opacity-80 ${bg}`}
                 >
                   <Text className="text-sm text-foreground">{Number(date.slice(8, 10))}</Text>
@@ -1124,8 +1146,7 @@ function PlanMonthCalendar({
       </View>
 
       <Text className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Verde: día en tu objetivo. Amarillo: te desviaste. Rojo: bastante por encima. Gris: sin
-        registro.
+        {t("planCalendar.legend")}
       </Text>
 
       <Dialog
@@ -1134,7 +1155,7 @@ function PlanMonthCalendar({
         title={
           selected
             ? capitalizeFirst(
-                new Date(`${selected}T00:00:00`).toLocaleDateString("es-ES", {
+                new Date(`${selected}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
                   weekday: "long",
                   day: "numeric",
                   month: "long",
@@ -1154,7 +1175,7 @@ function PlanMonthCalendar({
                 return (
                   <View key={meal.slot} className="rounded-xl bg-secondary p-3">
                     <Text className="text-xs font-sans-semibold text-primary-ink">
-                      {meal.moment}
+                      {t(`moments.${meal.moment}`, { defaultValue: meal.moment })}
                     </Text>
                     <Text className="mt-1 text-sm text-foreground">{meal.idea}</Text>
                     {note ? (
@@ -1165,7 +1186,8 @@ function PlanMonthCalendar({
                     {(kidMealsBySlot.get(meal.slot) ?? []).map((k) => (
                       <View key={`${k.name}-${k.dish}`} className="mt-1.5">
                         <Text className="text-[11px] leading-relaxed text-muted-foreground">
-                          Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
+                          {t("planCalendar.forChild", { name: k.name })}{" "}
+                          <Text className="text-foreground">{k.dish}</Text>
                           {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
                         </Text>
                         <DishRecipe dish={k.dish} month={month} />
@@ -1185,9 +1207,7 @@ function PlanMonthCalendar({
             </View>
           </View>
         ) : (
-          <Text className="text-sm text-muted-foreground">
-            Este día todavía no tiene menú en el plan.
-          </Text>
+          <Text className="text-sm text-muted-foreground">{t("planCalendar.noMenu")}</Text>
         )}
       </Dialog>
     </View>
@@ -1260,6 +1280,7 @@ function PantryExtrasCard({
     mutate: (v: { name: string; qty?: string; remove?: boolean }) => void;
   };
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   // Esta tarjeta no enseña el error de la mutación: sin este aviso, un
   // ingrediente rechazado por el servidor desaparecía sin decir nada.
@@ -1268,7 +1289,7 @@ function PantryExtrasCard({
     const trimmed = name.trim();
     if (!trimmed || pantry.isPending) return;
     if (!isCleanFood(trimmed)) {
-      setError(BLOCKED_FOOD_MESSAGE);
+      setError(t("food.blocked"));
       return;
     }
     setError(null);
@@ -1280,12 +1301,11 @@ function PantryExtrasCard({
       <View className="flex-row items-center gap-2">
         <Carrot size={15} color="#a84a17" />
         <Text className="flex-1 text-[12.5px] font-sans-semibold text-foreground">
-          Ya lo tengo en casa · fuera del plan
+          {t("shopping.pantry.title")}
         </Text>
       </View>
       <Text className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-        Si tienes algo que la lista no incluye, dímelo y recoloco los próximos días para
-        aprovecharlo. Tu lista de la compra no cambia.
+        {t("shopping.pantry.body")}
       </Text>
       <View className="mt-2.5 flex-row gap-1.5">
         <TextInput
@@ -1295,7 +1315,8 @@ function PantryExtrasCard({
             if (error) setError(null);
           }}
           onSubmitEditing={add}
-          placeholder="p. ej. lentejas, espinacas..."
+          placeholder={t("shopping.pantry.placeholder")}
+          accessibilityLabel={t("shopping.pantry.inputLabel")}
           placeholderTextColor="#a89f92"
           className="min-w-0 flex-1 rounded-full bg-secondary px-3.5 py-2 text-xs text-foreground"
         />
@@ -1303,7 +1324,7 @@ function PantryExtrasCard({
           onPress={add}
           disabled={pantry.isPending || !name.trim()}
           accessibilityRole="button"
-          accessibilityLabel="Añadir ingrediente"
+          accessibilityLabel={t("shopping.pantry.add")}
           className="h-9 w-9 items-center justify-center rounded-full bg-foreground active:opacity-80"
           style={pantry.isPending || !name.trim() ? { opacity: 0.4 } : undefined}
         >
@@ -1323,6 +1344,8 @@ function PantryExtrasCard({
               <Pressable
                 onPress={() => pantry.mutate({ name: e.name, remove: true })}
                 disabled={pantry.isPending}
+                accessibilityRole="button"
+                accessibilityLabel={t("common.removeNamed", { what: e.name })}
                 hitSlop={6}
               >
                 <X size={12} color="#6b6256" />
@@ -1403,6 +1426,7 @@ function IngredientsTab({
    *  línea (para la vista con dos listas apiladas). */
   onEnterShopMode?: () => void;
 }) {
+  const { t } = useTranslation();
   const money = useMoney();
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
 
@@ -1470,9 +1494,11 @@ function IngredientsTab({
   const pctResolved = totalItems > 0 ? Math.round((haveCount / totalItems) * 100) : 0;
 
   const tripRange = tripDayRange(coverage ?? FULL_COVERAGE, tripsTotal, selectedTrip);
-  const monthShort = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
-    month: "short",
-  });
+  const monthShort = t(`monthsShort.${Number(month.slice(5, 7)) - 1}`);
+  const tripLabel =
+    activeCadence === "mensual"
+      ? t("shopping.tripSingle")
+      : t("shopping.tripOf", { n: selectedTrip + 1, total: tripsTotal });
 
   // Frescos que esta compra no cubre sin que se estropeen: no cambia la lista,
   // solo avisa de comprarlos más cerca de cuando se cocinan.
@@ -1499,7 +1525,7 @@ function IngredientsTab({
       {readOnly ? (
         <View className="rounded-[20px] bg-secondary/60 px-4 py-3">
           <Text className="text-xs leading-relaxed text-muted-foreground">
-            Compra de un mes ya pasado: se muestra solo para consultar, no se puede modificar.
+            {t("shopping.readOnly")}
           </Text>
         </View>
       ) : plannerLocked ? null : (
@@ -1508,7 +1534,7 @@ function IngredientsTab({
           <View className="flex-row items-center gap-2 px-0.5">
             <CalendarSync size={15} color="#a84a17" />
             <Text className="flex-1 text-sm font-sans-semibold text-foreground">
-              Cada cuánto compras
+              {t("shopping.cadenceTitle")}
             </Text>
           </View>
           <View className="mt-2.5 flex-row gap-0.5 rounded-full bg-secondary p-[3px]">
@@ -1544,7 +1570,7 @@ function IngredientsTab({
                       active ? "text-primary-ink" : "text-muted-foreground"
                     }`}
                   >
-                    {c.short}
+                    {t(`cadence.${c.key}.short`)}
                   </Text>
                 </Pressable>
               );
@@ -1564,13 +1590,13 @@ function IngredientsTab({
             </View>
             <Text className="flex-1 text-[12.5px] leading-[18px] text-muted-foreground">
               {recadence.isPending ? (
-                "Actualizando…"
+                t("shopping.updating")
               ) : (
                 <>
                   <Text className="font-sans-semibold text-foreground">
-                    {tripsTotal} {tripsTotal === 1 ? "compra" : "compras"}.
+                    {t("shopping.trips", { count: tripsTotal })}
                   </Text>{" "}
-                  {shownCadence.desc}
+                  {t(`cadence.${shownCadence.key}.desc`)}
                 </>
               )}
             </Text>
@@ -1582,8 +1608,7 @@ function IngredientsTab({
       {overBudget ? (
         <View className="rounded-3xl bg-destructive/10 px-4 py-3">
           <Text className="text-xs leading-relaxed text-destructive">
-            El mes se pasa de tu presupuesto ({money(periodBudget)}). Puedo ajustarlo: regenera el
-            plan o dímelo en el chat.
+            {t("shopping.overBudget", { budget: money(periodBudget) })}
           </Text>
         </View>
       ) : null}
@@ -1594,6 +1619,8 @@ function IngredientsTab({
           <Pressable
             onPress={() => setSelectedTrip(Math.max(0, selectedTrip - 1))}
             disabled={selectedTrip === 0}
+            accessibilityRole="button"
+            accessibilityLabel={t("shopping.previousTrip")}
             className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-70"
             style={selectedTrip === 0 ? { opacity: 0.4 } : undefined}
           >
@@ -1601,10 +1628,9 @@ function IngredientsTab({
           </Pressable>
           <View className="min-w-0 flex-1 items-center">
             <Text className="text-[12.5px] font-sans-semibold text-foreground">
-              {activeCadence === "mensual"
-                ? "Compra única del mes"
-                : `Compra ${selectedTrip + 1} de ${tripsTotal}`}
-              {monthStatus === "current" && timing === "current" ? " · esta semana" : ""}
+              {monthStatus === "current" && timing === "current"
+                ? t("shopping.thisWeek", { trip: tripLabel })
+                : tripLabel}
             </Text>
             <Text className="font-mono text-[10px] text-muted-foreground">
               {tripRange.from} – {tripRange.to} {monthShort}
@@ -1613,6 +1639,8 @@ function IngredientsTab({
           <Pressable
             onPress={() => setSelectedTrip(Math.min(tripsTotal - 1, selectedTrip + 1))}
             disabled={selectedTrip === tripsTotal - 1}
+            accessibilityRole="button"
+            accessibilityLabel={t("shopping.nextTrip")}
             className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-70"
             style={selectedTrip === tripsTotal - 1 ? { opacity: 0.4 } : undefined}
           >
@@ -1623,13 +1651,15 @@ function IngredientsTab({
 
       {/* Resumen "Te falta comprar" */}
       <View className="rounded-3xl bg-surface p-5">
-        <Text className="text-xs font-sans-semibold text-muted-foreground">Te falta comprar</Text>
+        <Text className="text-xs font-sans-semibold text-muted-foreground">
+          {t("shopping.pending")}
+        </Text>
         <View className="mt-0.5 flex-row items-baseline gap-2">
           <Text className="font-heading text-4xl tabular-nums text-primary-ink">
             {money(stillPending)}
           </Text>
           <Text className="text-xs text-muted-foreground">
-            {needCount} artículo{needCount === 1 ? "" : "s"}
+            {t("shopping.items", { count: needCount })}
           </Text>
         </View>
         <View className="mt-3.5 h-2 flex-row overflow-hidden rounded-full bg-secondary">
@@ -1640,29 +1670,32 @@ function IngredientsTab({
           <View className="flex-row items-center gap-1.5">
             <View className="h-[7px] w-[7px] rounded-full bg-success" />
             <Text className="text-[11.5px] text-muted-foreground">
-              En casa {money(alreadyHome)}
+              {t("shopping.atHome")} {money(alreadyHome)}
             </Text>
           </View>
           <View className="flex-row items-center gap-1.5">
             <View className="h-[7px] w-[7px] rounded-full bg-success/50" />
             <Text className="text-[11.5px] text-muted-foreground">
-              Comprado {money(alreadyBought)}
+              {t("shopping.bought")} {money(alreadyBought)}
             </Text>
           </View>
           <View className="flex-row items-center gap-1.5">
             <View className="h-[7px] w-[7px] rounded-full bg-secondary" />
-            <Text className="text-[11.5px] text-muted-foreground">Total {money(total)}</Text>
+            <Text className="text-[11.5px] text-muted-foreground">
+              {t("shopping.total")} {money(total)}
+            </Text>
           </View>
         </View>
         {tripActual != null ? (
           <Text className="mt-2 text-xs text-muted-foreground">
-            Gastaste en esta compra:{" "}
+            {t("shopping.spentOnTrip")}{" "}
             <Text className="font-sans-semibold text-foreground">{money(tripActual)}</Text>
             {tripActual !== total ? (
               <Text className={tripActual > total ? "text-destructive" : "text-success"}>
                 {" "}
-                ({tripActual > total ? "+" : ""}
-                {money(tripActual - total)} vs. lo estimado)
+                {t("shopping.vsEstimate", {
+                  diff: `${tripActual > total ? "+" : ""}${money(tripActual - total)}`,
+                })}
               </Text>
             ) : null}
           </Text>
@@ -1680,20 +1713,21 @@ function IngredientsTab({
 
       {/* Cabecera + filtros */}
       <View className="mt-1 flex-row items-center justify-between gap-2.5 px-0.5">
-        <Text className="font-heading text-xl text-foreground">Ingredientes</Text>
-        <Text className="text-[11.5px] text-muted-foreground">{pctResolved}% ya resuelto</Text>
+        <Text className="font-heading text-xl text-foreground">{t("shopping.title")}</Text>
+        <Text className="text-[11.5px] text-muted-foreground">
+          {t("shopping.resolved", { pct: pctResolved })}
+        </Text>
       </View>
       <Text className="px-0.5 text-xs leading-relaxed text-muted-foreground">
-        Marca lo que ya tengas en casa; lo que quede sin marcar es tu lista del súper. Cuando
-        termines, pulsa Ir a comprar.
+        <Trans i18nKey="shopping.help" components={{ b: <Text /> }} />
       </Text>
 
       <View className="flex-row gap-1.5">
         {(
           [
-            ["all", "Todo", totalItems],
-            ["need", "Falta comprar", needCount],
-            ["have", "Ya lo tengo", haveCount],
+            ["all", t("shopping.filters.all"), totalItems],
+            ["need", t("shopping.filters.need"), needCount],
+            ["have", t("shopping.filters.have"), haveCount],
           ] as const
         ).map(([key, chipLabel, count]) => {
           const active = filter === key;
@@ -1773,7 +1807,7 @@ function IngredientsTab({
                     </Text>
                     {have ? (
                       <Text className="text-[10px] font-sans-semibold text-success">
-                        {item.owned === "store" ? "Comprado" : "En casa"}
+                        {item.owned === "store" ? t("shopping.bought") : t("shopping.atHome")}
                       </Text>
                     ) : null}
                   </View>
@@ -1785,18 +1819,16 @@ function IngredientsTab({
         {!shopping?.length ? (
           <Text className="text-sm text-muted-foreground">
             {readOnly
-              ? "No hubo lista de la compra este mes."
+              ? t("shopping.empty.past")
               : plannerLocked
-                ? `Aún no hay lista de la casa. La prepara ${plannerName ?? "quien planifica"}.`
-                : "Aún no hay lista. Regenera el plan para crearla."}
+                ? t("shopping.empty.house", {
+                    name: plannerName ?? t("shopping.plannerFallback"),
+                  })
+                : t("shopping.empty.own")}
           </Text>
         ) : filteredGroups.length === 0 ? (
           <Text className="px-0.5 text-sm text-muted-foreground">
-            {filter === "need"
-              ? "No te falta nada de esta compra."
-              : filter === "have"
-                ? "Todavía no has marcado nada como que ya lo tienes."
-                : "Esta compra no tiene ingredientes."}
+            {t(`shopping.emptyFilter.${filter}`)}
           </Text>
         ) : null}
       </View>
@@ -1809,8 +1841,7 @@ function IngredientsTab({
         <View className="mt-1 flex-row items-start gap-2.5 rounded-3xl bg-primary/10 px-4 py-3.5">
           <Lightbulb size={15} color="#a84a17" style={{ marginTop: 2 }} />
           <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
-            Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
-            volveré a pedir mientras te dure.
+            {t("shopping.tip")}
           </Text>
         </View>
       )}
@@ -1825,7 +1856,7 @@ function IngredientsTab({
         >
           <ShoppingCart size={17} color="#3e3d39" />
           <Text className="text-sm font-sans-bold text-primary-foreground">
-            Ir a comprar · {needCount} art.
+            {t("shopping.goShop", { count: needCount })}
           </Text>
         </Pressable>
       ) : null}
@@ -1865,6 +1896,7 @@ function ShopModeView({
   onScanReceipt: (imageBase64: string, mime: string) => void;
   scanningReceipt: boolean;
 }) {
+  const { t } = useTranslation();
   const money = useMoney();
   const currencySign = useCurrencySymbol();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
@@ -1878,7 +1910,7 @@ function ShopModeView({
       const ImageManipulator = await import("expo-image-manipulator");
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Necesito acceso a tus fotos para leer el tiquet");
+        Alert.alert(t("shopMode.photosPermission"));
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -1893,7 +1925,7 @@ function ShopModeView({
       );
       if (shrunk.base64) onScanReceipt(shrunk.base64, "image/jpeg");
     } catch (e) {
-      Alert.alert("El escaneo de tiquets estará disponible en la próxima versión de la app.");
+      Alert.alert(t("shopMode.scanUnavailable"));
       console.warn("pickReceipt", e);
     }
   };
@@ -1924,9 +1956,7 @@ function ShopModeView({
   const freshRisks = trip
     ? freshRisksForTrip(trip.groups, coverage ?? FULL_COVERAGE, tripsTotal, selectedTrip)
     : [];
-  const monthShort = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
-    month: "short",
-  });
+  const monthShort = t(`monthsShort.${Number(month.slice(5, 7)) - 1}`);
 
   // Último importe enviado, para que `commitActual` no repita la misma mutación
   // cuando lo disparan seguidos el onBlur del campo y el onPress del botón.
@@ -1956,17 +1986,22 @@ function ShopModeView({
           <Pressable
             onPress={onClose}
             accessibilityRole="button"
-            accessibilityLabel="Salir del modo compra"
+            accessibilityLabel={t("shopMode.exit")}
             className="h-9 w-9 items-center justify-center rounded-full bg-surface active:opacity-70"
           >
             <ChevronLeft size={16} color="#6b6256" />
           </Pressable>
           <View className="min-w-0 flex-1">
             <Text className="text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
-              Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to}{" "}
-              {monthShort}
+              {t("shopMode.header", {
+                n: selectedTrip + 1,
+                total: tripsTotal,
+                from: tripRange.from,
+                to: tripRange.to,
+                month: monthShort,
+              })}
             </Text>
-            <Text className="font-heading text-2xl text-foreground">En el súper</Text>
+            <Text className="font-heading text-2xl text-foreground">{t("shopMode.title")}</Text>
           </View>
         </View>
 
@@ -1975,14 +2010,16 @@ function ShopModeView({
           <View className="flex-row items-end justify-between gap-3">
             <View className="min-w-0">
               <Text className="text-xs font-sans-semibold text-muted-foreground">
-                Queda por coger
+                {t("shopMode.left")}
               </Text>
               <Text className="mt-0.5 font-heading text-3xl tabular-nums text-primary-ink">
                 {money(leftTotal)}
               </Text>
             </View>
             <View className="items-end">
-              <Text className="font-mono text-[11px] text-muted-foreground">en el carro</Text>
+              <Text className="font-mono text-[11px] text-muted-foreground">
+                {t("shopMode.inCart")}
+              </Text>
               <Text className="mt-0.5 font-mono-medium text-[15px] text-success">
                 {money(doneTotal)}
               </Text>
@@ -1992,8 +2029,7 @@ function ShopModeView({
             <ProgressFill pct={pct} color="#4cae64" rounded />
           </View>
           <Text className="mt-2 text-[11.5px] text-muted-foreground">
-            {leftItems.length} de {allItems.length} por coger · lo que ya tienes en casa no aparece
-            aquí
+            {t("shopMode.progress", { left: leftItems.length, total: allItems.length })}
           </Text>
         </View>
 
@@ -2053,9 +2089,7 @@ function ShopModeView({
             </View>
           ))}
           {shopGroups.length === 0 ? (
-            <Text className="px-1 text-sm text-muted-foreground">
-              Nada que coger en esta compra: ya lo tienes todo en casa o comprado.
-            </Text>
+            <Text className="px-1 text-sm text-muted-foreground">{t("shopMode.nothing")}</Text>
           ) : null}
         </View>
       </ScrollView>
@@ -2066,7 +2100,9 @@ function ShopModeView({
           {allDone ? (
             <View className="gap-3">
               <View className="flex-row items-center gap-2 rounded-2xl bg-surface px-4 py-3">
-                <Text className="flex-1 text-xs text-muted-foreground">¿Cuánto gastaste?</Text>
+                <Text className="flex-1 text-xs text-muted-foreground">
+                  {t("shopMode.spendQuestion")}
+                </Text>
                 <TextInput
                   value={text}
                   onChangeText={setText}
@@ -2087,11 +2123,11 @@ function ShopModeView({
               >
                 <Receipt size={16} color="#6b6256" />
                 <Text className="text-xs font-sans-semibold text-muted-foreground">
-                  {scanningReceipt ? "Leyendo el tiquet..." : "Escanear tiquet y calcularlo"}
+                  {scanningReceipt ? t("shopMode.scanning") : t("shopMode.scan")}
                 </Text>
               </Pressable>
               <Text className="text-[10.5px] leading-relaxed text-muted-foreground">
-                La foto se usa solo para leer el total y los productos; no se guarda.
+                {t("shopMode.photoNote")}
               </Text>
               <Pressable
                 onPress={() => {
@@ -2104,7 +2140,7 @@ function ShopModeView({
                 className="items-center rounded-2xl bg-success py-4 active:opacity-90"
               >
                 <Text className="text-sm font-sans-bold text-success-foreground">
-                  Compra completa · guardar gasto
+                  {t("shopMode.complete")}
                 </Text>
               </Pressable>
             </View>
@@ -2113,7 +2149,7 @@ function ShopModeView({
               onPress={onClose}
               className="items-center rounded-2xl bg-foreground py-4 active:opacity-90"
             >
-              <Text className="text-sm font-sans-bold text-background">Terminar compra</Text>
+              <Text className="text-sm font-sans-bold text-background">{t("shopMode.finish")}</Text>
             </Pressable>
           )}
         </View>

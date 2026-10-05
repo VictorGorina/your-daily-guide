@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -32,7 +33,7 @@ import { MonthIntakeChat } from "@/components/month-intake-chat";
 import { MonthSpendSummary } from "@/components/month-spend-summary";
 import { PlanMonthCalendar } from "@/components/plan-month-calendar";
 import { PlanUpdatedBanner } from "@/components/plan-updated-banner";
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
+import { isCleanFood } from "@/lib/content-guard";
 import {
   fetchLogs,
   fetchLogsForMonth,
@@ -43,6 +44,7 @@ import {
   todayISO,
 } from "@/lib/daily";
 import { fetchHousehold, householdSharedSlots } from "@/lib/household";
+import { dateLocale } from "@/lib/i18n";
 import {
   addMonths,
   boughtTotal,
@@ -136,6 +138,8 @@ export const Route = createFileRoute("/_authenticated/plan")({
 });
 
 function PlanPage() {
+  const { t, i18n } = useTranslation();
+  const locale = dateLocale(i18n.language);
   const money = useMoney();
   const qc = useQueryClient();
   const today = todayISO();
@@ -168,7 +172,7 @@ function PlanPage() {
   // compra del hogar en solo lectura a la pestaña Ingredientes (issue 05).
   const hh = householdQ.data;
   const isSoloPlanner = !!hh?.me && !!hh?.planner && hh.me.id !== hh.planner.id;
-  const plannerName = hh?.planner?.display_name ?? "quien lleva la cocina";
+  const plannerName = hh?.planner?.display_name ?? t("plan.plannerFallback");
   // La regla del servidor (horarios de cada persona), no la columna a pelo.
   const sharedSlots = householdSharedSlots(hh);
   // Para que el calendario del mes solo oculte "Ver receta" a quien de verdad
@@ -238,8 +242,7 @@ function PlanPage() {
           .catch(() => undefined);
       }
     },
-    onError: (e) =>
-      toast.error(e instanceof Error ? e.message : "No hemos podido crear el plan ahora mismo"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : t("plan.errors.create")),
   });
 
   // Cambiar la cadencia no llama a la IA: la lista canónica guarda el desglose
@@ -256,7 +259,7 @@ function PlanPage() {
     },
     onError: (e) => {
       setPendingCadence(null);
-      toast.error(e instanceof Error ? e.message : "No hemos podido cambiar la frecuencia");
+      toast.error(e instanceof Error ? e.message : t("plan.errors.recadence"));
     },
   });
 
@@ -283,7 +286,7 @@ function PlanPage() {
         ...row,
         shopping: res.shopping,
       }),
-      onError: () => toast.error("No hemos podido guardar el cambio"),
+      onError: () => toast.error(t("plan.errors.saveChange")),
     },
     actual: {
       kind: "actual",
@@ -296,7 +299,7 @@ function PlanPage() {
         ...row,
         trip_actuals: res.trip_actuals,
       }),
-      onError: () => toast.error("No hemos podido guardar el gasto"),
+      onError: () => toast.error(t("plan.errors.saveSpend")),
     },
     pantry: {
       kind: "pantry",
@@ -309,7 +312,7 @@ function PlanPage() {
         ...row,
         pantry_extras: res.pantry_extras,
       }),
-      onError: () => toast.error("No hemos podido guardar el ingrediente"),
+      onError: () => toast.error(t("plan.errors.saveIngredient")),
     },
     receipt: {
       kind: "receipt",
@@ -322,14 +325,23 @@ function PlanPage() {
         pantry_extras: res.pantry_extras,
       }),
       onError: (e: unknown) =>
-        toast.error(e instanceof Error ? e.message : "No hemos podido leer el tiquet"),
+        toast.error(e instanceof Error ? e.message : t("plan.errors.receipt")),
     },
   });
-  const receiptToast = (res: ReceiptScan, where: string) => {
-    const parts = [`Gasto guardado: ${money(res.total)}`];
-    if (res.added.length) parts.push(`Añadí a ${where}: ${res.added.join(", ")}`);
-    if (res.discarded.length)
-      parts.push(`Descarté: ${res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ")}`);
+  const receiptToast = (res: ReceiptScan, pantryOf: "own" | "house") => {
+    const parts = [t("plan.receipt.saved", { amount: money(res.total) })];
+    if (res.added.length) {
+      const names = res.added.join(", ");
+      parts.push(
+        pantryOf === "house"
+          ? t("plan.receipt.addedHouse", { names })
+          : t("plan.receipt.addedOwn", { names }),
+      );
+    }
+    if (res.discarded.length) {
+      const names = res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ");
+      parts.push(t("plan.receipt.discarded", { names }));
+    }
     toast.success(parts.join(". "));
   };
 
@@ -356,7 +368,7 @@ function PlanPage() {
     ...ownKey,
     ...own.receipt,
     onSuccess: (res) => {
-      receiptToast(res, "tu despensa");
+      receiptToast(res, "own");
       if (res.added.length) recalcFromPantry();
     },
   });
@@ -373,7 +385,7 @@ function PlanPage() {
   const hhReceipt = useShoppingMutation({
     ...houseKey,
     ...house.receipt,
-    onSuccess: (res) => receiptToast(res, "la despensa de la casa"),
+    onSuccess: (res) => receiptToast(res, "house"),
   });
 
   const plan = planQ.data?.plan ?? null;
@@ -538,14 +550,14 @@ function PlanPage() {
       <header className="animate-rise relative flex justify-center">
         <div className="min-w-0 text-center">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Plan mensual
+            {t("plan.eyebrow")}
           </p>
           <div className="mt-0.5 flex items-center gap-1">
             <button
               type="button"
               onClick={() => goToMonth(addMonths(month, -1))}
               disabled={!canPrev}
-              aria-label="Mes anterior"
+              aria-label={t("plan.prevMonth")}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground disabled:opacity-30"
             >
               <ChevronLeft className="h-5 w-5" />
@@ -556,10 +568,10 @@ function PlanPage() {
                 al lado, cabe de sobra incluso en el más largo (septiembre). */}
             <h1 className="min-w-0 flex-1 text-center leading-tight">
               <span className="block font-title text-[26px] font-semibold tracking-[-0.03em]">
-                {capitalizeFirst(monthParts(month).monthName)}
+                {capitalizeFirst(monthParts(month, locale).monthName)}
               </span>
               <span className="block text-[13px] font-medium text-muted-foreground">
-                {monthParts(month).year}
+                {monthParts(month, locale).year}
               </span>
             </h1>
             <button
@@ -567,12 +579,15 @@ function PlanPage() {
               onClick={() =>
                 nextIsLocked
                   ? toast.info(
-                      `Podrás preparar ${monthTitle(addMonths(month, 1))} la última semana de ${monthTitle(month)}.`,
+                      t("plan.nextLockedInfo", {
+                        next: monthTitle(addMonths(month, 1), locale),
+                        current: monthTitle(month, locale),
+                      }),
                     )
                   : goToMonth(addMonths(month, 1))
               }
               disabled={!canNext && !nextIsLocked}
-              aria-label={nextIsLocked ? "Mes siguiente (aún bloqueado)" : "Mes siguiente"}
+              aria-label={nextIsLocked ? t("plan.nextMonthLocked") : t("plan.nextMonth")}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground disabled:opacity-30"
             >
               {nextIsLocked ? <Lock className="h-4 w-4" /> : <ChevronRight className="h-5 w-5" />}
@@ -587,7 +602,7 @@ function PlanPage() {
             className="absolute right-0 top-full mt-1 text-xs text-muted-foreground"
             aria-live="polite"
           >
-            Calculando macros…
+            {t("plan.warming")}
           </p>
         ) : null}
       </header>
@@ -604,17 +619,17 @@ function PlanPage() {
           <CalendarRange className="mx-auto h-7 w-7 text-primary-ink" />
           <h2 className="mt-3 text-sm font-semibold">
             {isSoloPlanner
-              ? "Planifica tus comidas en solitario"
+              ? t("plan.create.titleSolo")
               : monthStatus === "next-unlocked"
-                ? `Prepara tu plan de ${monthTitle(month)}`
-                : "Todavía no tienes plan de este mes"}
+                ? t("plan.create.titleNext", { month: monthTitle(month, locale) })
+                : t("plan.create.titleCurrent")}
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
             {isSoloPlanner
-              ? `Las comidas compartidas de tu casa las lleva ${plannerName}. Esto planifica solo lo que comes por tu cuenta (desayunos, meriendas y los días que no compartís).`
+              ? t("plan.create.bodySolo", { name: plannerName })
               : monthStatus === "next-unlocked"
-                ? "Cuéntame en cinco preguntas cómo será tu mes y tendrás el plan y la compra antes de que empiece."
-                : "Cuéntame en cinco preguntas cómo será tu mes y te preparo sus comidas y la compra, ajustadas a tu presupuesto."}
+                ? t("plan.create.bodyNext")
+                : t("plan.create.bodyCurrent")}
           </p>
           <button
             onClick={() => setIntakeOpen(true)}
@@ -622,12 +637,12 @@ function PlanPage() {
             className="mt-5 w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
           >
             {generate.isPending
-              ? "Preparando tu mes..."
+              ? t("plan.create.preparing")
               : isSoloPlanner
-                ? "Planificar mis comidas en solitario"
+                ? t("plan.create.ctaSolo")
                 : monthStatus === "next-unlocked"
-                  ? `Crear plan de ${monthTitle(month)}`
-                  : "Crear plan del mes"}
+                  ? t("plan.create.ctaNext", { month: monthTitle(month, locale) })
+                  : t("plan.create.ctaCurrent")}
           </button>
         </section>
       ) : (
@@ -635,8 +650,8 @@ function PlanPage() {
           <div className="sticky top-3 z-10 mt-6 grid grid-cols-2 gap-2 rounded-full bg-secondary/80 p-1 backdrop-blur">
             {(
               [
-                ["plan", "Plan", CalendarRange],
-                ["compra", "Ingredientes", ShoppingBasket],
+                ["plan", t("plan.tabs.plan"), CalendarRange],
+                ["compra", t("plan.tabs.ingredients"), ShoppingBasket],
               ] as const
             ).map(([key, label, Icon]) => (
               <button
@@ -655,9 +670,11 @@ function PlanPage() {
             <div className="mt-4 flex items-start gap-2 rounded-2xl bg-secondary/60 px-3.5 py-2.5">
               <Users className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <p className="text-[12px] leading-relaxed text-muted-foreground">
-                Las comidas compartidas de tu casa las lleva{" "}
-                <span className="font-medium text-foreground">{plannerName}</span>. Aquí solo
-                planificas y ves tus comidas en solitario.
+                <Trans
+                  i18nKey="plan.sharedBy"
+                  values={{ name: plannerName }}
+                  components={{ b: <span className="font-medium text-foreground" /> }}
+                />
               </p>
             </div>
           ) : null}
@@ -679,7 +696,7 @@ function PlanPage() {
                 <div className="surface-card p-5">
                   <div className="flex items-center gap-2">
                     <Sparkle className="h-4 w-4 text-primary-ink" />
-                    <h2 className="text-sm font-semibold">Cómo enfocamos el mes</h2>
+                    <h2 className="text-sm font-semibold">{t("plan.focusTitle")}</h2>
                   </div>
                   <p className="hyphens-auto mt-2 text-justify text-sm leading-relaxed">
                     {plan.intro}
@@ -695,8 +712,7 @@ function PlanPage() {
                     </ul>
                   ) : null}
                   <p className="hyphens-auto mt-3 text-justify text-xs leading-relaxed text-muted-foreground">
-                    Solo cocinas con lo que has comprado. Si te saltas un día, dímelo en el chat y
-                    recoloco los siguientes.
+                    {t("plan.focusNote")}
                   </p>
                   <PlanFitNote fit={plan.fit} fitting={fitting} />
                 </div>
@@ -716,7 +732,7 @@ function PlanPage() {
 
               {!plan && !(monthLogsQ.data?.length ?? 0) ? (
                 <p className="px-1 text-sm text-muted-foreground">
-                  No planificaste {monthTitle(month)}.
+                  {t("plan.notPlanned", { month: monthTitle(month, locale) })}
                 </p>
               ) : null}
             </section>
@@ -743,12 +759,11 @@ function PlanPage() {
                   <div className="flex items-center gap-2 px-0.5">
                     <Users className="h-4 w-4 text-primary-ink" />
                     <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
-                      La compra de la casa
+                      {t("plan.householdShopping.title")}
                     </h2>
                   </div>
                   <p className="px-0.5 text-xs leading-relaxed text-muted-foreground">
-                    La lleva {plannerName}. Marca lo que ya tengas y sal a comprar cuando quieras;
-                    las cantidades y la frecuencia las decide {plannerName}.
+                    {t("plan.householdShopping.body", { name: plannerName })}
                   </p>
                   <IngredientsTab
                     shopping={plannerShopping}
@@ -788,7 +803,7 @@ function PlanPage() {
                 <div className="flex items-center gap-2 px-0.5">
                   <ShoppingBasket className="h-4 w-4 text-primary-ink" />
                   <h2 className="font-title text-lg font-semibold tracking-[-0.02em]">
-                    Tu compra en solitario
+                    {t("plan.soloShopping.title")}
                   </h2>
                 </div>
 
@@ -831,17 +846,16 @@ function PlanPage() {
                   />
                 ) : (
                   <div className="surface-card p-5 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Aún no tienes lista propia. Planifica tus comidas en solitario (desayunos,
-                      meriendas y los días que no compartís) y aparecerá aquí.
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t("plan.soloShopping.empty")}</p>
                     {actionable ? (
                       <button
                         onClick={() => setIntakeOpen(true)}
                         disabled={generate.isPending}
                         className="mt-4 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
                       >
-                        {generate.isPending ? "Preparando…" : "Planificar mis comidas en solitario"}
+                        {generate.isPending
+                          ? t("plan.create.preparingShort")
+                          : t("plan.create.ctaSolo")}
                       </button>
                     ) : null}
                   </div>
@@ -971,6 +985,7 @@ function PantryExtrasCard({
     mutate: (v: { name: string; qty?: string; remove?: boolean }) => void;
   };
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   // Esta tarjeta no enseña el error de la mutación, así que sin este aviso un
   // ingrediente rechazado por el servidor desaparecía sin decir nada.
@@ -979,7 +994,7 @@ function PantryExtrasCard({
     const trimmed = name.trim();
     if (!trimmed || pantry.isPending) return;
     if (!isCleanFood(trimmed)) {
-      setError(BLOCKED_FOOD_MESSAGE);
+      setError(t("food.blocked"));
       return;
     }
     setError(null);
@@ -990,11 +1005,10 @@ function PantryExtrasCard({
     <div className="surface-card px-4 py-3.5">
       <div className="flex items-center gap-2">
         <Carrot className="h-[15px] w-[15px] shrink-0 text-primary-ink" />
-        <h3 className="flex-1 text-[12.5px] font-semibold">Ya lo tengo en casa · fuera del plan</h3>
+        <h3 className="flex-1 text-[12.5px] font-semibold">{t("shopping.pantry.title")}</h3>
       </div>
       <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-        Si tienes algo que la lista no incluye, dímelo y recoloco los próximos días para
-        aprovecharlo. Tu lista de la compra no cambia.
+        {t("shopping.pantry.body")}
       </p>
       <div className="mt-2.5 flex gap-1.5">
         <input
@@ -1006,15 +1020,15 @@ function PantryExtrasCard({
           onKeyDown={(e) => {
             if (e.key === "Enter") add();
           }}
-          placeholder="p. ej. lentejas, espinacas..."
-          aria-label="Ingrediente que ya tienes en casa"
+          placeholder={t("shopping.pantry.placeholder")}
+          aria-label={t("shopping.pantry.inputLabel")}
           className="min-w-0 flex-1 rounded-full bg-secondary px-3.5 py-2 text-xs outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring/40"
         />
         <button
           type="button"
           onClick={add}
           disabled={pantry.isPending || !name.trim()}
-          aria-label="Añadir ingrediente"
+          aria-label={t("shopping.pantry.add")}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-foreground text-background disabled:opacity-40"
         >
           <Plus className="h-4 w-4" />
@@ -1036,7 +1050,7 @@ function PantryExtrasCard({
                 type="button"
                 onClick={() => pantry.mutate({ name: e.name, remove: true })}
                 disabled={pantry.isPending}
-                aria-label={`Quitar ${e.name}`}
+                aria-label={t("common.removeNamed", { what: e.name })}
                 className="text-muted-foreground disabled:opacity-40"
               >
                 <X className="h-3 w-3" />
@@ -1117,6 +1131,7 @@ function IngredientsTab({
    *  listas apiladas en la pantalla (compra de la casa + compra en solitario). */
   inlineCta?: boolean;
 }) {
+  const { t } = useTranslation();
   const money = useMoney();
   const currentTrip = trips[selectedTrip] ?? trips[0];
   const timing = tripTiming(tripsTotal, selectedTrip, todayDayOfMonth, coverage);
@@ -1179,6 +1194,11 @@ function IngredientsTab({
   // Rango de días de la compra seleccionada
   const covOrFull = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
   const tripRange = tripDayRange(covOrFull, tripsTotal, selectedTrip);
+  const monthShort = t(`monthsShort.${Number(month.slice(5, 7)) - 1}`);
+  const tripLabel =
+    activeCadence === "mensual"
+      ? t("shopping.tripSingle")
+      : t("shopping.tripOf", { n: selectedTrip + 1, total: tripsTotal });
 
   // Frescos que esta compra no cubre sin que se estropeen: no cambia la lista,
   // solo avisa de comprarlos más cerca de cuando se cocinan.
@@ -1201,16 +1221,14 @@ function IngredientsTab({
       {planUpdated ? <PlanUpdatedBanner onDismiss={dismissPlanUpdated} /> : null}
       {readOnly ? (
         <div className="rounded-[20px] bg-secondary/60 px-4 py-3">
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Compra de un mes ya pasado: se muestra solo para consultar, no se puede modificar.
-          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">{t("shopping.readOnly")}</p>
         </div>
       ) : plannerLocked ? null : (
         /* Cadencia */
         <div className="surface-card p-4">
           <div className="flex items-center gap-2 px-0.5">
             <CalendarSync className="h-[15px] w-[15px] shrink-0 text-primary-ink" />
-            <h3 className="flex-1 text-sm font-semibold">Cada cuánto compras</h3>
+            <h3 className="flex-1 text-sm font-semibold">{t("shopping.cadenceTitle")}</h3>
           </div>
           <div className="mt-2.5 flex gap-0.5 rounded-full bg-secondary p-[3px]">
             {CADENCES.map((c) => {
@@ -1232,7 +1250,7 @@ function IngredientsTab({
                       : "text-muted-foreground"
                   }`}
                 >
-                  {c.short}
+                  {t(`cadence.${c.key}.short`)}
                 </button>
               );
             })}
@@ -1251,13 +1269,13 @@ function IngredientsTab({
             </div>
             <p className="flex-1 text-[12.5px] leading-[18px] text-pretty text-muted-foreground">
               {recadence.isPending ? (
-                "Actualizando…"
+                t("shopping.updating")
               ) : (
                 <>
                   <span className="font-semibold text-foreground">
-                    {tripsTotal} {tripsTotal === 1 ? "compra" : "compras"}.
+                    {t("shopping.trips", { count: tripsTotal })}
                   </span>{" "}
-                  {shownCadence.desc}
+                  {t(`cadence.${shownCadence.key}.desc`)}
                 </>
               )}
             </p>
@@ -1269,8 +1287,7 @@ function IngredientsTab({
       {overBudget ? (
         <div className="rounded-[20px] bg-destructive/10 px-4 py-3">
           <p className="text-xs leading-relaxed text-destructive">
-            El mes se pasa de tu presupuesto ({money(periodBudget)}). Puedo ajustarlo: regenera el
-            plan o dímelo en el chat.
+            {t("shopping.overBudget", { budget: money(periodBudget) })}
           </p>
         </div>
       ) : null}
@@ -1282,26 +1299,26 @@ function IngredientsTab({
             type="button"
             onClick={() => setSelectedTrip(Math.max(0, selectedTrip - 1))}
             disabled={selectedTrip === 0}
+            aria-label={t("shopping.previousTrip")}
             className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-surface text-muted-foreground disabled:opacity-40"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <div className="min-w-0 flex-1 text-center">
             <p className="text-[12.5px] font-semibold">
-              {activeCadence === "mensual"
-                ? "Compra única del mes"
-                : `Compra ${selectedTrip + 1} de ${tripsTotal}`}
-              {monthStatus === "current" && timing === "current" ? " · esta semana" : ""}
+              {monthStatus === "current" && timing === "current"
+                ? t("shopping.thisWeek", { trip: tripLabel })
+                : tripLabel}
             </p>
             <p className="font-mono text-[10px] text-muted-foreground">
-              {tripRange.from} – {tripRange.to}{" "}
-              {new Date(`${month}-01`).toLocaleDateString("es-ES", { month: "short" })}
+              {tripRange.from} – {tripRange.to} {monthShort}
             </p>
           </div>
           <button
             type="button"
             onClick={() => setSelectedTrip(Math.min(tripsTotal - 1, selectedTrip + 1))}
             disabled={selectedTrip === tripsTotal - 1}
+            aria-label={t("shopping.nextTrip")}
             className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-surface text-muted-foreground disabled:opacity-40"
           >
             <ChevronRight className="h-3.5 w-3.5" />
@@ -1311,13 +1328,13 @@ function IngredientsTab({
 
       {/* Resumen "Te falta comprar" */}
       <div className="surface-card p-5">
-        <p className="text-xs font-semibold text-muted-foreground">Te falta comprar</p>
+        <p className="text-xs font-semibold text-muted-foreground">{t("shopping.pending")}</p>
         <div className="mt-0.5 flex items-baseline gap-2">
           <span className="font-title text-4xl font-semibold tabular-nums tracking-tight text-primary-ink">
             {money(stillPending)}
           </span>
           <span className="text-xs text-muted-foreground">
-            {needCount} artículo{needCount === 1 ? "" : "s"}
+            {t("shopping.items", { count: needCount })}
           </span>
         </div>
         <div className="mt-3.5 flex h-2 w-full overflow-hidden rounded-full bg-secondary">
@@ -1333,24 +1350,25 @@ function IngredientsTab({
         <div className="mt-2.5 flex flex-wrap gap-3.5 text-[11.5px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className="h-[7px] w-[7px] rounded-full bg-success" />
-            En casa {money(alreadyHome)}
+            {t("shopping.atHome")} {money(alreadyHome)}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-[7px] w-[7px] rounded-full bg-success/50" />
-            Comprado {money(alreadyBought)}
+            {t("shopping.bought")} {money(alreadyBought)}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-[7px] w-[7px] rounded-full bg-secondary" />
-            Total {money(total)}
+            {t("shopping.total")} {money(total)}
           </span>
         </div>
         {tripActual != null ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Gastaste en esta compra: <span className="font-semibold">{money(tripActual)}</span>{" "}
+            {t("shopping.spentOnTrip")} <span className="font-semibold">{money(tripActual)}</span>{" "}
             {tripActual !== total ? (
               <span className={tripActual > total ? "text-destructive" : "text-success"}>
-                ({tripActual > total ? "+" : ""}
-                {money(tripActual - total)} vs. lo estimado)
+                {t("shopping.vsEstimate", {
+                  diff: `${tripActual > total ? "+" : ""}${money(tripActual - total)}`,
+                })}
               </span>
             ) : null}
           </p>
@@ -1368,20 +1386,26 @@ function IngredientsTab({
 
       {/* Cabecera + filtros */}
       <div className="flex items-center justify-between gap-2.5 px-0.5">
-        <h2 className="font-title text-xl font-semibold tracking-[-0.02em]">Ingredientes</h2>
-        <span className="text-[11.5px] text-muted-foreground">{pctResolved}% ya resuelto</span>
+        <h2 className="font-title text-xl font-semibold tracking-[-0.02em]">
+          {t("shopping.title")}
+        </h2>
+        <span className="text-[11.5px] text-muted-foreground">
+          {t("shopping.resolved", { pct: pctResolved })}
+        </span>
       </div>
       <p className="px-0.5 text-xs leading-relaxed text-muted-foreground">
-        Marca lo que ya tengas en casa; lo que quede sin marcar es tu lista del súper. Cuando
-        termines, pulsa <span className="font-semibold text-foreground">Ir a comprar</span>.
+        <Trans
+          i18nKey="shopping.help"
+          components={{ b: <span className="font-semibold text-foreground" /> }}
+        />
       </p>
 
       <div className="flex gap-1.5">
         {(
           [
-            ["all", "Todo", totalItems],
-            ["need", "Falta comprar", needCount],
-            ["have", "Ya lo tengo", haveCount],
+            ["all", t("shopping.filters.all"), totalItems],
+            ["need", t("shopping.filters.need"), needCount],
+            ["have", t("shopping.filters.have"), haveCount],
           ] as const
         ).map(([key, label, count]) => (
           <button
@@ -1465,7 +1489,7 @@ function IngredientsTab({
                       </span>
                       {have ? (
                         <span className="block text-[10px] font-semibold text-success">
-                          {item.owned === "store" ? "Comprado" : "En casa"}
+                          {item.owned === "store" ? t("shopping.bought") : t("shopping.atHome")}
                         </span>
                       ) : null}
                     </span>
@@ -1478,18 +1502,16 @@ function IngredientsTab({
         {!shopping?.length ? (
           <p className="text-sm text-muted-foreground">
             {readOnly
-              ? "No hubo lista de la compra este mes."
+              ? t("shopping.empty.past")
               : plannerLocked
-                ? `Aún no hay lista de la casa. La prepara ${plannerName ?? "quien planifica"}.`
-                : "Aún no hay lista. Regenera el plan para crearla."}
+                ? t("shopping.empty.house", {
+                    name: plannerName ?? t("shopping.plannerFallback"),
+                  })
+                : t("shopping.empty.own")}
           </p>
         ) : filteredGroups.length === 0 ? (
           <p className="px-0.5 text-sm text-muted-foreground">
-            {filter === "need"
-              ? "No te falta nada de esta compra."
-              : filter === "have"
-                ? "Todavía no has marcado nada como que ya lo tienes."
-                : "Esta compra no tiene ingredientes."}
+            {t(`shopping.emptyFilter.${filter}`)}
           </p>
         ) : null}
       </div>
@@ -1501,10 +1523,7 @@ function IngredientsTab({
       {readOnly ? null : (
         <div className="flex items-start gap-2.5 rounded-[20px] bg-primary/10 px-4 py-3.5">
           <Lightbulb className="mt-0.5 h-[15px] w-[15px] shrink-0 text-primary-ink" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Lo que marques como "en casa" se guarda para las siguientes compras del mes: no te lo
-            volveré a pedir mientras te dure.
-          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">{t("shopping.tip")}</p>
         </div>
       )}
 
@@ -1518,7 +1537,7 @@ function IngredientsTab({
             className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-primary py-4 text-sm font-bold text-primary-foreground shadow-[0_8px_20px_-10px_rgba(255,138,61,.9)] transition-transform active:scale-[0.98]"
           >
             <ShoppingCart className="h-[17px] w-[17px]" />
-            Ir a comprar · {needCount} art.
+            {t("shopping.goShop", { count: needCount })}
           </button>
         ) : (
           <div className="fixed inset-x-0 bottom-[calc(6.75rem+env(safe-area-inset-bottom))] z-30 pl-5 pr-[4.75rem] sm:px-5">
@@ -1529,7 +1548,7 @@ function IngredientsTab({
                 className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-primary py-4 text-sm font-bold text-primary-foreground shadow-[0_8px_20px_-10px_rgba(255,138,61,.9)] transition-transform active:scale-[0.98]"
               >
                 <ShoppingCart className="h-[17px] w-[17px]" />
-                Ir a comprar · {needCount} art.
+                {t("shopping.goShop", { count: needCount })}
               </button>
             </div>
           </div>
@@ -1571,6 +1590,7 @@ function ShopModeView({
   onScanReceipt: (imageBase64: string, mime: string) => void;
   scanningReceipt: boolean;
 }) {
+  const { t } = useTranslation();
   const money = useMoney();
   const currencySign = useCurrencySymbol();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
@@ -1582,7 +1602,7 @@ function ShopModeView({
       const { base64, mime } = await imageFileToBase64(file);
       if (base64) onScanReceipt(base64, mime);
     } catch {
-      toast.error("No hemos podido preparar la foto");
+      toast.error(t("plan.errors.photo"));
     }
   };
 
@@ -1620,9 +1640,7 @@ function ShopModeView({
   const freshRisks = trip
     ? freshRisksForTrip(trip.groups, covOrFull, tripsTotal, selectedTrip)
     : [];
-  const monthShort = new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", {
-    month: "short",
-  });
+  const monthShort = t(`monthsShort.${Number(month.slice(5, 7)) - 1}`);
 
   // Último importe enviado, para que `commitActual` no repita la misma mutación
   // cuando lo disparan seguidos el onBlur del campo y el onClick del botón.
@@ -1660,21 +1678,26 @@ function ShopModeView({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Salir del modo compra"
+              aria-label={t("shopMode.exit")}
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Compra {selectedTrip + 1} de {tripsTotal} · {tripRange.from}–{tripRange.to}{" "}
-                {monthShort}
+                {t("shopMode.header", {
+                  n: selectedTrip + 1,
+                  total: tripsTotal,
+                  from: tripRange.from,
+                  to: tripRange.to,
+                  month: monthShort,
+                })}
               </p>
               <h1
                 id="shopping-mode-title"
                 className="font-title text-2xl font-semibold tracking-[-0.02em] leading-tight"
               >
-                En el súper
+                {t("shopMode.title")}
               </h1>
             </div>
           </div>
@@ -1683,13 +1706,15 @@ function ShopModeView({
           <div className="mt-4 surface-card p-5">
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-muted-foreground">Queda por coger</p>
+                <p className="text-xs font-semibold text-muted-foreground">{t("shopMode.left")}</p>
                 <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary-ink">
                   {money(Math.round(leftTotal * 100) / 100)}
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="font-mono text-[11px] text-muted-foreground">en el carro</p>
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  {t("shopMode.inCart")}
+                </p>
                 <p className="mt-0.5 font-mono text-[15px] font-medium text-success">
                   {money(Math.round(doneTotal * 100) / 100)}
                 </p>
@@ -1702,8 +1727,7 @@ function ShopModeView({
               />
             </div>
             <p className="mt-2 text-[11.5px] text-muted-foreground">
-              {leftItems.length} de {allItems.length} por coger · lo que ya tienes en casa no
-              aparece aquí
+              {t("shopMode.progress", { left: leftItems.length, total: allItems.length })}
             </p>
           </div>
 
@@ -1786,7 +1810,7 @@ function ShopModeView({
             <div className="space-y-3">
               <div className="flex items-center gap-2 rounded-[20px] bg-surface px-4 py-3">
                 <label htmlFor={spendId} className="flex-1 text-xs text-muted-foreground">
-                  ¿Cuánto gastaste?
+                  {t("shopMode.spendQuestion")}
                 </label>
                 <input
                   id={spendId}
@@ -1819,10 +1843,10 @@ function ShopModeView({
                 className="flex w-full items-center justify-center gap-2 rounded-[20px] border border-secondary py-3 text-xs font-semibold text-muted-foreground disabled:opacity-60"
               >
                 <Receipt className="h-4 w-4" />
-                {scanningReceipt ? "Leyendo el tiquet..." : "Escanear tiquet y calcularlo"}
+                {scanningReceipt ? t("shopMode.scanning") : t("shopMode.scan")}
               </button>
               <p className="text-[10.5px] leading-relaxed text-muted-foreground">
-                La foto se usa solo para leer el total y los productos; no se guarda.
+                {t("shopMode.photoNote")}
               </p>
               <button
                 type="button"
@@ -1834,7 +1858,7 @@ function ShopModeView({
                 }}
                 className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-success py-[17px] text-sm font-bold text-success-foreground"
               >
-                Compra completa · guardar gasto
+                {t("shopMode.complete")}
               </button>
             </div>
           ) : (
@@ -1843,7 +1867,7 @@ function ShopModeView({
               onClick={onClose}
               className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-foreground py-[17px] text-sm font-bold text-background"
             >
-              Terminar compra
+              {t("shopMode.finish")}
             </button>
           )}
         </div>

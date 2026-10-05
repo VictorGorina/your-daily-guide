@@ -6,6 +6,7 @@ import { foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { todayISO, type DailyLog } from "@/lib/daily";
 import type { SharedSlots } from "@/lib/household-shared";
+import { dateLocale } from "@/lib/i18n";
 import { daySignalKeyOf, daySignalOf } from "@/lib/macros";
 import {
   capitalizeFirst,
@@ -21,8 +22,6 @@ import {
   type PlanMonthStatus,
 } from "@/lib/plan-shared";
 import { dateInMonth, daysInMonth, weekdayIndex } from "@/lib/dates";
-
-const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 
 const dayNum = (date: string) => Number(date.slice(8, 10));
 
@@ -67,7 +66,7 @@ export function PlanMonthCalendar({
    *  resto del hogar (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
 
@@ -102,20 +101,17 @@ export function PlanMonthCalendar({
     }
   }
 
-  const hint =
-    monthStatus === "past"
-      ? "Toca un día para ver lo que comiste y sus macros."
-      : "Toca un día pasado para ver lo que comiste; uno futuro para su menú.";
+  const hint = monthStatus === "past" ? t("planCalendar.hintPast") : t("planCalendar.hintCurrent");
 
   return (
     <div className="surface-card p-5">
-      <h2 className="text-sm font-semibold">Calendario del mes</h2>
+      <h2 className="text-sm font-semibold">{t("planCalendar.title")}</h2>
       <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
 
       <div className="mt-4 grid grid-cols-7 gap-1 text-center">
-        {WEEKDAYS.map((d, i) => (
-          <span key={`${d}-${i}`} className="text-[11px] font-medium text-muted-foreground">
-            {d}
+        {Array.from({ length: 7 }, (_, i) => (
+          <span key={i} className="text-[11px] font-medium text-muted-foreground">
+            {t(`weekdaysInitial.${i}`)}
           </span>
         ))}
         {cells.map((date, i) => {
@@ -153,7 +149,14 @@ export function PlanMonthCalendar({
               <button
                 key={date}
                 onClick={() => onOpenDay(date)}
-                aria-label={`Ver el día ${dayNum(date)}${signalLabel ? `: ${signalLabel}` : ""}`}
+                aria-label={
+                  signalLabel
+                    ? t("planCalendar.openDayWithSignal", {
+                        day: dayNum(date),
+                        signal: signalLabel,
+                      })
+                    : t("planCalendar.openDay", { day: dayNum(date) })
+                }
                 className={`aspect-square rounded-xl text-sm transition-all active:scale-95 ${signalClass}`}
               >
                 {dayNum(date)}
@@ -176,8 +179,7 @@ export function PlanMonthCalendar({
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Verde: día en tu objetivo. Amarillo: te desviaste. Rojo: bastante por encima. Gris: sin
-        registro.
+        {t("planCalendar.legend")}
       </p>
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
@@ -186,7 +188,7 @@ export function PlanMonthCalendar({
             <DialogTitle>
               {selected
                 ? capitalizeFirst(
-                    new Date(`${selected}T00:00:00`).toLocaleDateString("es-ES", {
+                    new Date(`${selected}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
                       weekday: "long",
                       day: "numeric",
                       month: "long",
@@ -205,7 +207,9 @@ export function PlanMonthCalendar({
                 {meals.map((meal) => (
                   <div key={meal.slot} className="rounded-xl p-3" style={foodBgStyle(meal.idea)}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-primary-ink">{meal.moment}</span>
+                      <span className="text-xs font-semibold text-primary-ink">
+                        {t(`moments.${meal.moment}`, { defaultValue: meal.moment })}
+                      </span>
                       <FoodCategoryBadge dish={meal.idea} />
                     </div>
                     <p className="mt-1 text-sm text-foreground">{meal.idea}</p>
@@ -217,7 +221,8 @@ export function PlanMonthCalendar({
                     {(kidMealsBySlot.get(meal.slot) ?? []).map((k) => (
                       <div key={`${k.name}-${k.dish}`} className="mt-1.5">
                         <p className="text-[11px] leading-relaxed text-muted-foreground">
-                          Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                          {t("planCalendar.forChild", { name: k.name })}{" "}
+                          <span className="text-foreground">{k.dish}</span>
                           {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
                         </p>
                         <DishRecipe dish={k.dish} month={month} />
@@ -236,9 +241,7 @@ export function PlanMonthCalendar({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Este día todavía no tiene menú en el plan.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("planCalendar.noMenu")}</p>
           )}
         </DialogContent>
       </Dialog>

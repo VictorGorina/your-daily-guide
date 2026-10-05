@@ -44,6 +44,7 @@ import {
   mealsForDate,
   mirrorPinned,
   monthParts,
+  monthTitle,
   reconcileHabits,
   sameHabits,
   suggestedDish,
@@ -1549,6 +1550,12 @@ describe("monthParts", () => {
   it("separa mes y año en vez de partir la cadena ya formateada", () => {
     expect(monthParts("2026-09")).toEqual({ monthName: "septiembre", year: "2026" });
     expect(monthParts("2027-01")).toEqual({ monthName: "enero", year: "2027" });
+  });
+
+  it("con el locale de la persona, el mes sale en su idioma", () => {
+    expect(monthParts("2026-09", "en-GB")).toEqual({ monthName: "September", year: "2026" });
+    expect(monthTitle("2026-09", "en-GB")).toBe("September 2026");
+    expect(monthTitle("2026-09")).toBe("septiembre de 2026");
   });
 });
 

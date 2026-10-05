@@ -997,5 +997,155 @@
     "noNumbers": "Complete dishes at your own pace, without looking at numbers.",
     "noTarget": "A rough range for your day, with no fixation on the figure.",
     "range": "between {{low}} and {{high}} kcal"
+  },
+  "weekdaysInitial": ["M", "T", "W", "T", "F", "S", "S"],
+  "plan": {
+    "eyebrow": "Monthly plan",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "nextMonthLocked": "Next month (still locked)",
+    "notYetTitle": "Not yet",
+    "nextLockedInfo": "You can prepare {{next}} in the last week of {{current}}.",
+    "warming": "Working out macros…",
+    "plannerFallback": "whoever runs the kitchen",
+    "create": {
+      "titleSolo": "Plan the meals you eat on your own",
+      "titleNext": "Prepare your plan for {{month}}",
+      "titleCurrent": "You don't have a plan for this month yet",
+      "bodySolo": "{{name}} looks after the meals your household shares. This only plans what you eat on your own (breakfasts, afternoon snacks and the days you don't share).",
+      "bodyNext": "Tell me in five questions what your month will look like and you'll have the plan and the shopping ready before it starts.",
+      "bodyCurrent": "Tell me in five questions what your month will look like and I'll prepare its meals and the shopping, fitted to your budget.",
+      "preparing": "Preparing your month...",
+      "preparingShort": "Preparing…",
+      "ctaSolo": "Plan the meals I eat on my own",
+      "ctaNext": "Create the plan for {{month}}",
+      "ctaCurrent": "Create this month's plan"
+    },
+    "tabs": {
+      "plan": "Plan",
+      "ingredients": "Ingredients"
+    },
+    "sharedBy": "<b>{{name}}</b> looks after the meals your household shares. Here you only plan and see the meals you eat on your own.",
+    "focusTitle": "How we're approaching the month",
+    "focusNote": "You only cook with what you've bought. If you skip a day, tell me in the chat and I'll rearrange the following ones.",
+    "notPlanned": "You didn't plan {{month}}.",
+    "householdShopping": {
+      "title": "The household shopping",
+      "body": "{{name}} looks after it. Tick what you already have and go shopping whenever you like; {{name}} decides the quantities and how often."
+    },
+    "soloShopping": {
+      "title": "Your own shopping",
+      "empty": "You don't have a list of your own yet. Plan the meals you eat on your own (breakfasts, afternoon snacks and the days you don't share) and it will show up here."
+    },
+    "errors": {
+      "create": "We couldn't create the plan right now",
+      "recadence": "We couldn't change how often you shop",
+      "saveChange": "We couldn't save the change",
+      "saveSpend": "We couldn't save what you spent",
+      "saveIngredient": "We couldn't save the ingredient",
+      "receipt": "We couldn't read the receipt",
+      "photo": "We couldn't prepare the photo"
+    },
+    "receipt": {
+      "title": "Receipt read",
+      "saved": "Spend saved: {{amount}}",
+      "addedOwn": "Added to your pantry: {{names}}",
+      "addedHouse": "Added to the household pantry: {{names}}",
+      "discarded": "Left out: {{names}}"
+    }
+  },
+  "planCalendar": {
+    "title": "Month calendar",
+    "hintPast": "Tap a day to see what you ate and its macros.",
+    "hintCurrent": "Tap a past day to see what you ate; a future one for its menu.",
+    "legend": "Green: day on target. Yellow: you drifted. Red: well over. Grey: nothing logged.",
+    "openDay": "See day {{day}}",
+    "openDayWithSignal": "See day {{day}}: {{signal}}",
+    "forChild": "For {{name}}:",
+    "noMenu": "This day doesn't have a menu in the plan yet."
+  },
+  "cadence": {
+    "semanal": {
+      "short": "Weekly",
+      "desc": "One a week, each with what its 7 days need."
+    },
+    "bisemanal": {
+      "short": "2 weeks",
+      "desc": "Each trip covers 14 days; the most delicate fresh food may not last."
+    },
+    "mensual": {
+      "short": "Monthly",
+      "desc": "The whole month in one go. You'll have to freeze the fresh food."
+    },
+    "optimizada": {
+      "short": "Optimised",
+      "desc": "The first trip takes its own week plus everything that lasts the month; the rest, only fresh food."
+    }
+  },
+  "shopping": {
+    "readOnly": "Shopping from a past month: shown for reference only, it can't be changed.",
+    "cadenceTitle": "How often you shop",
+    "updating": "Updating…",
+    "trips_one": "{{count}} trip.",
+    "trips_other": "{{count}} trips.",
+    "overBudget": "The month goes over your budget ({{budget}}). I can adjust it: tell me in the chat.",
+    "previousTrip": "Previous trip",
+    "nextTrip": "Next trip",
+    "tripSingle": "One trip for the whole month",
+    "tripOf": "Trip {{n}} of {{total}}",
+    "thisWeek": "{{trip}} · this week",
+    "pending": "Still to buy",
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "atHome": "At home",
+    "bought": "Bought",
+    "total": "Total",
+    "spentOnTrip": "You spent on this trip:",
+    "vsEstimate": "({{diff}} vs. the estimate)",
+    "title": "Ingredients",
+    "resolved": "{{pct}}% sorted",
+    "help": "Tick what you already have at home; whatever is left unticked is your shopping list. When you're done, tap <b>Go shopping</b>.",
+    "filters": {
+      "all": "All",
+      "need": "To buy",
+      "have": "Already have"
+    },
+    "empty": {
+      "past": "There was no shopping list this month.",
+      "house": "There's no household list yet. {{name}} prepares it.",
+      "own": "There's no list yet."
+    },
+    "plannerFallback": "whoever plans",
+    "emptyFilter": {
+      "need": "You're not missing anything from this trip.",
+      "have": "You haven't ticked anything as already at home yet.",
+      "all": "This trip has no ingredients."
+    },
+    "tip": "Whatever you tick as \"at home\" is kept for the month's following trips: I won't ask for it again while it lasts.",
+    "goShop": "Go shopping · {{count}} items",
+    "pantry": {
+      "title": "Already at home · outside the plan",
+      "body": "If you have something the list doesn't include, tell me and I'll rearrange the coming days to use it up. Your shopping list doesn't change.",
+      "placeholder": "e.g. lentils, spinach...",
+      "inputLabel": "Ingredient you already have at home",
+      "add": "Add ingredient"
+    }
+  },
+  "shopMode": {
+    "exit": "Leave shopping mode",
+    "header": "Trip {{n}} of {{total}} · {{from}}–{{to}} {{month}}",
+    "title": "At the shop",
+    "left": "Left to pick up",
+    "inCart": "in the trolley",
+    "progress": "{{left}} of {{total}} left to pick up · what you already have at home isn't shown here",
+    "nothing": "Nothing to pick up on this trip: you already have it all at home or bought.",
+    "spendQuestion": "How much did you spend?",
+    "scanning": "Reading the receipt...",
+    "scan": "Scan the receipt and work it out",
+    "photoNote": "The photo is only used to read the total and the products; it isn't stored.",
+    "complete": "Shopping done · save spend",
+    "finish": "Finish shopping",
+    "photosPermission": "I need access to your photos to read the receipt",
+    "scanUnavailable": "Receipt scanning will be available in the next version of the app."
   }
 }

@@ -11,9 +11,12 @@ export const addMonths = (month: string, delta: number): string => {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-/** "2026-08" → "agosto de 2026". */
-export const monthTitle = (month: string): string =>
-  new Date(`${month}-01T00:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+/**
+ * "2026-08" → "agosto de 2026". `locale` es una etiqueta `Intl` (`dateLocale`):
+ * la pantalla pasa la de la persona; el servidor no, y escribe en español.
+ */
+export const monthTitle = (month: string, locale = "es-ES"): string =>
+  new Date(`${month}-01T00:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" });
 
 /**
  * Mes y año por separado, para pintarlos en dos líneas en la cabecera de Plan
@@ -23,11 +26,14 @@ export const monthTitle = (month: string): string =>
  * `monthTitle`: ese formato ("agosto de 2026") depende del idioma y no es
  * seguro trocearlo por posición.
  */
-export const monthParts = (month: string): { monthName: string; year: string } => {
+export const monthParts = (
+  month: string,
+  locale = "es-ES",
+): { monthName: string; year: string } => {
   const date = new Date(`${month}-01T00:00:00`);
   return {
-    monthName: date.toLocaleDateString("es-ES", { month: "long" }),
-    year: date.toLocaleDateString("es-ES", { year: "numeric" }),
+    monthName: date.toLocaleDateString(locale, { month: "long" }),
+    year: date.toLocaleDateString(locale, { year: "numeric" }),
   };
 };
 
