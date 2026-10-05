@@ -1,4 +1,5 @@
 import { X } from "lucide-react-native";
+import { Trans, useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 
 /**
@@ -11,15 +12,19 @@ import { Pressable, Text, View } from "react-native";
  * `src/components/plan-updated-banner.tsx`.
  */
 export function PlanUpdatedBanner({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useTranslation();
   return (
     <View className="mb-4 flex-row items-start justify-between gap-3 rounded-2xl bg-warning/15 px-3.5 py-3">
       <Text className="min-w-0 flex-1 text-[12.5px] leading-snug text-foreground">
-        <Text className="font-body-semibold">La mesa ha cambiado.</Text> Hemos actualizado tu plan y
-        las cantidades de la compra.
+        <Trans
+          i18nKey="planUpdated.text"
+          components={{ b: <Text className="font-body-semibold" /> }}
+        />
       </Text>
       <Pressable
         onPress={onDismiss}
-        accessibilityLabel="Descartar aviso"
+        accessibilityRole="button"
+        accessibilityLabel={t("planUpdated.dismiss")}
         className="h-6 w-6 items-center justify-center rounded-full active:opacity-70"
       >
         <X size={14} color="#6b6256" />

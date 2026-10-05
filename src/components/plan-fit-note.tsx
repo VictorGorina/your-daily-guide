@@ -1,7 +1,10 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
+import { dateLocale } from "@/lib/i18n";
 import type { PlanFitChange, PlanFitMark } from "@/lib/plan-shared";
+import type { Translate } from "@/lib/week-nav";
 
 /**
  * Lo que cambió la comprobación del plan contra el objetivo (ticket 10 de
@@ -17,8 +20,8 @@ import type { PlanFitChange, PlanFitMark } from "@/lib/plan-shared";
 /** Cambios a la vista; el resto tras "Ver los N". */
 const INLINE_CHANGES = 3;
 
-const dayLabel = (date: string) =>
-  new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+const dayLabel = (date: string, locale: string) =>
+  new Date(`${date}T00:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric" });
 
 const SLOT_LABEL: Record<PlanFitChange["slot"], string> = {
   desayuno: "Desayuno",
@@ -28,18 +31,23 @@ const SLOT_LABEL: Record<PlanFitChange["slot"], string> = {
 };
 
 /** "mar 15 · Cena", o para una idea de la semana "Merienda · 4 días desde mar 15". */
-const changeLabel = (c: PlanFitChange) =>
-  c.days && c.days > 1
-    ? `${SLOT_LABEL[c.slot]} · ${c.days} días desde ${dayLabel(c.date)}`
-    : `${dayLabel(c.date)} · ${SLOT_LABEL[c.slot]}`;
+const changeLabel = (c: PlanFitChange, t: Translate, locale: string) => {
+  const slot = t(`moments.${SLOT_LABEL[c.slot]}`, { defaultValue: SLOT_LABEL[c.slot] });
+  const day = dayLabel(c.date, locale);
+  return c.days && c.days > 1
+    ? t("planFit.weekIdea", { slot, days: c.days, day })
+    : t("planFit.single", { day, slot });
+};
 
 export function PlanFitNote({ fit, fitting }: { fit?: PlanFitMark; fitting: boolean }) {
+  const { t, i18n } = useTranslation();
+  const locale = dateLocale(i18n.language);
   const [all, setAll] = useState(false);
   if (fitting && !fit) {
     return (
       <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Ajustando tus platos a tu objetivo…
+        {t("planFit.fitting")}
       </p>
     );
   }
@@ -49,17 +57,13 @@ export function PlanFitNote({ fit, fitting }: { fit?: PlanFitMark; fitting: bool
   const shown = all ? fit.changed : fit.changed.slice(0, INLINE_CHANGES);
   return (
     <div className="mt-4 border-t border-border/60 pt-4">
-      <p className="text-sm font-medium">
-        He cambiado {n} {n === 1 ? "plato" : "platos"} para que tus días lleguen a lo que necesitas
-      </p>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        Ajustando solo la cantidad no llegaban.
-      </p>
+      <p className="text-sm font-medium">{t("planFit.title", { count: n })}</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t("planFit.why")}</p>
       <div className="mt-3 space-y-2">
         {shown.map((c) => (
           <div key={`${c.date}-${c.slot}`} className="rounded-xl bg-secondary/60 px-3 py-2.5">
             <span className="font-num text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-              {changeLabel(c)}
+              {changeLabel(c, t, locale)}
             </span>
             <div className="mt-1 flex items-start gap-1.5 text-[13px] leading-snug">
               <span className="text-muted-foreground line-through">{c.from}</span>
@@ -75,7 +79,7 @@ export function PlanFitNote({ fit, fitting }: { fit?: PlanFitMark; fitting: bool
           onClick={() => setAll((v) => !v)}
           className="mt-2 text-xs font-medium text-primary-ink"
         >
-          {all ? "Ver menos" : `Ver los ${n}`}
+          {all ? t("planFit.less") : t("planFit.all", { n })}
         </button>
       ) : null}
     </div>

@@ -7,7 +7,10 @@ import {
   freshRiskText,
   shelfLifeDays,
 } from "./perishability";
+import i18n from "./i18n";
 import type { ShoppingItem } from "./plan-shared";
+
+const t = i18n.getFixedT("es");
 
 const item = (name: string, perishable: boolean, owned?: "fridge" | "store"): ShoppingItem => ({
   name,
@@ -72,36 +75,36 @@ describe("freshRisksForTrip", () => {
   });
 
   it("escribe el aviso según la cadencia y la pantalla", () => {
-    expect(freshRiskText(["Merluza"], 8, "semanal")).toBe(
+    expect(freshRiskText(["Merluza"], 8, "semanal", t)).toBe(
       "Merluza no aguanta los 8 días de esta compra. Cómpralo más cerca de cuando los vayas a cocinar.",
     );
-    expect(freshRiskText(["Merluza", "Espinacas"], 8, "semanal", true)).toBe(
+    expect(freshRiskText(["Merluza", "Espinacas"], 8, "semanal", t, true)).toBe(
       "Merluza y Espinacas no aguantan los 8 días hasta la próxima compra. Cógelos justo para los primeros platos.",
     );
     // la optimizada ya compra lo fresco en cada salida: propone qué hacer con lo que no llega
-    expect(freshRiskText(["Merluza", "Espinacas"], 8, "optimizada")).toBe(
+    expect(freshRiskText(["Merluza", "Espinacas"], 8, "optimizada", t)).toBe(
       "Merluza y Espinacas no aguantan hasta la próxima compra. Congélalos al llegar o cómpralos el día que los cocines.",
     );
-    expect(freshRiskText(["Merluza"], 8, "optimizada", true)).toBe(
+    expect(freshRiskText(["Merluza"], 8, "optimizada", t, true)).toBe(
       "Merluza no aguanta hasta la próxima compra. Congélalo al llegar o cómpralo el día que lo cocines.",
     );
   });
 
   it("en la optimizada solo propone congelar lo que se congela", () => {
-    expect(freshRiskText(["Lechuga", "Plátano"], 8, "optimizada")).toBe(
+    expect(freshRiskText(["Lechuga", "Plátano"], 8, "optimizada", t)).toBe(
       "Lechuga y Plátano no aguantan hasta la próxima compra. Cómpralos el día que los vayas a usar.",
     );
-    expect(freshRiskText(["Fresas"], 8, "optimizada", true)).toBe(
+    expect(freshRiskText(["Fresas"], 8, "optimizada", t, true)).toBe(
       "Fresas no aguanta hasta la próxima compra. Cómpralo el día que lo vayas a usar.",
     );
     // de los dos tipos en la misma compra: cada uno con su consejo
     expect(
-      freshRiskText(["Merluza", "Lechuga", "Pechuga de pollo", "Plátano"], 8, "optimizada"),
+      freshRiskText(["Merluza", "Lechuga", "Pechuga de pollo", "Plátano"], 8, "optimizada", t),
     ).toBe(
       "Merluza y Pechuga de pollo no aguantan hasta la próxima compra: congélalos al llegar. " +
         "Lechuga y Plátano tampoco y no se congelan bien: cómpralos el día que los vayas a usar.",
     );
-    expect(freshRiskText(["Merluza", "Aguacate"], 8, "optimizada")).toBe(
+    expect(freshRiskText(["Merluza", "Aguacate"], 8, "optimizada", t)).toBe(
       "Merluza no aguanta hasta la próxima compra: congélalo al llegar. " +
         "Aguacate tampoco y no se congela bien: cómpralo el día que lo vayas a usar.",
     );
@@ -116,12 +119,24 @@ describe("freshRisksForTrip", () => {
     }
   });
 
+  it("el aviso sale en el idioma de la persona, con su plural", () => {
+    const en = i18n.getFixedT("en");
+    expect(freshRiskText(["Hake"], 8, "semanal", en)).toBe(
+      "Hake won't last the 8 days this trip covers. Buy it closer to when you'll cook it.",
+    );
+    expect(freshRiskText(["Hake", "Lettuce", "Spinach", "Banana"], 8, "semanal", en, true)).toBe(
+      "Hake, Lettuce and 2 more won't last the 8 days until the next trip. Pick them up just for the first dishes.",
+    );
+  });
+
   it("resume la lista de nombres para el aviso", () => {
-    expect(freshRiskNames([])).toBe("");
-    expect(freshRiskNames(["Pescado"])).toBe("Pescado");
-    expect(freshRiskNames(["Pescado", "Espinacas"])).toBe("Pescado y Espinacas");
-    expect(freshRiskNames(["Pescado", "Espinacas", "Fresas"])).toBe("Pescado, Espinacas y Fresas");
-    expect(freshRiskNames(["Pescado", "Espinacas", "Fresas", "Lechuga"])).toBe(
+    expect(freshRiskNames([], t)).toBe("");
+    expect(freshRiskNames(["Pescado"], t)).toBe("Pescado");
+    expect(freshRiskNames(["Pescado", "Espinacas"], t)).toBe("Pescado y Espinacas");
+    expect(freshRiskNames(["Pescado", "Espinacas", "Fresas"], t)).toBe(
+      "Pescado, Espinacas y Fresas",
+    );
+    expect(freshRiskNames(["Pescado", "Espinacas", "Fresas", "Lechuga"], t)).toBe(
       "Pescado, Espinacas y 2 más",
     );
   });

@@ -8,6 +8,7 @@ import {
   type ShoppingItem,
 } from "./plan-shared";
 import { freezesWell, shelfLifeDays } from "./shelf-life";
+import type { Translate } from "./week-nav";
 
 export { freezesWell, shelfLifeDays };
 
@@ -43,12 +44,18 @@ export const freshRisksForTrip = (
 };
 
 /** "Pescado", "Pescado y espinacas", "Pescado, espinacas y 3 más" — para el aviso. */
-export const freshRiskNames = (names: string[], shown = 2): string => {
+export const freshRiskNames = (names: string[], t: Translate, shown = 2): string => {
   if (names.length <= shown + 1) {
     if (names.length <= 1) return names[0] ?? "";
-    return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+    return t("common.listAnd", {
+      rest: names.slice(0, -1).join(", "),
+      last: names[names.length - 1] ?? "",
+    });
   }
-  return `${names.slice(0, shown).join(", ")} y ${names.length - shown} más`;
+  return t("freshRisk.more", {
+    shown: names.slice(0, shown).join(", "),
+    n: names.length - shown,
+  });
 };
 
 /**
@@ -57,32 +64,24 @@ export const freshRiskNames = (names: string[], shown = 2): string => {
  * o comprarlo el día. Congelar, solo lo que se congela (`freezesWell`): a una
  * lechuga o un plátano se les dice que se compren el día, y si hay de los dos
  * el aviso los separa. `shop` es el modo compra, con la lista ya en la mano.
+ * El texto sale del catálogo (`freshRisk.*`): `t` es el traductor de la pantalla.
  */
 export const freshRiskText = (
   names: string[],
   spanDays: number,
   cadence: ShoppingCadence,
+  t: Translate,
   shop = false,
 ): string => {
-  const one = names.length === 1;
-  const s = one ? "" : "s";
-  const head = `${freshRiskNames(names)} no ${one ? "aguanta" : "aguantan"}`;
+  // El plural va con cuántos nombres hay, no con los que se enseñan ("A, B y 3 más").
+  const say = (key: string, list: string[]) =>
+    t(`freshRisk.${key}`, { names: freshRiskNames(list, t), days: spanDays, count: list.length });
   if (cadence === "optimizada") {
     const frozen = names.filter(freezesWell);
     const fresh = names.filter((name) => !freezesWell(name));
-    if (!fresh.length) {
-      return `${head} hasta la próxima compra. Congélalo${s} al llegar o cómpralo${s} el día que lo${s} cocines.`;
-    }
-    const p = fresh.length === 1 ? "" : "s";
-    const buy = `ómpralo${p} el día que lo${p} vayas a usar.`;
-    if (!frozen.length) return `${head} hasta la próxima compra. C${buy}`;
-    const f = frozen.length === 1 ? "" : "s";
-    return (
-      `${freshRiskNames(frozen)} no aguanta${f ? "n" : ""} hasta la próxima compra: congélalo${f} al llegar. ` +
-      `${freshRiskNames(fresh)} tampoco y no se congela${p ? "n" : ""} bien: c${buy}`
-    );
+    if (!fresh.length) return say("freezeAll", names);
+    if (!frozen.length) return say("buyOnDay", names);
+    return `${say("mixedFrozen", frozen)} ${say("mixedFresh", fresh)}`;
   }
-  return shop
-    ? `${head} los ${spanDays} días hasta la próxima compra. Cógelo${s} justo para los primeros platos.`
-    : `${head} los ${spanDays} días de esta compra. Cómpralo${s} más cerca de cuando los vayas a cocinar.`;
+  return say(shop ? "shop" : "trip", names);
 };

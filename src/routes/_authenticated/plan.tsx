@@ -1379,7 +1379,7 @@ function IngredientsTab({
       {freshRisks.length ? (
         <div className="rounded-[20px] bg-warning/20 px-4 py-3">
           <p className="text-xs leading-relaxed text-foreground">
-            {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, activeCadence)}
+            {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, activeCadence, t)}
           </p>
         </div>
       ) : null}
@@ -1734,7 +1734,7 @@ function ShopModeView({
           {freshRisks.length ? (
             <div className="mt-3.5 rounded-[18px] bg-warning/20 px-4 py-3">
               <p className="text-xs leading-relaxed text-foreground">
-                {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, cadence, true)}
+                {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, cadence, t, true)}
               </p>
             </div>
           ) : null}

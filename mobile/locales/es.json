@@ -1147,5 +1147,48 @@
     "finish": "Terminar compra",
     "photosPermission": "Necesito acceso a tus fotos para leer el tiquet",
     "scanUnavailable": "El escaneo de tiquets estará disponible en la próxima versión de la app."
+  },
+  "freshRisk": {
+    "more": "{{shown}} y {{n}} más",
+    "trip_one": "{{names}} no aguanta los {{days}} días de esta compra. Cómpralo más cerca de cuando los vayas a cocinar.",
+    "trip_other": "{{names}} no aguantan los {{days}} días de esta compra. Cómpralos más cerca de cuando los vayas a cocinar.",
+    "shop_one": "{{names}} no aguanta los {{days}} días hasta la próxima compra. Cógelo justo para los primeros platos.",
+    "shop_other": "{{names}} no aguantan los {{days}} días hasta la próxima compra. Cógelos justo para los primeros platos.",
+    "freezeAll_one": "{{names}} no aguanta hasta la próxima compra. Congélalo al llegar o cómpralo el día que lo cocines.",
+    "freezeAll_other": "{{names}} no aguantan hasta la próxima compra. Congélalos al llegar o cómpralos el día que los cocines.",
+    "buyOnDay_one": "{{names}} no aguanta hasta la próxima compra. Cómpralo el día que lo vayas a usar.",
+    "buyOnDay_other": "{{names}} no aguantan hasta la próxima compra. Cómpralos el día que los vayas a usar.",
+    "mixedFrozen_one": "{{names}} no aguanta hasta la próxima compra: congélalo al llegar.",
+    "mixedFrozen_other": "{{names}} no aguantan hasta la próxima compra: congélalos al llegar.",
+    "mixedFresh_one": "{{names}} tampoco y no se congela bien: cómpralo el día que lo vayas a usar.",
+    "mixedFresh_other": "{{names}} tampoco y no se congelan bien: cómpralos el día que los vayas a usar."
+  },
+  "planUpdated": {
+    "text": "<b>La mesa ha cambiado.</b> Hemos actualizado tu plan y las cantidades de la compra.",
+    "dismiss": "Descartar aviso"
+  },
+  "planFit": {
+    "fitting": "Ajustando tus platos a tu objetivo…",
+    "title_one": "He cambiado {{count}} plato para que tus días lleguen a lo que necesitas",
+    "title_other": "He cambiado {{count}} platos para que tus días lleguen a lo que necesitas",
+    "why": "Ajustando solo la cantidad no llegaban.",
+    "weekIdea": "{{slot}} · {{days}} días desde {{day}}",
+    "single": "{{day}} · {{slot}}",
+    "less": "Ver menos",
+    "all": "Ver los {{n}}"
+  },
+  "monthSpend": {
+    "title": "Gasto en comida",
+    "real": "real",
+    "realTrips": "real · {{n}} compras",
+    "notBoughtYet": "aún no has comprado",
+    "notLogged": "sin registrar todavía",
+    "estimated": "Estimado del plan:",
+    "budgetMonth": "Presupuesto del mes: {{amount}}",
+    "budgetPeriod": "Presupuesto del periodo: {{amount}}",
+    "over": "te has pasado",
+    "within": "dentro",
+    "trip": "Compra {{n}}:",
+    "receipt": "tiquet"
   }
 }

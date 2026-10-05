@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 
 /**
  * Aviso: la mesa del hogar ha cambiado (entró o salió alguien, cambió una
@@ -12,16 +13,16 @@ import { X } from "lucide-react";
  * queda hasta que se descarta, para que no dependa de estar mirando.
  */
 export function PlanUpdatedBanner({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-4 flex items-start justify-between gap-3 rounded-[16px] bg-warning/15 px-3.5 py-3">
       <p className="min-w-0 text-[12.5px] leading-snug text-foreground">
-        <span className="font-medium">La mesa ha cambiado.</span> Hemos actualizado tu plan y las
-        cantidades de la compra.
+        <Trans i18nKey="planUpdated.text" components={{ b: <span className="font-medium" /> }} />
       </p>
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Descartar aviso"
+        aria-label={t("planUpdated.dismiss")}
         className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-transform active:scale-95"
       >
         <X className="h-3.5 w-3.5" />

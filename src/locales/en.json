@@ -1147,5 +1147,48 @@
     "finish": "Finish shopping",
     "photosPermission": "I need access to your photos to read the receipt",
     "scanUnavailable": "Receipt scanning will be available in the next version of the app."
+  },
+  "freshRisk": {
+    "more": "{{shown}} and {{n}} more",
+    "trip_one": "{{names}} won't last the {{days}} days this trip covers. Buy it closer to when you'll cook it.",
+    "trip_other": "{{names}} won't last the {{days}} days this trip covers. Buy them closer to when you'll cook them.",
+    "shop_one": "{{names}} won't last the {{days}} days until the next trip. Pick it up just for the first dishes.",
+    "shop_other": "{{names}} won't last the {{days}} days until the next trip. Pick them up just for the first dishes.",
+    "freezeAll_one": "{{names}} won't last until the next trip. Freeze it when you get home or buy it the day you cook it.",
+    "freezeAll_other": "{{names}} won't last until the next trip. Freeze them when you get home or buy them the day you cook them.",
+    "buyOnDay_one": "{{names}} won't last until the next trip. Buy it the day you're going to use it.",
+    "buyOnDay_other": "{{names}} won't last until the next trip. Buy them the day you're going to use them.",
+    "mixedFrozen_one": "{{names}} won't last until the next trip: freeze it when you get home.",
+    "mixedFrozen_other": "{{names}} won't last until the next trip: freeze them when you get home.",
+    "mixedFresh_one": "{{names}} won't either and doesn't freeze well: buy it the day you're going to use it.",
+    "mixedFresh_other": "{{names}} won't either and don't freeze well: buy them the day you're going to use them."
+  },
+  "planUpdated": {
+    "text": "<b>Your table has changed.</b> We've updated your plan and the shopping quantities.",
+    "dismiss": "Dismiss notice"
+  },
+  "planFit": {
+    "fitting": "Fitting your dishes to your target…",
+    "title_one": "I've changed {{count}} dish so your days reach what you need",
+    "title_other": "I've changed {{count}} dishes so your days reach what you need",
+    "why": "Adjusting only the amount wasn't enough.",
+    "weekIdea": "{{slot}} · {{days}} days from {{day}}",
+    "single": "{{day}} · {{slot}}",
+    "less": "Show fewer",
+    "all": "Show all {{n}}"
+  },
+  "monthSpend": {
+    "title": "Food spend",
+    "real": "actual",
+    "realTrips": "actual · {{n}} trips",
+    "notBoughtYet": "you haven't shopped yet",
+    "notLogged": "nothing logged yet",
+    "estimated": "Plan estimate:",
+    "budgetMonth": "Budget for the month: {{amount}}",
+    "budgetPeriod": "Budget for the period: {{amount}}",
+    "over": "you've gone over",
+    "within": "within budget",
+    "trip": "Trip {{n}}:",
+    "receipt": "receipt"
   }
 }

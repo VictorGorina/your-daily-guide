@@ -1,4 +1,5 @@
 import { Wallet } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useMoney } from "@/lib/use-money";
 
 import {
@@ -32,6 +33,7 @@ export function MonthSpendSummary({
   partialMonth: boolean;
   monthStatus: PlanMonthStatus;
 }) {
+  const { t } = useTranslation();
   const money = useMoney();
   const trips = Object.keys(tripActuals)
     .map(Number)
@@ -51,7 +53,7 @@ export function MonthSpendSummary({
     <div className="surface-card p-5">
       <div className="flex items-center gap-2">
         <Wallet className="h-4 w-4 text-primary-ink" />
-        <h2 className="text-sm font-semibold">Gasto en comida</h2>
+        <h2 className="text-sm font-semibold">{t("monthSpend.title")}</h2>
       </div>
 
       <div className="mt-2 flex items-baseline gap-2">
@@ -60,16 +62,19 @@ export function MonthSpendSummary({
         </span>
         <span className="text-xs text-muted-foreground">
           {hasReal
-            ? `real${trips.length > 1 ? ` · ${trips.length} compras` : ""}`
+            ? trips.length > 1
+              ? t("monthSpend.realTrips", { n: trips.length })
+              : t("monthSpend.real")
             : future
-              ? "aún no has comprado"
-              : "sin registrar todavía"}
+              ? t("monthSpend.notBoughtYet")
+              : t("monthSpend.notLogged")}
         </span>
       </div>
 
       {estimated > 0 ? (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Estimado del plan: <span className="font-medium text-foreground">{money(estimated)}</span>
+          {t("monthSpend.estimated")}{" "}
+          <span className="font-medium text-foreground">{money(estimated)}</span>
           {hasReal && Math.abs(real - estimated) >= 0.5 ? (
             <span className={real > estimated ? " text-destructive" : " text-success"}>
               {" "}
@@ -82,18 +87,26 @@ export function MonthSpendSummary({
 
       {periodBudget > 0 ? (
         <p className={`mt-1 text-xs ${overBudget ? "text-destructive" : "text-muted-foreground"}`}>
-          Presupuesto{partialMonth ? " del periodo" : " del mes"}: {money(periodBudget)}
-          {overBudget ? " · te has pasado" : hasReal ? " · dentro" : ""}
+          {t(partialMonth ? "monthSpend.budgetPeriod" : "monthSpend.budgetMonth", {
+            amount: money(periodBudget),
+          })}
+          {overBudget
+            ? ` · ${t("monthSpend.over")}`
+            : hasReal
+              ? ` · ${t("monthSpend.within")}`
+              : ""}
         </p>
       ) : null}
 
       {trips.length > 1 ? (
         <div className="mt-3 flex flex-wrap gap-x-3.5 gap-y-1 text-[11.5px] text-muted-foreground">
-          {trips.map((t) => (
-            <span key={t}>
-              Compra {t + 1}:{" "}
-              <span className="font-mono text-foreground">{money(tripActuals[t]!)}</span>
-              {tripReceipts[t] ? <span className="text-muted-foreground/70"> · tiquet</span> : null}
+          {trips.map((trip) => (
+            <span key={trip}>
+              {t("monthSpend.trip", { n: trip + 1 })}{" "}
+              <span className="font-mono text-foreground">{money(tripActuals[trip]!)}</span>
+              {tripReceipts[trip] ? (
+                <span className="text-muted-foreground/70"> · {t("monthSpend.receipt")}</span>
+              ) : null}
             </span>
           ))}
         </div>
