@@ -8,7 +8,8 @@
     "back": "Atrás",
     "retry": "Inténtalo otra vez.",
     "saving": "Guardando…",
-    "removeNamed": "Quitar {{what}}"
+    "removeNamed": "Quitar {{what}}",
+    "listAnd": "{{rest}} y {{last}}"
   },
   "languages": {
     "es": "Español",
@@ -634,7 +635,6 @@
         "text_other": "{{qty}} raciones de taquitos de queso"
       }
     },
-    "listAnd": "{{rest}} y {{last}}",
     "placeholder": "Ej: un puñado de almendras",
     "fieldLabel": "Qué has picoteado",
     "tellMe": "Cuéntame qué has picado.",
@@ -685,5 +685,61 @@
     "routineHint": "Si es una de tus sesiones de siempre, ya va en tu plan: solo cuenta lo que pase de ella.",
     "save": "Guardar deporte",
     "foot": "Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los próximos días."
+  },
+  "balance": {
+    "title": "Balance de hoy",
+    "lines": {
+      "meals": "Comidas cambiadas",
+      "snacks": "Picoteo",
+      "exercise": "Deporte"
+    },
+    "settling": "Ajustando tus próximos días…",
+    "movedBefore": "He movido",
+    "movedCount_one": "{{count}} plato",
+    "movedCount_other": "{{count}} platos",
+    "movedAfter": "de los próximos días para absorberlo.",
+    "seeAll": "Ver los {{count}} cambios",
+    "failed": "No he podido revisar el plan ahora; lo intento de nuevo más tarde.",
+    "absorbed": {
+      "partial": "He ajustado una parte; el resto no lo persigo.",
+      "kcal": "He movido unas {{kcal}} kcal de tus próximos días.",
+      "lighter": "He aligerado un poco tus próximas comidas.",
+      "heavier": "He reforzado un poco tus próximas comidas."
+    },
+    "outcome": {
+      "no-days": "No quedan días este mes donde compensarlo.",
+      "shared-only": "Tus comidas de estos días son de la casa: no las cambio por esto.",
+      "no-meals": "No planificas comidas ni cenas donde compensarlo.",
+      "no-plan": "Aún no tienes plan este mes: queda apuntado.",
+      "pregnancy": "Queda apuntado. Con embarazo o lactancia no recorto los próximos días."
+    },
+    "note": {
+      "routine": "Tu rutina ya va en tu plan. Lo demás lo absorbe el plan tal cual.",
+      "offset": "El deporte compensa lo que has comido de más. No he tocado tu plan.",
+      "absorbed": "Lo absorbe el plan tal cual. Te aviso si el día se desvía más."
+    }
+  },
+  "adjustment": {
+    "title": "Ajuste del plan",
+    "todayBefore": "Hoy llevas",
+    "todayAfter": "frente a lo que preveía el plan",
+    "plain": "Tu día frente a lo que preveía el plan",
+    "withChanges": ". Se han recolocado estos platos:",
+    "noChanges": ".",
+    "noneMovedExcess": "El coach no ha movido ningún plato futuro: considera que el exceso se absorbe con lo que ya tienes planificado.",
+    "noneMovedDifference": "El coach no ha movido ningún plato futuro: considera que la diferencia se absorbe con lo que ya tienes planificado.",
+    "noneMoved": "El coach no ha movido ningún plato futuro."
+  },
+  "childGap": {
+    "missing": "Falta el menú de {{names}} en el plan.",
+    "updating": "Actualizando…",
+    "update": "Actualizar"
+  },
+  "dictation": {
+    "label": "Dictar",
+    "unavailable": "El dictado por voz no está disponible en este navegador",
+    "unavailableLabel": "{{label}} (no disponible en este navegador)",
+    "holdTo": "Mantén pulsado para {{action}}",
+    "listening": "Escuchando…"
   }
 }

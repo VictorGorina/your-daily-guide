@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import {
   Sheet,
   SheetContent,
@@ -5,11 +7,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { dateLocale } from "@/lib/i18n";
 import type { MealChange } from "@/lib/plan-shared";
 
-const weekdayShort = (date: string) => {
+const weekdayShort = (date: string, locale: string) => {
   const d = new Date(`${date}T00:00:00`);
-  const label = d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+  const label = d.toLocaleDateString(locale, { weekday: "short", day: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 };
 
@@ -36,6 +39,7 @@ export function AdjustmentInfoSheet({
   /** Desvío del día frente a lo que preveía el plan. */
   kcalDelta?: number | null;
 }) {
+  const { t, i18n } = useTranslation();
   const signed =
     typeof kcalDelta === "number" && kcalDelta !== 0
       ? `${kcalDelta > 0 ? "+" : "−"}${Math.abs(kcalDelta)} kcal`
@@ -46,18 +50,19 @@ export function AdjustmentInfoSheet({
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
-            Ajuste del plan
+            {t("adjustment.title")}
           </SheetTitle>
           <SheetDescription>
             {signed ? (
               <>
-                Hoy llevas <span className="font-medium text-foreground">{signed}</span> frente a lo
-                que preveía el plan
+                {t("adjustment.todayBefore")}{" "}
+                <span className="font-medium text-foreground">{signed}</span>{" "}
+                {t("adjustment.todayAfter")}
               </>
             ) : (
-              "Tu día frente a lo que preveía el plan"
+              t("adjustment.plain")
             )}
-            {changes.length ? ". Se han recolocado estos platos:" : "."}
+            {changes.length ? t("adjustment.withChanges") : t("adjustment.noChanges")}
           </SheetDescription>
         </SheetHeader>
 
@@ -65,16 +70,19 @@ export function AdjustmentInfoSheet({
           {changes.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {signed
-                ? `El coach no ha movido ningún plato futuro: considera que ${
-                    (kcalDelta ?? 0) > 0 ? "el exceso" : "la diferencia"
-                  } se absorbe con lo que ya tienes planificado.`
-                : "El coach no ha movido ningún plato futuro."}
+                ? t(
+                    (kcalDelta ?? 0) > 0
+                      ? "adjustment.noneMovedExcess"
+                      : "adjustment.noneMovedDifference",
+                  )
+                : t("adjustment.noneMoved")}
             </p>
           ) : (
             changes.map((c) => (
               <div key={`${c.date}-${c.slot}`} className="rounded-xl bg-secondary/60 px-3.5 py-3">
                 <span className="font-num text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-                  {weekdayShort(c.date)} · {c.slotLabel}
+                  {weekdayShort(c.date, dateLocale(i18n.language))} ·{" "}
+                  {t(`moments.${c.slotLabel}`, { defaultValue: c.slotLabel })}
                 </span>
                 <div className="mt-1.5 flex items-start gap-2 text-sm leading-snug">
                   <span className="text-muted-foreground line-through">{c.before}</span>

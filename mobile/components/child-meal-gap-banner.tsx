@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 /**
@@ -17,14 +18,20 @@ export function ChildMealGapBanner({
   pending: boolean;
   onUpdate: () => void;
 }) {
+  const { t } = useTranslation();
   if (!names.length) return null;
   const label =
-    names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+    names.length === 1
+      ? names[0]
+      : t("common.listAnd", {
+          rest: names.slice(0, -1).join(", "),
+          last: names[names.length - 1],
+        });
 
   return (
     <View className="mt-3 flex-row items-center justify-between gap-3 rounded-[16px] bg-warning/15 px-3.5 py-3">
       <Text className="flex-1 text-[12.5px] leading-[17px] text-foreground">
-        Falta el menú de {label} en el plan.
+        {t("childGap.missing", { names: label })}
       </Text>
       <Pressable
         onPress={onUpdate}
@@ -35,7 +42,7 @@ export function ChildMealGapBanner({
       >
         {pending ? <ActivityIndicator size="small" color="#fbfaf7" /> : null}
         <Text className="text-[12px] font-medium text-background">
-          {pending ? "Actualizando…" : "Actualizar"}
+          {pending ? t("childGap.updating") : t("childGap.update")}
         </Text>
       </Pressable>
     </View>

@@ -51,7 +51,7 @@ const pillGroupClass = (active: boolean) =>
 /** Junta frases en una lista natural: "A", "A y B", "A, B y C". */
 const joinNaturally = (parts: string[], t: TFunction): string => {
   if (parts.length <= 1) return parts.join("");
-  return t("snack.listAnd", {
+  return t("common.listAnd", {
     rest: parts.slice(0, -1).join(", "),
     last: parts[parts.length - 1],
   });
@@ -257,10 +257,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
           </div>
           {/* Debajo y no encima del campo: en web el botón lleva texto
           ("Dictar") y tapaba lo escrito. */}
-          <DictateButton
-            onText={(said) => changeText(text ? `${text.trim()} ${said}` : said)}
-            label="Dictar"
-          />
+          <DictateButton onText={(said) => changeText(text ? `${text.trim()} ${said}` : said)} />
         </div>
       </DictationField>
 

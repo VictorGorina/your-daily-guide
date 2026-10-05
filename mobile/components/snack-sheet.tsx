@@ -90,7 +90,7 @@ const parseKcal = (raw: string): number | null => {
 /** Junta frases en una lista natural: "A", "A y B", "A, B y C". */
 const joinNaturally = (parts: string[], t: TFunction): string => {
   if (parts.length <= 1) return parts.join("");
-  return t("snack.listAnd", {
+  return t("common.listAnd", {
     rest: parts.slice(0, -1).join(", "),
     last: parts[parts.length - 1],
   });

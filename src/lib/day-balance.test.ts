@@ -24,6 +24,7 @@ import {
   type PendingReservation,
 } from "./day-reservation";
 import type { DayExercise, ExerciseEntry } from "./exercise";
+import i18n from "./i18n";
 import { compensationNeed } from "./nutrition/compensation";
 import type { MealChange, MealHabit } from "./plan-shared";
 import type { DaySnacks, SnackEntry } from "./snacks";
@@ -284,6 +285,8 @@ describe("dayNote", () => {
   });
 });
 
+const es = i18n.getFixedT("es");
+
 describe("balanceNote", () => {
   const withSources = (meals: number, snack: number, ex: number): DayBalance => ({
     sources: { meals, snacks: snack, exercise: ex },
@@ -295,22 +298,24 @@ describe("balanceNote", () => {
   });
 
   it("explica el motivo cuando el plan no se pudo tocar", () => {
-    expect(balanceNote(withSources(0, 300, 0), "no-days")).toContain("No quedan días");
-    expect(balanceNote(withSources(0, 300, 0), "pregnancy")).toContain("embarazo");
+    expect(balanceNote(withSources(0, 300, 0), "no-days", es)).toContain("No quedan días");
+    expect(balanceNote(withSources(0, 300, 0), "pregnancy", es)).toContain("embarazo");
   });
 
   it("dice que el deporte compensó lo comido cuando el día se anula solo", () => {
-    expect(balanceNote(withSources(0, 250, -300), "below-threshold")).toContain(
+    expect(balanceNote(withSources(0, 250, -300), "below-threshold", es)).toContain(
       "El deporte compensa",
     );
   });
 
   it("un desvío pequeño de un solo origen cae en el mensaje genérico", () => {
-    expect(balanceNote(withSources(90, 0, 0), "below-threshold")).toContain("Lo absorbe el plan");
+    expect(balanceNote(withSources(90, 0, 0), "below-threshold", es)).toContain(
+      "Lo absorbe el plan",
+    );
   });
 
   it("sin nada que explicar tras un ajuste no dice nada", () => {
-    expect(balanceNote(withSources(0, 300, 0), "adjusted")).toBeNull();
+    expect(balanceNote(withSources(0, 300, 0), "adjusted", es)).toBeNull();
   });
 });
 
@@ -445,16 +450,19 @@ describe("absorbedKcal (ticket 18)", () => {
   });
 
   it("la tarjeta dice lo que se midió, con o sin cifras", () => {
-    expect(absorbedNote({ absorbedKcal: 347, kcal: 400 }, true)).toBe(
+    expect(absorbedNote({ absorbedKcal: 347, kcal: 400 }, true, es, "es-ES")).toBe(
       "He movido unas 350 kcal de tus próximos días.",
     );
-    expect(absorbedNote({ absorbedKcal: 347, kcal: 400 }, false)).toBe(
+    expect(absorbedNote({ absorbedKcal: 347, kcal: 400 }, false, es, "es-ES")).toBe(
       "He aligerado un poco tus próximas comidas.",
     );
-    expect(absorbedNote({ absorbedKcal: 80, kcal: 400, partial: true }, true)).toBe(
+    expect(absorbedNote({ absorbedKcal: 80, kcal: 400, partial: true }, true, es, "es-ES")).toBe(
       "He ajustado una parte; el resto no lo persigo.",
     );
-    expect(absorbedNote({ kcal: 400 }, true)).toBeNull();
+    expect(absorbedNote({ kcal: 400 }, true, es, "es-ES")).toBeNull();
+    expect(
+      absorbedNote({ absorbedKcal: 347, kcal: 400 }, true, i18n.getFixedT("en"), "en-GB"),
+    ).toBe("I've moved about 350 kcal from your coming days.");
   });
 });
 

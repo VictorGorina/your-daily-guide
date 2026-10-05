@@ -1,4 +1,5 @@
 import { Check, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   absorbedNote,
@@ -6,6 +7,7 @@ import {
   type DayAdjustmentRecord,
   type DayBalance,
 } from "@/lib/day-balance";
+import { dateLocale } from "@/lib/i18n";
 import type { MealChange } from "@/lib/plan-shared";
 
 /**
@@ -43,9 +45,9 @@ import type { MealChange } from "@/lib/plan-shared";
 /** Platos que se enseñan sin abrir la hoja. Los demás, tras "Ver". */
 const INLINE_CHANGES = 2;
 
-const weekdayShort = (date: string) => {
+const weekdayShort = (date: string, locale: string) => {
   const d = new Date(`${date}T00:00:00`);
-  const label = d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+  const label = d.toLocaleDateString(locale, { weekday: "short", day: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 };
 
@@ -66,10 +68,12 @@ function Line({ label, kcal, showNumbers }: { label: string; kcal: number; showN
 }
 
 function ChangeChip({ change }: { change: MealChange }) {
+  const { t, i18n } = useTranslation();
   return (
     <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
       <span className="font-num text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-        {weekdayShort(change.date)} · {change.slotLabel}
+        {weekdayShort(change.date, dateLocale(i18n.language))} ·{" "}
+        {t(`moments.${change.slotLabel}`, { defaultValue: change.slotLabel })}
       </span>
       <div className="mt-1 flex items-start gap-1.5 text-[13px] leading-snug">
         <span className="text-muted-foreground line-through">{change.before}</span>
@@ -105,6 +109,7 @@ export function DayBalanceCard({
    */
   showNumbers?: boolean;
 }) {
+  const { t, i18n } = useTranslation();
   const changes = record?.adjustment?.changes ?? [];
   if (!balance.active && !changes.length) return null;
 
@@ -117,13 +122,15 @@ export function DayBalanceCard({
   // Un día que se anula solo (deporte contra picoteo) no es cero de verdad: el
   // verde dice "esto está cuadrado", que es la lectura correcta.
   const settled = !busy && !failed && Math.abs(balance.net) < 100 && (snacks > 0 || meals !== 0);
-  const note = busy ? null : balanceNote(balance, record?.lastOutcome, { onlyRoutineExercise });
+  const note = busy ? null : balanceNote(balance, record?.lastOutcome, t, { onlyRoutineExercise });
+
+  const absorbed = absorbedNote(record?.adjustment, showNumbers, t, dateLocale(i18n.language));
 
   return (
     <section className="animate-rise mt-6 rounded-[20px] bg-surface px-3.5 py-3.5">
       <div className="flex items-baseline justify-between">
         <h3 className="text-[13px] font-semibold tracking-[0.01em] text-foreground">
-          Balance de hoy
+          {t("balance.title")}
         </h3>
         {showNumbers ? (
           <span className="flex items-baseline gap-1">
@@ -143,31 +150,31 @@ export function DayBalanceCard({
           sumando a un solo número. Solo se pinta la línea que aporta algo. */}
       <div className="mt-2.5 space-y-1">
         {meals !== 0 ? (
-          <Line label="Comidas cambiadas" kcal={meals} showNumbers={showNumbers} />
+          <Line label={t("balance.lines.meals")} kcal={meals} showNumbers={showNumbers} />
         ) : null}
-        {snacks !== 0 ? <Line label="Picoteo" kcal={snacks} showNumbers={showNumbers} /> : null}
-        {exercise !== 0 ? <Line label="Deporte" kcal={exercise} showNumbers={showNumbers} /> : null}
+        {snacks !== 0 ? (
+          <Line label={t("balance.lines.snacks")} kcal={snacks} showNumbers={showNumbers} />
+        ) : null}
+        {exercise !== 0 ? (
+          <Line label={t("balance.lines.exercise")} kcal={exercise} showNumbers={showNumbers} />
+        ) : null}
       </div>
 
       {busy ? (
         <p className="mt-3 flex items-center gap-2 text-[12px] text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary-ink" aria-hidden />
-          Ajustando tus próximos días…
+          {t("balance.settling")}
         </p>
       ) : changes.length ? (
         <>
           <p className="mt-3 text-[12.5px] leading-[1.45] text-foreground">
-            He movido{" "}
+            {t("balance.movedBefore")}{" "}
             <span className="font-medium">
-              {changes.length} {changes.length === 1 ? "plato" : "platos"}
+              {t("balance.movedCount", { count: changes.length })}
             </span>{" "}
-            de los próximos días para absorberlo.
+            {t("balance.movedAfter")}
           </p>
-          {absorbedNote(record?.adjustment, showNumbers) ? (
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              {absorbedNote(record?.adjustment, showNumbers)}
-            </p>
-          ) : null}
+          {absorbed ? <p className="mt-1 text-[12px] text-muted-foreground">{absorbed}</p> : null}
           <div className="mt-2 space-y-1.5">
             {changes.slice(0, INLINE_CHANGES).map((c) => (
               <ChangeChip key={`${c.date}-${c.slot}`} change={c} />
@@ -179,14 +186,12 @@ export function DayBalanceCard({
               onClick={onShowAdjustment}
               className="mt-2.5 text-left text-[12px] font-medium text-primary-ink"
             >
-              Ver los {changes.length} cambios
+              {t("balance.seeAll", { count: changes.length })}
             </button>
           ) : null}
         </>
       ) : failed ? (
-        <p className="mt-3 text-[12px] text-muted-foreground">
-          No he podido revisar el plan ahora; lo intento de nuevo más tarde.
-        </p>
+        <p className="mt-3 text-[12px] text-muted-foreground">{t("balance.failed")}</p>
       ) : note ? (
         <p className="mt-3 flex items-start gap-2 text-[12.5px] leading-[1.45] text-foreground">
           {settled ? (

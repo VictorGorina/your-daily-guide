@@ -8,7 +8,8 @@
     "back": "Back",
     "retry": "Please try again.",
     "saving": "Saving…",
-    "removeNamed": "Remove {{what}}"
+    "removeNamed": "Remove {{what}}",
+    "listAnd": "{{rest}} and {{last}}"
   },
   "languages": {
     "es": "Spanish",
@@ -634,7 +635,6 @@
         "text_other": "{{qty}} portions of cheese cubes"
       }
     },
-    "listAnd": "{{rest}} and {{last}}",
     "placeholder": "E.g. a handful of almonds",
     "fieldLabel": "What you snacked on",
     "tellMe": "Tell me what you snacked on.",
@@ -685,5 +685,61 @@
     "routineHint": "If it's one of your usual sessions, it's already in your plan: only what goes beyond it counts.",
     "save": "Save exercise",
     "foot": "Today and the shopping list don't change: if needed, I'll add energy back over the coming days."
+  },
+  "balance": {
+    "title": "Today's balance",
+    "lines": {
+      "meals": "Meals changed",
+      "snacks": "Snacks",
+      "exercise": "Exercise"
+    },
+    "settling": "Adjusting your coming days…",
+    "movedBefore": "I've moved",
+    "movedCount_one": "{{count}} dish",
+    "movedCount_other": "{{count}} dishes",
+    "movedAfter": "in the coming days to absorb it.",
+    "seeAll": "See all {{count}} changes",
+    "failed": "I couldn't review the plan just now; I'll try again later.",
+    "absorbed": {
+      "partial": "I've adjusted part of it; I won't chase the rest.",
+      "kcal": "I've moved about {{kcal}} kcal from your coming days.",
+      "lighter": "I've made your coming meals a little lighter.",
+      "heavier": "I've made your coming meals a little more substantial."
+    },
+    "outcome": {
+      "no-days": "There are no days left this month to make up for it.",
+      "shared-only": "Your meals these days are the household's: I won't change them for this.",
+      "no-meals": "You don't plan lunches or dinners where I could make up for it.",
+      "no-plan": "You don't have a plan this month yet: it's noted.",
+      "pregnancy": "It's noted. During pregnancy or breastfeeding I don't cut back the coming days."
+    },
+    "note": {
+      "routine": "Your routine is already in your plan. The plan absorbs the rest as it is.",
+      "offset": "Your exercise makes up for the extra you've eaten. I haven't touched your plan.",
+      "absorbed": "The plan absorbs it as it is. I'll let you know if the day drifts further."
+    }
+  },
+  "adjustment": {
+    "title": "Plan adjustment",
+    "todayBefore": "Today you're at",
+    "todayAfter": "against what the plan expected",
+    "plain": "Your day against what the plan expected",
+    "withChanges": ". These dishes have been rearranged:",
+    "noChanges": ".",
+    "noneMovedExcess": "The coach hasn't moved any future dish: it considers the excess is absorbed by what you already have planned.",
+    "noneMovedDifference": "The coach hasn't moved any future dish: it considers the difference is absorbed by what you already have planned.",
+    "noneMoved": "The coach hasn't moved any future dish."
+  },
+  "childGap": {
+    "missing": "{{names}}'s menu is missing from the plan.",
+    "updating": "Updating…",
+    "update": "Update"
+  },
+  "dictation": {
+    "label": "Dictate",
+    "unavailable": "Voice dictation isn't available in this browser",
+    "unavailableLabel": "{{label}} (not available in this browser)",
+    "holdTo": "Hold to {{action}}",
+    "listening": "Listening…"
   }
 }

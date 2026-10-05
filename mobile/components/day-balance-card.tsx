@@ -1,4 +1,5 @@
 import { Check } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import {
@@ -7,6 +8,7 @@ import {
   type DayAdjustmentRecord,
   type DayBalance,
 } from "../lib/day-balance";
+import { dateLocale } from "../lib/i18n";
 import type { MealChange } from "../lib/plan-shared";
 
 /**
@@ -23,9 +25,9 @@ import type { MealChange } from "../lib/plan-shared";
 /** Platos que se enseñan sin abrir la hoja. Los demás, tras "Ver". */
 const INLINE_CHANGES = 2;
 
-const weekdayShort = (date: string) => {
+const weekdayShort = (date: string, locale: string) => {
   const d = new Date(`${date}T00:00:00`);
-  const label = d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+  const label = d.toLocaleDateString(locale, { weekday: "short", day: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 };
 
@@ -44,10 +46,12 @@ function Line({ label, kcal, showNumbers }: { label: string; kcal: number; showN
 }
 
 function ChangeChip({ change }: { change: MealChange }) {
+  const { t, i18n } = useTranslation();
   return (
     <View className="rounded-2xl bg-secondary/60 px-3 py-2.5">
       <Text className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
-        {weekdayShort(change.date)} · {change.slotLabel}
+        {weekdayShort(change.date, dateLocale(i18n.language))} ·{" "}
+        {t(`moments.${change.slotLabel}`, { defaultValue: change.slotLabel })}
       </Text>
       <View className="mt-1 flex-row flex-wrap items-start gap-1.5">
         <Text className="font-body text-[13px] text-muted-foreground line-through">
@@ -81,6 +85,7 @@ export function DayBalanceCard({
   /** `false` con la preferencia de no ver cifras (ticket 01): sin números de kcal. */
   showNumbers?: boolean;
 }) {
+  const { t, i18n } = useTranslation();
   const changes = record?.adjustment?.changes ?? [];
   if (!balance.active && !changes.length) return null;
 
@@ -93,12 +98,14 @@ export function DayBalanceCard({
   // Un día que se anula solo (deporte contra picoteo) no es cero de verdad: el
   // verde dice "esto está cuadrado", que es la lectura correcta.
   const settled = !busy && !failed && Math.abs(balance.net) < 100 && (snacks > 0 || meals !== 0);
-  const note = busy ? null : balanceNote(balance, record?.lastOutcome, { onlyRoutineExercise });
+  const note = busy ? null : balanceNote(balance, record?.lastOutcome, t, { onlyRoutineExercise });
+
+  const absorbed = absorbedNote(record?.adjustment, showNumbers, t, dateLocale(i18n.language));
 
   return (
     <View className="mt-6 rounded-[20px] bg-surface px-3.5 py-3.5">
       <View className="flex-row items-baseline justify-between">
-        <Text className="font-body-semibold text-[13px] text-foreground">Balance de hoy</Text>
+        <Text className="font-body-semibold text-[13px] text-foreground">{t("balance.title")}</Text>
         {showNumbers ? (
           <View className="flex-row items-baseline gap-1">
             <Text
@@ -115,32 +122,34 @@ export function DayBalanceCard({
           sumando a un solo número. Solo se pinta la línea que aporta algo. */}
       <View className="mt-2.5 gap-1">
         {meals !== 0 ? (
-          <Line label="Comidas cambiadas" kcal={meals} showNumbers={showNumbers} />
+          <Line label={t("balance.lines.meals")} kcal={meals} showNumbers={showNumbers} />
         ) : null}
-        {snacks !== 0 ? <Line label="Picoteo" kcal={snacks} showNumbers={showNumbers} /> : null}
-        {exercise !== 0 ? <Line label="Deporte" kcal={exercise} showNumbers={showNumbers} /> : null}
+        {snacks !== 0 ? (
+          <Line label={t("balance.lines.snacks")} kcal={snacks} showNumbers={showNumbers} />
+        ) : null}
+        {exercise !== 0 ? (
+          <Line label={t("balance.lines.exercise")} kcal={exercise} showNumbers={showNumbers} />
+        ) : null}
       </View>
 
       {busy ? (
         <View className="mt-3 flex-row items-center gap-2">
           <ActivityIndicator size="small" color="#a84a17" />
           <Text className="font-body text-[12px] text-muted-foreground">
-            Ajustando tus próximos días…
+            {t("balance.settling")}
           </Text>
         </View>
       ) : changes.length ? (
         <>
           <Text className="mt-3 font-body text-[12.5px] leading-[18px] text-foreground">
-            He movido{" "}
+            {t("balance.movedBefore")}{" "}
             <Text className="font-body-medium">
-              {changes.length} {changes.length === 1 ? "plato" : "platos"}
+              {t("balance.movedCount", { count: changes.length })}
             </Text>{" "}
-            de los próximos días para absorberlo.
+            {t("balance.movedAfter")}
           </Text>
-          {absorbedNote(record?.adjustment, showNumbers) ? (
-            <Text className="mt-1 font-body text-[12px] text-muted-foreground">
-              {absorbedNote(record?.adjustment, showNumbers)}
-            </Text>
+          {absorbed ? (
+            <Text className="mt-1 font-body text-[12px] text-muted-foreground">{absorbed}</Text>
           ) : null}
           <View className="mt-2 gap-1.5">
             {changes.slice(0, INLINE_CHANGES).map((c) => (
@@ -150,14 +159,14 @@ export function DayBalanceCard({
           {changes.length > INLINE_CHANGES ? (
             <Pressable onPress={onShowAdjustment} className="mt-2.5 active:opacity-70">
               <Text className="font-body-medium text-[12px] text-primary-ink">
-                Ver los {changes.length} cambios
+                {t("balance.seeAll", { count: changes.length })}
               </Text>
             </Pressable>
           ) : null}
         </>
       ) : failed ? (
         <Text className="mt-3 font-body text-[12px] text-muted-foreground">
-          No he podido revisar el plan ahora; lo intento de nuevo más tarde.
+          {t("balance.failed")}
         </Text>
       ) : note ? (
         <View className="mt-3 flex-row items-start gap-2">

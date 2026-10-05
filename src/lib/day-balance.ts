@@ -6,6 +6,7 @@ import {
   type MealHabit,
 } from "@/lib/plan-shared";
 import { pendingSnackKcal, snackTotals, type DaySnacks } from "@/lib/snacks";
+import type { Translate } from "@/lib/week-nav";
 
 /**
  * Balance de energía del día (feature `balance-del-dia`).
@@ -212,22 +213,25 @@ export function absorbsTooLittle(absorbed: number, pendingKcal: number): boolean
 
 /**
  * Lo que la tarjeta dice que se ha movido (ticket 18: lo que se enseña es lo que
- * el código midió). `null` si no hay medida.
+ * el código midió). `null` si no hay medida. El texto, del catálogo
+ * (`balance.absorbed.*`); `numberLocale` es la etiqueta `Intl` de la cifra.
  */
 export function absorbedNote(
   adjustment: Pick<DayAdjustment, "absorbedKcal" | "partial" | "kcal"> | null | undefined,
   showNumbers: boolean,
+  t: Translate,
+  numberLocale: string,
 ): string | null {
   const absorbed = adjustment?.absorbedKcal;
   if (absorbed == null) return null;
-  if (adjustment?.partial) return "He ajustado una parte; el resto no lo persigo.";
+  if (adjustment?.partial) return t("balance.absorbed.partial");
   if (showNumbers) {
-    const n = Math.abs(Math.round(absorbed / 10) * 10).toLocaleString("es-ES");
-    return `He movido unas ${n} kcal de tus próximos días.`;
+    const kcal = Math.abs(Math.round(absorbed / 10) * 10).toLocaleString(numberLocale);
+    return t("balance.absorbed.kcal", { kcal });
   }
   return (adjustment?.kcal ?? absorbed) >= 0
-    ? "He aligerado un poco tus próximas comidas."
-    : "He reforzado un poco tus próximas comidas.";
+    ? t("balance.absorbed.lighter")
+    : t("balance.absorbed.heavier");
 }
 
 export type DayOutcome =
@@ -393,18 +397,17 @@ export function dayNote(opts: {
  * un motivo que conviene explicar. `null` cuando el motivo se cuenta mejor con
  * las cifras a la vista (ver `balanceNote`).
  */
-export function dayOutcomeNote(outcome: DayOutcome | null | undefined): string | null {
+export function dayOutcomeNote(
+  outcome: DayOutcome | null | undefined,
+  t: Translate,
+): string | null {
   switch (outcome) {
     case "no-days":
-      return "No quedan días este mes donde compensarlo.";
     case "shared-only":
-      return "Tus comidas de estos días son de la casa: no las cambio por esto.";
     case "no-meals":
-      return "No planificas comidas ni cenas donde compensarlo.";
     case "no-plan":
-      return "Aún no tienes plan este mes: queda apuntado.";
     case "pregnancy":
-      return "Queda apuntado. Con embarazo o lactancia no recorto los próximos días.";
+      return t(`balance.outcome.${outcome}`);
     default:
       return null;
   }
@@ -419,14 +422,15 @@ export function dayOutcomeNote(outcome: DayOutcome | null | undefined): string |
 export function balanceNote(
   balance: DayBalance,
   outcome: DayOutcome | null | undefined,
+  t: Translate,
   opts: { onlyRoutineExercise?: boolean } = {},
 ): string | null {
-  const explained = dayOutcomeNote(outcome);
+  const explained = dayOutcomeNote(outcome, t);
   if (explained) return explained;
   if (outcome !== "below-threshold" && outcome !== "nothing") return null;
   // El deporte de hoy fue solo de su rutina: ya iba en el objetivo (D9, ticket 16).
   if (opts.onlyRoutineExercise && balance.sources.exercise === 0) {
-    return "Tu rutina ya va en tu plan. Lo demás lo absorbe el plan tal cual.";
+    return t("balance.note.routine");
   }
 
   const { meals, snacks, exercise } = balance.sources;
@@ -434,9 +438,9 @@ export function balanceNote(
   // Dos orígenes de signo contrario que casi se anulan: eso no es "un desvío
   // pequeño", es el día cuadrando solo, y merece decirse.
   if (exercise < 0 && positives > 0 && Math.abs(balance.net) < Math.min(positives, -exercise)) {
-    return "El deporte compensa lo que has comido de más. No he tocado tu plan.";
+    return t("balance.note.offset");
   }
-  return "Lo absorbe el plan tal cual. Te aviso si el día se desvía más.";
+  return t("balance.note.absorbed");
 }
 
 /**

@@ -1,11 +1,13 @@
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 
+import { dateLocale } from "../lib/i18n";
 import type { MealChange } from "../lib/plan-shared";
 import { Sheet } from "./ui/sheet";
 
-const weekdayShort = (date: string) => {
+const weekdayShort = (date: string, locale: string) => {
   const d = new Date(`${date}T00:00:00`);
-  const label = d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+  const label = d.toLocaleDateString(locale, { weekday: "short", day: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 };
 
@@ -33,24 +35,26 @@ export function AdjustmentInfoSheet({
   /** Desvío del día frente a lo que preveía el plan. */
   kcalDelta?: number | null;
 }) {
+  const { t, i18n } = useTranslation();
   const rounded =
     typeof kcalDelta === "number" && kcalDelta !== 0
       ? `${kcalDelta > 0 ? "+" : "−"}${Math.abs(kcalDelta)} kcal`
       : null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="Ajuste del plan">
+    <Sheet open={open} onOpenChange={onOpenChange} title={t("adjustment.title")}>
       <View className="gap-3 px-4 pb-8">
         <Text className="text-sm text-muted-foreground">
           {rounded ? (
             <Text>
-              Hoy llevas <Text className="font-medium text-foreground">{rounded}</Text> frente a lo
-              que preveía el plan
+              {t("adjustment.todayBefore")}{" "}
+              <Text className="font-medium text-foreground">{rounded}</Text>{" "}
+              {t("adjustment.todayAfter")}
             </Text>
           ) : (
-            <Text>Tu día frente a lo que preveía el plan</Text>
+            <Text>{t("adjustment.plain")}</Text>
           )}
-          {changes.length ? ". Se han recolocado estos platos:" : "."}
+          {changes.length ? t("adjustment.withChanges") : t("adjustment.noChanges")}
         </Text>
 
         {changes.length === 0 ? (
@@ -58,16 +62,19 @@ export function AdjustmentInfoSheet({
           // sabemos que el coach no ha movido nada. Con cifra, se dice.
           <Text className="text-sm text-muted-foreground">
             {rounded
-              ? `El coach no ha movido ningún plato futuro: considera que ${
-                  (kcalDelta ?? 0) > 0 ? "el exceso" : "la diferencia"
-                } se absorbe con lo que ya tienes planificado.`
-              : "El coach no ha movido ningún plato futuro."}
+              ? t(
+                  (kcalDelta ?? 0) > 0
+                    ? "adjustment.noneMovedExcess"
+                    : "adjustment.noneMovedDifference",
+                )
+              : t("adjustment.noneMoved")}
           </Text>
         ) : (
           changes.map((c) => (
             <View key={`${c.date}-${c.slot}`} className="rounded-2xl bg-secondary/60 px-3.5 py-3">
               <Text className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
-                {weekdayShort(c.date)} · {c.slotLabel}
+                {weekdayShort(c.date, dateLocale(i18n.language))} ·{" "}
+                {t(`moments.${c.slotLabel}`, { defaultValue: c.slotLabel })}
               </Text>
               <View className="mt-1.5 flex-row flex-wrap items-start gap-2">
                 <Text className="text-sm text-muted-foreground line-through">{c.before}</Text>

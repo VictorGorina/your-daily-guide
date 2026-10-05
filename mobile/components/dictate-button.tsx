@@ -1,5 +1,6 @@
 import { Mic } from "lucide-react-native";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable } from "react-native";
 
 import { useDictationField } from "../lib/dictation-context";
@@ -16,6 +17,7 @@ export function DictateButton({
   onText: (text: string) => void;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const { state, start, stop, level } = useDictation(onText);
   const listening = state === "listening";
 
@@ -30,7 +32,7 @@ export function DictateButton({
       onPressIn={() => void start()}
       onPressOut={stop}
       hitSlop={8}
-      accessibilityLabel="Mantén pulsado para dictar"
+      accessibilityLabel={t("dictation.holdTo", { action: t("dictation.label").toLowerCase() })}
       className={`h-9 w-9 items-center justify-center rounded-full active:opacity-70 ${
         listening ? "bg-foreground" : "bg-secondary"
       } ${className}`}

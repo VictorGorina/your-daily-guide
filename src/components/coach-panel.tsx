@@ -396,7 +396,7 @@ export default function CoachPanel({
                 {/* Solo sobre el texto: los botones de debajo siguen a la vista. */}
                 <DictationWave className="bottom-12 rounded-none" />
                 <PromptInputFooter className="justify-between">
-                  <DictateButton onText={appendDictation} label="Dictar" />
+                  <DictateButton onText={appendDictation} />
                   <PromptInputSubmit status={status} disabled={busy} />
                 </PromptInputFooter>
               </PromptInput>
