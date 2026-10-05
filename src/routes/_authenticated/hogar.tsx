@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
@@ -23,15 +24,12 @@ import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
 import { ChildSheet } from "@/components/child-sheet";
 import { fetchMonthlyPlan, monthISO, todayISO } from "@/lib/daily";
 import {
-  DAY_LABEL,
-  DAY_SHORT,
   EMPTY_SCHEDULE,
   MEAL_KEYS,
   MEAL_LABEL,
   deriveSharedSlots,
   describeSharedSlots,
   eatsTableFood,
-  FEEDING_STAGE_NOTE,
   personColor,
   toggleDay,
   type Appetite,
@@ -80,22 +78,26 @@ export const Route = createFileRoute("/_authenticated/hogar")({
 const input =
   "h-12 w-full rounded-2xl bg-muted px-4 text-sm outline-none focus:ring-2 focus:ring-ring/40";
 
-/** Apetito → peso de ración para dimensionar la compra (adultos; los niños usan `childPortion`). */
-const APPETITES: readonly [Appetite, string, number][] = [
-  ["poco", "Poco", 0.8],
-  ["normal", "Normal", 1],
-  ["mucho", "Mucho", 1.2],
+/**
+ * Apetito → peso de ración para dimensionar la compra (adultos; los niños usan
+ * `childPortion`). La etiqueta sale del catálogo (`appetite.<clave>`).
+ */
+const APPETITES: readonly [Appetite, number][] = [
+  ["poco", 0.8],
+  ["normal", 1],
+  ["mucho", 1.2],
 ];
-const portionFor = (a: Appetite) => APPETITES.find(([key]) => key === a)![2];
+const portionFor = (a: Appetite) => APPETITES.find(([key]) => key === a)![1];
 
 function Hogar() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
   const sync = useServerFn(syncHouseholdPlan);
   const saveSched = useServerFn(saveHomeSchedule);
   const fillKids = useServerFn(fillChildMeals);
 
-  const [name, setName] = useState("Mi casa");
+  const [name, setName] = useState(() => t("hogar.create.defaultName"));
   const [code, setCode] = useState("");
   const [slots, setSlots] = useState<OpenSlot[] | null>(null);
   const [addingType, setAddingType] = useState<"adult" | "child">("adult");
@@ -144,10 +146,10 @@ function Hogar() {
   const create = useMutation({
     mutationFn: () => createHousehold(name),
     onSuccess: () => {
-      toast.success("Hogar creado");
+      toast.success(t("hogar.create.done"));
       refresh();
     },
-    onError: () => toast.error("No hemos podido crear el hogar"),
+    onError: () => toast.error(t("hogar.create.failed")),
   });
 
   const lookup = useMutation({
@@ -155,15 +157,13 @@ function Hogar() {
     onSuccess: (found) => setSlots(found),
     // La búsqueda cuenta los códigos malos: al llegar al límite, que lo diga.
     onError: (e: Error) =>
-      toast.error(
-        e.message.includes("Demasiados") ? e.message : "No hemos podido buscar tu familia",
-      ),
+      toast.error(e.message.includes("Demasiados") ? e.message : t("hogar.join.lookupFailed")),
   });
 
   const claim = useMutation({
     mutationFn: (memberId: string) => claimSlot(code, memberId),
     onSuccess: () => {
-      toast.success("¡Ya estás en la familia!");
+      toast.success(t("hogar.join.joined"));
       setCode("");
       setSlots(null);
       refresh();
@@ -173,7 +173,7 @@ function Hogar() {
 
   const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
   const isPlanner = !!state.data?.me?.is_planner;
-  const plannerName = state.data?.planner?.display_name ?? "quien lleva la cocina";
+  const plannerName = state.data?.planner?.display_name ?? t("hogar.roster.plannerFallback");
   // Gestionar la mesa (añadir, renombrar, quitar, cambiar ración, ceder quién
   // planifica) lo puede hacer el creador o quien planifica ese hogar — así lo
   // permite ahora la policy de household_members (migración
@@ -191,7 +191,7 @@ function Hogar() {
   const addAdult = useMutation({
     mutationFn: () => {
       const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
+      if (!householdId) throw new Error(t("hogar.roster.noHousehold"));
       return addAdultSlot(householdId, {
         display_name: newAdult.name.trim(),
         uses_app: newAdult.usesApp,
@@ -200,7 +200,7 @@ function Hogar() {
     },
     onSuccess: () => {
       setNewAdult({ name: "", usesApp: true, appetite: "normal" });
-      toast.success("Añadido a la mesa");
+      toast.success(t("hogar.add.added"));
       refresh();
       recalcRoster();
     },
@@ -226,18 +226,20 @@ function Hogar() {
   const makePlanner = useMutation({
     mutationFn: (id: string) => {
       const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
+      if (!householdId) throw new Error(t("hogar.roster.noHousehold"));
       return setPlanner(householdId, id);
     },
     onSuccess: () => {
-      toast.success("Cambiado quién planifica en casa");
+      toast.success(t("hogar.roster.plannerChanged"));
       refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const renameMember = (id: string, value: string) =>
-    void updateMember(id, { display_name: value.trim() || "Miembro" }).then(refresh);
+    void updateMember(id, { display_name: value.trim() || t("hogar.roster.memberFallback") }).then(
+      refresh,
+    );
   const setMemberPortion = (id: string, portion: number) =>
     void updateMember(id, { portion }).then(() => {
       refresh();
@@ -247,7 +249,7 @@ function Hogar() {
   const leave = useMutation({
     mutationFn: leaveHousehold,
     onSuccess: () => {
-      toast.success("Has salido del hogar");
+      toast.success(t("hogar.leave.done"));
       refresh();
     },
   });
@@ -259,12 +261,12 @@ function Hogar() {
       await sync({ data: { month: monthISO(), today: todayISO() } });
     },
     onSuccess: () => {
-      toast.success("Horario guardado");
+      toast.success(t("hogar.schedule.saved"));
       refresh();
       setTableChanged(true);
       qc.invalidateQueries({ queryKey: ["plan", monthISO()] });
     },
-    onError: (e: Error) => toast.error(e.message || "No hemos podido guardar el horario"),
+    onError: (e: Error) => toast.error(e.message || t("hogar.schedule.saveFailed")),
   });
 
   // Regenera platos y cantidades con la mesa actual y copia las comidas
@@ -275,19 +277,15 @@ function Hogar() {
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
       if (r?.skipped === "no-plan") {
-        toast("Aún no tienes plan este mes: créalo en Plan y ya contará con la familia");
+        toast(t("hogar.rebuild.noPlanToast"));
         return;
       }
       setTableChanged(false);
-      toast.success(
-        r?.synced
-          ? "Plan rehecho con la familia y compartido con quien usa la app"
-          : "Plan rehecho con la familia",
-      );
+      toast.success(t(r?.synced ? "hogar.rebuild.doneSynced" : "hogar.rebuild.done"));
     },
     onError: (e: Error) => {
       console.warn("hogar: rehaciendo el plan con la familia", e);
-      toast.error("No hemos podido rehacer el plan. Inténtalo de nuevo en un rato");
+      toast.error(t("hogar.rebuild.failed"));
     },
   });
 
@@ -317,20 +315,22 @@ function Hogar() {
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
       toast.success(
-        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+        res.filled
+          ? t("hogar.child.menuUpdated", { names: res.children.join(", ") })
+          : t("hogar.child.upToDate"),
       );
     },
-    onError: (e) =>
-      toast.error(
-        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
-      ),
+    onError: (e) => toast.error(e instanceof Error ? e.message : t("hogar.child.menuFailed")),
   });
 
   const openChild = (child: HouseholdChild | null) => setChildSheet({ open: true, child });
 
   const renderChildRow = (c: HouseholdChild) => {
     const pal = personColor(c.id);
-    const note = FEEDING_STAGE_NOTE[c.feeding_stage];
+    // Quien aún no come de la mesa enseña su etapa en vez de alergias y apetito.
+    const note = eatsTableFood(c.feeding_stage)
+      ? ""
+      : t(`hogar.child.stageNote.${c.feeding_stage}`);
     return (
       <button
         key={c.id}
@@ -346,12 +346,19 @@ function Hogar() {
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium">
             {c.name}
-            {c.age ? ` · ${c.age} ${c.age === 1 ? "año" : "años"}` : ""}
+            {c.age ? ` · ${t("hogar.child.age", { count: c.age })}` : ""}
           </span>
           <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
             {note
               ? note
-              : `${c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"} · apetito ${c.appetite ?? "normal"}`}
+              : t("hogar.child.summary", {
+                  allergies: c.allergies
+                    ? t("hogar.child.allergies", { list: c.allergies.toLowerCase() })
+                    : t("hogar.child.noAllergies"),
+                  appetite: t(`appetite.lower.${c.appetite ?? "normal"}`, {
+                    defaultValue: c.appetite ?? "normal",
+                  }),
+                })}
           </span>
         </span>
         <ChevronRight className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
@@ -363,16 +370,15 @@ function Hogar() {
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
       {!household ? (
         <Fragment key="no-household">
-          <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">Tu hogar</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder
-            tu propio plan.
-          </p>
+          <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">
+            {t("hogar.title")}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">{t("hogar.intro")}</p>
 
           <section className="mt-6 rounded-[1.25rem] bg-primary-soft p-5">
-            <h2 className="text-sm font-semibold">¿Ya te han pasado un código?</h2>
+            <h2 className="text-sm font-semibold">{t("hogar.join.title")}</h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Lo tiene arriba del todo quien ya esté dentro de la familia.
+              {t("hogar.join.hint")}
             </p>
             {!slots ? (
               <Fragment key="ask-code">
@@ -381,19 +387,19 @@ function Hogar() {
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   placeholder="ABC123"
-                  aria-label="Código de invitación"
+                  aria-label={t("hogar.join.codeLabel")}
                 />
                 <button
                   onClick={() => lookup.mutate()}
                   disabled={lookup.isPending || code.trim().length < 4}
                   className="mt-2.5 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
                 >
-                  {lookup.isPending ? "Buscando..." : "Unirme a la familia"}
+                  {lookup.isPending ? t("hogar.join.searching") : t("hogar.join.submit")}
                 </button>
               </Fragment>
             ) : slots.length ? (
               <Fragment key="pick-who">
-                <p className="mt-3 text-xs text-muted-foreground">¿Quién eres? Toca tu nombre.</p>
+                <p className="mt-3 text-xs text-muted-foreground">{t("hogar.join.pickWho")}</p>
                 <div className="mt-2 space-y-2">
                   {slots.map((s) => {
                     const pal = personColor(s.id);
@@ -419,20 +425,17 @@ function Hogar() {
                   onClick={() => setSlots(null)}
                   className="mt-3 text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
                 >
-                  Probar otro código
+                  {t("hogar.join.otherCode")}
                 </button>
               </Fragment>
             ) : (
               <Fragment key="no-slots">
-                <p className="mt-3 text-xs text-muted-foreground">
-                  No hay ningún sitio libre con ese código. Comprueba que está bien escrito o pídele
-                  a quien creó la familia que te añada.
-                </p>
+                <p className="mt-3 text-xs text-muted-foreground">{t("hogar.join.noSlots")}</p>
                 <button
                   onClick={() => setSlots(null)}
                   className="mt-3 text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
                 >
-                  Probar otro código
+                  {t("hogar.join.otherCode")}
                 </button>
               </Fragment>
             )}
@@ -441,40 +444,35 @@ function Hogar() {
           <div className="my-5 flex items-center gap-3">
             <span className="h-px flex-1 bg-border" />
             <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-              o empieza tú
+              {t("hogar.orStart")}
             </span>
             <span className="h-px flex-1 bg-border" />
           </div>
 
           <section className="surface-card space-y-3 p-5">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Users className="h-4 w-4 text-primary-ink" /> Crear un hogar
+              <Users className="h-4 w-4 text-primary-ink" /> {t("hogar.create.title")}
             </h2>
-            <p className="text-xs text-muted-foreground">
-              Tendrás un código para invitar a quien vive contigo.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("hogar.create.hint")}</p>
             <input
               className={input}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Nombre del hogar"
-              aria-label="Nombre del hogar"
+              placeholder={t("hogar.create.nameLabel")}
+              aria-label={t("hogar.create.nameLabel")}
             />
             <button
               onClick={() => create.mutate()}
               disabled={create.isPending}
               className="w-full rounded-full bg-secondary py-3.5 text-sm font-semibold disabled:opacity-60"
             >
-              {create.isPending ? "Creando..." : "Crear hogar"}
+              {create.isPending ? t("hogar.create.creating") : t("hogar.create.submit")}
             </button>
           </section>
 
           <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
-            <p>
-              Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
-              del hogar.
-            </p>
+            <p>{t("hogar.privacy")}</p>
           </div>
         </Fragment>
       ) : (
@@ -482,7 +480,7 @@ function Hogar() {
           <div className="flex items-start gap-2.5">
             <div className="min-w-0 flex-1">
               <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                Tu familia
+                {t("hogar.eyebrow")}
               </span>
               {editingName ? (
                 <input
@@ -503,7 +501,7 @@ function Hogar() {
             {!editingName ? (
               <button
                 onClick={() => setEditingName(true)}
-                aria-label="Cambiar el nombre de la familia"
+                aria-label={t("hogar.rename")}
                 className="mt-4 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-border"
               >
                 <Pencil className="h-[15px] w-[15px]" />
@@ -513,15 +511,12 @@ function Hogar() {
 
           <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
-            <p>
-              Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto
-              del hogar. Solo compartís las comidas comunes.
-            </p>
+            <p>{t("hogar.privacyShared")}</p>
           </div>
 
           <section className="mt-4 rounded-[1.25rem] bg-primary-soft p-5">
             <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-              Código de la familia
+              {t("hogar.code.title")}
             </span>
             <div className="mt-2.5 flex items-center gap-3">
               <span className="flex-1 font-title text-[32px] font-semibold leading-none tracking-[0.14em]">
@@ -531,26 +526,25 @@ function Hogar() {
                 onClick={() => {
                   void navigator.clipboard?.writeText(household.invite_code);
                   setCopied(true);
-                  toast.success("Código copiado");
+                  toast.success(t("hogar.code.copiedToast"));
                   window.setTimeout(() => setCopied(false), 1900);
                 }}
                 className="flex shrink-0 items-center gap-2 rounded-full bg-surface px-4 py-3 text-sm font-medium transition-colors hover:bg-secondary"
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? "Copiado" : "Copiar"}
+                {copied ? t("hogar.code.copied") : t("hogar.code.copy")}
               </button>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-              Quien lo tenga puede unirse a esta familia desde su app.
+              {t("hogar.code.hint")}
             </p>
           </section>
 
           <section className="surface-card mt-4 p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold">Familia</h2>
+              <h2 className="text-sm font-semibold">{t("hogar.roster.title")}</h2>
               <span className="text-[11px] text-muted-foreground">
-                {members.length + children.length}{" "}
-                {members.length + children.length === 1 ? "miembro" : "miembros"}
+                {t("hogar.roster.count", { count: members.length + children.length })}
               </span>
             </div>
 
@@ -583,28 +577,30 @@ function Hogar() {
                       <div className="flex shrink-0 items-center gap-1">
                         {m.is_planner ? (
                           <span className="flex items-center gap-1 rounded-full bg-primary-soft px-2 py-1 text-[11px] font-medium text-primary-ink">
-                            <ChefHat className="h-3 w-3" /> Planifica
+                            <ChefHat className="h-3 w-3" /> {t("hogar.roster.planner")}
                           </span>
                         ) : null}
                         {isMe ? (
                           <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                            Tú
+                            {t("hogar.roster.you")}
                           </span>
                         ) : !m.uses_app ? (
                           <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                            Sin cuenta
+                            {t("hogar.roster.noAccount")}
                           </span>
                         ) : !m.user_id ? (
                           <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                            Pendiente
+                            {t("hogar.roster.pending")}
                           </span>
                         ) : null}
                       </div>
                     </div>
 
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[11px] text-muted-foreground">Ración</span>
-                      {APPETITES.map(([key, label, value]) => {
+                      <span className="text-[11px] text-muted-foreground">
+                        {t("hogar.roster.portion")}
+                      </span>
+                      {APPETITES.map(([key, value]) => {
                         const active = Math.abs(m.portion - value) < 0.01;
                         return (
                           <button
@@ -617,7 +613,7 @@ function Hogar() {
                                 : "bg-surface text-muted-foreground"
                             } ${canManageRoster ? "" : "opacity-70"}`}
                           >
-                            {label}
+                            {t(`appetite.${key}`)}
                           </button>
                         );
                       })}
@@ -630,7 +626,7 @@ function Hogar() {
                             onClick={() => markUsesApp.mutate(m.id)}
                             className="text-[11px] font-medium text-primary-ink underline-offset-2 hover:underline"
                           >
-                            Ya usa la app
+                            {t("hogar.roster.usesAppNow")}
                           </button>
                         ) : null}
                         {m.user_id && !m.is_planner ? (
@@ -638,14 +634,14 @@ function Hogar() {
                             onClick={() => makePlanner.mutate(m.id)}
                             className="text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline"
                           >
-                            Que planifique la casa
+                            {t("hogar.roster.makePlanner")}
                           </button>
                         ) : null}
                         <button
                           onClick={() => dropMember.mutate(m.id)}
                           className="text-[11px] font-medium text-destructive underline-offset-2 hover:underline"
                         >
-                          Quitar
+                          {t("hogar.roster.remove")}
                         </button>
                       </div>
                     ) : null}
@@ -659,7 +655,7 @@ function Hogar() {
             {babies.length ? (
               <div className="mt-3">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                  Bebés · aún no comen de la mesa
+                  {t("hogar.roster.babies")}
                 </p>
                 <div className="space-y-2">{babies.map(renderChildRow)}</div>
                 <ChildMealGapBanner
@@ -673,7 +669,7 @@ function Hogar() {
             {/* --- Añadir miembro: adulto o peque --- */}
             {canManageRoster ? (
               <div className="mt-3 rounded-2xl bg-secondary/60 p-4">
-                <p className="text-xs font-semibold">Añadir a alguien a la mesa</p>
+                <p className="text-xs font-semibold">{t("hogar.add.title")}</p>
 
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
@@ -684,7 +680,7 @@ function Hogar() {
                         : "bg-surface text-muted-foreground"
                     }`}
                   >
-                    Adulto
+                    {t("hogar.add.adult")}
                   </button>
                   <button
                     onClick={() => setAddingType("child")}
@@ -694,7 +690,7 @@ function Hogar() {
                         : "bg-surface text-muted-foreground"
                     }`}
                   >
-                    Peque
+                    {t("hogar.add.child")}
                   </button>
                 </div>
 
@@ -704,18 +700,18 @@ function Hogar() {
                       className={`${input} mt-2`}
                       value={newAdult.name}
                       onChange={(e) => setNewAdult((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="Nombre"
-                      aria-label="Nombre del adulto"
+                      placeholder={t("hogar.add.name")}
+                      aria-label={t("hogar.add.adultNameLabel")}
                     />
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       {(
                         [
-                          [true, "Usa la app"],
-                          [false, "No usa la app"],
+                          [true, "hogar.add.usesApp"],
+                          [false, "hogar.add.noApp"],
                         ] as const
-                      ).map(([value, label]) => (
+                      ).map(([value, labelKey]) => (
                         <button
-                          key={label}
+                          key={labelKey}
                           onClick={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
                           className={`rounded-xl py-2 text-xs font-medium transition-colors ${
                             newAdult.usesApp === value
@@ -723,13 +719,15 @@ function Hogar() {
                               : "bg-surface text-muted-foreground"
                           }`}
                         >
-                          {label}
+                          {t(labelKey)}
                         </button>
                       ))}
                     </div>
                     <div className="mt-2 flex items-center gap-1.5">
-                      <span className="text-[11px] text-muted-foreground">Ración</span>
-                      {APPETITES.map(([key, label]) => (
+                      <span className="text-[11px] text-muted-foreground">
+                        {t("hogar.roster.portion")}
+                      </span>
+                      {APPETITES.map(([key]) => (
                         <button
                           key={key}
                           onClick={() => setNewAdult((p) => ({ ...p, appetite: key }))}
@@ -739,7 +737,7 @@ function Hogar() {
                               : "bg-surface text-muted-foreground"
                           }`}
                         >
-                          {label}
+                          {t(`appetite.${key}`)}
                         </button>
                       ))}
                     </div>
@@ -748,18 +746,16 @@ function Hogar() {
                       disabled={addAdult.isPending || !newAdult.name.trim()}
                       className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-2.5 text-sm font-medium disabled:opacity-60"
                     >
-                      <UserPlus className="h-4 w-4" /> Añadir adulto
+                      <UserPlus className="h-4 w-4" /> {t("hogar.add.addAdult")}
                     </button>
-                    <p className="mt-2 text-[11px] text-muted-foreground">
-                      Si usa la app, podrá unirse con el código y elegir su nombre de esta lista.
-                    </p>
+                    <p className="mt-2 text-[11px] text-muted-foreground">{t("hogar.add.hint")}</p>
                   </>
                 ) : (
                   <button
                     onClick={() => openChild(null)}
                     className="mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-2.5 text-sm font-medium text-foreground"
                   >
-                    <Baby className="h-4 w-4" /> Añadir peque
+                    <Baby className="h-4 w-4" /> {t("hogar.add.addChild")}
                   </button>
                 )}
               </div>
@@ -767,39 +763,33 @@ function Hogar() {
               // Explicar en vez de ocultar: antes este bloque simplemente
               // desaparecía para quien no era el creador, sin decir por qué.
               <p className="mt-3 rounded-2xl bg-secondary/60 px-4 py-3 text-[11.5px] leading-relaxed text-muted-foreground">
-                Solo quien creó la familia o quien planifica puede añadir gente a la mesa.
+                {t("hogar.roster.onlyManagers")}
               </p>
             )}
 
             <div className="mt-4 flex items-start gap-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-[11.5px] leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <p>
-                Cada adulto edita su propio perfil desde Ajustes; aquí solo ves lo que comparte con
-                la casa. A los peques los editáis entre todos.
-              </p>
+              <p>{t("hogar.roster.profileNote")}</p>
             </div>
           </section>
 
           <section className="surface-card mt-4 p-5">
-            <h2 className="text-sm font-semibold">¿Cuándo come cada uno en casa?</h2>
+            <h2 className="text-sm font-semibold">{t("hogar.schedule.title")}</h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Cada persona marca los días que come en casa. Cuando coincidís, el plato es el mismo
-              para todos.
+              {t("hogar.schedule.intro")}
             </p>
             <button
               onClick={() => setShowHelp((v) => !v)}
               className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary-ink"
             >
-              {showHelp ? "Ocultar detalle" : "Cómo funciona exactamente"}
+              {showHelp ? t("hogar.schedule.hideHelp") : t("hogar.schedule.showHelp")}
               <ChevronDown
                 className={`h-3.5 w-3.5 transition-transform ${showHelp ? "rotate-180" : ""}`}
               />
             </button>
             {showHelp ? (
               <p className="mt-2.5 rounded-[14px] bg-muted px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
-                Cada persona indica qué días come en casa para cada comida. Si varios coincidís,{" "}
-                {plannerName} planifica el plato compartido. Si comes solo, tu plan va aparte. La
-                merienda siempre es individual.
+                {t("hogar.schedule.help", { planner: plannerName })}
               </p>
             ) : null}
 
@@ -864,7 +854,9 @@ function Hogar() {
                         ) : null}
                       </span>
                       <span className="text-[11px] text-muted-foreground">
-                        {MEAL_KEYS.reduce((sum, m) => sum + draft[m].length, 0)} comidas/sem
+                        {t("hogar.schedule.mealsPerWeek", {
+                          n: MEAL_KEYS.reduce((sum, m) => sum + draft[m].length, 0),
+                        })}
                       </span>
                       <ChevronDown
                         className={`h-4 w-4 text-muted-foreground transition-transform ${
@@ -876,22 +868,29 @@ function Hogar() {
                       <div className="mt-3 space-y-3">
                         {MEAL_KEYS.map((meal) => {
                           const picked = draft[meal];
+                          const mealLabel = t(`moments.${MEAL_LABEL[meal]}`);
                           return (
                             <div key={meal}>
                               <div className="flex items-baseline justify-between gap-3">
-                                <p className="text-xs font-medium">{MEAL_LABEL[meal]}</p>
+                                <p className="text-xs font-medium">{mealLabel}</p>
                                 <span className="text-[11px] text-muted-foreground">
-                                  {picked.length ? `${picked.length} de 7` : "—"}
+                                  {picked.length
+                                    ? t("hogar.schedule.ofSeven", { n: picked.length })
+                                    : "—"}
                                 </span>
                               </div>
                               <div className="mt-1.5 grid grid-cols-7 gap-1.5">
-                                {DAY_SHORT.map((label, day) => {
+                                {[0, 1, 2, 3, 4, 5, 6].map((day) => {
                                   const active = picked.includes(day);
                                   return (
                                     <button
                                       key={day}
                                       disabled={!person.canEdit}
-                                      aria-label={`${person.name} ${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
+                                      aria-label={t("hogar.schedule.dayLabel", {
+                                        name: person.name,
+                                        meal: mealLabel,
+                                        day: t(`weekdaysLong.${day}`),
+                                      })}
                                       onClick={() =>
                                         setSchedDrafts((prev) => ({
                                           ...prev,
@@ -907,7 +906,7 @@ function Hogar() {
                                           : "bg-secondary text-muted-foreground"
                                       } disabled:opacity-60`}
                                     >
-                                      {label}
+                                      {t(`weekdaysInitial.${day}`)}
                                     </button>
                                   );
                                 })}
@@ -927,12 +926,14 @@ function Hogar() {
                             disabled={persistSchedule.isPending}
                             className="w-full rounded-full bg-primary py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
                           >
-                            {persistSchedule.isPending ? "Guardando..." : "Guardar horario"}
+                            {persistSchedule.isPending
+                              ? t("hogar.schedule.saving")
+                              : t("hogar.schedule.save")}
                           </button>
                         ) : null}
                         {!person.canEdit ? (
                           <p className="text-[11px] text-muted-foreground">
-                            Solo {plannerName} puede cambiar este horario.
+                            {t("hogar.schedule.onlyPlanner", { planner: plannerName })}
                           </p>
                         ) : null}
                       </div>
@@ -961,7 +962,7 @@ function Hogar() {
               return anyShared ? (
                 <div className="mt-4 rounded-[14px] bg-muted px-3.5 py-3">
                   <p className="text-[11px] font-medium text-muted-foreground">
-                    Comidas en común → {describeSharedSlots(derivedSlots)}
+                    {t("hogar.schedule.shared", { slots: describeSharedSlots(derivedSlots, t) })}
                   </p>
                 </div>
               ) : null;
@@ -971,16 +972,12 @@ function Hogar() {
           {isPlanner && (members.length > 1 || children.length > 0) ? (
             <section className="surface-card mt-4 p-5">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <RefreshCw className="h-4 w-4 text-primary-ink" /> Plan del mes con la familia
+                <RefreshCw className="h-4 w-4 text-primary-ink" /> {t("hogar.rebuild.title")}
               </h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Rehace los platos y la compra de lo que queda de mes contando con toda la mesa. A
-                quien usa la app le llegan las comidas compartidas; quien no la usa cuenta en las
-                raciones. Hoy, los días pasados y los platos que cambiaste a mano no se tocan.
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("hogar.rebuild.intro")}</p>
               {tableChanged ? (
                 <p className="mt-3 rounded-2xl bg-primary-soft px-4 py-3 text-xs text-primary-ink">
-                  Has cambiado la mesa o los horarios. Tu plan aún no cuenta con ello.
+                  {t("hogar.rebuild.changed")}
                 </p>
               ) : null}
               <button
@@ -989,15 +986,15 @@ function Hogar() {
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
               >
                 <RefreshCw className={`h-4 w-4 ${rebuild.isPending ? "animate-spin" : ""}`} />
-                {rebuild.isPending ? "Rehaciendo el plan…" : "Rehacer plan con la familia"}
+                {rebuild.isPending ? t("hogar.rebuild.running") : t("hogar.rebuild.submit")}
               </button>
               {rebuild.isPending ? (
                 <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                  Puede tardar un par de minutos.
+                  {t("hogar.rebuild.wait")}
                 </p>
               ) : !planQ.data?.plan ? (
                 <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                  Aún no tienes plan este mes: créalo en Plan y ya contará con la familia.
+                  {t("hogar.rebuild.noPlan")}
                 </p>
               ) : null}
             </section>
@@ -1007,7 +1004,7 @@ function Hogar() {
             onClick={() => leave.mutate()}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground transition-colors hover:text-destructive"
           >
-            <LogOut className="h-4 w-4" /> Salir del hogar
+            <LogOut className="h-4 w-4" /> {t("hogar.leave.submit")}
           </button>
 
           <ChildSheet

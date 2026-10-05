@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react-native";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { addChild, removeChild, updateChild, type HouseholdChild } from "../lib/household";
 import {
   childRation,
   cleanFeedingStage,
-  FEEDING_STAGE_LABEL,
   type Appetite,
   type FeedingStage,
 } from "../lib/household-shared";
@@ -16,11 +16,7 @@ import { Sheet } from "./ui/sheet";
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 const FIELD = "text-[11px] font-sans-semibold uppercase tracking-[0.06em] text-muted-foreground";
 
-const APPETITES: readonly [Appetite, string][] = [
-  ["poco", "Poco"],
-  ["normal", "Normal"],
-  ["mucho", "Mucho"],
-];
+const APPETITES: readonly Appetite[] = ["poco", "normal", "mucho"];
 
 const STAGES: readonly FeedingStage[] = ["pecho", "triturados", "mesa"];
 
@@ -70,6 +66,7 @@ export function ChildSheet({
   /** Se llama tras guardar o quitar un peque, para programar el recálculo del plan (issue 05). */
   onChanged?: () => void;
 }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
 
@@ -101,12 +98,12 @@ export function ChildSheet({
       else await addChild(householdId, payload);
     },
     onSuccess: () => {
-      Alert.alert(child ? "Peque actualizado" : "Peque añadido");
+      Alert.alert(child ? t("childSheet.updated") : t("childSheet.added"));
       refresh();
       onChanged?.();
       onClose();
     },
-    onError: () => Alert.alert("No hemos podido guardar"),
+    onError: () => Alert.alert(t("childSheet.saveFailed")),
   });
 
   const drop = useMutation({
@@ -116,16 +113,16 @@ export function ChildSheet({
       onChanged?.();
       onClose();
     },
-    onError: () => Alert.alert("No hemos podido quitarlo"),
+    onError: () => Alert.alert(t("childSheet.removeFailed")),
   });
 
   const confirmDrop = () =>
     Alert.alert(
-      "¿Quitar de la familia?",
-      `${child?.name ?? "Este peque"} dejará de estar en casa.`,
+      t("childSheet.confirmTitle"),
+      t("childSheet.confirmText", { name: child?.name ?? t("childSheet.thisChild") }),
       [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Quitar", style: "destructive", onPress: () => drop.mutate() },
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("hogar.roster.remove"), style: "destructive", onPress: () => drop.mutate() },
       ],
     );
 
@@ -133,27 +130,27 @@ export function ChildSheet({
     <Sheet
       open={open}
       onOpenChange={(v) => !v && onClose()}
-      title={child ? draft.name || "Peque" : "Nuevo peque"}
-      description="Sus datos ayudan a que los menús de casa le sirvan también."
+      title={child ? draft.name || t("childSheet.fallbackName") : t("childSheet.newTitle")}
+      description={t("childSheet.description")}
     >
       <View className="mt-4 gap-4">
         <View className="flex-row gap-2.5">
           <View className="flex-1 gap-1.5">
-            <Text className={FIELD}>Nombre</Text>
+            <Text className={FIELD}>{t("childSheet.name")}</Text>
             <TextInput
               className={INPUT}
               value={draft.name}
-              onChangeText={(t) => patch({ name: t })}
-              placeholder="Nombre"
+              onChangeText={(v) => patch({ name: v })}
+              placeholder={t("childSheet.name")}
               placeholderTextColor="#a69d8f"
             />
           </View>
           <View className="w-24 gap-1.5">
-            <Text className={FIELD}>Edad</Text>
+            <Text className={FIELD}>{t("childSheet.age")}</Text>
             <TextInput
               className={INPUT}
               value={draft.age}
-              onChangeText={(t) => patch({ age: t })}
+              onChangeText={(v) => patch({ age: v })}
               placeholder="—"
               placeholderTextColor="#a69d8f"
               keyboardType="number-pad"
@@ -162,7 +159,7 @@ export function ChildSheet({
         </View>
 
         <View className="gap-1.5">
-          <Text className={FIELD}>¿Qué come?</Text>
+          <Text className={FIELD}>{t("childSheet.stage")}</Text>
           <View className="gap-1.5">
             {STAGES.map((key) => {
               const active = draft.stage === key;
@@ -177,7 +174,7 @@ export function ChildSheet({
                       active ? "text-primary-ink" : "text-muted-foreground"
                     }`}
                   >
-                    {FEEDING_STAGE_LABEL[key]}
+                    {t(`feedingStage.${key}`)}
                   </Text>
                 </Pressable>
               );
@@ -185,18 +182,16 @@ export function ChildSheet({
           </View>
           {draft.stage !== "mesa" ? (
             <Text className="text-[11.5px] leading-relaxed text-muted-foreground">
-              {draft.stage === "pecho"
-                ? "No entra en el plan de comidas ni en la compra de la casa."
-                : "Lleva su propio triturado en el plan, aparte del plato de la mesa."}
+              {t(`childSheet.stageHint.${draft.stage}`)}
             </Text>
           ) : null}
         </View>
 
         {draft.stage === "mesa" ? (
           <View className="gap-1.5">
-            <Text className={FIELD}>Apetito</Text>
+            <Text className={FIELD}>{t("childSheet.appetite")}</Text>
             <View className="flex-row gap-1.5 rounded-full bg-muted p-1">
-              {APPETITES.map(([key, label]) => {
+              {APPETITES.map((key) => {
                 const active = draft.appetite === key;
                 return (
                   <Pressable
@@ -209,7 +204,7 @@ export function ChildSheet({
                         active ? "text-foreground" : "text-muted-foreground"
                       }`}
                     >
-                      {label}
+                      {t(`appetite.${key}`)}
                     </Text>
                   </Pressable>
                 );
@@ -219,23 +214,23 @@ export function ChildSheet({
         ) : null}
 
         <View className="gap-1.5">
-          <Text className={FIELD}>Alergias e intolerancias</Text>
+          <Text className={FIELD}>{t("childSheet.allergies")}</Text>
           <TextInput
             className={INPUT}
             value={draft.allergies}
-            onChangeText={(t) => patch({ allergies: t })}
-            placeholder="Ninguna"
+            onChangeText={(v) => patch({ allergies: v })}
+            placeholder={t("childSheet.allergiesNone")}
             placeholderTextColor="#a69d8f"
           />
         </View>
 
         <View className="gap-1.5">
-          <Text className={FIELD}>Notas</Text>
+          <Text className={FIELD}>{t("childSheet.notes")}</Text>
           <TextInput
             className={`${INPUT} h-auto py-3`}
             value={draft.notes}
-            onChangeText={(t) => patch({ notes: t })}
-            placeholder="Ej. come en el cole de lunes a viernes"
+            onChangeText={(v) => patch({ notes: v })}
+            placeholder={t("childSheet.notesPlaceholder")}
             placeholderTextColor="#a69d8f"
             multiline
             numberOfLines={3}
@@ -250,7 +245,7 @@ export function ChildSheet({
         style={save.isPending || !draft.name.trim() ? { opacity: 0.6 } : undefined}
       >
         <Text className="text-sm font-sans-semibold text-primary-foreground">
-          {save.isPending ? "Guardando..." : "Guardar"}
+          {save.isPending ? t("childSheet.saving") : t("common.save")}
         </Text>
       </Pressable>
 
@@ -262,7 +257,7 @@ export function ChildSheet({
         >
           <Trash2 size={16} color="#6b6256" />
           <Text className="text-[13px] font-sans-medium text-muted-foreground">
-            Quitar de la familia
+            {t("childSheet.remove")}
           </Text>
         </Pressable>
       ) : null}

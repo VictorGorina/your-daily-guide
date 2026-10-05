@@ -4,6 +4,8 @@
  * (ver AGENTS.md).
  */
 
+import type { Translate } from "./week-nav";
+
 export const MEAL_KEYS = ["desayuno", "comida", "cena"] as const;
 export type MealKey = (typeof MEAL_KEYS)[number];
 
@@ -49,11 +51,21 @@ export const toggleDay = (list: number[], day: number) =>
 export const isSharedSlot = (slots: SharedSlots, meal: MealKey, day: number) =>
   slots[meal].includes(day);
 
-export function describeSharedSlots(slots: SharedSlots): string {
-  const parts = MEAL_KEYS.filter((m) => slots[m].length).map(
-    (m) => `${MEAL_LABEL[m]}: ${slots[m].map((d) => DAY_LABEL[d]).join(", ")}`,
-  );
-  return parts.length ? parts.join(" · ") : "sin comidas compartidas";
+/**
+ * "Comida: Lunes, Viernes · Cena: Sábado". Sin traductor sale en español
+ * canónico, que es lo que entra en los prompts del servidor; la pantalla
+ * Familia pasa el suyo y sale en el idioma de la persona.
+ */
+export function describeSharedSlots(slots: SharedSlots, t?: Translate): string {
+  const parts = MEAL_KEYS.filter((m) => slots[m].length).map((m) => {
+    if (!t) return `${MEAL_LABEL[m]}: ${slots[m].map((d) => DAY_LABEL[d]).join(", ")}`;
+    return t("hogar.schedule.sharedMeal", {
+      meal: t(`moments.${MEAL_LABEL[m]}`),
+      days: slots[m].map((d) => t(`weekdaysLong.${d}`)).join(", "),
+    });
+  });
+  if (parts.length) return parts.join(" · ");
+  return t ? t("hogar.schedule.noneShared") : "sin comidas compartidas";
 }
 
 // ---------------------------------------------------------------------------
@@ -217,19 +229,6 @@ export function childPortion(age: number | null, appetite: Appetite): number {
  * - `mesa` — ya come del mismo plato que la familia (comportamiento de siempre).
  */
 export type FeedingStage = "pecho" | "triturados" | "mesa";
-
-export const FEEDING_STAGE_LABEL: Record<FeedingStage, string> = {
-  pecho: "Pecho o biberón",
-  triturados: "Triturados y potitos",
-  mesa: "Ya come del plato",
-};
-
-/** Frase para la fila del peque en Familia cuando aún no come de la mesa. */
-export const FEEDING_STAGE_NOTE: Record<FeedingStage, string> = {
-  pecho: "toma pecho o biberón",
-  triturados: "triturados y potitos",
-  mesa: "",
-};
 
 export const cleanFeedingStage = (raw: unknown): FeedingStage =>
   raw === "pecho" || raw === "triturados" ? raw : "mesa";

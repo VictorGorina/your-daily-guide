@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import {
@@ -14,7 +15,6 @@ import { addChild, removeChild, updateChild, type HouseholdChild } from "@/lib/h
 import {
   childRation,
   cleanFeedingStage,
-  FEEDING_STAGE_LABEL,
   personColor,
   type Appetite,
   type FeedingStage,
@@ -24,11 +24,7 @@ const field = "text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-
 const control =
   "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40";
 
-const APPETITES: readonly [Appetite, string][] = [
-  ["poco", "Poco"],
-  ["normal", "Normal"],
-  ["mucho", "Mucho"],
-];
+const APPETITES: readonly Appetite[] = ["poco", "normal", "mucho"];
 
 const STAGES: readonly FeedingStage[] = ["pecho", "triturados", "mesa"];
 
@@ -81,6 +77,7 @@ export function ChildSheet({
   /** Se llama tras guardar o quitar un peque, para programar el recálculo del plan (issue 05). */
   onChanged?: () => void;
 }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -116,23 +113,23 @@ export function ChildSheet({
       else await addChild(householdId, payload);
     },
     onSuccess: () => {
-      toast.success(child ? "Peque actualizado" : "Peque añadido");
+      toast.success(child ? t("childSheet.updated") : t("childSheet.added"));
       refresh();
       onChanged?.();
       onClose();
     },
-    onError: () => toast.error("No hemos podido guardar"),
+    onError: () => toast.error(t("childSheet.saveFailed")),
   });
 
   const drop = useMutation({
     mutationFn: () => removeChild(child!.id),
     onSuccess: () => {
-      toast.success("Peque quitado de la familia");
+      toast.success(t("childSheet.removed"));
       refresh();
       onChanged?.();
       onClose();
     },
-    onError: () => toast.error("No hemos podido quitarlo"),
+    onError: () => toast.error(t("childSheet.removeFailed")),
   });
 
   const pal = personColor(child?.id ?? (draft.name || "nuevo"));
@@ -150,10 +147,10 @@ export function ChildSheet({
               {initial}
             </span>
             <div>
-              <SheetTitle>{child ? draft.name || "Peque" : "Nuevo peque"}</SheetTitle>
-              <SheetDescription>
-                Sus datos ayudan a que los menús de casa le sirvan también.
-              </SheetDescription>
+              <SheetTitle>
+                {child ? draft.name || t("childSheet.fallbackName") : t("childSheet.newTitle")}
+              </SheetTitle>
+              <SheetDescription>{t("childSheet.description")}</SheetDescription>
             </div>
           </div>
         </SheetHeader>
@@ -161,16 +158,16 @@ export function ChildSheet({
         <div className="mt-5 space-y-4">
           <div className="grid grid-cols-[1.6fr_1fr] gap-2.5">
             <label className="space-y-1.5">
-              <span className={field}>Nombre</span>
+              <span className={field}>{t("childSheet.name")}</span>
               <input
                 className={control}
                 value={draft.name}
                 onChange={(e) => patch({ name: e.target.value })}
-                placeholder="Nombre"
+                placeholder={t("childSheet.name")}
               />
             </label>
             <label className="space-y-1.5">
-              <span className={field}>Edad</span>
+              <span className={field}>{t("childSheet.age")}</span>
               <input
                 className={control}
                 inputMode="numeric"
@@ -182,7 +179,7 @@ export function ChildSheet({
           </div>
 
           <div className="space-y-1.5">
-            <span className={field}>¿Qué come?</span>
+            <span className={field}>{t("childSheet.stage")}</span>
             <div className="grid gap-1.5">
               {STAGES.map((key) => (
                 <button
@@ -195,24 +192,22 @@ export function ChildSheet({
                       : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {FEEDING_STAGE_LABEL[key]}
+                  {t(`feedingStage.${key}`)}
                 </button>
               ))}
             </div>
             {draft.stage !== "mesa" ? (
               <p className="pt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
-                {draft.stage === "pecho"
-                  ? "No entra en el plan de comidas ni en la compra de la casa."
-                  : "Lleva su propio triturado en el plan, aparte del plato de la mesa."}
+                {t(`childSheet.stageHint.${draft.stage}`)}
               </p>
             ) : null}
           </div>
 
           {draft.stage === "mesa" ? (
             <div className="space-y-1.5">
-              <span className={field}>Apetito</span>
+              <span className={field}>{t("childSheet.appetite")}</span>
               <div className="grid grid-cols-3 gap-1.5 rounded-full bg-muted p-1">
-                {APPETITES.map(([key, label]) => (
+                {APPETITES.map((key) => (
                   <button
                     key={key}
                     type="button"
@@ -223,7 +218,7 @@ export function ChildSheet({
                         : "text-muted-foreground"
                     }`}
                   >
-                    {label}
+                    {t(`appetite.${key}`)}
                   </button>
                 ))}
               </div>
@@ -231,23 +226,23 @@ export function ChildSheet({
           ) : null}
 
           <label className="block space-y-1.5">
-            <span className={field}>Alergias e intolerancias</span>
+            <span className={field}>{t("childSheet.allergies")}</span>
             <input
               className={control}
               value={draft.allergies}
               onChange={(e) => patch({ allergies: e.target.value })}
-              placeholder="Ninguna"
+              placeholder={t("childSheet.allergiesNone")}
             />
           </label>
 
           <label className="block space-y-1.5">
-            <span className={field}>Notas</span>
+            <span className={field}>{t("childSheet.notes")}</span>
             <textarea
               className={`${control} h-auto py-3 leading-relaxed`}
               rows={3}
               value={draft.notes}
               onChange={(e) => patch({ notes: e.target.value })}
-              placeholder="Ej. come en el cole de lunes a viernes"
+              placeholder={t("childSheet.notesPlaceholder")}
             />
           </label>
         </div>
@@ -258,7 +253,7 @@ export function ChildSheet({
           disabled={save.isPending || !draft.name.trim()}
           className="mt-5 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
-          {save.isPending ? "Guardando..." : "Guardar"}
+          {save.isPending ? t("childSheet.saving") : t("common.save")}
         </button>
 
         {child ? (
@@ -269,7 +264,7 @@ export function ChildSheet({
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-full py-3 text-[13px] font-medium text-muted-foreground transition-colors hover:text-destructive disabled:opacity-60"
           >
             <Trash2 className="h-4 w-4" />
-            {confirmDelete ? "Toca otra vez para quitarlo" : "Quitar de la familia"}
+            {confirmDelete ? t("childSheet.removeConfirm") : t("childSheet.remove")}
           </button>
         ) : null}
       </SheetContent>

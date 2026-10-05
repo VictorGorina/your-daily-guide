@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import i18n from "@/lib/i18n";
+
 import {
   childBasePortion,
   childPortion,
@@ -70,6 +72,16 @@ describe("describeSharedSlots", () => {
     expect(describeSharedSlots({ desayuno: [], comida: [], cena: [] })).toBe(
       "sin comidas compartidas",
     );
+  });
+
+  it("con traductor: el español es el mismo texto y el inglés sale traducido", () => {
+    const slots = { desayuno: [], comida: [0, 4], cena: [5] };
+    expect(describeSharedSlots(slots, i18n.getFixedT("es"))).toBe(describeSharedSlots(slots));
+    expect(describeSharedSlots(slots, i18n.getFixedT("en"))).toBe(
+      "Lunch: Monday, Friday · Dinner: Saturday",
+    );
+    const none = { desayuno: [], comida: [], cena: [] };
+    expect(describeSharedSlots(none, i18n.getFixedT("es"))).toBe(describeSharedSlots(none));
   });
 });
 

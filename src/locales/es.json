@@ -1268,5 +1268,174 @@
     "above": "{{kg}} kg por encima",
     "below": "{{kg}} kg por debajo",
     "gaugeLabel": "Peso actual {{current}} kg, objetivo {{target}} kg"
+  },
+  "weekdaysLong": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"],
+  "appetite": {
+    "poco": "Poco",
+    "normal": "Normal",
+    "mucho": "Mucho",
+    "lower": {
+      "poco": "poco",
+      "normal": "normal",
+      "mucho": "mucho"
+    }
+  },
+  "feedingStage": {
+    "pecho": "Pecho o biberón",
+    "triturados": "Triturados y potitos",
+    "mesa": "Ya come del plato"
+  },
+  "hogar": {
+    "title": "Tu hogar",
+    "intro": "Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin perder tu propio plan.",
+    "orStart": "o empieza tú",
+    "privacy": "Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto del hogar.",
+    "privacyShared": "Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el resto del hogar. Solo compartís las comidas comunes.",
+    "eyebrow": "Tu familia",
+    "rename": "Cambiar el nombre de la familia",
+    "join": {
+      "title": "¿Ya te han pasado un código?",
+      "hint": "Lo tiene arriba del todo quien ya esté dentro de la familia.",
+      "codeLabel": "Código de invitación",
+      "searching": "Buscando...",
+      "submit": "Unirme a la familia",
+      "pickWho": "¿Quién eres? Toca tu nombre.",
+      "otherCode": "Probar otro código",
+      "noSlots": "No hay ningún sitio libre con ese código. Comprueba que está bien escrito o pídele a quien creó la familia que te añada.",
+      "joined": "¡Ya estás en la familia!",
+      "lookupFailed": "No hemos podido buscar tu familia"
+    },
+    "create": {
+      "title": "Crear un hogar",
+      "hint": "Tendrás un código para invitar a quien vive contigo.",
+      "nameLabel": "Nombre del hogar",
+      "defaultName": "Mi casa",
+      "creating": "Creando...",
+      "submit": "Crear hogar",
+      "done": "Hogar creado",
+      "failed": "No hemos podido crear el hogar"
+    },
+    "code": {
+      "title": "Código de la familia",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "copiedToast": "Código copiado",
+      "share": "Compartir",
+      "shareMessage": "Únete a mi hogar en Peppers con el código {{code}}",
+      "hint": "Quien lo tenga puede unirse a esta familia desde su app."
+    },
+    "roster": {
+      "title": "Familia",
+      "count_one": "{{count}} miembro",
+      "count_other": "{{count}} miembros",
+      "planner": "Planifica",
+      "you": "Tú",
+      "noAccount": "Sin cuenta",
+      "pending": "Pendiente",
+      "portion": "Ración",
+      "usesAppNow": "Ya usa la app",
+      "makePlanner": "Que planifique la casa",
+      "remove": "Quitar",
+      "babies": "Bebés · aún no comen de la mesa",
+      "memberFallback": "Miembro",
+      "plannerFallback": "quien lleva la cocina",
+      "plannerChanged": "Cambiado quién planifica en casa",
+      "noHousehold": "Sin hogar",
+      "onlyManagers": "Solo quien creó la familia o quien planifica puede añadir gente a la mesa.",
+      "profileNote": "Cada adulto edita su propio perfil desde Ajustes; aquí solo ves lo que comparte con la casa. A los peques los editáis entre todos."
+    },
+    "add": {
+      "title": "Añadir a alguien a la mesa",
+      "adult": "Adulto",
+      "child": "Peque",
+      "name": "Nombre",
+      "adultNameLabel": "Nombre del adulto",
+      "usesApp": "Usa la app",
+      "noApp": "No usa la app",
+      "addAdult": "Añadir adulto",
+      "addChild": "Añadir peque",
+      "hint": "Si usa la app, podrá unirse con el código y elegir su nombre de esta lista.",
+      "added": "Añadido a la mesa"
+    },
+    "child": {
+      "age_one": "{{count}} año",
+      "age_other": "{{count}} años",
+      "allergies": "Alergias: {{list}}",
+      "noAllergies": "Sin alergias",
+      "summary": "{{allergies}} · apetito {{appetite}}",
+      "stageNote": {
+        "pecho": "toma pecho o biberón",
+        "triturados": "triturados y potitos"
+      },
+      "menuUpdated": "Menú de {{names}} actualizado",
+      "upToDate": "Ya estaba al día",
+      "menuFailed": "No hemos podido actualizar el menú de los peques"
+    },
+    "schedule": {
+      "title": "¿Cuándo come cada uno en casa?",
+      "intro": "Cada persona marca los días que come en casa. Cuando coincidís, el plato es el mismo para todos.",
+      "hideHelp": "Ocultar detalle",
+      "showHelp": "Cómo funciona exactamente",
+      "help": "Cada persona indica qué días come en casa para cada comida. Si varios coincidís, {{planner}} planifica el plato compartido. Si comes solo, tu plan va aparte. La merienda siempre es individual.",
+      "mealsPerWeek": "{{n}} comidas/sem",
+      "ofSeven": "{{n}} de 7",
+      "dayLabel": "{{name}} {{meal}} {{day}}",
+      "saving": "Guardando...",
+      "save": "Guardar horario",
+      "saved": "Horario guardado",
+      "saveFailed": "No hemos podido guardar el horario",
+      "onlyPlanner": "Solo {{planner}} puede cambiar este horario.",
+      "shared": "Comidas en común → {{slots}}",
+      "sharedMeal": "{{meal}}: {{days}}",
+      "noneShared": "sin comidas compartidas"
+    },
+    "rebuild": {
+      "title": "Plan del mes con la familia",
+      "intro": "Rehace los platos y la compra de lo que queda de mes contando con toda la mesa. A quien usa la app le llegan las comidas compartidas; quien no la usa cuenta en las raciones. Hoy, los días pasados y los platos que cambiaste a mano no se tocan.",
+      "changed": "Has cambiado la mesa o los horarios. Tu plan aún no cuenta con ello.",
+      "running": "Rehaciendo el plan…",
+      "submit": "Rehacer plan con la familia",
+      "wait": "Puede tardar un par de minutos.",
+      "noPlan": "Aún no tienes plan este mes: créalo en Plan y ya contará con la familia.",
+      "noPlanToast": "Aún no tienes plan este mes: créalo en Plan y ya contará con la familia",
+      "done": "Plan rehecho con la familia",
+      "doneSynced": "Plan rehecho con la familia y compartido con quien usa la app",
+      "failed": "No hemos podido rehacer el plan. Inténtalo de nuevo en un rato"
+    },
+    "leave": {
+      "submit": "Salir del hogar",
+      "done": "Has salido del hogar",
+      "confirmTitle": "¿Salir del hogar?",
+      "confirmText": "Dejarás de compartir comidas con el resto.",
+      "confirm": "Salir"
+    }
+  },
+  "childSheet": {
+    "newTitle": "Nuevo peque",
+    "fallbackName": "Peque",
+    "description": "Sus datos ayudan a que los menús de casa le sirvan también.",
+    "name": "Nombre",
+    "age": "Edad",
+    "stage": "¿Qué come?",
+    "stageHint": {
+      "pecho": "No entra en el plan de comidas ni en la compra de la casa.",
+      "triturados": "Lleva su propio triturado en el plan, aparte del plato de la mesa."
+    },
+    "appetite": "Apetito",
+    "allergies": "Alergias e intolerancias",
+    "allergiesNone": "Ninguna",
+    "notes": "Notas",
+    "notesPlaceholder": "Ej. come en el cole de lunes a viernes",
+    "saving": "Guardando...",
+    "updated": "Peque actualizado",
+    "added": "Peque añadido",
+    "saveFailed": "No hemos podido guardar",
+    "removed": "Peque quitado de la familia",
+    "removeFailed": "No hemos podido quitarlo",
+    "remove": "Quitar de la familia",
+    "removeConfirm": "Toca otra vez para quitarlo",
+    "confirmTitle": "¿Quitar de la familia?",
+    "confirmText": "{{name}} dejará de estar en casa.",
+    "thisChild": "Este peque"
   }
 }

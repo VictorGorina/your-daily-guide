@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
@@ -46,15 +47,12 @@ import {
   type OpenSlot,
 } from "../../lib/household";
 import {
-  DAY_LABEL,
-  DAY_SHORT,
   EMPTY_SCHEDULE,
   MEAL_KEYS,
   MEAL_LABEL,
   deriveSharedSlots,
   describeSharedSlots,
   eatsTableFood,
-  FEEDING_STAGE_NOTE,
   personColor,
   toggleDay,
   type Appetite,
@@ -65,13 +63,16 @@ import { rebuildPlanWithHousehold } from "../../lib/plan-recalc";
 
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 
-/** Apetito → peso de ración para dimensionar la compra (adultos; los niños usan `childPortion`). */
-const APPETITES: readonly [Appetite, string, number][] = [
-  ["poco", "Poco", 0.8],
-  ["normal", "Normal", 1],
-  ["mucho", "Mucho", 1.2],
+/**
+ * Apetito → peso de ración para dimensionar la compra (adultos; los niños usan
+ * `childPortion`). La etiqueta sale del catálogo (`appetite.<clave>`).
+ */
+const APPETITES: readonly [Appetite, number][] = [
+  ["poco", 0.8],
+  ["normal", 1],
+  ["mucho", 1.2],
 ];
-const portionFor = (a: Appetite) => APPETITES.find(([key]) => key === a)![2];
+const portionFor = (a: Appetite) => APPETITES.find(([key]) => key === a)![1];
 
 // La sincronización del plan compartido toca el plan del otro miembro con la
 // clave de servicio, así que va por /api/v1/* como en la web (el resto del CRUD
@@ -80,10 +81,11 @@ const syncSharedPlan = () =>
   apiPost<{ synced: number }>("household/sync", { month: monthISO(), today: todayISO() });
 
 export default function Hogar() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
-  const [name, setName] = useState("Mi casa");
+  const [name, setName] = useState(() => t("hogar.create.defaultName"));
   const [code, setCode] = useState("");
   const [slots, setSlots] = useState<OpenSlot[] | null>(null);
   const [addingType, setAddingType] = useState<"adult" | "child">("adult");
@@ -129,10 +131,10 @@ export default function Hogar() {
   const create = useMutation({
     mutationFn: () => createHousehold(name),
     onSuccess: () => {
-      Alert.alert("Hogar creado");
+      Alert.alert(t("hogar.create.done"));
       refresh();
     },
-    onError: () => Alert.alert("No hemos podido crear el hogar"),
+    onError: () => Alert.alert(t("hogar.create.failed")),
   });
 
   const lookup = useMutation({
@@ -140,15 +142,13 @@ export default function Hogar() {
     onSuccess: (found) => setSlots(found),
     // La búsqueda cuenta los códigos malos: al llegar al límite, que lo diga.
     onError: (e: Error) =>
-      Alert.alert(
-        e.message.includes("Demasiados") ? e.message : "No hemos podido buscar tu familia",
-      ),
+      Alert.alert(e.message.includes("Demasiados") ? e.message : t("hogar.join.lookupFailed")),
   });
 
   const claim = useMutation({
     mutationFn: (memberId: string) => claimSlot(code, memberId),
     onSuccess: () => {
-      Alert.alert("¡Ya estás en la familia!");
+      Alert.alert(t("hogar.join.joined"));
       setCode("");
       setSlots(null);
       refresh();
@@ -158,7 +158,7 @@ export default function Hogar() {
 
   const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
   const isPlanner = !!state.data?.me?.is_planner;
-  const plannerName = state.data?.planner?.display_name ?? "quien lleva la cocina";
+  const plannerName = state.data?.planner?.display_name ?? t("hogar.roster.plannerFallback");
   // Gestionar la mesa (añadir, renombrar, quitar, cambiar ración, ceder quién
   // planifica) lo puede hacer el creador o quien planifica ese hogar — así lo
   // permite ahora la policy de household_members (migración
@@ -176,7 +176,7 @@ export default function Hogar() {
   const addAdult = useMutation({
     mutationFn: () => {
       const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
+      if (!householdId) throw new Error(t("hogar.roster.noHousehold"));
       return addAdultSlot(householdId, {
         display_name: newAdult.name.trim(),
         uses_app: newAdult.usesApp,
@@ -185,7 +185,7 @@ export default function Hogar() {
     },
     onSuccess: () => {
       setNewAdult({ name: "", usesApp: true, appetite: "normal" });
-      Alert.alert("Añadido a la mesa");
+      Alert.alert(t("hogar.add.added"));
       refresh();
       recalcRoster();
     },
@@ -211,18 +211,20 @@ export default function Hogar() {
   const makePlanner = useMutation({
     mutationFn: (id: string) => {
       const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error("Sin hogar");
+      if (!householdId) throw new Error(t("hogar.roster.noHousehold"));
       return setPlanner(householdId, id);
     },
     onSuccess: () => {
-      Alert.alert("Cambiado quién planifica en casa");
+      Alert.alert(t("hogar.roster.plannerChanged"));
       refresh();
     },
     onError: (e: Error) => Alert.alert(e.message),
   });
 
   const renameMember = (id: string, value: string) =>
-    void updateMember(id, { display_name: value.trim() || "Miembro" }).then(refresh);
+    void updateMember(id, { display_name: value.trim() || t("hogar.roster.memberFallback") }).then(
+      refresh,
+    );
   const setMemberPortion = (id: string, portion: number) =>
     void updateMember(id, { portion }).then(() => {
       refresh();
@@ -232,7 +234,7 @@ export default function Hogar() {
   const leave = useMutation({
     mutationFn: leaveHousehold,
     onSuccess: () => {
-      Alert.alert("Has salido del hogar");
+      Alert.alert(t("hogar.leave.done"));
       refresh();
     },
   });
@@ -243,12 +245,12 @@ export default function Hogar() {
       await syncSharedPlan();
     },
     onSuccess: () => {
-      Alert.alert("Horario guardado");
+      Alert.alert(t("hogar.schedule.saved"));
       refresh();
       setTableChanged(true);
       qc.invalidateQueries({ queryKey: ["plan", month] });
     },
-    onError: (e: Error) => Alert.alert(e.message || "No hemos podido guardar el horario"),
+    onError: (e: Error) => Alert.alert(e.message || t("hogar.schedule.saveFailed")),
   });
 
   // Regenera platos y cantidades con la mesa actual y copia las comidas
@@ -259,31 +261,27 @@ export default function Hogar() {
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
       if (r?.skipped === "no-plan") {
-        Alert.alert("Aún no tienes plan este mes: créalo en Plan y ya contará con la familia");
+        Alert.alert(t("hogar.rebuild.noPlanToast"));
         return;
       }
       setTableChanged(false);
-      Alert.alert(
-        r?.synced
-          ? "Plan rehecho con la familia y compartido con quien usa la app"
-          : "Plan rehecho con la familia",
-      );
+      Alert.alert(t(r?.synced ? "hogar.rebuild.doneSynced" : "hogar.rebuild.done"));
     },
     onError: (e: Error) => {
       console.warn("hogar: rehaciendo el plan con la familia", e);
-      Alert.alert("No hemos podido rehacer el plan. Inténtalo de nuevo en un rato");
+      Alert.alert(t("hogar.rebuild.failed"));
     },
   });
 
   const confirmLeave = () =>
-    Alert.alert("¿Salir del hogar?", "Dejarás de compartir comidas con el resto.", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Salir", style: "destructive", onPress: () => leave.mutate() },
+    Alert.alert(t("hogar.leave.confirmTitle"), t("hogar.leave.confirmText"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("hogar.leave.confirm"), style: "destructive", onPress: () => leave.mutate() },
     ]);
 
   const shareCode = (inviteCode: string) =>
     void Share.share({
-      message: `Únete a mi hogar en Peppers con el código ${inviteCode}`,
+      message: t("hogar.code.shareMessage", { code: inviteCode }),
     }).catch(() => {
       /* el usuario canceló el diálogo */
     });
@@ -316,17 +314,19 @@ export default function Hogar() {
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["plan", month] });
       Alert.alert(
-        res.filled ? `Menú de ${res.children.join(", ")} actualizado` : "Ya estaba al día",
+        res.filled
+          ? t("hogar.child.menuUpdated", { names: res.children.join(", ") })
+          : t("hogar.child.upToDate"),
       );
     },
-    onError: (e) =>
-      Alert.alert(
-        e instanceof Error ? e.message : "No hemos podido actualizar el menú de los peques",
-      ),
+    onError: (e) => Alert.alert(e instanceof Error ? e.message : t("hogar.child.menuFailed")),
   });
   const renderChildRow = (c: HouseholdChild) => {
     const pal = personColor(c.id);
-    const note = FEEDING_STAGE_NOTE[c.feeding_stage];
+    // Quien aún no come de la mesa enseña su etapa en vez de alergias y apetito.
+    const note = eatsTableFood(c.feeding_stage)
+      ? ""
+      : t(`hogar.child.stageNote.${c.feeding_stage}`);
     return (
       <Pressable
         key={c.id}
@@ -342,12 +342,19 @@ export default function Hogar() {
         <View className="flex-1">
           <Text className="text-sm font-sans-medium text-foreground">
             {c.name}
-            {c.age ? ` · ${c.age} ${c.age === 1 ? "año" : "años"}` : ""}
+            {c.age ? ` · ${t("hogar.child.age", { count: c.age })}` : ""}
           </Text>
           <Text className="mt-0.5 text-xs text-muted-foreground">
             {note
               ? note
-              : `${c.allergies ? `Alergias: ${c.allergies.toLowerCase()}` : "Sin alergias"} · apetito ${c.appetite ?? "normal"}`}
+              : t("hogar.child.summary", {
+                  allergies: c.allergies
+                    ? t("hogar.child.allergies", { list: c.allergies.toLowerCase() })
+                    : t("hogar.child.noAllergies"),
+                  appetite: t(`appetite.lower.${c.appetite ?? "normal"}`, {
+                    defaultValue: c.appetite ?? "normal",
+                  }),
+                })}
           </Text>
         </View>
         <ChevronRight size={18} color="#6b6256" />
@@ -363,26 +370,24 @@ export default function Hogar() {
       >
         {!household ? (
           <>
-            <Text className="font-heading text-3xl text-foreground">Tu hogar</Text>
-            <Text className="mt-2 text-sm text-muted-foreground">
-              Si compartes mesa con alguien, vuestros menús y la compra se ajustan juntos. Sin
-              perder tu propio plan.
-            </Text>
+            <Text className="font-heading text-3xl text-foreground">{t("hogar.title")}</Text>
+            <Text className="mt-2 text-sm text-muted-foreground">{t("hogar.intro")}</Text>
 
             <View className="mt-6 gap-2 rounded-3xl bg-primary-soft p-5">
               <Text className="text-sm font-sans-semibold text-foreground">
-                ¿Ya te han pasado un código?
+                {t("hogar.join.title")}
               </Text>
               <Text className="text-xs leading-5 text-muted-foreground">
-                Lo tiene arriba del todo quien ya esté dentro de la familia.
+                {t("hogar.join.hint")}
               </Text>
               {!slots ? (
                 <>
                   <TextInput
                     className="mt-1 h-[60px] w-full rounded-2xl bg-surface px-4 text-center font-heading text-2xl uppercase tracking-widest text-foreground"
                     value={code}
-                    onChangeText={(t) => setCode(t.toUpperCase())}
+                    onChangeText={(v) => setCode(v.toUpperCase())}
                     placeholder="ABC123"
+                    accessibilityLabel={t("hogar.join.codeLabel")}
                     placeholderTextColor="#a69d8f"
                     autoCapitalize="characters"
                     autoCorrect={false}
@@ -396,15 +401,13 @@ export default function Hogar() {
                     }
                   >
                     <Text className="text-sm font-sans-semibold text-primary-foreground">
-                      {lookup.isPending ? "Buscando..." : "Unirme a la familia"}
+                      {lookup.isPending ? t("hogar.join.searching") : t("hogar.join.submit")}
                     </Text>
                   </Pressable>
                 </>
               ) : slots.length ? (
                 <View className="gap-2">
-                  <Text className="text-xs text-muted-foreground">
-                    ¿Quién eres? Toca tu nombre.
-                  </Text>
+                  <Text className="text-xs text-muted-foreground">{t("hogar.join.pickWho")}</Text>
                   {slots.map((s) => {
                     const pal = personColor(s.id);
                     return (
@@ -431,19 +434,16 @@ export default function Hogar() {
                   })}
                   <Pressable onPress={() => setSlots(null)} className="active:opacity-70">
                     <Text className="text-xs font-sans-medium text-muted-foreground underline">
-                      Probar otro código
+                      {t("hogar.join.otherCode")}
                     </Text>
                   </Pressable>
                 </View>
               ) : (
                 <View className="gap-2">
-                  <Text className="text-xs text-muted-foreground">
-                    No hay ningún sitio libre con ese código. Comprueba que está bien escrito o
-                    pídele a quien creó la familia que te añada.
-                  </Text>
+                  <Text className="text-xs text-muted-foreground">{t("hogar.join.noSlots")}</Text>
                   <Pressable onPress={() => setSlots(null)} className="active:opacity-70">
                     <Text className="text-xs font-sans-medium text-muted-foreground underline">
-                      Probar otro código
+                      {t("hogar.join.otherCode")}
                     </Text>
                   </Pressable>
                 </View>
@@ -453,7 +453,7 @@ export default function Hogar() {
             <View className="my-5 flex-row items-center gap-3">
               <View className="h-px flex-1 bg-border" />
               <Text className="text-[11px] font-sans-semibold uppercase tracking-widest text-muted-foreground">
-                o empieza tú
+                {t("hogar.orStart")}
               </Text>
               <View className="h-px flex-1 bg-border" />
             </View>
@@ -461,16 +461,16 @@ export default function Hogar() {
             <View className="gap-3 rounded-3xl bg-surface p-5">
               <View className="flex-row items-center gap-2">
                 <Users size={16} color="#6dbe7b" />
-                <Text className="text-sm font-sans-semibold text-foreground">Crear un hogar</Text>
+                <Text className="text-sm font-sans-semibold text-foreground">
+                  {t("hogar.create.title")}
+                </Text>
               </View>
-              <Text className="text-xs text-muted-foreground">
-                Tendrás un código para invitar a quien vive contigo.
-              </Text>
+              <Text className="text-xs text-muted-foreground">{t("hogar.create.hint")}</Text>
               <TextInput
                 className={INPUT}
                 value={name}
                 onChangeText={setName}
-                placeholder="Nombre del hogar"
+                placeholder={t("hogar.create.nameLabel")}
                 placeholderTextColor="#a69d8f"
               />
               <Pressable
@@ -480,17 +480,14 @@ export default function Hogar() {
                 style={create.isPending ? { opacity: 0.6 } : undefined}
               >
                 <Text className="text-sm font-sans-semibold text-foreground">
-                  {create.isPending ? "Creando..." : "Crear hogar"}
+                  {create.isPending ? t("hogar.create.creating") : t("hogar.create.submit")}
                 </Text>
               </Pressable>
             </View>
 
             <View className="mt-4 flex-row items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3">
               <ShieldCheck size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
-              <Text className="flex-1 text-xs text-muted-foreground">
-                Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el
-                resto del hogar.
-              </Text>
+              <Text className="flex-1 text-xs text-muted-foreground">{t("hogar.privacy")}</Text>
             </View>
           </>
         ) : (
@@ -498,7 +495,7 @@ export default function Hogar() {
             <View className="mt-2 flex-row items-start gap-2.5">
               <View className="flex-1">
                 <Text className="text-[11px] font-sans-semibold uppercase tracking-widest text-muted-foreground">
-                  Tu familia
+                  {t("hogar.eyebrow")}
                 </Text>
                 {editingName ? (
                   <TextInput
@@ -521,7 +518,7 @@ export default function Hogar() {
               {!editingName ? (
                 <Pressable
                   onPress={() => setEditingName(true)}
-                  accessibilityLabel="Cambiar el nombre de la familia"
+                  accessibilityLabel={t("hogar.rename")}
                   hitSlop={8}
                   className="mt-4 h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
                 >
@@ -533,14 +530,13 @@ export default function Hogar() {
             <View className="mt-4 flex-row items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3">
               <ShieldCheck size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
               <Text className="flex-1 text-xs text-muted-foreground">
-                Tu progreso personal (racha, comidas registradas, peso) nunca es visible para el
-                resto del hogar. Solo compartís las comidas comunes.
+                {t("hogar.privacyShared")}
               </Text>
             </View>
 
             <View className="mt-4 gap-2.5 rounded-3xl bg-primary-soft p-5">
               <Text className="text-[11px] font-sans-semibold uppercase tracking-widest text-muted-foreground">
-                Código de la familia
+                {t("hogar.code.title")}
               </Text>
               <View className="flex-row items-center gap-3">
                 <Text className="flex-1 font-heading text-3xl tracking-widest text-foreground">
@@ -551,20 +547,23 @@ export default function Hogar() {
                   className="flex-row items-center gap-2 rounded-full bg-surface px-4 py-3 active:opacity-80"
                 >
                   <Copy size={16} color="#6b6256" />
-                  <Text className="text-sm font-sans-medium text-foreground">Compartir</Text>
+                  <Text className="text-sm font-sans-medium text-foreground">
+                    {t("hogar.code.share")}
+                  </Text>
                 </Pressable>
               </View>
               <Text className="text-xs leading-5 text-muted-foreground">
-                Quien lo tenga puede unirse a esta familia desde su app.
+                {t("hogar.code.hint")}
               </Text>
             </View>
 
             <View className="mt-4 rounded-3xl bg-surface p-5">
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm font-sans-semibold text-foreground">Familia</Text>
+                <Text className="text-sm font-sans-semibold text-foreground">
+                  {t("hogar.roster.title")}
+                </Text>
                 <Text className="text-[11px] text-muted-foreground">
-                  {members.length + children.length}{" "}
-                  {members.length + children.length === 1 ? "miembro" : "miembros"}
+                  {t("hogar.roster.count", { count: members.length + children.length })}
                 </Text>
               </View>
 
@@ -602,29 +601,31 @@ export default function Hogar() {
                             <View className="flex-row items-center gap-1 rounded-full bg-primary-soft px-2 py-1">
                               <ChefHat size={12} color="#6dbe7b" />
                               <Text className="text-[11px] font-sans-medium text-primary-ink">
-                                Planifica
+                                {t("hogar.roster.planner")}
                               </Text>
                             </View>
                           ) : null}
                           {isMe ? (
                             <Text className="rounded-full bg-surface px-2 py-1 text-[11px] font-sans-medium text-muted-foreground">
-                              Tú
+                              {t("hogar.roster.you")}
                             </Text>
                           ) : !m.uses_app ? (
                             <Text className="rounded-full bg-surface px-2 py-1 text-[11px] font-sans-medium text-muted-foreground">
-                              Sin cuenta
+                              {t("hogar.roster.noAccount")}
                             </Text>
                           ) : !m.user_id ? (
                             <Text className="rounded-full bg-surface px-2 py-1 text-[11px] font-sans-medium text-muted-foreground">
-                              Pendiente
+                              {t("hogar.roster.pending")}
                             </Text>
                           ) : null}
                         </View>
                       </View>
 
                       <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
-                        <Text className="text-[11px] text-muted-foreground">Ración</Text>
-                        {APPETITES.map(([key, label, value]) => {
+                        <Text className="text-[11px] text-muted-foreground">
+                          {t("hogar.roster.portion")}
+                        </Text>
+                        {APPETITES.map(([key, value]) => {
                           const active = Math.abs(m.portion - value) < 0.01;
                           return (
                             <Pressable
@@ -641,7 +642,7 @@ export default function Hogar() {
                                   active ? "text-primary-ink" : "text-muted-foreground"
                                 }`}
                               >
-                                {label}
+                                {t(`appetite.${key}`)}
                               </Text>
                             </Pressable>
                           );
@@ -653,20 +654,20 @@ export default function Hogar() {
                           {!m.uses_app ? (
                             <Pressable onPress={() => markUsesApp.mutate(m.id)}>
                               <Text className="text-[11px] font-sans-medium text-primary-ink underline">
-                                Ya usa la app
+                                {t("hogar.roster.usesAppNow")}
                               </Text>
                             </Pressable>
                           ) : null}
                           {m.user_id && !m.is_planner ? (
                             <Pressable onPress={() => makePlanner.mutate(m.id)}>
                               <Text className="text-[11px] font-sans-medium text-muted-foreground underline">
-                                Que planifique la casa
+                                {t("hogar.roster.makePlanner")}
                               </Text>
                             </Pressable>
                           ) : null}
                           <Pressable onPress={() => dropMember.mutate(m.id)}>
                             <Text className="text-[11px] font-sans-medium text-destructive underline">
-                              Quitar
+                              {t("hogar.roster.remove")}
                             </Text>
                           </Pressable>
                         </View>
@@ -680,7 +681,7 @@ export default function Hogar() {
                 {babies.length ? (
                   <View className="mt-1 gap-2">
                     <Text className="text-[11px] font-sans-semibold uppercase tracking-wider text-muted-foreground">
-                      Bebés · aún no comen de la mesa
+                      {t("hogar.roster.babies")}
                     </Text>
                     {babies.map(renderChildRow)}
                     <ChildMealGapBanner
@@ -696,16 +697,16 @@ export default function Hogar() {
               {canManageRoster ? (
                 <View className="mt-3 gap-2 rounded-2xl bg-secondary/60 p-4">
                   <Text className="text-xs font-sans-semibold text-foreground">
-                    Añadir a alguien a la mesa
+                    {t("hogar.add.title")}
                   </Text>
 
                   <View className="flex-row gap-2">
                     {(
                       [
-                        ["adult", "Adulto"],
-                        ["child", "Peque"],
+                        ["adult", "hogar.add.adult"],
+                        ["child", "hogar.add.child"],
                       ] as const
-                    ).map(([key, label]) => (
+                    ).map(([key, labelKey]) => (
                       <Pressable
                         key={key}
                         onPress={() => setAddingType(key)}
@@ -718,7 +719,7 @@ export default function Hogar() {
                             addingType === key ? "text-primary-ink" : "text-muted-foreground"
                           }`}
                         >
-                          {label}
+                          {t(labelKey)}
                         </Text>
                       </Pressable>
                     ))}
@@ -729,19 +730,20 @@ export default function Hogar() {
                       <TextInput
                         className={INPUT}
                         value={newAdult.name}
-                        onChangeText={(t) => setNewAdult((p) => ({ ...p, name: t }))}
-                        placeholder="Nombre"
+                        onChangeText={(v) => setNewAdult((p) => ({ ...p, name: v }))}
+                        placeholder={t("hogar.add.name")}
+                        accessibilityLabel={t("hogar.add.adultNameLabel")}
                         placeholderTextColor="#a69d8f"
                       />
                       <View className="flex-row gap-2">
                         {(
                           [
-                            [true, "Usa la app"],
-                            [false, "No usa la app"],
+                            [true, "hogar.add.usesApp"],
+                            [false, "hogar.add.noApp"],
                           ] as const
-                        ).map(([value, label]) => (
+                        ).map(([value, labelKey]) => (
                           <Pressable
-                            key={label}
+                            key={labelKey}
                             onPress={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
                             className={`flex-1 items-center rounded-xl py-2 ${
                               newAdult.usesApp === value ? "bg-primary-soft" : "bg-surface"
@@ -754,14 +756,16 @@ export default function Hogar() {
                                   : "text-muted-foreground"
                               }`}
                             >
-                              {label}
+                              {t(labelKey)}
                             </Text>
                           </Pressable>
                         ))}
                       </View>
                       <View className="flex-row items-center gap-1.5">
-                        <Text className="text-[11px] text-muted-foreground">Ración</Text>
-                        {APPETITES.map(([key, label]) => (
+                        <Text className="text-[11px] text-muted-foreground">
+                          {t("hogar.roster.portion")}
+                        </Text>
+                        {APPETITES.map(([key]) => (
                           <Pressable
                             key={key}
                             onPress={() => setNewAdult((p) => ({ ...p, appetite: key }))}
@@ -776,7 +780,7 @@ export default function Hogar() {
                                   : "text-muted-foreground"
                               }`}
                             >
-                              {label}
+                              {t(`appetite.${key}`)}
                             </Text>
                           </Pressable>
                         ))}
@@ -791,11 +795,11 @@ export default function Hogar() {
                       >
                         <UserPlus size={16} color="#3e3d39" />
                         <Text className="text-sm font-sans-medium text-foreground">
-                          Añadir adulto
+                          {t("hogar.add.addAdult")}
                         </Text>
                       </Pressable>
                       <Text className="text-[11px] text-muted-foreground">
-                        Si usa la app, podrá unirse con el código y elegir su nombre de esta lista.
+                        {t("hogar.add.hint")}
                       </Text>
                     </>
                   ) : (
@@ -804,7 +808,9 @@ export default function Hogar() {
                       className="flex-row items-center justify-center gap-2 rounded-full bg-secondary py-2.5 active:opacity-80"
                     >
                       <Baby size={16} color="#3e3d39" />
-                      <Text className="text-sm font-sans-medium text-foreground">Añadir peque</Text>
+                      <Text className="text-sm font-sans-medium text-foreground">
+                        {t("hogar.add.addChild")}
+                      </Text>
                     </Pressable>
                   )}
                 </View>
@@ -813,7 +819,7 @@ export default function Hogar() {
                 // desaparecía para quien no era el creador, sin decir por qué.
                 <View className="mt-3 rounded-2xl bg-secondary/60 px-4 py-3">
                   <Text className="text-[11.5px] leading-5 text-muted-foreground">
-                    Solo quien creó la familia o quien planifica puede añadir gente a la mesa.
+                    {t("hogar.roster.onlyManagers")}
                   </Text>
                 </View>
               )}
@@ -821,26 +827,24 @@ export default function Hogar() {
               <View className="mt-4 flex-row items-start gap-2.5 rounded-2xl bg-muted px-3.5 py-3">
                 <ShieldCheck size={14} color="#6b6256" style={{ marginTop: 1 }} />
                 <Text className="flex-1 text-[11.5px] leading-5 text-muted-foreground">
-                  Cada adulto edita su propio perfil desde Ajustes; aquí solo ves lo que comparte
-                  con la casa. A los peques los editáis entre todos.
+                  {t("hogar.roster.profileNote")}
                 </Text>
               </View>
             </View>
 
             <View className="mt-4 rounded-3xl bg-surface p-5">
               <Text className="text-sm font-sans-semibold text-foreground">
-                ¿Cuándo come cada uno en casa?
+                {t("hogar.schedule.title")}
               </Text>
               <Text className="mt-1 text-xs leading-5 text-muted-foreground">
-                Cada persona marca los días que come en casa. Cuando coincidís, el plato es el mismo
-                para todos.
+                {t("hogar.schedule.intro")}
               </Text>
               <Pressable
                 onPress={() => setShowHelp((v) => !v)}
                 className="mt-2 flex-row items-center gap-1.5 active:opacity-70"
               >
                 <Text className="text-xs font-sans-medium text-primary-ink">
-                  {showHelp ? "Ocultar detalle" : "Cómo funciona exactamente"}
+                  {showHelp ? t("hogar.schedule.hideHelp") : t("hogar.schedule.showHelp")}
                 </Text>
                 <ChevronDown
                   size={14}
@@ -850,9 +854,7 @@ export default function Hogar() {
               </Pressable>
               {showHelp ? (
                 <Text className="mt-2.5 rounded-2xl bg-muted px-3.5 py-3 text-xs leading-5 text-muted-foreground">
-                  Cada persona indica qué días come en casa para cada comida. Si varios coincidís,{" "}
-                  {plannerName} planifica el plato compartido. Si comes solo, tu plan va aparte. La
-                  merienda siempre es individual.
+                  {t("hogar.schedule.help", { planner: plannerName })}
                 </Text>
               ) : null}
 
@@ -923,7 +925,9 @@ export default function Hogar() {
                           ) : null}
                         </View>
                         <Text className="text-[11px] text-muted-foreground">
-                          {MEAL_KEYS.reduce((sum, m) => sum + draft[m].length, 0)} comidas/sem
+                          {t("hogar.schedule.mealsPerWeek", {
+                            n: MEAL_KEYS.reduce((sum, m) => sum + draft[m].length, 0),
+                          })}
                         </Text>
                         <ChevronDown
                           size={16}
@@ -937,24 +941,31 @@ export default function Hogar() {
                         <View className="mt-3 gap-3">
                           {MEAL_KEYS.map((meal) => {
                             const picked = draft[meal];
+                            const mealLabel = t(`moments.${MEAL_LABEL[meal]}`);
                             return (
                               <View key={meal}>
                                 <View className="flex-row items-baseline justify-between">
                                   <Text className="text-xs font-sans-medium text-foreground">
-                                    {MEAL_LABEL[meal]}
+                                    {mealLabel}
                                   </Text>
                                   <Text className="text-[11px] text-muted-foreground">
-                                    {picked.length ? `${picked.length} de 7` : "—"}
+                                    {picked.length
+                                      ? t("hogar.schedule.ofSeven", { n: picked.length })
+                                      : "—"}
                                   </Text>
                                 </View>
                                 <View className="mt-1.5 flex-row gap-1.5">
-                                  {DAY_SHORT.map((label, day) => {
+                                  {[0, 1, 2, 3, 4, 5, 6].map((day) => {
                                     const active = picked.includes(day);
                                     return (
                                       <Pressable
                                         key={day}
                                         disabled={!person.canEdit}
-                                        accessibilityLabel={`${person.name} ${MEAL_LABEL[meal]} ${DAY_LABEL[day]}`}
+                                        accessibilityLabel={t("hogar.schedule.dayLabel", {
+                                          name: person.name,
+                                          meal: mealLabel,
+                                          day: t(`weekdaysLong.${day}`),
+                                        })}
                                         onPress={() =>
                                           setSchedDrafts((prev) => ({
                                             ...prev,
@@ -974,7 +985,7 @@ export default function Hogar() {
                                             active ? "text-primary-ink" : "text-muted-foreground"
                                           }`}
                                         >
-                                          {label}
+                                          {t(`weekdaysInitial.${day}`)}
                                         </Text>
                                       </Pressable>
                                     );
@@ -997,13 +1008,15 @@ export default function Hogar() {
                               style={persistSchedule.isPending ? { opacity: 0.6 } : undefined}
                             >
                               <Text className="text-xs font-sans-semibold text-primary-foreground">
-                                {persistSchedule.isPending ? "Guardando..." : "Guardar horario"}
+                                {persistSchedule.isPending
+                                  ? t("hogar.schedule.saving")
+                                  : t("hogar.schedule.save")}
                               </Text>
                             </Pressable>
                           ) : null}
                           {!person.canEdit ? (
                             <Text className="text-[11px] text-muted-foreground">
-                              Solo {plannerName} puede cambiar este horario.
+                              {t("hogar.schedule.onlyPlanner", { planner: plannerName })}
                             </Text>
                           ) : null}
                         </View>
@@ -1032,7 +1045,9 @@ export default function Hogar() {
                 return anyShared ? (
                   <View className="mt-4 rounded-[14px] bg-muted px-3.5 py-3">
                     <Text className="text-[11px] font-sans-medium text-muted-foreground">
-                      Comidas en común → {describeSharedSlots(derivedSlots)}
+                      {t("hogar.schedule.shared", {
+                        slots: describeSharedSlots(derivedSlots, t),
+                      })}
                     </Text>
                   </View>
                 ) : null;
@@ -1044,19 +1059,15 @@ export default function Hogar() {
                 <View className="flex-row items-center gap-2">
                   <RefreshCw size={16} color="#6dbe7b" />
                   <Text className="text-sm font-sans-semibold text-foreground">
-                    Plan del mes con la familia
+                    {t("hogar.rebuild.title")}
                   </Text>
                 </View>
                 <Text className="mt-1 text-xs text-muted-foreground">
-                  Rehace los platos y la compra de lo que queda de mes contando con toda la mesa. A
-                  quien usa la app le llegan las comidas compartidas; quien no la usa cuenta en las
-                  raciones. Hoy, los días pasados y los platos que cambiaste a mano no se tocan.
+                  {t("hogar.rebuild.intro")}
                 </Text>
                 {tableChanged ? (
                   <View className="mt-3 rounded-2xl bg-primary-soft px-4 py-3">
-                    <Text className="text-xs text-primary-ink">
-                      Has cambiado la mesa o los horarios. Tu plan aún no cuenta con ello.
-                    </Text>
+                    <Text className="text-xs text-primary-ink">{t("hogar.rebuild.changed")}</Text>
                   </View>
                 ) : null}
                 <Pressable
@@ -1071,16 +1082,16 @@ export default function Hogar() {
                     <RefreshCw size={16} color="#3e3d39" />
                   )}
                   <Text className="text-sm font-sans-semibold text-primary-foreground">
-                    {rebuild.isPending ? "Rehaciendo el plan…" : "Rehacer plan con la familia"}
+                    {rebuild.isPending ? t("hogar.rebuild.running") : t("hogar.rebuild.submit")}
                   </Text>
                 </Pressable>
                 {rebuild.isPending ? (
                   <Text className="mt-2 text-center text-[11px] text-muted-foreground">
-                    Puede tardar un par de minutos.
+                    {t("hogar.rebuild.wait")}
                   </Text>
                 ) : !planQ.data?.plan ? (
                   <Text className="mt-2 text-center text-[11px] text-muted-foreground">
-                    Aún no tienes plan este mes: créalo en Plan y ya contará con la familia.
+                    {t("hogar.rebuild.noPlan")}
                   </Text>
                 ) : null}
               </View>
@@ -1092,7 +1103,7 @@ export default function Hogar() {
             >
               <LogOut size={16} color="#6b6256" />
               <Text className="text-sm font-sans-medium text-muted-foreground">
-                Salir del hogar
+                {t("hogar.leave.submit")}
               </Text>
             </Pressable>
 

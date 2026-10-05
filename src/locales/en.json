@@ -1263,5 +1263,174 @@
     "above": "{{kg}} kg above",
     "below": "{{kg}} kg below",
     "gaugeLabel": "Current weight {{current}} kg, target {{target}} kg"
+  },
+  "weekdaysLong": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+  "appetite": {
+    "poco": "Small",
+    "normal": "Normal",
+    "mucho": "Large",
+    "lower": {
+      "poco": "small",
+      "normal": "normal",
+      "mucho": "large"
+    }
+  },
+  "feedingStage": {
+    "pecho": "Breast or bottle",
+    "triturados": "Purées and baby food",
+    "mesa": "Eats from the family plate"
+  },
+  "hogar": {
+    "title": "Your household",
+    "intro": "If you share a table with someone, your menus and shopping adjust together. Without losing your own plan.",
+    "orStart": "or start your own",
+    "privacy": "Your personal progress (streak, logged meals, weight) is never visible to the rest of the household.",
+    "privacyShared": "Your personal progress (streak, logged meals, weight) is never visible to the rest of the household. You only share the meals you have together.",
+    "eyebrow": "Your family",
+    "rename": "Rename the family",
+    "join": {
+      "title": "Have you been given a code?",
+      "hint": "Anyone already in the family has it at the very top.",
+      "codeLabel": "Invite code",
+      "searching": "Searching...",
+      "submit": "Join the family",
+      "pickWho": "Who are you? Tap your name.",
+      "otherCode": "Try another code",
+      "noSlots": "There is no free place with that code. Check it is typed correctly or ask whoever created the family to add you.",
+      "joined": "You're in the family!",
+      "lookupFailed": "We couldn't look up your family"
+    },
+    "create": {
+      "title": "Create a household",
+      "hint": "You'll get a code to invite the people you live with.",
+      "nameLabel": "Household name",
+      "defaultName": "My home",
+      "creating": "Creating...",
+      "submit": "Create household",
+      "done": "Household created",
+      "failed": "We couldn't create the household"
+    },
+    "code": {
+      "title": "Family code",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copiedToast": "Code copied",
+      "share": "Share",
+      "shareMessage": "Join my household on Peppers with the code {{code}}",
+      "hint": "Anyone who has it can join this family from their app."
+    },
+    "roster": {
+      "title": "Family",
+      "count_one": "{{count}} member",
+      "count_other": "{{count}} members",
+      "planner": "Plans",
+      "you": "You",
+      "noAccount": "No account",
+      "pending": "Pending",
+      "portion": "Portion",
+      "usesAppNow": "Now uses the app",
+      "makePlanner": "Make them the planner",
+      "remove": "Remove",
+      "babies": "Babies · not eating from the table yet",
+      "memberFallback": "Member",
+      "plannerFallback": "whoever runs the kitchen",
+      "plannerChanged": "The household planner has changed",
+      "noHousehold": "No household",
+      "onlyManagers": "Only whoever created the family or the planner can add people to the table.",
+      "profileNote": "Each adult edits their own profile in Settings; here you only see what they share with the household. Everyone can edit the kids."
+    },
+    "add": {
+      "title": "Add someone to the table",
+      "adult": "Adult",
+      "child": "Child",
+      "name": "Name",
+      "adultNameLabel": "Adult's name",
+      "usesApp": "Uses the app",
+      "noApp": "Doesn't use the app",
+      "addAdult": "Add adult",
+      "addChild": "Add child",
+      "hint": "If they use the app, they can join with the code and pick their name from this list.",
+      "added": "Added to the table"
+    },
+    "child": {
+      "age_one": "{{count}} year old",
+      "age_other": "{{count}} years old",
+      "allergies": "Allergies: {{list}}",
+      "noAllergies": "No allergies",
+      "summary": "{{allergies}} · {{appetite}} appetite",
+      "stageNote": {
+        "pecho": "breast or bottle fed",
+        "triturados": "purées and baby food"
+      },
+      "menuUpdated": "Menu updated for {{names}}",
+      "upToDate": "It was already up to date",
+      "menuFailed": "We couldn't update the kids' menu"
+    },
+    "schedule": {
+      "title": "When does each person eat at home?",
+      "intro": "Each person marks the days they eat at home. When you overlap, everyone gets the same dish.",
+      "hideHelp": "Hide details",
+      "showHelp": "How exactly it works",
+      "help": "Each person says which days they eat at home for each meal. If several of you overlap, {{planner}} plans the shared dish. If you eat alone, your plan stays separate. The afternoon snack is always individual.",
+      "mealsPerWeek": "{{n}} meals/wk",
+      "ofSeven": "{{n}} of 7",
+      "dayLabel": "{{name}} {{meal}} {{day}}",
+      "saving": "Saving...",
+      "save": "Save schedule",
+      "saved": "Schedule saved",
+      "saveFailed": "We couldn't save the schedule",
+      "onlyPlanner": "Only {{planner}} can change this schedule.",
+      "shared": "Shared meals → {{slots}}",
+      "sharedMeal": "{{meal}}: {{days}}",
+      "noneShared": "no shared meals"
+    },
+    "rebuild": {
+      "title": "This month's plan with the family",
+      "intro": "Rebuilds the dishes and shopping for the rest of the month counting everyone at the table. People who use the app get the shared meals; those who don't count towards the portions. Today, past days and dishes you changed by hand are left alone.",
+      "changed": "You've changed the table or the schedules. Your plan doesn't account for it yet.",
+      "running": "Rebuilding the plan…",
+      "submit": "Rebuild plan with the family",
+      "wait": "It can take a couple of minutes.",
+      "noPlan": "You don't have a plan this month yet: create it in Plan and it will include the family.",
+      "noPlanToast": "You don't have a plan this month yet: create it in Plan and it will include the family",
+      "done": "Plan rebuilt with the family",
+      "doneSynced": "Plan rebuilt with the family and shared with those who use the app",
+      "failed": "We couldn't rebuild the plan. Try again in a while"
+    },
+    "leave": {
+      "submit": "Leave household",
+      "done": "You've left the household",
+      "confirmTitle": "Leave the household?",
+      "confirmText": "You'll stop sharing meals with the others.",
+      "confirm": "Leave"
+    }
+  },
+  "childSheet": {
+    "newTitle": "New child",
+    "fallbackName": "Child",
+    "description": "Their details help the household menus work for them too.",
+    "name": "Name",
+    "age": "Age",
+    "stage": "What do they eat?",
+    "stageHint": {
+      "pecho": "Not included in the meal plan or the household shopping.",
+      "triturados": "Gets their own purée in the plan, separate from the family dish."
+    },
+    "appetite": "Appetite",
+    "allergies": "Allergies and intolerances",
+    "allergiesNone": "None",
+    "notes": "Notes",
+    "notesPlaceholder": "E.g. eats at school Monday to Friday",
+    "saving": "Saving...",
+    "updated": "Child updated",
+    "added": "Child added",
+    "saveFailed": "We couldn't save",
+    "removed": "Child removed from the family",
+    "removeFailed": "We couldn't remove them",
+    "remove": "Remove from the family",
+    "removeConfirm": "Tap again to remove",
+    "confirmTitle": "Remove from the family?",
+    "confirmText": "{{name}} will no longer be in the household.",
+    "thisChild": "This child"
   }
 }
