@@ -2,13 +2,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Cookie, Loader2, Users, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { MacroBars } from "@/components/macro-bars";
 import { SnackSheet } from "@/components/snack-sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  MEAL_STATUS_LABEL,
+  MEAL_STATUSES,
   todayISO,
   updateLogByDate,
   type DailyLog,
@@ -44,10 +45,11 @@ import {
 import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
 import { weekdayIndex } from "@/lib/dates";
+import { dateLocale } from "@/lib/i18n";
 
-const longDate = (date: string) =>
+const longDate = (date: string, locale: string) =>
   capitalizeFirst(
-    new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", {
+    new Date(`${date}T00:00:00`).toLocaleDateString(locale, {
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -80,11 +82,12 @@ export function DayDetailSheet({
   household?: DayDetailHousehold;
   onClose: () => void;
 }) {
+  const { i18n } = useTranslation();
   return (
     <Dialog open={!!date} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[92vw] sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{date ? longDate(date) : ""}</DialogTitle>
+          <DialogTitle>{date ? longDate(date, dateLocale(i18n.language)) : ""}</DialogTitle>
         </DialogHeader>
         {date ? (
           <DayDetailBody
@@ -128,6 +131,7 @@ export function DayDetailBody({
   /** Si se pasa, habilita el toggle "toda la familia comió esto" en las comidas compartidas. */
   household?: DayDetailHousehold;
 }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
   // Texto libre de "qué comí realmente" por índice de habit, mientras se edita.
@@ -193,7 +197,7 @@ export function DayDetailBody({
       await removeSnackCall({ data: { today: date, id } });
       refreshLogs();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No hemos podido quitar el picoteo");
+      toast.error(e instanceof Error ? e.message : t("hoy.errors.removeSnack"));
     } finally {
       setRemovingSnackId(null);
     }
@@ -219,7 +223,7 @@ export function DayDetailBody({
   const correct = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateLogByDate(date, patch),
     onSuccess: refreshLogs,
-    onError: () => toast.error("No hemos podido guardar la corrección"),
+    onError: () => toast.error(t("dayDetail.saveFailed")),
   });
 
   /** ¿Este habit corresponde a una comida compartida ese día? */
@@ -248,7 +252,7 @@ export function DayDetailBody({
       },
     }).then(
       (r) => {
-        if (r.propagated > 0) toast.success(`Aplicado a ${r.propagated} familiar(es) más`);
+        if (r.propagated > 0) toast.success(t("dayDetail.propagated", { count: r.propagated }));
       },
       () => {
         // Silencioso: el log propio ya se guardó, la propagación es best-effort.
@@ -338,11 +342,7 @@ export function DayDetailBody({
   }).length;
 
   if (!habits.length && !snackEntries.length && beforeStart) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Antes de empezar a usar Peppers. No hay nada registrado de este día.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">{t("dayDetail.beforeStart")}</p>;
   }
 
   const doneCount = habits.filter((h) => h.done).length;
@@ -365,11 +365,11 @@ export function DayDetailBody({
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Comidas
+              {t("dayDetail.meals")}
             </span>
             <span className="font-num text-[11px] tabular-nums text-muted-foreground">
-              {doneCount} de {habits.length}
-              {skippedCount ? ` · ${skippedCount} saltada${skippedCount > 1 ? "s" : ""}` : ""}
+              {t("hoy.meals.count", { done: doneCount, total: habits.length })}
+              {skippedCount ? t("dayDetail.skipped", { count: skippedCount }) : ""}
             </span>
           </div>
           {habits.map((h, i) => {
@@ -397,7 +397,7 @@ export function DayDetailBody({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] font-semibold tracking-[0.01em] text-foreground">
-                      {h.label}
+                      {t(`moments.${h.label}`, { defaultValue: h.label })}
                     </span>
                     <span
                       className={`text-[11px] font-medium ${
@@ -408,7 +408,7 @@ export function DayDetailBody({
                             : "text-primary-ink"
                       }`}
                     >
-                      {unlogged ? "Sin registrar" : MEAL_STATUS_LABEL[h.status!]}
+                      {unlogged ? t("dayDetail.unlogged") : t(`mealStatus.${h.status!}`)}
                     </span>
                   </div>
                   {planned || wasIdea ? (
@@ -428,11 +428,13 @@ export function DayDetailBody({
                   ) : null}
                   {/* Mostrar qué comió realmente si ya lo indicó */}
                   {changed && h.actual ? (
-                    <p className="mt-0.5 text-sm text-primary-ink">Comí: {h.actual}</p>
+                    <p className="mt-0.5 text-sm text-primary-ink">
+                      {t("dayDetail.ate", { dish: h.actual })}
+                    </p>
                   ) : null}
                   {wasIdea ? (
                     <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                      Plan sugerido: <span className="line-through">{wasIdea}</span>
+                      {t("dayDetail.suggested")} <span className="line-through">{wasIdea}</span>
                     </p>
                   ) : null}
                   {(kidMealsByLabel.get(h.label) ?? []).map((k) => (
@@ -440,7 +442,8 @@ export function DayDetailBody({
                       key={`${k.name}-${k.dish}`}
                       className="mt-0.5 text-[11px] leading-snug text-muted-foreground"
                     >
-                      Para {k.name}: <span className="text-foreground">{k.dish}</span>
+                      {t("hoy.meals.forChild", { name: k.name })}{" "}
+                      <span className="text-foreground">{k.dish}</span>
                       {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
                     </p>
                   ))}
@@ -448,7 +451,7 @@ export function DayDetailBody({
                 {editing === i ? (
                   <div className="mt-1.5 space-y-2 rounded-xl bg-secondary/40 p-2.5">
                     <div className="flex flex-wrap gap-2">
-                      {(Object.keys(MEAL_STATUS_LABEL) as MealStatus[]).map((s) => (
+                      {MEAL_STATUSES.map((s) => (
                         <button
                           key={s}
                           type="button"
@@ -465,7 +468,7 @@ export function DayDetailBody({
                               : "bg-surface text-muted-foreground"
                           }`}
                         >
-                          {MEAL_STATUS_LABEL[s]}
+                          {t(`mealStatus.${s}`)}
                         </button>
                       ))}
                     </div>
@@ -481,7 +484,7 @@ export function DayDetailBody({
                         }`}
                       >
                         <Users className="h-4 w-4" />
-                        Toda la familia comió esto
+                        {t("dayDetail.family")}
                       </button>
                     ) : null}
                     {/* Campo de texto para indicar qué comió realmente */}
@@ -490,7 +493,7 @@ export function DayDetailBody({
                         htmlFor={`${actualId}-${i}`}
                         className="text-[11px] font-medium text-muted-foreground"
                       >
-                        ¿Qué comiste realmente?
+                        {t("dayDetail.whatActually")}
                       </label>
                       <input
                         id={`${actualId}-${i}`}
@@ -505,7 +508,7 @@ export function DayDetailBody({
                             else setStatus(i, "distinto");
                           }
                         }}
-                        placeholder="Ej.: pizza, ensalada de pollo..."
+                        placeholder={t("dayDetail.placeholder")}
                         className="w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40"
                       />
                       <button
@@ -517,7 +520,7 @@ export function DayDetailBody({
                         }}
                         className="w-full rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                       >
-                        {h.status === "distinto" ? "Guardar" : "Comí esto"}
+                        {h.status === "distinto" ? t("common.save") : t("hoy.meals.ateThis")}
                       </button>
                     </div>
                   </div>
@@ -526,9 +529,7 @@ export function DayDetailBody({
             );
           })}
           {editable ? (
-            <p className="pt-0.5 text-[11px] text-muted-foreground">
-              Corregir aquí es solo para tu historial: la compra ya hecha de ese mes no cambia.
-            </p>
+            <p className="pt-0.5 text-[11px] text-muted-foreground">{t("dayDetail.historyOnly")}</p>
           ) : null}
         </div>
       ) : null}
@@ -537,7 +538,7 @@ export function DayDetailBody({
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Picoteo
+              {t("dayDetail.snacks")}
             </span>
             {snackEntries.length && showNumbers ? (
               <span className="font-num text-[11px] tabular-nums text-muted-foreground">
@@ -561,7 +562,7 @@ export function DayDetailBody({
                   type="button"
                   onClick={() => void removeSnack(e.id)}
                   disabled={removingSnackId != null}
-                  aria-label={`Quitar ${e.text}`}
+                  aria-label={t("common.removeNamed", { what: e.text })}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-background text-muted-foreground transition-opacity hover:text-foreground disabled:opacity-60"
                 >
                   {removingSnackId === e.id ? (
@@ -580,7 +581,7 @@ export function DayDetailBody({
               className="flex w-full items-center justify-center gap-1.5 rounded-full bg-secondary/50 py-2 text-xs font-semibold text-foreground transition-transform active:scale-[0.99]"
             >
               <Cookie className="h-3.5 w-3.5" aria-hidden />
-              Añadir picoteo
+              {t("hoy.addSnack")}
             </button>
           ) : null}
         </div>
@@ -588,8 +589,7 @@ export function DayDetailBody({
 
       {moved ? (
         <p className="text-[11px] text-muted-foreground">
-          Lo de este día ajustó {moved === 1 ? "1 comida" : `${moved} comidas`} de los días
-          siguientes.
+          {t("dayDetail.moved", { count: moved })}
         </p>
       ) : null}
 
@@ -605,20 +605,18 @@ export function DayDetailBody({
       {showNumbers ? (
         <div>
           <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Macros del día
+            {t("dayDetail.macrosTitle")}
           </span>
           {hasMacros ? (
             <MacroBars
               estimate={consumed}
               target={log?.guide?.targets ?? log?.guide?.macroEstimate ?? null}
               weightKg={profile?.current_weight_kg ?? null}
-              note={`~${consumed.kcal} kcal de lo que comiste ese día`}
+              note={t("dayDetail.eatenThatDay", { kcal: consumed.kcal })}
               pending={donePendingMeals(log?.guide?.mealMacros, habits).length}
             />
           ) : (
-            <p className="mt-2 text-sm text-muted-foreground">
-              No hay estimación de macros para este día.
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("dayDetail.noMacros")}</p>
           )}
         </div>
       ) : null}

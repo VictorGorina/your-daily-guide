@@ -301,11 +301,8 @@ export async function fetchPlannerShopping(month: string): Promise<PlannerShoppi
 
 export type { MealHabit, MealStatus } from "@/lib/plan-shared";
 
-export const MEAL_STATUS_LABEL: Record<MealStatus, string> = {
-  plan: "Comí lo del plan",
-  distinto: "Comí distinto",
-  salteo: "Me lo salté",
-};
+/** Estados de una comida, en el orden en que se ofrecen; su texto, en `mealStatus.<estado>`. */
+export const MEAL_STATUSES: readonly MealStatus[] = ["plan", "distinto", "salteo"];
 
 export type DailyLog = {
   id: string;

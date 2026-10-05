@@ -825,5 +825,31 @@
       "What counts isn't today alone, it's the whole week.",
       "One more step, even if today's was small."
     ]
+  },
+  "mealStatus": {
+    "plan": "I ate the plan",
+    "distinto": "I ate something else",
+    "salteo": "I skipped it"
+  },
+  "dayDetail": {
+    "saveFailed": "We couldn't save the correction",
+    "propagated": "Applied to {{count}} more family member(s)",
+    "beforeStart": "Before you started using Peppers. Nothing is logged for this day.",
+    "meals": "Meals",
+    "skipped_one": " · {{count}} skipped",
+    "skipped_other": " · {{count}} skipped",
+    "unlogged": "Not logged",
+    "ate": "I ate: {{dish}}",
+    "suggested": "Suggested plan:",
+    "family": "The whole family ate this",
+    "whatActually": "What did you actually eat?",
+    "placeholder": "E.g. pizza, chicken salad...",
+    "historyOnly": "Correcting here is only for your history: the shopping already done that month doesn't change.",
+    "snacks": "Snacks",
+    "moved_one": "This day adjusted {{count}} meal in the following days.",
+    "moved_other": "This day adjusted {{count}} meals in the following days.",
+    "macrosTitle": "Macros for the day",
+    "eatenThatDay": "~{{kcal}} kcal from what you ate that day",
+    "noMacros": "There is no macro estimate for this day."
   }
 }

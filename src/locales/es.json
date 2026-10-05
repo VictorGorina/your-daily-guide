@@ -825,5 +825,31 @@
       "Lo que cuenta no es hoy solo, es la semana entera.",
       "Un paso más, aunque hoy haya sido pequeño."
     ]
+  },
+  "mealStatus": {
+    "plan": "Comí lo del plan",
+    "distinto": "Comí distinto",
+    "salteo": "Me lo salté"
+  },
+  "dayDetail": {
+    "saveFailed": "No hemos podido guardar la corrección",
+    "propagated": "Aplicado a {{count}} familiar(es) más",
+    "beforeStart": "Antes de empezar a usar Peppers. No hay nada registrado de este día.",
+    "meals": "Comidas",
+    "skipped_one": " · {{count}} saltada",
+    "skipped_other": " · {{count}} saltadas",
+    "unlogged": "Sin registrar",
+    "ate": "Comí: {{dish}}",
+    "suggested": "Plan sugerido:",
+    "family": "Toda la familia comió esto",
+    "whatActually": "¿Qué comiste realmente?",
+    "placeholder": "Ej.: pizza, ensalada de pollo...",
+    "historyOnly": "Corregir aquí es solo para tu historial: la compra ya hecha de ese mes no cambia.",
+    "snacks": "Picoteo",
+    "moved_one": "Lo de este día ajustó {{count}} comida de los días siguientes.",
+    "moved_other": "Lo de este día ajustó {{count}} comidas de los días siguientes.",
+    "macrosTitle": "Macros del día",
+    "eatenThatDay": "~{{kcal}} kcal de lo que comiste ese día",
+    "noMacros": "No hay estimación de macros para este día."
   }
 }
