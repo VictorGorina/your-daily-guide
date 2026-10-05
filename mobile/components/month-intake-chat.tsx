@@ -1,20 +1,23 @@
 import { useMutation } from "@tanstack/react-query";
 import { Check, Sparkles } from "lucide-react-native";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { DictateButton } from "./dictate-button";
 import { DictationField, DictationWave } from "./dictation-field";
 import { apiPost } from "../lib/api";
+import { dateLocale } from "../lib/i18n";
 import {
-  AWAY_QUESTION,
+  AWAY_PRESETS,
   INTAKE_TEXT_QUESTIONS,
   intakeAnswerText,
   type AwayPreset,
   type IntakeAnswers,
   type IntakeTextAnswer,
+  type IntakeTextQuestion,
 } from "../lib/month-intake";
-import { monthTitle } from "../lib/plan-shared";
+import { monthParts } from "../lib/plan-shared";
 
 /** Paso 0: ausencia. 1..4: preguntas de texto. 5: resumen y generar. */
 const LAST_STEP = INTAKE_TEXT_QUESTIONS.length + 1;
@@ -31,8 +34,8 @@ const parseDatePretty = (pretty: string): string | null => {
 };
 
 /** "2026-10-12" → "12 de octubre". */
-const prettyDay = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+const prettyDay = (iso: string, locale: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "long" });
 
 /**
  * La conversación con el coach antes de generar el plan de un mes: cinco
@@ -55,7 +58,9 @@ export function MonthIntakeChat({
   /** Tras cada paso: quien la pinta baja su ScrollView hasta la pregunta nueva. */
   onAdvance?: () => void;
 }) {
-  const monthName = monthTitle(month).split(" de ")[0] ?? month;
+  const { t, i18n } = useTranslation();
+  const locale = dateLocale(i18n.language);
+  const monthName = monthParts(month, locale).monthName;
   const [step, setStepState] = useState(0);
   const setStep = (next: number) => {
     setStepState(next);
@@ -85,16 +90,15 @@ export function MonthIntakeChat({
         answers,
       }),
     onSuccess: onGenerate,
-    onError: (e) =>
-      Alert.alert(e instanceof Error ? e.message : "No hemos podido guardar tus respuestas"),
+    onError: (e) => Alert.alert(e instanceof Error ? e.message : t("monthIntake.saveError")),
   });
   const busy = submit.isPending || generating;
 
   const nextFromAway = () => {
     if (hasRange && !rangeOk) {
       Alert.alert(
-        "Revisa las fechas",
-        `Escríbelas como DD/MM/AAAA, dentro de ${monthName} y la de inicio antes que la de fin.`,
+        t("monthIntake.away.checkTitle"),
+        t("monthIntake.away.checkBody", { month: monthName }),
       );
       return;
     }
@@ -103,10 +107,21 @@ export function MonthIntakeChat({
 
   const awayText =
     preset === "no"
-      ? "No"
+      ? t("monthIntake.away.chips.no")
       : preset && awayStart && awayEnd
-        ? `${AWAY_QUESTION.chips.find((c) => c.key === preset)?.label}: del ${prettyDay(awayStart)} al ${prettyDay(awayEnd)}`
+        ? t("monthIntake.away.range", {
+            preset: t(`monthIntake.away.chips.${preset}`),
+            from: prettyDay(awayStart, locale),
+            to: prettyDay(awayEnd, locale),
+          })
         : "";
+
+  // El chip se guarda en español canónico (el servidor solo acepta los de su
+  // lista) y se pinta en el idioma de la persona, por su posición en la lista.
+  const chipLabel = (q: IntakeTextQuestion, chip: string) => {
+    const index = q.chips.indexOf(chip);
+    return index < 0 ? chip : t(`monthIntake.q.${q.key}.chips.${index}`);
+  };
 
   const setAnswer = (key: keyof IntakeAnswers, patch: Partial<IntakeTextAnswer>) =>
     setAnswers((prev) => {
@@ -121,21 +136,24 @@ export function MonthIntakeChat({
           <Sparkles size={16} color="#a84a17" />
         </View>
         <View className="flex-1">
-          <Text className="text-sm font-sans-semibold text-foreground">Preparemos {monthName}</Text>
-          <Text className="text-xs text-muted-foreground">
-            Cinco preguntas y lo hago a tu medida. El plan del mes se crea una sola vez.
+          <Text className="text-sm font-sans-semibold text-foreground">
+            {t("monthIntake.title", { month: monthName })}
           </Text>
+          <Text className="text-xs text-muted-foreground">{t("monthIntake.subtitle")}</Text>
         </View>
       </View>
 
-      <CoachLine>{AWAY_QUESTION.ask(monthName)}</CoachLine>
+      <CoachLine>{t("monthIntake.away.ask", { month: monthName })}</CoachLine>
       {step === 0 ? (
         <View className="gap-3">
           <Chips
-            options={AWAY_QUESTION.chips.map((c) => c.label)}
-            value={AWAY_QUESTION.chips.find((c) => c.key === preset)?.label ?? null}
+            options={AWAY_PRESETS.map((key) => ({
+              value: key,
+              label: t(`monthIntake.away.chips.${key}`),
+            }))}
+            value={preset}
             disabled={busy}
-            onPick={(label) => setPreset(AWAY_QUESTION.chips.find((c) => c.label === label)!.key)}
+            onPick={setPreset}
           />
           {hasRange ? (
             <View className="flex-row items-center gap-2">
@@ -143,16 +161,16 @@ export function MonthIntakeChat({
                 value={awayStartText}
                 onChangeText={setAwayStartText}
                 keyboardType="numbers-and-punctuation"
-                placeholder="Desde DD/MM/AAAA"
+                placeholder={t("monthIntake.away.fromPlaceholder")}
                 placeholderTextColor="#6b6256"
                 className="min-h-[44px] flex-1 rounded-xl bg-muted px-3 text-sm text-foreground"
               />
-              <Text className="text-sm text-muted-foreground">a</Text>
+              <Text className="text-sm text-muted-foreground">{t("monthIntake.away.sep")}</Text>
               <TextInput
                 value={awayEndText}
                 onChangeText={setAwayEndText}
                 keyboardType="numbers-and-punctuation"
-                placeholder="Hasta DD/MM/AAAA"
+                placeholder={t("monthIntake.away.toPlaceholder")}
                 placeholderTextColor="#6b6256"
                 className="min-h-[44px] flex-1 rounded-xl bg-muted px-3 text-sm text-foreground"
               />
@@ -170,11 +188,11 @@ export function MonthIntakeChat({
         const answer = answers[q.key];
         return (
           <View key={q.key} className="gap-3">
-            <CoachLine>{q.ask(monthName)}</CoachLine>
+            <CoachLine>{t(`monthIntake.q.${q.key}.ask`)}</CoachLine>
             {step === qStep ? (
               <>
                 <Chips
-                  options={q.chips}
+                  options={q.chips.map((chip) => ({ value: chip, label: chipLabel(q, chip) }))}
                   value={answer?.chip ?? null}
                   disabled={busy}
                   onPick={(chip) => setAnswer(q.key, { chip: answer?.chip === chip ? null : chip })}
@@ -187,7 +205,7 @@ export function MonthIntakeChat({
                         onChangeText={(text) => setAnswer(q.key, { text })}
                         multiline
                         maxLength={200}
-                        placeholder={q.placeholder}
+                        placeholder={t(`monthIntake.q.${q.key}.placeholder`)}
                         placeholderTextColor="#6b6256"
                         className="min-h-[44px] px-2 py-2 text-sm text-foreground"
                         textAlignVertical="top"
@@ -196,9 +214,9 @@ export function MonthIntakeChat({
                     </View>
                     <View className="flex-row items-center px-1">
                       <DictateButton
-                        onText={(t) =>
+                        onText={(spoken) =>
                           setAnswer(q.key, {
-                            text: answer?.text?.trim() ? `${answer.text.trim()} ${t}` : t,
+                            text: answer?.text?.trim() ? `${answer.text.trim()} ${spoken}` : spoken,
                           })
                         }
                       />
@@ -208,7 +226,9 @@ export function MonthIntakeChat({
                 <StepButtons onBack={() => setStep(qStep - 1)} onNext={() => setStep(qStep + 1)} />
               </>
             ) : (
-              <UserLine>{intakeAnswerText(answer) ?? "Nada que contar"}</UserLine>
+              <UserLine>
+                {intakeAnswerText(answer, (chip) => chipLabel(q, chip)) ?? t("monthIntake.nothing")}
+              </UserLine>
             )}
           </View>
         );
@@ -216,10 +236,7 @@ export function MonthIntakeChat({
 
       {step === LAST_STEP ? (
         <View className="gap-3">
-          <CoachLine>
-            Perfecto, con esto preparo tu plan de {monthName} y su lista de la compra. Tardo un par
-            de minutos.
-          </CoachLine>
+          <CoachLine>{t("monthIntake.ready", { month: monthName })}</CoachLine>
           <Pressable
             onPress={() => submit.mutate()}
             disabled={busy}
@@ -227,7 +244,7 @@ export function MonthIntakeChat({
             style={busy ? { opacity: 0.6 } : undefined}
           >
             <Text className="text-sm font-sans-semibold text-primary-foreground">
-              {busy ? "Preparando tu mes..." : `Generar mi plan de ${monthName}`}
+              {busy ? t("plan.create.preparing") : t("monthIntake.generate", { month: monthName })}
             </Text>
           </Pressable>
           {!busy ? (
@@ -236,7 +253,7 @@ export function MonthIntakeChat({
               className="w-full items-center py-1 active:opacity-70"
             >
               <Text className="text-xs font-sans-medium text-muted-foreground">
-                Cambiar alguna respuesta
+                {t("monthIntake.change")}
               </Text>
             </Pressable>
           ) : null}
@@ -245,7 +262,9 @@ export function MonthIntakeChat({
 
       {step === 0 ? (
         <Pressable onPress={onCancel} className="w-full items-center py-1 active:opacity-70">
-          <Text className="text-xs font-sans-medium text-muted-foreground">Ahora no</Text>
+          <Text className="text-xs font-sans-medium text-muted-foreground">
+            {t("monthIntake.notNow")}
+          </Text>
         </Pressable>
       ) : null}
     </View>
@@ -264,25 +283,26 @@ function UserLine({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Chips({
+function Chips<T extends string>({
   options,
   value,
   disabled,
   onPick,
 }: {
-  options: readonly string[];
-  value: string | null;
+  /** `value` es lo que se guarda; `label`, lo que se lee. */
+  options: readonly { value: T; label: string }[];
+  value: T | null;
   disabled?: boolean;
-  onPick: (option: string) => void;
+  onPick: (option: T) => void;
 }) {
   return (
     <View className="flex-row flex-wrap gap-2">
-      {options.map((label) => {
-        const active = value === label;
+      {options.map((option) => {
+        const active = value === option.value;
         return (
           <Pressable
-            key={label}
-            onPress={() => onPick(label)}
+            key={option.value}
+            onPress={() => onPick(option.value)}
             disabled={disabled}
             className={`min-h-[44px] flex-row items-center gap-1.5 rounded-full px-4 active:opacity-80 ${
               active ? "bg-foreground" : "bg-muted"
@@ -296,7 +316,7 @@ function Chips({
                   : "font-sans-medium text-foreground"
               }`}
             >
-              {label}
+              {option.label}
             </Text>
           </Pressable>
         );
@@ -314,11 +334,12 @@ function StepButtons({
   onNext: () => void;
   nextDisabled?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <View className="flex-row gap-2">
       {onBack ? (
         <Pressable onPress={onBack} className="rounded-full bg-muted px-5 py-3 active:opacity-80">
-          <Text className="text-sm font-sans-medium text-foreground">Atrás</Text>
+          <Text className="text-sm font-sans-medium text-foreground">{t("common.back")}</Text>
         </Pressable>
       ) : null}
       <Pressable
@@ -327,7 +348,9 @@ function StepButtons({
         className="flex-1 items-center rounded-full bg-primary py-3 active:opacity-90"
         style={nextDisabled ? { opacity: 0.6 } : undefined}
       >
-        <Text className="text-sm font-sans-semibold text-primary-foreground">Siguiente</Text>
+        <Text className="text-sm font-sans-semibold text-primary-foreground">
+          {t("monthIntake.next")}
+        </Text>
       </Pressable>
     </View>
   );

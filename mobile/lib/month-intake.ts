@@ -7,6 +7,11 @@
  * Copia de `src/lib/month-intake.ts` (web): si cambias una pregunta o un chip,
  * cambia las dos — el servidor solo acepta los chips de SU lista.
  *
+ * Aquí vive solo lo que llega al prompt, en español canónico: la etiqueta de
+ * cada pregunta y sus chips. Lo que ve la persona (pregunta, chips, ejemplo)
+ * sale del catálogo (`monthIntake.*`), con los chips en el mismo orden; el chip
+ * elegido se guarda siempre con el texto de aquí, en cualquier idioma.
+ *
  * Puro y compartido: las preguntas las pintan `MonthIntakeChat` (web y móvil)
  * y el texto que llega al prompt lo
  * arma `monthIntakeNotes` en el servidor (`setMonthConstraints`), que lo
@@ -23,49 +28,33 @@ export type IntakeTextQuestion = {
   key: IntakeTextKey;
   /** Etiqueta con la que la respuesta entra al prompt. */
   label: string;
-  ask: (monthLabel: string) => string;
   /** Respuestas rápidas. La primera es siempre "nada que contar". */
   chips: readonly string[];
-  placeholder: string;
 };
 
-export const AWAY_QUESTION = {
-  ask: (monthLabel: string) => `¿Vas a estar fuera de casa algún tramo de ${monthLabel}?`,
-  chips: [
-    { key: "no", label: "No" },
-    { key: "few", label: "Unos días" },
-    { key: "week", label: "Una semana o más" },
-  ] as const satisfies readonly { key: AwayPreset; label: string }[],
-};
+/** Las respuestas de la pregunta de ausencia, en el orden en que se pintan. */
+export const AWAY_PRESETS: readonly AwayPreset[] = ["no", "few", "week"];
 
 export const INTAKE_TEXT_QUESTIONS: readonly IntakeTextQuestion[] = [
   {
     key: "events",
     label: "Eventos o comidas fuera",
-    ask: () => "¿Tienes alguna celebración, evento o comida fuera de casa?",
     chips: ["Nada especial", "Alguna comida fuera", "Una celebración", "Varias comidas fuera"],
-    placeholder: "Opcional: cuándo y qué, p. ej. cumpleaños el sábado 10",
   },
   {
     key: "routine",
     label: "Horario o rutina",
-    ask: () => "¿Cambia algo de tu horario o tu rutina este mes?",
     chips: ["Igual que siempre", "Menos tiempo para cocinar", "Vacaciones", "Más deporte"],
-    placeholder: "Opcional: turnos nuevos, empiezo a entrenar...",
   },
   {
     key: "ingredients",
     label: "Ingredientes a usar o evitar",
-    ask: () => "¿Algún ingrediente que quieras aprovechar o evitar este mes?",
     chips: ["Nada especial", "Aprovechar lo que tengo en casa", "Probar cosas nuevas"],
-    placeholder: "Opcional: me quedan garbanzos, sin pescado este mes...",
   },
   {
     key: "notes",
     label: "Otras notas",
-    ask: () => "¿Algo más que deba saber para tu plan?",
     chips: ["Nada más"],
-    placeholder: "Opcional: cualquier otra cosa",
   },
 ];
 
@@ -98,11 +87,16 @@ function isNothingChip(q: IntakeTextQuestion, chip: string) {
 
 /**
  * Texto de una respuesta para enseñarla en la conversación ("Alguna comida
- * fuera — el sábado 10"), o `null` si no respondió nada.
+ * fuera — el sábado 10"), o `null` si no respondió nada. `chipLabel` pinta el
+ * chip en el idioma de la persona; sin él sale el canónico.
  */
-export function intakeAnswerText(answer: IntakeTextAnswer | undefined): string | null {
+export function intakeAnswerText(
+  answer: IntakeTextAnswer | undefined,
+  chipLabel: (chip: string) => string = (chip) => chip,
+): string | null {
   if (!answer) return null;
-  const chip = cleanIntakeText(answer.chip);
+  const rawChip = cleanIntakeText(answer.chip);
+  const chip = rawChip ? chipLabel(rawChip) : "";
   const text = cleanIntakeText(answer.text);
   if (chip && text) return `${chip} — ${text}`;
   return chip || text || null;

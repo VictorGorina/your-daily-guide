@@ -2,20 +2,23 @@ import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { DictateButton } from "@/components/dictate-button";
 import { DictationField, DictationWave } from "@/components/dictation-field";
 import {
-  AWAY_QUESTION,
+  AWAY_PRESETS,
   INTAKE_TEXT_QUESTIONS,
   intakeAnswerText,
   type AwayPreset,
   type IntakeAnswers,
   type IntakeTextAnswer,
+  type IntakeTextQuestion,
 } from "@/lib/month-intake";
 import { dateInMonth, daysInMonth } from "@/lib/dates";
-import { monthTitle } from "@/lib/plan-shared";
+import { dateLocale } from "@/lib/i18n";
+import { monthParts } from "@/lib/plan-shared";
 import { setMonthConstraints } from "@/lib/plan.functions";
 
 /** Paso 0: ausencia. 1..4: preguntas de texto. 5: resumen y generar. */
@@ -39,7 +42,9 @@ export function MonthIntakeChat({
   onGenerate: () => void;
   onCancel: () => void;
 }) {
-  const monthName = monthTitle(month).split(" de ")[0];
+  const { t, i18n } = useTranslation();
+  const locale = dateLocale(i18n.language);
+  const monthName = monthParts(month, locale).monthName;
   const [step, setStep] = useState(0);
   const [preset, setPreset] = useState<AwayPreset | null>(null);
   const [awayStart, setAwayStart] = useState("");
@@ -65,8 +70,7 @@ export function MonthIntakeChat({
       });
     },
     onSuccess: onGenerate,
-    onError: (e) =>
-      toast.error(e instanceof Error ? e.message : "No hemos podido guardar tus respuestas"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : t("monthIntake.saveError")),
   });
   const busy = submit.isPending || generating;
 
@@ -77,10 +81,21 @@ export function MonthIntakeChat({
 
   const awayText =
     preset === "no"
-      ? "No"
+      ? t("monthIntake.away.chips.no")
       : preset
-        ? `${AWAY_QUESTION.chips.find((c) => c.key === preset)?.label}: del ${prettyDay(awayStart)} al ${prettyDay(awayEnd)}`
+        ? t("monthIntake.away.range", {
+            preset: t(`monthIntake.away.chips.${preset}`),
+            from: prettyDay(awayStart, locale),
+            to: prettyDay(awayEnd, locale),
+          })
         : null;
+
+  // El chip se guarda en español canónico (el servidor solo acepta los de su
+  // lista) y se pinta en el idioma de la persona, por su posición en la lista.
+  const chipLabel = (q: IntakeTextQuestion, chip: string) => {
+    const index = q.chips.indexOf(chip);
+    return index < 0 ? chip : t(`monthIntake.q.${q.key}.chips.${index}`);
+  };
 
   const setAnswer = (key: keyof IntakeAnswers, patch: Partial<IntakeTextAnswer>) =>
     setAnswers((prev) => {
@@ -95,37 +110,38 @@ export function MonthIntakeChat({
           <Sparkles className="h-4 w-4" />
         </span>
         <div>
-          <h2 className="text-sm font-semibold">Preparemos {monthName}</h2>
-          <p className="text-xs text-muted-foreground">
-            Cinco preguntas y lo hago a tu medida. El plan del mes se crea una sola vez.
-          </p>
+          <h2 className="text-sm font-semibold">{t("monthIntake.title", { month: monthName })}</h2>
+          <p className="text-xs text-muted-foreground">{t("monthIntake.subtitle")}</p>
         </div>
       </div>
 
-      <CoachLine>{AWAY_QUESTION.ask(monthName)}</CoachLine>
+      <CoachLine>{t("monthIntake.away.ask", { month: monthName })}</CoachLine>
       {step === 0 ? (
         <div className="space-y-3">
           <Chips
-            options={AWAY_QUESTION.chips.map((c) => c.label)}
-            value={AWAY_QUESTION.chips.find((c) => c.key === preset)?.label ?? null}
+            options={AWAY_PRESETS.map((key) => ({
+              value: key,
+              label: t(`monthIntake.away.chips.${key}`),
+            }))}
+            value={preset}
             disabled={busy}
-            onPick={(label) => setPreset(AWAY_QUESTION.chips.find((c) => c.label === label)!.key)}
+            onPick={setPreset}
           />
           {hasRange ? (
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                aria-label="Desde"
+                aria-label={t("monthIntake.away.from")}
                 value={awayStart}
                 min={minDate}
                 max={awayEnd || maxDate}
                 onChange={(e) => setAwayStart(e.target.value)}
                 className="min-w-0 flex-1 rounded-xl bg-muted px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/40"
               />
-              <span className="text-sm text-muted-foreground">a</span>
+              <span className="text-sm text-muted-foreground">{t("monthIntake.away.sep")}</span>
               <input
                 type="date"
-                aria-label="Hasta"
+                aria-label={t("monthIntake.away.to")}
                 value={awayEnd}
                 min={awayStart || minDate}
                 max={maxDate}
@@ -146,11 +162,11 @@ export function MonthIntakeChat({
         const answer = answers[q.key];
         return (
           <div key={q.key} className="space-y-3">
-            <CoachLine>{q.ask(monthName)}</CoachLine>
+            <CoachLine>{t(`monthIntake.q.${q.key}.ask`)}</CoachLine>
             {step === qStep ? (
               <>
                 <Chips
-                  options={q.chips}
+                  options={q.chips.map((chip) => ({ value: chip, label: chipLabel(q, chip) }))}
                   value={answer?.chip ?? null}
                   disabled={busy}
                   onPick={(chip) => setAnswer(q.key, { chip: answer?.chip === chip ? null : chip })}
@@ -163,17 +179,17 @@ export function MonthIntakeChat({
                         maxLength={200}
                         value={answer?.text ?? ""}
                         onChange={(e) => setAnswer(q.key, { text: e.target.value })}
-                        placeholder={q.placeholder}
-                        aria-label={q.ask(monthName)}
+                        placeholder={t(`monthIntake.q.${q.key}.placeholder`)}
+                        aria-label={t(`monthIntake.q.${q.key}.ask`)}
                         className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
                       />
                       <DictationWave />
                     </div>
                     <div className="flex items-center px-1">
                       <DictateButton
-                        onText={(t) =>
+                        onText={(spoken) =>
                           setAnswer(q.key, {
-                            text: answer?.text ? `${answer.text.trim()} ${t}` : t,
+                            text: answer?.text ? `${answer.text.trim()} ${spoken}` : spoken,
                           })
                         }
                       />
@@ -183,7 +199,9 @@ export function MonthIntakeChat({
                 <StepButtons onBack={() => setStep(qStep - 1)} onNext={() => setStep(qStep + 1)} />
               </>
             ) : (
-              <UserLine>{intakeAnswerText(answer) ?? "Nada que contar"}</UserLine>
+              <UserLine>
+                {intakeAnswerText(answer, (chip) => chipLabel(q, chip)) ?? t("monthIntake.nothing")}
+              </UserLine>
             )}
           </div>
         );
@@ -191,17 +209,14 @@ export function MonthIntakeChat({
 
       {step === LAST_STEP ? (
         <div className="space-y-3">
-          <CoachLine>
-            Perfecto, con esto preparo tu plan de {monthName} y su lista de la compra. Tardo un par
-            de minutos.
-          </CoachLine>
+          <CoachLine>{t("monthIntake.ready", { month: monthName })}</CoachLine>
           <button
             type="button"
             onClick={() => submit.mutate()}
             disabled={busy}
             className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
           >
-            {busy ? "Preparando tu mes..." : `Generar mi plan de ${monthName}`}
+            {busy ? t("plan.create.preparing") : t("monthIntake.generate", { month: monthName })}
           </button>
           {!busy ? (
             <button
@@ -209,7 +224,7 @@ export function MonthIntakeChat({
               onClick={() => setStep(LAST_STEP - 1)}
               className="w-full py-1 text-xs font-medium text-muted-foreground"
             >
-              Cambiar alguna respuesta
+              {t("monthIntake.change")}
             </button>
           ) : null}
         </div>
@@ -221,7 +236,7 @@ export function MonthIntakeChat({
           onClick={onCancel}
           className="w-full py-1 text-xs font-medium text-muted-foreground"
         >
-          Ahora no
+          {t("monthIntake.notNow")}
         </button>
       ) : null}
       <div ref={endRef} />
@@ -230,8 +245,8 @@ export function MonthIntakeChat({
 }
 
 /** "2026-10-12" → "12 de octubre". */
-function prettyDay(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("es-ES", {
+function prettyDay(iso: string, locale: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(locale, {
     day: "numeric",
     month: "long",
   });
@@ -249,26 +264,27 @@ function UserLine({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Chips({
+function Chips<T extends string>({
   options,
   value,
   disabled,
   onPick,
 }: {
-  options: readonly string[];
-  value: string | null;
+  /** `value` es lo que se guarda; `label`, lo que se lee. */
+  options: readonly { value: T; label: string }[];
+  value: T | null;
   disabled?: boolean;
-  onPick: (option: string) => void;
+  onPick: (option: T) => void;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
-      {options.map((label) => {
-        const active = value === label;
+      {options.map((option) => {
+        const active = value === option.value;
         return (
           <button
-            key={label}
+            key={option.value}
             type="button"
-            onClick={() => onPick(label)}
+            onClick={() => onPick(option.value)}
             aria-pressed={active}
             disabled={disabled}
             className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[13.5px] font-medium transition-transform active:scale-95 ${
@@ -276,7 +292,7 @@ function Chips({
             }`}
           >
             {active ? <Check className="h-3.5 w-3.5" strokeWidth={2.6} /> : null}
-            {label}
+            {option.label}
           </button>
         );
       })}
@@ -293,6 +309,7 @@ function StepButtons({
   onNext: () => void;
   nextDisabled?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex gap-2">
       {onBack ? (
@@ -301,7 +318,7 @@ function StepButtons({
           onClick={onBack}
           className="rounded-full bg-muted px-5 py-3 text-sm font-medium text-foreground"
         >
-          Atrás
+          {t("common.back")}
         </button>
       ) : null}
       <button
@@ -310,7 +327,7 @@ function StepButtons({
         disabled={nextDisabled}
         className="flex-1 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
       >
-        Siguiente
+        {t("monthIntake.next")}
       </button>
     </div>
   );

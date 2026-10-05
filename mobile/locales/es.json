@@ -1190,5 +1190,59 @@
     "within": "dentro",
     "trip": "Compra {{n}}:",
     "receipt": "tiquet"
+  },
+  "monthIntake": {
+    "title": "Preparemos {{month}}",
+    "subtitle": "Cinco preguntas y lo hago a tu medida. El plan del mes se crea una sola vez.",
+    "away": {
+      "ask": "¿Vas a estar fuera de casa algún tramo de {{month}}?",
+      "chips": {
+        "no": "No",
+        "few": "Unos días",
+        "week": "Una semana o más"
+      },
+      "from": "Desde",
+      "to": "Hasta",
+      "sep": "a",
+      "range": "{{preset}}: del {{from}} al {{to}}",
+      "fromPlaceholder": "Desde DD/MM/AAAA",
+      "toPlaceholder": "Hasta DD/MM/AAAA",
+      "checkTitle": "Revisa las fechas",
+      "checkBody": "Escríbelas como DD/MM/AAAA, dentro de {{month}} y la de inicio antes que la de fin."
+    },
+    "q": {
+      "events": {
+        "ask": "¿Tienes alguna celebración, evento o comida fuera de casa?",
+        "chips": [
+          "Nada especial",
+          "Alguna comida fuera",
+          "Una celebración",
+          "Varias comidas fuera"
+        ],
+        "placeholder": "Opcional: cuándo y qué, p. ej. cumpleaños el sábado 10"
+      },
+      "routine": {
+        "ask": "¿Cambia algo de tu horario o tu rutina este mes?",
+        "chips": ["Igual que siempre", "Menos tiempo para cocinar", "Vacaciones", "Más deporte"],
+        "placeholder": "Opcional: turnos nuevos, empiezo a entrenar..."
+      },
+      "ingredients": {
+        "ask": "¿Algún ingrediente que quieras aprovechar o evitar este mes?",
+        "chips": ["Nada especial", "Aprovechar lo que tengo en casa", "Probar cosas nuevas"],
+        "placeholder": "Opcional: me quedan garbanzos, sin pescado este mes..."
+      },
+      "notes": {
+        "ask": "¿Algo más que deba saber para tu plan?",
+        "chips": ["Nada más"],
+        "placeholder": "Opcional: cualquier otra cosa"
+      }
+    },
+    "nothing": "Nada que contar",
+    "ready": "Perfecto, con esto preparo tu plan de {{month}} y su lista de la compra. Tardo un par de minutos.",
+    "generate": "Generar mi plan de {{month}}",
+    "change": "Cambiar alguna respuesta",
+    "notNow": "Ahora no",
+    "next": "Siguiente",
+    "saveError": "No hemos podido guardar tus respuestas"
   }
 }

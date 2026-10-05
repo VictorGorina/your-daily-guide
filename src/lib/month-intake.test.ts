@@ -7,6 +7,8 @@ import {
   intakeAnswerText,
   monthIntakeNotes,
 } from "./month-intake";
+import es from "@/locales/es.json";
+import en from "@/locales/en.json";
 
 describe("monthIntakeNotes", () => {
   test("sin respuestas no hay nada que mandar al prompt", () => {
@@ -57,11 +59,32 @@ describe("cleanIntakeText", () => {
 });
 
 describe("intakeAnswerText", () => {
+  test("el chip se pinta con la etiqueta que le pasen", () => {
+    const label = (chip: string) => (chip === "Vacaciones" ? "Holidays" : chip);
+    expect(intakeAnswerText({ chip: "Vacaciones", text: "two weeks" }, label)).toBe(
+      "Holidays — two weeks",
+    );
+  });
+
   test("chip y texto se enseñan juntos; nada respondido es null", () => {
     expect(intakeAnswerText({ chip: "Alguna comida fuera", text: "el viernes" })).toBe(
       "Alguna comida fuera — el viernes",
     );
     expect(intakeAnswerText({ chip: null, text: "  " })).toBeNull();
     expect(intakeAnswerText(undefined)).toBeNull();
+  });
+});
+
+describe("catálogo de la conversación del mes", () => {
+  test("en español, los chips son los canónicos del módulo y en su orden", () => {
+    for (const q of INTAKE_TEXT_QUESTIONS) {
+      expect(es.monthIntake.q[q.key].chips).toEqual([...q.chips]);
+    }
+  });
+
+  test("en inglés hay un chip por cada canónico (se casan por posición)", () => {
+    for (const q of INTAKE_TEXT_QUESTIONS) {
+      expect(en.monthIntake.q[q.key].chips).toHaveLength(q.chips.length);
+    }
   });
 });

@@ -1190,5 +1190,54 @@
     "within": "within budget",
     "trip": "Trip {{n}}:",
     "receipt": "receipt"
+  },
+  "monthIntake": {
+    "title": "Let's get {{month}} ready",
+    "subtitle": "Five questions and I'll tailor it to you. The month's plan is created only once.",
+    "away": {
+      "ask": "Will you be away from home for part of {{month}}?",
+      "chips": {
+        "no": "No",
+        "few": "A few days",
+        "week": "A week or more"
+      },
+      "from": "From",
+      "to": "To",
+      "sep": "to",
+      "range": "{{preset}}: from {{from}} to {{to}}",
+      "fromPlaceholder": "From DD/MM/YYYY",
+      "toPlaceholder": "To DD/MM/YYYY",
+      "checkTitle": "Check the dates",
+      "checkBody": "Write them as DD/MM/YYYY, within {{month}} and with the start before the end."
+    },
+    "q": {
+      "events": {
+        "ask": "Do you have any celebration, event or meal out?",
+        "chips": ["Nothing special", "A meal out", "A celebration", "Several meals out"],
+        "placeholder": "Optional: when and what, e.g. a birthday on Saturday the 10th"
+      },
+      "routine": {
+        "ask": "Is anything changing in your schedule or routine this month?",
+        "chips": ["Same as always", "Less time to cook", "Holidays", "More exercise"],
+        "placeholder": "Optional: new shifts, I'm starting to train..."
+      },
+      "ingredients": {
+        "ask": "Any ingredient you'd like to use up or avoid this month?",
+        "chips": ["Nothing special", "Use up what I have at home", "Try new things"],
+        "placeholder": "Optional: I have chickpeas left, no fish this month..."
+      },
+      "notes": {
+        "ask": "Anything else I should know for your plan?",
+        "chips": ["Nothing else"],
+        "placeholder": "Optional: anything else"
+      }
+    },
+    "nothing": "Nothing to mention",
+    "ready": "Great, with this I'll prepare your plan for {{month}} and its shopping list. It takes a couple of minutes.",
+    "generate": "Generate my plan for {{month}}",
+    "change": "Change an answer",
+    "notNow": "Not now",
+    "next": "Next",
+    "saveError": "We couldn't save your answers"
   }
 }
