@@ -1239,5 +1239,29 @@
     "notNow": "Not now",
     "next": "Next",
     "saveError": "We couldn't save your answers"
+  },
+  "weight": {
+    "title": "Your weight",
+    "stability": "Stability",
+    "regressUp": "+{{kg}} kg (setback)",
+    "regressDown": "−{{kg}} kg (setback)",
+    "doneOf": "{{done}} of {{total}} kg",
+    "more": "{{kg}} kg more",
+    "less": "{{kg}} kg less",
+    "goalDate": "goal: {{date}}",
+    "noGoal": "no kg goal — add it in Settings",
+    "saved": "Today's weight logged",
+    "saveError": "We couldn't save your weight",
+    "range": "Weight must be between 25 and 400 kg",
+    "inputLabel": "Today's weight, in kilos",
+    "last": "Latest: {{kg}} kg",
+    "none": "You haven't logged your weight yet",
+    "log": "Log weight",
+    "noChange": "No change",
+    "trend": "{{change}} over your last {{n}} weigh-ins",
+    "onTarget": "At your weight",
+    "above": "{{kg}} kg above",
+    "below": "{{kg}} kg below",
+    "gaugeLabel": "Current weight {{current}} kg, target {{target}} kg"
   }
 }

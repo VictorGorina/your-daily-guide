@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 /**
  * Indicador visual de peso actual vs peso objetivo.
  *
@@ -27,6 +29,7 @@ const PADDING_KG = 3;
 const MAINTAIN_ZONE = 1;
 
 export function WeightGauge({ targetKg, currentKg, startKg, regressing, trendDirection }: Props) {
+  const { t } = useTranslation();
   const rangeMin = Math.min(targetKg, currentKg, startKg) - PADDING_KG;
   const rangeMax = Math.max(targetKg, currentKg, startKg) + PADDING_KG;
   const rangeSpan = rangeMax - rangeMin;
@@ -53,8 +56,8 @@ export function WeightGauge({ targetKg, currentKg, startKg, regressing, trendDir
 
   const distanceLabel =
     distanceKg < 0.5
-      ? "En tu peso"
-      : `${distanceKg.toFixed(1)} kg ${currentKg > targetKg ? "por encima" : "por debajo"}`;
+      ? t("weight.onTarget")
+      : t(currentKg > targetKg ? "weight.above" : "weight.below", { kg: distanceKg.toFixed(1) });
 
   return (
     <div className="w-full">
@@ -74,7 +77,7 @@ export function WeightGauge({ targetKg, currentKg, startKg, regressing, trendDir
         preserveAspectRatio="xMidYMid meet"
         className="w-full"
         role="img"
-        aria-label={`Peso actual ${currentKg} kg, objetivo ${targetKg} kg`}
+        aria-label={t("weight.gaugeLabel", { current: currentKg, target: targetKg })}
       >
         {/* Raíl de fondo */}
         <rect x="10" y="14" width="280" height="6" rx="3" fill="#EAE6DD" />

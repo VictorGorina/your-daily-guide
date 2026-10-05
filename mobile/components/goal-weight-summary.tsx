@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Scale } from "lucide-react-native";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from "react-native-svg";
 
@@ -11,6 +12,7 @@ import {
   type DailyLogHistory,
   type Profile,
 } from "../lib/daily";
+import type { Translate } from "../lib/week-nav";
 
 // "2026-12-01" -> "01/12/2026", como pide el diseño de la tarjeta de objetivo.
 const formatMetaDate = (isoDate: string) => {
@@ -53,6 +55,7 @@ function WeightGauge({
   regressing: boolean;
   trend: "toward" | "away" | "stable";
 }) {
+  const { t } = useTranslation();
   const rangeMin = Math.min(targetKg, currentKg, startKg) - PADDING_KG;
   const rangeMax = Math.max(targetKg, currentKg, startKg) + PADDING_KG;
   const rangeSpan = rangeMax - rangeMin;
@@ -75,8 +78,8 @@ function WeightGauge({
 
   const distanceLabel =
     distanceKg < 0.5
-      ? "En tu peso"
-      : `${distanceKg.toFixed(1)} kg ${currentKg > targetKg ? "por encima" : "por debajo"}`;
+      ? t("weight.onTarget")
+      : t(currentKg > targetKg ? "weight.above" : "weight.below", { kg: distanceKg.toFixed(1) });
 
   const trendArrow = trend === "toward" ? "→" : trend === "away" ? "←" : null;
 
@@ -98,7 +101,7 @@ function WeightGauge({
         height={40}
         viewBox="0 0 300 40"
         preserveAspectRatio="xMidYMid meet"
-        accessibilityLabel={`Peso actual ${currentKg} kg, objetivo ${targetKg} kg`}
+        accessibilityLabel={t("weight.gaugeLabel", { current: currentKg, target: targetKg })}
       >
         {/* Rail de fondo */}
         <Rect x={10} y={14} width={280} height={6} rx={3} fill="#EAE6DD" />
@@ -187,6 +190,7 @@ export function GoalWeightSummary({
   logs: DailyLogHistory[];
   profile: Profile | null;
 }) {
+  const { t } = useTranslation();
   const progress = goalProgress(profile ?? null);
   const goal = profile?.goal_type ? normalizeGoalType(profile.goal_type) : null;
 
@@ -221,18 +225,20 @@ export function GoalWeightSummary({
   const pct = Math.round(progress.pct * 100);
 
   const metaCaption = profile?.goal_target_date
-    ? `meta: ${formatMetaDate(profile.goal_target_date)}`
+    ? t("weight.goalDate", { date: formatMetaDate(profile.goal_target_date) })
     : null;
 
   const progressLabel = () => {
-    if (goal === "mantener") return "Estabilidad";
+    if (goal === "mantener") return t("weight.stability");
     if (progress.regressing) {
       const kg = Math.abs(progress.done).toFixed(1);
-      return goal === "perder" ? `+${kg} kg (retroceso)` : `−${kg} kg (retroceso)`;
+      return t(goal === "perder" ? "weight.regressUp" : "weight.regressDown", { kg });
     }
-    if (progress.hasTarget) return `${progress.done.toFixed(1)} de ${progress.total} kg`;
+    if (progress.hasTarget) {
+      return t("weight.doneOf", { done: progress.done.toFixed(1), total: progress.total });
+    }
     const kg = progress.done.toFixed(1);
-    return goal === "ganar" ? `${kg} kg más` : `${kg} kg menos`;
+    return t(goal === "ganar" ? "weight.more" : "weight.less", { kg });
   };
 
   // Con meta numérica (o "mantener") se enseña la barra; sin meta, solo un dato.
@@ -272,11 +278,11 @@ export function GoalWeightSummary({
             {progressLabel()}
           </Text>
           <Text className="mt-1 font-mono-medium text-[10.5px] text-muted-foreground">
-            {metaCaption ?? "sin meta de kg — anótala en Ajustes"}
+            {metaCaption ?? t("weight.noGoal")}
           </Text>
         </View>
       ) : (
-        <Text className="text-sm font-sans-semibold text-foreground">Tu peso</Text>
+        <Text className="text-sm font-sans-semibold text-foreground">{t("weight.title")}</Text>
       )}
       <WeightPanel
         logs={logs}
@@ -299,6 +305,7 @@ function WeightPanel({
   lastKnown: number | null;
   regressing: boolean;
 }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
@@ -311,13 +318,13 @@ function WeightPanel({
       qc.invalidateQueries({ queryKey: ["today"] });
       setEditing(false);
     },
-    onError: (e) => Alert.alert(e instanceof Error ? e.message : "No hemos podido guardar el peso"),
+    onError: (e) => Alert.alert(e instanceof Error ? e.message : t("weight.saveError")),
   });
 
   const commit = () => {
     const kg = Number(value.trim().replace(",", "."));
     if (!Number.isFinite(kg) || kg < 25 || kg > 400) {
-      Alert.alert("El peso debe estar entre 25 y 400 kg");
+      Alert.alert(t("weight.range"));
       return;
     }
     save.mutate(kg);
@@ -348,7 +355,9 @@ function WeightPanel({
           />
           <Text className="text-xs text-muted-foreground">kg</Text>
           <Pressable onPress={() => setEditing(false)} className="ml-auto active:opacity-60">
-            <Text className="text-xs font-sans-medium text-muted-foreground">Cancelar</Text>
+            <Text className="text-xs font-sans-medium text-muted-foreground">
+              {t("common.cancel")}
+            </Text>
           </Pressable>
           <Pressable
             onPress={commit}
@@ -357,7 +366,7 @@ function WeightPanel({
             style={save.isPending ? { opacity: 0.6 } : undefined}
           >
             <Text className="text-xs font-sans-semibold text-background">
-              {save.isPending ? "..." : "Guardar"}
+              {save.isPending ? "..." : t("common.save")}
             </Text>
           </Pressable>
         </View>
@@ -369,11 +378,11 @@ function WeightPanel({
                 <Text className="text-sm font-mono-medium tabular-nums text-foreground">
                   {last} kg
                 </Text>
-                <Text className="text-[11px] text-muted-foreground">{trendCaption(points)}</Text>
+                <Text className="text-[11px] text-muted-foreground">{trendCaption(points, t)}</Text>
               </>
             ) : (
               <Text className="text-[13px] text-muted-foreground">
-                {last != null ? `Último: ${last} kg` : "Aún no has anotado tu peso"}
+                {last != null ? t("weight.last", { kg: last }) : t("weight.none")}
               </Text>
             )}
           </View>
@@ -384,7 +393,7 @@ function WeightPanel({
             }}
             className="shrink-0 rounded-full bg-secondary px-3 py-1.5 active:opacity-80"
           >
-            <Text className="text-xs font-sans-semibold text-foreground">Anotar peso</Text>
+            <Text className="text-xs font-sans-semibold text-foreground">{t("weight.log")}</Text>
           </Pressable>
         </>
       )}
@@ -402,10 +411,11 @@ function weighPoints(logs: DailyLogHistory[]): number[] {
     .map((p) => p.weight_kg);
 }
 
-function trendCaption(weights: number[]): string {
+function trendCaption(weights: number[], t: Translate): string {
   const delta = weights[weights.length - 1]! - weights[0]!;
-  const change = delta === 0 ? "Sin cambios" : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} kg`;
-  return `${change} en tus últimos ${weights.length} pesajes`;
+  const change =
+    delta === 0 ? t("weight.noChange") : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} kg`;
+  return t("weight.trend", { change, n: weights.length });
 }
 
 function Sparkline({ weights, regressing }: { weights: number[]; regressing: boolean }) {

@@ -1244,5 +1244,29 @@
     "notNow": "Ahora no",
     "next": "Siguiente",
     "saveError": "No hemos podido guardar tus respuestas"
+  },
+  "weight": {
+    "title": "Tu peso",
+    "stability": "Estabilidad",
+    "regressUp": "+{{kg}} kg (retroceso)",
+    "regressDown": "−{{kg}} kg (retroceso)",
+    "doneOf": "{{done}} de {{total}} kg",
+    "more": "{{kg}} kg más",
+    "less": "{{kg}} kg menos",
+    "goalDate": "meta: {{date}}",
+    "noGoal": "sin meta de kg — anótala en Ajustes",
+    "saved": "Peso de hoy anotado",
+    "saveError": "No hemos podido guardar el peso",
+    "range": "El peso debe estar entre 25 y 400 kg",
+    "inputLabel": "Peso de hoy, en kilos",
+    "last": "Último: {{kg}} kg",
+    "none": "Aún no has anotado tu peso",
+    "log": "Anotar peso",
+    "noChange": "Sin cambios",
+    "trend": "{{change}} en tus últimos {{n}} pesajes",
+    "onTarget": "En tu peso",
+    "above": "{{kg}} kg por encima",
+    "below": "{{kg}} kg por debajo",
+    "gaugeLabel": "Peso actual {{current}} kg, objetivo {{target}} kg"
   }
 }
