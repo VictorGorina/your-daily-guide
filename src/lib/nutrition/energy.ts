@@ -308,19 +308,29 @@ export const targetsAsMacros = (t: EnergyTargets) => ({
  * Cómo se ha calculado, en una frase, para Ajustes (transparencia: la persona
  * ve de dónde sale su cifra, igual que en la tarjeta "Balance de hoy").
  */
-export function energyExplanation(t: EnergyTargets): string {
-  const n = (x: number) => Math.round(x).toLocaleString("es-ES");
-  const pal = t.basis.pal.toLocaleString("es-ES", { maximumFractionDigits: 3 });
-  const routine = t.basis.routineKcal ? ` + rutina ${n(t.basis.routineKcal)}` : "";
-  const pct = t.basis.tdee ? Math.round((t.basis.adjustment / t.basis.tdee) * 100) : 0;
+export function energyExplanation(
+  targets: EnergyTargets,
+  t: Translate,
+  locale: string = "es-ES",
+): string {
+  const { basis } = targets;
+  const n = (x: number) => Math.round(x).toLocaleString(locale);
+  const pct = basis.tdee ? Math.round((basis.adjustment / basis.tdee) * 100) : 0;
+  const stage =
+    basis.goal === "embarazo" || basis.goal === "lactancia"
+      ? ` (${t(`energyExplain.stage.${basis.goal}`)})`
+      : "";
   const goal =
-    t.basis.adjustment === 0
-      ? "para mantenerte"
-      : `${pct > 0 ? "+" : "−"}${Math.abs(pct)} %${
-          t.basis.goal === "embarazo" || t.basis.goal === "lactancia" ? ` (${t.basis.goal})` : ""
-        }`;
-  return (
-    `Gasto estimado: ${n(t.basis.tdee)} kcal (basal ${n(t.basis.bmr)} × actividad ${pal}${routine}). ` +
-    `Objetivo: ${n(t.kcal)} kcal ${goal} y ${n(t.protein_g)} g de proteína.`
-  );
+    basis.adjustment === 0
+      ? t("energyExplain.maintain")
+      : t("energyExplain.pct", { sign: pct > 0 ? "+" : "−", pct: Math.abs(pct) }) + stage;
+  return t("energyExplain.text", {
+    tdee: n(basis.tdee),
+    bmr: n(basis.bmr),
+    pal: basis.pal.toLocaleString(locale, { maximumFractionDigits: 3 }),
+    routine: basis.routineKcal ? t("energyExplain.routine", { kcal: n(basis.routineKcal) }) : "",
+    kcal: n(targets.kcal),
+    goal,
+    protein: n(targets.protein_g),
+  });
 }

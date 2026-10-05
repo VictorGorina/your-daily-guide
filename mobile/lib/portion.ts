@@ -21,6 +21,7 @@
  */
 
 import type { EnergyTargets } from "./energy";
+import type { Translate } from "./week-nav";
 
 export const REFERENCE_KCAL = 2000;
 export const PORTION_MIN = 0.6;
@@ -79,15 +80,21 @@ export function sharedPortion(planFactors: readonly number[]): number | null {
   return clamp(valid.reduce((sum, f) => sum + f, 0) / valid.length);
 }
 
-/** "×1,2" con coma decimal, para Ajustes. */
-export function formatPortion(factor: number): string {
-  return `×${factor.toLocaleString("es-ES", { maximumFractionDigits: 2 })}`;
+/** "×1,2" con el decimal del idioma, para Ajustes. */
+export function formatPortion(factor: number, locale: string = "es-ES"): string {
+  return `×${factor.toLocaleString(locale, { maximumFractionDigits: 2 })}`;
 }
 
 /** La línea de Ajustes (ticket 21, transparencia): de dónde sale el tamaño de sus platos. */
-export function portionExplanation(f: PortionFactors): string {
-  const why = f.basis === "objetivo" ? "según tu objetivo" : "a falta de tu altura, peso o edad";
-  return `Tus raciones: ${formatPortion(f.plan)} de la ración de referencia (${why}).`;
+export function portionExplanation(
+  f: PortionFactors,
+  t: Translate,
+  locale: string = "es-ES",
+): string {
+  return t("portionExplain.text", {
+    factor: formatPortion(f.plan, locale),
+    why: t(f.basis === "objetivo" ? "portionExplain.byTarget" : "portionExplain.missingData"),
+  });
 }
 
 // ---------------------------------------------------------------------------

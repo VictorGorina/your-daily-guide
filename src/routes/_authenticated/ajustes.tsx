@@ -91,7 +91,7 @@ function Ajustes() {
   const save = useMutation({
     mutationFn: (patch: Partial<Profile>) => saveProfile(patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
-    onError: () => toast.error("No hemos podido guardar"),
+    onError: () => toast.error(t("common.saveError")),
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -117,9 +117,7 @@ function Ajustes() {
         setPushEnabled(false);
       }
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "No hemos podido cambiar las notificaciones",
-      );
+      toast.error(error instanceof Error ? error.message : t("ajustes.push.toggleError"));
     } finally {
       setPushBusy(false);
     }
@@ -144,7 +142,7 @@ function Ajustes() {
     const text = raw.trim();
     if (!text) {
       if (required) {
-        setError(key, "Este dato es necesario para tu progreso");
+        setError(key, t("ajustes.errors.required"));
         return;
       }
       setError(key);
@@ -162,7 +160,7 @@ function Ajustes() {
 
   const commitTime = (key: "morning_time" | "evening_time", raw: string) => {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
-      setError(key, "Indica una hora válida (HH:MM)");
+      setError(key, t("ajustes.errors.time"));
       return;
     }
     setError(key);
@@ -170,10 +168,10 @@ function Ajustes() {
   };
 
   const missing = [
-    profile && !profile.current_weight_kg ? "peso actual" : null,
-    profile && !profile.height_cm ? "altura" : null,
-    profile && !profile.morning_time ? "hora del resumen matutino" : null,
-    profile && !profile.evening_time ? "hora del repaso nocturno" : null,
+    profile && !profile.current_weight_kg ? t("ajustes.missing.weight") : null,
+    profile && !profile.height_cm ? t("ajustes.missing.height") : null,
+    profile && !profile.morning_time ? t("ajustes.missing.morning") : null,
+    profile && !profile.evening_time ? t("ajustes.missing.evening") : null,
   ].filter(Boolean) as string[];
 
   const signOut = async () => {
@@ -191,7 +189,7 @@ function Ajustes() {
     try {
       const logs = await fetchAllLogs();
       if (!logs.length) {
-        toast.info("Todavía no hay nada que exportar");
+        toast.info(t("ajustes.history.empty"));
         return;
       }
       const csv = buildHistoryCsv(logs, { numbers: showsNutritionNumbers(profile) });
@@ -203,7 +201,7 @@ function Ajustes() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.warn("ajustes: exportar el historial", error);
-      toast.error("No hemos podido preparar tu historial");
+      toast.error(t("ajustes.history.error"));
     } finally {
       setExporting(false);
     }
@@ -221,10 +219,10 @@ function Ajustes() {
       // También lo hace el listener de sesión con SIGNED_OUT; aquí, por si no llega.
       clearLocalUserData();
       await supabase.auth.signOut();
-      toast.success("Tu cuenta se ha eliminado");
+      toast.success(t("ajustes.deleteAccount.done"));
       navigate({ to: "/", replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No hemos podido eliminar tu cuenta");
+      toast.error(error instanceof Error ? error.message : t("ajustes.deleteAccount.error"));
     } finally {
       setDeleting(false);
     }
@@ -232,50 +230,46 @@ function Ajustes() {
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-28 pt-12">
-      <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">Ajustes</h1>
+      <h1 className="font-title text-[34px] font-semibold tracking-[-0.03em]">
+        {t("ajustes.title")}
+      </h1>
 
       {missing.length ? (
         <div className="mt-4 flex items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-xs">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
-          <span>
-            Para que el progreso y los avisos funcionen bien, completa: {missing.join(", ")}.
-          </span>
+          <span>{t("ajustes.missing.text", { list: missing.join(", ") })}</span>
         </div>
       ) : null}
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Cuenta
+        {t("ajustes.sections.account")}
       </span>
       <div className="surface-card mt-2 divide-y divide-border overflow-hidden">
         <Link to="/hogar" className="flex items-center gap-3 px-4 py-4 text-sm">
           <Users className="h-4 w-4 shrink-0 text-primary-ink" />
           <span className="min-w-0 flex-1">
-            <span className="block font-medium">Tu hogar</span>
-            <span className="block text-xs text-muted-foreground">
-              Une cuentas, elige qué comidas compartís y añade a los peques
-            </span>
+            <span className="block font-medium">{t("ajustes.home.title")}</span>
+            <span className="block text-xs text-muted-foreground">{t("ajustes.home.desc")}</span>
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </Link>
         <Link to="/perfil" className="flex items-center gap-3 px-4 py-4 text-sm">
           <Pencil className="h-4 w-4 shrink-0 text-primary-ink" />
           <span className="min-w-0 flex-1">
-            <span className="block font-medium">Editar mis respuestas</span>
-            <span className="block text-xs text-muted-foreground">
-              Corrige cualquier dato del onboarding en dos toques
-            </span>
+            <span className="block font-medium">{t("ajustes.answers.title")}</span>
+            <span className="block text-xs text-muted-foreground">{t("ajustes.answers.desc")}</span>
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </Link>
       </div>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Perfil
+        {t("ajustes.sections.profile")}
       </span>
       <section className="surface-card mt-2 space-y-4 p-5">
-        <h2 className="text-sm font-semibold">Datos básicos</h2>
+        <h2 className="text-sm font-semibold">{t("ajustes.basics.title")}</h2>
         <FieldInput
-          label="Nombre"
+          label={t("ajustes.basics.name")}
           defaultValue={profile?.display_name ?? ""}
           placeholder="—"
           onBlur={(e) => save.mutate({ display_name: e.target.value || null })}
@@ -283,7 +277,7 @@ function Ajustes() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <FieldInput
-              label="Peso"
+              label={t("ajustes.basics.weight")}
               inputMode="decimal"
               defaultValue={profile?.current_weight_kg ?? ""}
               placeholder="kg"
@@ -293,19 +287,16 @@ function Ajustes() {
                   e.target.value,
                   25,
                   350,
-                  "El peso debe estar entre 25 y 350 kg",
+                  t("ajustes.errors.weight"),
                   true,
                 )
               }
             />
-            <FieldNote
-              error={errors["current_weight_kg"]}
-              help="Necesario para calcular tu progreso."
-            />
+            <FieldNote error={errors["current_weight_kg"]} help={t("ajustes.basics.weightHelp")} />
           </div>
           <div>
             <FieldInput
-              label="Altura"
+              label={t("ajustes.basics.height")}
               inputMode="decimal"
               defaultValue={profile?.height_cm ?? ""}
               placeholder="cm"
@@ -315,17 +306,17 @@ function Ajustes() {
                   e.target.value,
                   100,
                   250,
-                  "La altura debe estar entre 100 y 250 cm",
+                  t("ajustes.errors.height"),
                   true,
                 )
               }
             />
-            <FieldNote error={errors["height_cm"]} help="Ajusta las cantidades de tu guía." />
+            <FieldNote error={errors["height_cm"]} help={t("ajustes.basics.heightHelp")} />
           </div>
         </div>
         <div>
           <FieldInput
-            label="Peso objetivo"
+            label={t("ajustes.basics.targetWeight")}
             inputMode="decimal"
             defaultValue={profile?.target_weight_kg ?? ""}
             placeholder="kg"
@@ -335,74 +326,69 @@ function Ajustes() {
                 e.target.value,
                 30,
                 300,
-                "El peso objetivo debe estar entre 30 y 300 kg",
+                t("ajustes.errors.targetWeight"),
                 false,
               )
             }
           />
-          <FieldNote
-            error={errors["target_weight_kg"]}
-            help="El peso al que quieres llegar y mantenerte."
-          />
+          <FieldNote error={errors["target_weight_kg"]} help={t("ajustes.basics.targetHelp")} />
         </div>
       </section>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Coach
+        {t("ajustes.sections.coach")}
       </span>
       <section className="surface-card mt-2 divide-y divide-border p-5">
         <div>
-          <h2 className="text-sm font-semibold">Tono</h2>
+          <h2 className="text-sm font-semibold">{t("ajustes.tone.title")}</h2>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            {["relajado", "neutro", "exigente"].map((t) => (
+            {["relajado", "neutro", "exigente"].map((tone) => (
               <button
-                key={t}
-                onClick={() => save.mutate({ tone: t })}
+                key={tone}
+                onClick={() => save.mutate({ tone })}
                 className={`rounded-2xl px-3 py-3 text-sm capitalize transition-colors ${
-                  profile?.tone === t ? "bg-foreground text-background" : "bg-secondary"
+                  profile?.tone === tone ? "bg-foreground text-background" : "bg-secondary"
                 }`}
               >
-                {t}
+                {t(`ajustes.tone.${tone}`)}
               </button>
             ))}
           </div>
         </div>
 
         <div className="pt-4">
-          <h2 className="text-sm font-semibold">Recordatorios</h2>
+          <h2 className="text-sm font-semibold">{t("ajustes.reminders.title")}</h2>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
               <FieldInput
-                label="Mañana"
+                label={t("ajustes.reminders.morning")}
                 type="time"
                 defaultValue={profile?.morning_time?.slice(0, 5) ?? "08:00"}
                 onBlur={(e) => commitTime("morning_time", e.target.value)}
               />
-              <FieldNote error={errors["morning_time"]} help="Hora del resumen matutino." />
+              <FieldNote error={errors["morning_time"]} help={t("ajustes.reminders.morningHelp")} />
             </div>
             <div>
               <FieldInput
-                label="Noche"
+                label={t("ajustes.reminders.evening")}
                 type="time"
                 defaultValue={profile?.evening_time?.slice(0, 5) ?? "21:30"}
                 onBlur={(e) => commitTime("evening_time", e.target.value)}
               />
-              <FieldNote error={errors["evening_time"]} help="Hora del repaso nocturno." />
+              <FieldNote error={errors["evening_time"]} help={t("ajustes.reminders.eveningHelp")} />
             </div>
           </div>
         </div>
       </section>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Notificaciones
+        {t("ajustes.sections.notifications")}
       </span>
       <section className="surface-card mt-2 p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold">Avisos push</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Resumen matutino y aviso del repaso nocturno, a las horas de arriba.
-            </p>
+            <h2 className="text-sm font-semibold">{t("ajustes.push.title")}</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("ajustes.push.desc")}</p>
           </div>
           <Switch
             checked={pushEnabled}
@@ -411,9 +397,9 @@ function Ajustes() {
           />
         </div>
         {!pushSupported ? (
-          <FieldNote help="Este navegador no soporta notificaciones push." />
+          <FieldNote help={t("ajustes.push.unsupported")} />
         ) : iosHint ? (
-          <FieldNote help="En iPhone: añade Peppers a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) para poder recibir avisos." />
+          <FieldNote help={t("ajustes.push.iosHint")} />
         ) : null}
       </section>
 
@@ -437,22 +423,20 @@ function Ajustes() {
       </section>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Apariencia
+        {t("ajustes.sections.appearance")}
       </span>
       <section className="surface-card mt-2 p-5">
-        <h2 className="text-sm font-semibold">Tema</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          El naranja de la marca es el mismo en los dos — solo cambia el fondo.
-        </p>
+        <h2 className="text-sm font-semibold">{t("ajustes.theme.title")}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">{t("ajustes.theme.desc")}</p>
         <div className="mt-3 grid grid-cols-2 gap-1 rounded-full bg-secondary p-1">
-          {THEMES.map((t) => {
-            const active = (profile?.theme ?? "claro") === t.id;
+          {THEMES.map((theme) => {
+            const active = (profile?.theme ?? "claro") === theme.id;
             return (
               <button
-                key={t.id}
+                key={theme.id}
                 onClick={() => {
-                  applyTheme(t.id);
-                  save.mutate({ theme: t.id });
+                  applyTheme(theme.id);
+                  save.mutate({ theme: theme.id });
                 }}
                 aria-pressed={active}
                 className={`flex items-center justify-center gap-2 rounded-full py-2 text-xs font-semibold transition-colors ${
@@ -461,9 +445,9 @@ function Ajustes() {
               >
                 <span
                   className="h-3.5 w-3.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: t.swatch[2] }}
+                  style={{ backgroundColor: theme.swatch[2] }}
                 />
-                {t.label}
+                {t(`ajustes.theme.${theme.id}`)}
               </button>
             );
           })}
@@ -471,14 +455,13 @@ function Ajustes() {
       </section>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Datos y cuenta
+        {t("ajustes.sections.data")}
       </span>
 
       <div className="surface-card mt-2 p-5">
-        <h2 className="text-sm font-semibold">Tu historial</h2>
+        <h2 className="text-sm font-semibold">{t("ajustes.history.title")}</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          Descarga en un archivo CSV todo lo que has registrado: comidas, picoteo, deporte y peso.
-          Se abre con Excel, Numbers o Google Sheets.
+          {t("ajustes.history.desc")}
         </p>
         <button
           type="button"
@@ -487,26 +470,24 @@ function Ajustes() {
           className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-3 text-sm font-medium text-foreground disabled:opacity-60"
         >
           <Download className="h-4 w-4" />
-          {exporting ? "Preparando…" : "Descargar historial"}
+          {exporting ? t("ajustes.history.preparing") : t("ajustes.history.download")}
         </button>
       </div>
 
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <button className="mt-3 w-full rounded-full bg-surface py-4 text-sm font-medium text-muted-foreground">
-            Cerrar sesión
+            {t("ajustes.signOut.button")}
           </button>
         </AlertDialogTrigger>
         <AlertDialogContent className="rounded-3xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tendrás que volver a entrar para retomar tu plan.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("ajustes.signOut.title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("ajustes.signOut.desc")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={signOut}>Cerrar sesión</AlertDialogAction>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={signOut}>{t("ajustes.signOut.button")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -514,25 +495,22 @@ function Ajustes() {
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <button className="mt-3 w-full rounded-full bg-destructive/10 py-4 text-sm font-medium text-destructive">
-            Eliminar cuenta
+            {t("ajustes.deleteAccount.button")}
           </button>
         </AlertDialogTrigger>
         <AlertDialogContent className="rounded-3xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar tu cuenta?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se borrará tu perfil, tus guías, tu plan y tu progreso. Es permanente y no se puede
-              deshacer.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("ajustes.deleteAccount.title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("ajustes.deleteAccount.desc")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={removeAccount}
               disabled={deleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleting ? "Eliminando..." : "Sí, eliminar"}
+              {deleting ? t("ajustes.deleteAccount.deleting") : t("ajustes.deleteAccount.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

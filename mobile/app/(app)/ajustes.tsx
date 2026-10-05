@@ -38,7 +38,7 @@ export default function Ajustes() {
   const save = useMutation({
     mutationFn: (patch: Partial<Profile>) => saveProfile(patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
-    onError: () => Alert.alert("No hemos podido guardar"),
+    onError: () => Alert.alert(t("common.saveError")),
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -61,7 +61,7 @@ export default function Ajustes() {
     const text = raw.trim();
     if (!text) {
       if (required) {
-        setError(key, "Este dato es necesario para tu progreso");
+        setError(key, t("ajustes.errors.required"));
         return;
       }
       setError(key);
@@ -79,7 +79,7 @@ export default function Ajustes() {
 
   const commitTime = (key: "morning_time" | "evening_time", raw: string) => {
     if (!TIME_RE.test(raw)) {
-      setError(key, "Indica una hora válida (HH:MM)");
+      setError(key, t("ajustes.errors.time"));
       return;
     }
     setError(key);
@@ -87,10 +87,10 @@ export default function Ajustes() {
   };
 
   const missing = [
-    profile && !profile.current_weight_kg ? "peso actual" : null,
-    profile && !profile.height_cm ? "altura" : null,
-    profile && !profile.morning_time ? "hora del resumen matutino" : null,
-    profile && !profile.evening_time ? "hora del repaso nocturno" : null,
+    profile && !profile.current_weight_kg ? t("ajustes.missing.weight") : null,
+    profile && !profile.height_cm ? t("ajustes.missing.height") : null,
+    profile && !profile.morning_time ? t("ajustes.missing.morning") : null,
+    profile && !profile.evening_time ? t("ajustes.missing.evening") : null,
   ].filter(Boolean) as string[];
 
   const signOut = async () => {
@@ -101,9 +101,9 @@ export default function Ajustes() {
   };
 
   const confirmSignOut = () =>
-    Alert.alert("¿Cerrar sesión?", "Tendrás que volver a entrar para retomar tu plan.", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Cerrar sesión", style: "destructive", onPress: () => void signOut() },
+    Alert.alert(t("ajustes.signOut.title"), t("ajustes.signOut.desc"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("ajustes.signOut.button"), style: "destructive", onPress: () => void signOut() },
     ]);
 
   // El historial se arma en el dispositivo con lo que la persona ya puede leer
@@ -114,7 +114,7 @@ export default function Ajustes() {
     try {
       const logs = await fetchAllLogs();
       if (!logs.length) {
-        Alert.alert("Tu historial", "Todavía no hay nada que exportar.");
+        Alert.alert(t("ajustes.history.title"), t("ajustes.history.emptyBody"));
         return;
       }
       const csv = buildHistoryCsv(logs, { numbers: showsNutritionNumbers(profile) });
@@ -130,13 +130,13 @@ export default function Ajustes() {
         uri = file.uri;
       } catch (error) {
         console.warn("ajustes: escribir el archivo del historial", error);
-        Alert.alert("Tu historial", "Estará disponible en la próxima versión de la app.");
+        Alert.alert(t("ajustes.history.title"), t("ajustes.history.nextVersion"));
         return;
       }
       await Share.share({ url: uri });
     } catch (error) {
       console.warn("ajustes: exportar el historial", error);
-      Alert.alert("Tu historial", "No hemos podido preparar tu historial.");
+      Alert.alert(t("ajustes.history.title"), t("ajustes.history.errorBody"));
     } finally {
       setExporting(false);
     }
@@ -153,21 +153,21 @@ export default function Ajustes() {
       await clearLocalUserData();
       await supabase.auth.signOut();
     } catch (error) {
-      Alert.alert(error instanceof Error ? error.message : "No hemos podido eliminar tu cuenta");
+      Alert.alert(error instanceof Error ? error.message : t("ajustes.deleteAccount.error"));
     } finally {
       setDeleting(false);
     }
   };
 
   const confirmDelete = () =>
-    Alert.alert(
-      "¿Eliminar tu cuenta?",
-      "Se borrará tu perfil, tus guías, tu plan y tu progreso. Es permanente y no se puede deshacer.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Sí, eliminar", style: "destructive", onPress: () => void removeAccount() },
-      ],
-    );
+    Alert.alert(t("ajustes.deleteAccount.title"), t("ajustes.deleteAccount.desc"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("ajustes.deleteAccount.confirm"),
+        style: "destructive",
+        onPress: () => void removeAccount(),
+      },
+    ]);
 
   const inputClass = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
   // `key` fuerza a remontar los inputs no controlados cuando llega el perfil,
@@ -180,20 +180,20 @@ export default function Ajustes() {
         contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-36 pt-6"
         keyboardShouldPersistTaps="handled"
       >
-        <Text className="font-heading text-3xl text-foreground">Ajustes</Text>
+        <Text className="font-heading text-3xl text-foreground">{t("ajustes.title")}</Text>
 
         {missing.length ? (
           <View className="mt-4 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-4 py-3">
             <Info size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
             <Text className="flex-1 text-xs text-foreground">
-              Para que el progreso y los avisos funcionen bien, completa: {missing.join(", ")}.
+              {t("ajustes.missing.text", { list: missing.join(", ") })}
             </Text>
           </View>
         ) : null}
 
         {/* Cuenta */}
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
-          Cuenta
+          {t("ajustes.sections.account")}
         </Text>
         <View className="mt-2 overflow-hidden rounded-3xl bg-surface">
           <Pressable
@@ -202,10 +202,10 @@ export default function Ajustes() {
           >
             <Users size={16} color="#6dbe7b" />
             <View className="min-w-0 flex-1">
-              <Text className="text-sm font-sans-medium text-foreground">Tu hogar</Text>
-              <Text className="text-xs text-muted-foreground">
-                Une cuentas, elige qué comidas compartís y añade a los peques
+              <Text className="text-sm font-sans-medium text-foreground">
+                {t("ajustes.home.title")}
               </Text>
+              <Text className="text-xs text-muted-foreground">{t("ajustes.home.desc")}</Text>
             </View>
             <ChevronRight size={16} color="#6b6256" />
           </Pressable>
@@ -216,11 +216,9 @@ export default function Ajustes() {
             <Pencil size={16} color="#6dbe7b" />
             <View className="min-w-0 flex-1">
               <Text className="text-sm font-sans-medium text-foreground">
-                Editar mis respuestas
+                {t("ajustes.answers.title")}
               </Text>
-              <Text className="text-xs text-muted-foreground">
-                Corrige cualquier dato del onboarding en dos toques
-              </Text>
+              <Text className="text-xs text-muted-foreground">{t("ajustes.answers.desc")}</Text>
             </View>
             <ChevronRight size={16} color="#6b6256" />
           </Pressable>
@@ -228,14 +226,16 @@ export default function Ajustes() {
 
         {/* Perfil — datos básicos */}
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
-          Perfil
+          {t("ajustes.sections.profile")}
         </Text>
         <View className="mt-2 gap-4 rounded-3xl bg-surface p-5">
-          <Text className="text-sm font-sans-semibold text-foreground">Datos básicos</Text>
+          <Text className="text-sm font-sans-semibold text-foreground">
+            {t("ajustes.basics.title")}
+          </Text>
           <TextInput
             key={`name-${seed}`}
             defaultValue={profile?.display_name ?? ""}
-            placeholder="Nombre"
+            placeholder={t("ajustes.basics.name")}
             placeholderTextColor="#a69d8f"
             onEndEditing={(e) => save.mutate({ display_name: e.nativeEvent.text || null })}
             className={inputClass}
@@ -245,7 +245,7 @@ export default function Ajustes() {
               <TextInput
                 key={`weight-${seed}`}
                 defaultValue={profile?.current_weight_kg?.toString() ?? ""}
-                placeholder="Peso (kg)"
+                placeholder={t("ajustes.basics.weightKg")}
                 placeholderTextColor="#a69d8f"
                 keyboardType="decimal-pad"
                 onEndEditing={(e) =>
@@ -254,19 +254,22 @@ export default function Ajustes() {
                     e.nativeEvent.text,
                     25,
                     350,
-                    "El peso debe estar entre 25 y 350 kg",
+                    t("ajustes.errors.weight"),
                     true,
                   )
                 }
                 className={inputClass}
               />
-              <FieldNote error={errors["current_weight_kg"]} help="Necesario para tu progreso." />
+              <FieldNote
+                error={errors["current_weight_kg"]}
+                help={t("ajustes.basics.weightHelpShort")}
+              />
             </View>
             <View className="flex-1">
               <TextInput
                 key={`height-${seed}`}
                 defaultValue={profile?.height_cm?.toString() ?? ""}
-                placeholder="Altura (cm)"
+                placeholder={t("ajustes.basics.heightCm")}
                 placeholderTextColor="#a69d8f"
                 keyboardType="decimal-pad"
                 onEndEditing={(e) =>
@@ -275,20 +278,20 @@ export default function Ajustes() {
                     e.nativeEvent.text,
                     100,
                     250,
-                    "La altura debe estar entre 100 y 250 cm",
+                    t("ajustes.errors.height"),
                     true,
                   )
                 }
                 className={inputClass}
               />
-              <FieldNote error={errors["height_cm"]} help="Ajusta las cantidades de tu guía." />
+              <FieldNote error={errors["height_cm"]} help={t("ajustes.basics.heightHelp")} />
             </View>
           </View>
           <View>
             <TextInput
               key={`target-${seed}`}
               defaultValue={profile?.target_weight_kg?.toString() ?? ""}
-              placeholder="Peso objetivo (kg)"
+              placeholder={t("ajustes.basics.targetWeightKg")}
               placeholderTextColor="#a69d8f"
               keyboardType="decimal-pad"
               onEndEditing={(e) =>
@@ -297,7 +300,7 @@ export default function Ajustes() {
                   e.nativeEvent.text,
                   30,
                   300,
-                  "El peso objetivo debe estar entre 30 y 300 kg",
+                  t("ajustes.errors.targetWeight"),
                   false,
                 )
               }
@@ -305,25 +308,27 @@ export default function Ajustes() {
             />
             <FieldNote
               error={errors["target_weight_kg"]}
-              help="El peso al que quieres llegar. La dirección se calcula sola."
+              help={t("ajustes.basics.targetHelpAuto")}
             />
           </View>
         </View>
 
         {/* Coach */}
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
-          Coach
+          {t("ajustes.sections.coach")}
         </Text>
         <View className="mt-2 gap-4 rounded-3xl bg-surface p-5">
           <View>
-            <Text className="text-sm font-sans-semibold text-foreground">Tono</Text>
+            <Text className="text-sm font-sans-semibold text-foreground">
+              {t("ajustes.tone.title")}
+            </Text>
             <View className="mt-3 flex-row gap-2">
-              {["relajado", "neutro", "exigente"].map((t) => {
-                const active = profile?.tone === t;
+              {["relajado", "neutro", "exigente"].map((tone) => {
+                const active = profile?.tone === tone;
                 return (
                   <Pressable
-                    key={t}
-                    onPress={() => save.mutate({ tone: t })}
+                    key={tone}
+                    onPress={() => save.mutate({ tone })}
                     className={`flex-1 items-center rounded-2xl px-3 py-3 active:opacity-80 ${
                       active ? "bg-primary-soft" : "bg-secondary"
                     }`}
@@ -331,7 +336,7 @@ export default function Ajustes() {
                     <Text
                       className={`text-sm capitalize ${active ? "text-primary-ink" : "text-foreground"}`}
                     >
-                      {t}
+                      {t(`ajustes.tone.${tone}`)}
                     </Text>
                   </Pressable>
                 );
@@ -340,10 +345,14 @@ export default function Ajustes() {
           </View>
 
           <View className="pt-4">
-            <Text className="text-sm font-sans-semibold text-foreground">Recordatorios</Text>
+            <Text className="text-sm font-sans-semibold text-foreground">
+              {t("ajustes.reminders.title")}
+            </Text>
             <View className="mt-3 flex-row gap-3">
               <View className="flex-1">
-                <Text className="text-xs text-muted-foreground">Mañana</Text>
+                <Text className="text-xs text-muted-foreground">
+                  {t("ajustes.reminders.morning")}
+                </Text>
                 <TextInput
                   key={`morning-${seed}`}
                   defaultValue={profile?.morning_time?.slice(0, 5) ?? "08:00"}
@@ -353,10 +362,15 @@ export default function Ajustes() {
                   onEndEditing={(e) => commitTime("morning_time", e.nativeEvent.text)}
                   className={`${inputClass} mt-1`}
                 />
-                <FieldNote error={errors["morning_time"]} help="Hora del resumen matutino." />
+                <FieldNote
+                  error={errors["morning_time"]}
+                  help={t("ajustes.reminders.morningHelp")}
+                />
               </View>
               <View className="flex-1">
-                <Text className="text-xs text-muted-foreground">Noche</Text>
+                <Text className="text-xs text-muted-foreground">
+                  {t("ajustes.reminders.evening")}
+                </Text>
                 <TextInput
                   key={`evening-${seed}`}
                   defaultValue={profile?.evening_time?.slice(0, 5) ?? "21:30"}
@@ -366,7 +380,10 @@ export default function Ajustes() {
                   onEndEditing={(e) => commitTime("evening_time", e.nativeEvent.text)}
                   className={`${inputClass} mt-1`}
                 />
-                <FieldNote error={errors["evening_time"]} help="Hora del repaso nocturno." />
+                <FieldNote
+                  error={errors["evening_time"]}
+                  help={t("ajustes.reminders.eveningHelp")}
+                />
               </View>
             </View>
           </View>
@@ -394,13 +411,14 @@ export default function Ajustes() {
 
         {/* Datos y cuenta */}
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
-          Datos y cuenta
+          {t("ajustes.sections.data")}
         </Text>
         <View className="mt-2 rounded-3xl bg-surface p-5">
-          <Text className="text-sm font-sans-semibold text-foreground">Tu historial</Text>
+          <Text className="text-sm font-sans-semibold text-foreground">
+            {t("ajustes.history.title")}
+          </Text>
           <Text className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Descarga en un archivo CSV todo lo que has registrado: comidas, picoteo, deporte y peso.
-            Se abre con Excel, Numbers o Google Sheets.
+            {t("ajustes.history.desc")}
           </Text>
           <Pressable
             onPress={() => void exportHistory()}
@@ -410,7 +428,7 @@ export default function Ajustes() {
           >
             <Download size={16} color="#3e3d39" />
             <Text className="text-sm font-sans-medium text-foreground">
-              {exporting ? "Preparando…" : "Descargar historial"}
+              {exporting ? t("ajustes.history.preparing") : t("ajustes.history.download")}
             </Text>
           </Pressable>
         </View>
@@ -418,7 +436,9 @@ export default function Ajustes() {
           onPress={confirmSignOut}
           className="mt-3 w-full items-center rounded-full bg-surface py-4 active:opacity-80"
         >
-          <Text className="text-sm font-sans-medium text-muted-foreground">Cerrar sesión</Text>
+          <Text className="text-sm font-sans-medium text-muted-foreground">
+            {t("ajustes.signOut.button")}
+          </Text>
         </Pressable>
         <Pressable
           onPress={confirmDelete}
@@ -426,7 +446,7 @@ export default function Ajustes() {
           className="mt-3 w-full items-center rounded-full bg-destructive/10 py-4 active:opacity-80"
         >
           <Text className="text-sm font-sans-medium text-destructive">
-            {deleting ? "Eliminando..." : "Eliminar cuenta"}
+            {deleting ? t("ajustes.deleteAccount.deleting") : t("ajustes.deleteAccount.button")}
           </Text>
         </Pressable>
       </ScrollView>

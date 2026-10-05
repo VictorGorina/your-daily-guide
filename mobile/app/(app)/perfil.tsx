@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { AlertCircle, Check, ChevronLeft, Pencil, X } from "lucide-react-native";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ageFromDOB } from "../../lib/age";
 import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
 import { energyExplanation, energyTargets } from "../../lib/energy";
+import { dateLocale } from "../../lib/i18n";
 import { portionExplanation, portionFactors } from "../../lib/portion";
 import { showsNutritionNumbers } from "../../lib/macros";
 import {
@@ -16,31 +18,47 @@ import {
   valueToChip,
   type ProfileField as Field,
 } from "../../lib/profile-fields";
+import { useCurrencySymbol } from "../../lib/use-money";
+import type { Translate } from "../../lib/week-nav";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-function validate(field: Field, raw: string): { error?: string; value?: unknown } {
+/** La moneda del presupuesto es la del perfil; el resto de unidades, las del campo. */
+const fieldUnit = (field: Field, currency: string) =>
+  field.key === "budget_month_eur" ? currency : field.unit;
+
+/** Un chip se guarda en español canónico y se pinta por su posición en la lista. */
+function chipLabel(field: Field, chip: string, t: Translate) {
+  const index = field.options?.indexOf(chip) ?? -1;
+  return index < 0 ? chip : t(`profileFields.${String(field.key)}.options.${index}`);
+}
+
+function validate(
+  field: Field,
+  raw: string,
+  t: Translate,
+  unit: string | undefined,
+): { error?: string; value?: unknown } {
   const text = raw.trim();
   if (field.kind === "number") {
     if (!text) return { value: null };
     const n = Number(text.replace(",", "."));
     if (!Number.isFinite(n) || n < (field.min ?? 0) || n > (field.max ?? Infinity))
       return {
-        error: `Indica un valor entre ${field.min} y ${field.max}${field.unit ? ` ${field.unit}` : ""}`,
+        error: `${t("perfil.errors.range", { min: field.min ?? 0, max: field.max ?? 0 })}${unit ? ` ${unit}` : ""}`,
       };
     return { value: n };
   }
   if (field.kind === "time") {
-    if (!TIME_RE.test(text)) return { error: "Indica una hora válida (HH:MM)" };
+    if (!TIME_RE.test(text)) return { error: t("perfil.errors.time") };
     return { value: text };
   }
   if (field.kind === "date") {
     if (!text) return { value: null };
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return { error: "Indica una fecha válida (AAAA-MM-DD)" };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return { error: t("perfil.errors.dateFormat") };
     if (field.key === "date_of_birth") {
       const age = ageFromDOB(text);
-      if (age === null || age < 12 || age > 110)
-        return { error: "Indica una fecha de nacimiento real" };
+      if (age === null || age < 12 || age > 110) return { error: t("perfil.errors.dob") };
     }
     return { value: text };
   }
@@ -49,18 +67,23 @@ function validate(field: Field, raw: string): { error?: string; value?: unknown 
   return { value: text || null };
 }
 
-function display(field: Field, profile: Profile | null | undefined) {
+function display(
+  field: Field,
+  profile: Profile | null | undefined,
+  t: Translate,
+  unit: string | undefined,
+) {
   const value = profile ? (profile[field.key] as unknown) : null;
   if (value === null || value === undefined || value === "") return null;
   if (field.kind === "time") return String(value).slice(0, 5);
-  if (field.kind === "number") return `${value}${field.unit ? ` ${field.unit}` : ""}`;
+  if (field.kind === "number") return `${value}${unit ? ` ${unit}` : ""}`;
   if (field.key === "date_of_birth") {
     const age = ageFromDOB(String(value));
     const [y, m, d] = String(value).split("-");
-    return `${d}/${m}/${y}${age !== null ? ` · ${age} años` : ""}`;
+    return `${d}/${m}/${y}${age !== null ? ` · ${t("perfil.age", { count: age })}` : ""}`;
   }
-  // Chips con valueMap: mostrar la etiqueta UI, no el valor interno.
-  if (field.kind === "chips" && field.valueMap) return valueToChip(field, String(value));
+  // Chips: la etiqueta de la pantalla, no el valor guardado.
+  if (field.kind === "chips") return chipLabel(field, valueToChip(field, String(value)), t);
   return String(value);
 }
 
@@ -73,6 +96,10 @@ export default function Perfil() {
   const showNumbers = showsNutritionNumbers(profile);
   const energy = energyTargets(profile);
 
+  const { t, i18n } = useTranslation();
+  const numberLocale = dateLocale(i18n.language);
+  const currency = useCurrencySymbol();
+
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | undefined>();
@@ -84,7 +111,7 @@ export default function Perfil() {
       // El día de hoy depende del perfil (guía, cantidades): que se rehaga.
       qc.removeQueries({ queryKey: ["today"] });
     },
-    onError: () => Alert.alert("No hemos podido guardar"),
+    onError: () => Alert.alert(t("common.saveError")),
   });
 
   const open = (field: Field) => {
@@ -102,7 +129,7 @@ export default function Perfil() {
   };
 
   const commit = (field: Field, raw?: string) => {
-    const { error: err, value } = validate(field, raw ?? draft);
+    const { error: err, value } = validate(field, raw ?? draft, t, fieldUnit(field, currency));
     if (err) {
       setError(err);
       return;
@@ -125,37 +152,40 @@ export default function Perfil() {
           hitSlop={8}
         >
           <ChevronLeft size={16} color="#6b6256" />
-          <Text className="text-xs font-sans-medium text-muted-foreground">Ajustes</Text>
+          <Text className="text-xs font-sans-medium text-muted-foreground">
+            {t("ajustes.title")}
+          </Text>
         </Pressable>
 
-        <Text className="mt-3 font-heading text-3xl text-foreground">Mis respuestas</Text>
-        <Text className="mt-1 text-sm text-muted-foreground">
-          Toca cualquier respuesta para corregirla. No hace falta repetir el onboarding.
-        </Text>
+        <Text className="mt-3 font-heading text-3xl text-foreground">{t("perfil.title")}</Text>
+        <Text className="mt-1 text-sm text-muted-foreground">{t("perfil.intro")}</Text>
 
         {showNumbers && energy ? (
           <View className="mt-5 rounded-3xl bg-surface p-4">
             <Text className="px-1 text-sm font-sans-semibold text-foreground">
-              Tu objetivo diario
+              {t("perfil.target.title")}
             </Text>
-            <Text className="mt-2 px-1 text-sm text-foreground">{energyExplanation(energy)}</Text>
+            <Text className="mt-2 px-1 text-sm text-foreground">
+              {energyExplanation(energy, t, numberLocale)}
+            </Text>
             <Text className="mt-1 px-1 text-sm text-foreground">
-              {portionExplanation(portionFactors(energy, profile))}
+              {portionExplanation(portionFactors(energy, profile), t, numberLocale)}
             </Text>
             <Text className="mt-2 px-1 text-[11px] leading-4 text-muted-foreground">
-              Es una estimación: entre personas puede variar un ±10 %. Se recalcula sola cuando
-              cambias tu peso, tu día a día, tu rutina o tu objetivo.
+              {t("perfil.target.note")}
             </Text>
           </View>
         ) : null}
 
-        {PROFILE_SECTIONS.map((section) => (
+        {PROFILE_SECTIONS.map((section, sectionIndex) => (
           <View key={section.title} className="mt-5 rounded-3xl bg-surface p-4">
-            <Text className="px-1 text-sm font-sans-semibold text-foreground">{section.title}</Text>
+            <Text className="px-1 text-sm font-sans-semibold text-foreground">
+              {t(`perfil.sections.${sectionIndex}`)}
+            </Text>
             <View className="mt-2">
               {section.fields.map((field, idx) => {
                 const isEditing = editing === String(field.key);
-                const shown = display(field, profile);
+                const shown = display(field, profile, t, fieldUnit(field, currency));
                 return (
                   <View
                     key={String(field.key)}
@@ -164,7 +194,7 @@ export default function Perfil() {
                     {isEditing ? (
                       <View className="rounded-2xl bg-primary-soft/40 p-3">
                         <Text className="text-xs font-sans-medium text-foreground">
-                          {field.label}
+                          {t(`profileFields.${String(field.key)}.label`)}
                         </Text>
                         {field.kind === "chips" ? (
                           <View className="mt-2 flex-row flex-wrap gap-2">
@@ -183,7 +213,7 @@ export default function Perfil() {
                                       active ? "text-primary-ink" : "text-muted-foreground"
                                     }`}
                                   >
-                                    {opt}
+                                    {chipLabel(field, opt, t)}
                                   </Text>
                                 </Pressable>
                               );
@@ -216,7 +246,7 @@ export default function Perfil() {
                               field.kind === "time"
                                 ? "HH:MM"
                                 : field.kind === "date"
-                                  ? "AAAA-MM-DD"
+                                  ? t("perfil.datePlaceholder")
                                   : ""
                             }
                             placeholderTextColor="#a69d8f"
@@ -226,7 +256,7 @@ export default function Perfil() {
 
                         {field.help ? (
                           <Text className="mt-2 text-[11px] leading-4 text-muted-foreground">
-                            {field.help}
+                            {t(`profileFields.${String(field.key)}.help`)}
                           </Text>
                         ) : null}
 
@@ -245,7 +275,7 @@ export default function Perfil() {
                             >
                               <Check size={14} color="#3e3d39" />
                               <Text className="text-xs font-sans-semibold text-primary-foreground">
-                                Guardar
+                                {t("common.save")}
                               </Text>
                             </Pressable>
                             <Pressable
@@ -254,14 +284,14 @@ export default function Perfil() {
                             >
                               <X size={14} color="#6b6256" />
                               <Text className="text-xs font-sans-medium text-muted-foreground">
-                                Cancelar
+                                {t("common.cancel")}
                               </Text>
                             </Pressable>
                           </View>
                         ) : (
                           <Pressable onPress={() => setEditing(null)} className="mt-3">
                             <Text className="text-[11px] font-sans-medium text-muted-foreground">
-                              Cancelar
+                              {t("common.cancel")}
                             </Text>
                           </Pressable>
                         )}
@@ -272,13 +302,15 @@ export default function Perfil() {
                         className="flex-row items-start gap-3 rounded-2xl px-1 py-2 active:opacity-70"
                       >
                         <View className="min-w-0 flex-1">
-                          <Text className="text-xs text-muted-foreground">{field.label}</Text>
+                          <Text className="text-xs text-muted-foreground">
+                            {t(`profileFields.${String(field.key)}.label`)}
+                          </Text>
                           <Text
                             className={`mt-0.5 text-sm ${
                               shown ? "text-foreground" : "text-muted-foreground"
                             }`}
                           >
-                            {shown ?? "Sin responder — toca para añadir"}
+                            {shown ?? t("perfil.empty")}
                           </Text>
                         </View>
                         <Pencil size={14} color="#6b6256" style={{ marginTop: 4 }} />

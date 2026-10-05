@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
+import en from "@/locales/en.json";
+import es from "@/locales/es.json";
+
 import {
+  PROFILE_FIELDS,
+  PROFILE_SECTIONS,
   profilePatchFromTool,
   profileToolResult,
   SENSITIVE_PROFILE_FIELDS,
@@ -170,5 +175,32 @@ describe("sensitiveConfirmCopy", () => {
     expect(copy.title).toBe("¿Guardo estos cambios en tu perfil?");
     expect(copy.lines).toHaveLength(2);
     expect(copy.note).toContain("Ajustes");
+  });
+});
+
+// Ticket 34: la pantalla pinta etiquetas, ayudas y chips desde el catálogo
+// (los chips, por su posición), pero el coach y el servidor siguen leyendo el
+// módulo. Si uno cambia sin el otro, la pantalla y el coach dirían cosas distintas.
+describe("catálogo de «Mis respuestas»", () => {
+  type FieldText = { label: string; help?: string; options?: string[] };
+  const esFields = es.profileFields as Record<string, FieldText>;
+  const enFields = en.profileFields as Record<string, FieldText>;
+
+  test("el español del catálogo es el del módulo", () => {
+    expect(es.perfil.sections).toEqual(PROFILE_SECTIONS.map((s) => s.title));
+    expect(Object.keys(esFields)).toEqual(PROFILE_FIELDS.map((f) => String(f.key)));
+    for (const field of PROFILE_FIELDS) {
+      const text = esFields[String(field.key)];
+      expect(text.label).toBe(field.label);
+      expect(text.help).toBe(field.help);
+      expect(text.options).toEqual(field.options);
+    }
+  });
+
+  test("el inglés tiene los mismos chips, en el mismo orden de posiciones", () => {
+    expect(en.perfil.sections).toHaveLength(PROFILE_SECTIONS.length);
+    for (const field of PROFILE_FIELDS) {
+      expect(enFields[String(field.key)].options?.length).toBe(field.options?.length);
+    }
   });
 });

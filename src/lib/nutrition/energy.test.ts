@@ -228,11 +228,15 @@ describe("una sola cifra: texto de la guía y explicación", () => {
   });
 
   it("la explicación dice de dónde sale la cifra", () => {
-    const text = energyExplanation(energyTargets(woman35)!);
+    const text = energyExplanation(energyTargets(woman35)!, i18n.getFixedT("es"));
     expect(text).toContain("1764");
     expect(text).toContain("basal 1395");
     expect(text).toContain("rutina 90");
     expect(text).toContain("−20 %");
+    const english = energyExplanation(energyTargets(woman35)!, i18n.getFixedT("en"), "en-GB");
+    expect(english).toContain("1,764");
+    expect(english).toContain("routine 90");
+    expect(english).toContain("−20%");
   });
 });
 

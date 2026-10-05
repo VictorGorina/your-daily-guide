@@ -9,7 +9,9 @@
     "retry": "Inténtalo otra vez.",
     "saving": "Guardando…",
     "removeNamed": "Quitar {{what}}",
-    "listAnd": "{{rest}} y {{last}}"
+    "listAnd": "{{rest}} y {{last}}",
+    "saved": "Guardado",
+    "saveError": "No hemos podido guardar"
   },
   "languages": {
     "es": "Español",
@@ -1437,5 +1439,296 @@
     "confirmTitle": "¿Quitar de la familia?",
     "confirmText": "{{name}} dejará de estar en casa.",
     "thisChild": "Este peque"
+  },
+  "ajustes": {
+    "title": "Ajustes",
+    "missing": {
+      "text": "Para que el progreso y los avisos funcionen bien, completa: {{list}}.",
+      "weight": "peso actual",
+      "height": "altura",
+      "morning": "hora del resumen matutino",
+      "evening": "hora del repaso nocturno"
+    },
+    "sections": {
+      "account": "Cuenta",
+      "profile": "Perfil",
+      "coach": "Coach",
+      "notifications": "Notificaciones",
+      "appearance": "Apariencia",
+      "data": "Datos y cuenta"
+    },
+    "home": {
+      "title": "Tu hogar",
+      "desc": "Une cuentas, elige qué comidas compartís y añade a los peques"
+    },
+    "answers": {
+      "title": "Editar mis respuestas",
+      "desc": "Corrige cualquier dato del onboarding en dos toques"
+    },
+    "basics": {
+      "title": "Datos básicos",
+      "name": "Nombre",
+      "weight": "Peso",
+      "height": "Altura",
+      "targetWeight": "Peso objetivo",
+      "weightKg": "Peso (kg)",
+      "heightCm": "Altura (cm)",
+      "targetWeightKg": "Peso objetivo (kg)",
+      "weightHelp": "Necesario para calcular tu progreso.",
+      "weightHelpShort": "Necesario para tu progreso.",
+      "heightHelp": "Ajusta las cantidades de tu guía.",
+      "targetHelp": "El peso al que quieres llegar y mantenerte.",
+      "targetHelpAuto": "El peso al que quieres llegar. La dirección se calcula sola."
+    },
+    "errors": {
+      "required": "Este dato es necesario para tu progreso",
+      "weight": "El peso debe estar entre 25 y 350 kg",
+      "height": "La altura debe estar entre 100 y 250 cm",
+      "targetWeight": "El peso objetivo debe estar entre 30 y 300 kg",
+      "time": "Indica una hora válida (HH:MM)"
+    },
+    "tone": {
+      "title": "Tono",
+      "relajado": "relajado",
+      "neutro": "neutro",
+      "exigente": "exigente"
+    },
+    "reminders": {
+      "title": "Recordatorios",
+      "morning": "Mañana",
+      "evening": "Noche",
+      "morningHelp": "Hora del resumen matutino.",
+      "eveningHelp": "Hora del repaso nocturno."
+    },
+    "push": {
+      "title": "Avisos push",
+      "desc": "Resumen matutino y aviso del repaso nocturno, a las horas de arriba.",
+      "unsupported": "Este navegador no soporta notificaciones push.",
+      "iosHint": "En iPhone: añade Peppers a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) para poder recibir avisos.",
+      "toggleError": "No hemos podido cambiar las notificaciones"
+    },
+    "theme": {
+      "title": "Tema",
+      "desc": "El naranja de la marca es el mismo en los dos — solo cambia el fondo.",
+      "claro": "Claro",
+      "oscuro": "Oscuro"
+    },
+    "history": {
+      "title": "Tu historial",
+      "desc": "Descarga en un archivo CSV todo lo que has registrado: comidas, picoteo, deporte y peso. Se abre con Excel, Numbers o Google Sheets.",
+      "download": "Descargar historial",
+      "preparing": "Preparando…",
+      "empty": "Todavía no hay nada que exportar",
+      "error": "No hemos podido preparar tu historial",
+      "emptyBody": "Todavía no hay nada que exportar.",
+      "errorBody": "No hemos podido preparar tu historial.",
+      "nextVersion": "Estará disponible en la próxima versión de la app."
+    },
+    "signOut": {
+      "button": "Cerrar sesión",
+      "title": "¿Cerrar sesión?",
+      "desc": "Tendrás que volver a entrar para retomar tu plan."
+    },
+    "deleteAccount": {
+      "button": "Eliminar cuenta",
+      "title": "¿Eliminar tu cuenta?",
+      "desc": "Se borrará tu perfil, tus guías, tu plan y tu progreso. Es permanente y no se puede deshacer.",
+      "confirm": "Sí, eliminar",
+      "deleting": "Eliminando...",
+      "done": "Tu cuenta se ha eliminado",
+      "error": "No hemos podido eliminar tu cuenta"
+    }
+  },
+  "perfil": {
+    "title": "Mis respuestas",
+    "intro": "Toca cualquier respuesta para corregirla. No hace falta repetir el onboarding.",
+    "target": {
+      "title": "Tu objetivo diario",
+      "note": "Es una estimación: entre personas puede variar un ±10 %. Se recalcula sola cuando cambias tu peso, tu día a día, tu rutina o tu objetivo."
+    },
+    "empty": "Sin responder — toca para añadir",
+    "age_one": "{{count}} años",
+    "age_other": "{{count}} años",
+    "datePlaceholder": "AAAA-MM-DD",
+    "errors": {
+      "range": "Indica un valor entre {{min}} y {{max}}",
+      "time": "Indica una hora válida (HH:MM)",
+      "date": "Indica una fecha válida",
+      "dateFormat": "Indica una fecha válida (AAAA-MM-DD)",
+      "dob": "Indica una fecha de nacimiento real"
+    },
+    "sections": [
+      "Sobre ti",
+      "Tu día a día",
+      "Cómo comes hoy",
+      "Hacia dónde vamos",
+      "Cómo te acompaño"
+    ]
+  },
+  "profileFields": {
+    "display_name": {
+      "label": "Nombre"
+    },
+    "date_of_birth": {
+      "label": "Fecha de nacimiento"
+    },
+    "sex": {
+      "label": "Sexo",
+      "options": ["mujer", "hombre", "otro"]
+    },
+    "height_cm": {
+      "label": "Altura"
+    },
+    "current_weight_kg": {
+      "label": "Peso actual"
+    },
+    "medical_conditions": {
+      "label": "Condiciones médicas"
+    },
+    "medications": {
+      "label": "Medicación"
+    },
+    "supplements": {
+      "label": "Suplementos",
+      "help": "proteína, creatina, vitaminas..."
+    },
+    "smoking": {
+      "label": "Tabaco",
+      "options": ["no", "ocasional", "sí"]
+    },
+    "pregnancy_status": {
+      "label": "Embarazo o lactancia",
+      "options": ["no", "embarazada", "lactancia", "prefiero no decirlo"]
+    },
+    "menstrual_cycle": {
+      "label": "Ciclo menstrual",
+      "help": "si te afecta al apetito, energía o antojos"
+    },
+    "activity_level": {
+      "label": "Nivel de actividad",
+      "options": ["sedentario", "ligero", "moderado", "alto"]
+    },
+    "daily_activity": {
+      "label": "Tu día a día (sin contar el deporte)",
+      "help": "Con esto y tu rutina calculo tu gasto de energía de cada día.",
+      "options": [
+        "Sentado (oficina, estudiar)",
+        "De pie (tienda, docencia, casa con niños)",
+        "Físico (hostelería, reparto)",
+        "Muy físico (obra, campo, almacén)"
+      ]
+    },
+    "training": {
+      "label": "Tu rutina de entrenamiento",
+      "help": "sesiones por semana × minutos · actividad · intensidad. Ej.: 3 × 45 min · gimnasio · normal (o «ninguna»)"
+    },
+    "exercise": {
+      "label": "Ejercicio que haces"
+    },
+    "strength_training_experience": {
+      "label": "Experiencia entrenando fuerza",
+      "options": ["ninguna", "menos de 1 año", "1-3 años", "más de 3 años"]
+    },
+    "life_context": {
+      "label": "Cómo es tu vida ahora"
+    },
+    "alcohol": {
+      "label": "Alcohol",
+      "options": ["nunca", "ocasional", "frecuente"]
+    },
+    "meals_per_day": {
+      "label": "Comidas al día"
+    },
+    "meals_to_plan": {
+      "label": "Comidas que quieres que te planifique",
+      "help": "desayuno, comida, cena, merienda"
+    },
+    "meal_schedule": {
+      "label": "Dónde y cuándo comes"
+    },
+    "diet_pattern": {
+      "label": "Tipo de alimentación"
+    },
+    "restrictions": {
+      "label": "Alergias o restricciones"
+    },
+    "allergy_severity": {
+      "label": "Gravedad de tus alergias",
+      "help": "cuáles son graves y cuáles llevaderas"
+    },
+    "non_negotiable_foods": {
+      "label": "Comidas que no quieres dejar"
+    },
+    "disliked_foods": {
+      "label": "Ingredientes que no te gustan"
+    },
+    "cuisine_preference": {
+      "label": "Cocina que más te gusta"
+    },
+    "portions_per_meal": {
+      "label": "Raciones por comida",
+      "help": "puede variar entre semana y finde"
+    },
+    "kitchen_equipment": {
+      "label": "Utensilios de cocina"
+    },
+    "cooking_skill": {
+      "label": "Nivel cocinando",
+      "options": ["básico", "cómodo", "avanzado"]
+    },
+    "food_relationship": {
+      "label": "Tu relación con la comida"
+    },
+    "ed_history": {
+      "label": "Relación difícil con la comida",
+      "options": ["no", "activa", "pasada", "prefiero no decirlo"]
+    },
+    "budget_month_eur": {
+      "label": "Presupuesto mensual"
+    },
+    "target_weight_kg": {
+      "label": "Peso objetivo",
+      "help": "El peso al que quieres llegar y mantenerte. La dirección (perder o ganar) se calcula sola."
+    },
+    "goal_target_date": {
+      "label": "Fecha orientativa"
+    },
+    "past_struggles": {
+      "label": "Qué te ha costado antes"
+    },
+    "tone": {
+      "label": "Tono del coach",
+      "options": ["relajado", "neutro", "exigente"]
+    },
+    "coach_scope": {
+      "label": "En qué te acompaño",
+      "options": ["comida", "comida y hábitos"]
+    },
+    "nutrition_numbers": {
+      "label": "Ver calorías y macros",
+      "help": "Puedes cambiarlo cuando quieras. Si eliges «No», la app no te enseña calorías, macros ni objetivos en ninguna pantalla, ni el coach te habla de cifras. Tus platos se siguen calculando igual y las recetas mantienen sus cantidades.",
+      "options": ["Sí, enséñamelas", "No, prefiero no verlas"]
+    },
+    "morning_time": {
+      "label": "Resumen de la mañana"
+    },
+    "evening_time": {
+      "label": "Repaso de la noche"
+    }
+  },
+  "energyExplain": {
+    "text": "Gasto estimado: {{tdee}} kcal (basal {{bmr}} × actividad {{pal}}{{routine}}). Objetivo: {{kcal}} kcal {{goal}} y {{protein}} g de proteína.",
+    "routine": " + rutina {{kcal}}",
+    "maintain": "para mantenerte",
+    "pct": "{{sign}}{{pct}} %",
+    "stage": {
+      "embarazo": "embarazo",
+      "lactancia": "lactancia"
+    }
+  },
+  "portionExplain": {
+    "text": "Tus raciones: {{factor}} de la ración de referencia ({{why}}).",
+    "byTarget": "según tu objetivo",
+    "missingData": "a falta de tu altura, peso o edad"
   }
 }
