@@ -201,7 +201,9 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
 ## Datos, seguridad y migraciones
 
 - [ ] Cambio de esquema → migración nueva en `supabase/migrations/` con el prefijo de
-      timestamp del formato existente. Se aplica a mano pegándola en el SQL Editor.
+      timestamp del formato existente. Se aplica con la CLI (`supabase db push` tras
+      `--dry-run`) antes de desplegar el código que la usa, y en el mismo commit va
+      `bun run db:types`. Flujo en [verification.md](verification.md).
 - [ ] Políticas RLS consideradas para cualquier tabla nueva o columna sensible.
 - [ ] Toda lectura de `monthly_plans` que espere **una sola fila propia** filtra por
       `.eq("user_id", …)` explícitamente, no se apoya solo en la RLS. Desde la feature
@@ -216,9 +218,12 @@ también la sección "Familia — hogar compartido" de [AGENTS.md](../../AGENTS.
 
 ## Onboarding y coach
 
-- [ ] El onboarding se queda largo (~25 preguntas, una vez). No propongas recortarlo: la
-      fricción se arregla con edición posterior (`perfil.tsx`, herramienta `actualizar_perfil`
-      del coach) y con movimiento, no con menos preguntas.
+- [ ] El onboarding se recorta pregunta a pregunta (decisión del 2026-09-07, que sustituye a
+      "se queda largo"): una pregunta se queda si su respuesta cambia el plan, la compra o el
+      tono del coach. Lo que no se propone es una reducción en bloque a un número fijo. La
+      edición posterior (`perfil.tsx`, herramienta `actualizar_perfil` del coach) sigue siendo
+      la otra palanca contra la fricción. Mover o quitar una pregunta obliga a subir
+      `DRAFT_STORAGE_KEY` (ver «Guion del onboarding» en CLAUDE.md).
 - [ ] `profiles.tone` (relajado/neutro/exigente) afecta a **tres** superficies desde un solo
       campo: copy y frecuencia del push, repaso nocturno (`NightlyReviewSheet`) y prompt del
       coach (`toneLine`). Si tocas una, revisa las tres.

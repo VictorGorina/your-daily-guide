@@ -179,9 +179,15 @@ Dos familias que no se mezclan nunca en el mismo hueco.
 - **Iconos de sistema · Lucide** — trazo de 2 (2.2 en la cruz, 2.6 en el check para que gane peso
   sobre color). Tamaños 14–17px según el hueco. Sin relleno, siempre `currentColor` o topo. Cero
   emoji en toda la app.
-- **Dibujos de ingrediente · propios** — 68 SVGs en `viewBox 0 0 40 40`, trazo marrón cálido
-  `#8B7B65` de 1.5–1.7, rellenos suaves y silueta orgánica dibujada a mano. Se muestran a 28px
-  dentro del círculo de 40px, como `background-image` centrado y contenido.
+- **Iconos de categoría de comida · también Lucide** — las filas de comida de Hoy y el detalle de
+  un día llevan el glifo de su categoría (`DishCategoryIcon` en `food-category-bg.tsx`, web y
+  móvil: zanahoria, pez, trigo…), el mismo de los encabezados de Ingredientes, teñido con el
+  acento de la categoría. Un plato sin categoría no lleva icono de relleno.
+- **Dibujos de ingrediente · propios, retirados de las filas de comida** — 68 SVGs en
+  `viewBox 0 0 40 40`, trazo marrón cálido `#8B7B65` de 1.5–1.7, rellenos suaves y silueta
+  orgánica dibujada a mano (`public/food/`, `dishAsset`). El usuario los descartó en Hoy el
+  2026-08-31; en la web `DishImage` ya no lo pinta ninguna pantalla. No los devuelvas a una fila
+  de comida.
 
 ## 7. Movimiento
 

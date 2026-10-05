@@ -69,11 +69,17 @@ const RATE_LIMITS = {
  *
  * Una persona que usa mucho la app gastaba ~0,85 $/mes solo con `COACH_MODEL`
  * (medido el 2026-09-15: un mensaje al coach ≈ 0,0014 $, la guía ≈ 0,0013 $, el
- * plan del mes ≈ 0,01 $). Desde que `PLAN_MODEL`/`DISH_MODEL` (Gemini 2.5 Pro,
- * ~4x el precio de Flash) llevan la generación/reajuste del plan y la
- * descomposición de platos (issue "reorganizar IAs", 2026-09-19), el gasto
- * intensivo proyectado sube pero se queda bien por debajo de este tope — el
- * chat, con más volumen que nada, se queda en Flash sin cambios.
+ * plan del mes ≈ 0,01 $). Desde que `PLAN_MODEL` (Gemini 2.5 Pro) y `DISH_MODEL`
+ * (GPT-5), ~4x el precio de Flash, llevan la generación/reajuste del plan y la
+ * descomposición de platos (issue "reorganizar IAs", 2026-09-19), el gasto sube;
+ * el chat, con más volumen que nada, se queda en Flash sin cambios.
+ *
+ * Estas cifras son un FRENO contra el abuso, no lo que se espera que cueste una
+ * persona. El objetivo de producto era ~1 €/mes para un uso intensivo y no se
+ * ha vuelto a medir con los modelos actuales: el único dato real (2026-10-05)
+ * es el de una sola cuenta, la de desarrollo, con 4,34 $ en septiembre (16 días
+ * de uso, muchas pruebas) — cerca del tope mensual y muy por encima del
+ * objetivo. Falta medir un mes de uso normal antes de dar por bueno uno u otro.
  *
  * El día y el mes van en UTC (ver `ai-spend.ts`). `Infinity` desactiva un tope.
  */

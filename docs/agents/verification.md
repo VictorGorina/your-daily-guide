@@ -14,8 +14,10 @@ bun run typecheck:test          # tsc con los *.test.ts dentro (ver docs/agents/
 bun test                        # suite de lógica pura (ver docs/agents/testing.md)
 ```
 
-Las cuatro corren en segundos y son las mismas que ejecuta el CI en cada PR
-([.github/workflows/ci.yml](../../.github/workflows/ci.yml)). Si tocas lógica de plan,
+Las cuatro corren en segundos y el CI las ejecuta en cada PR
+([.github/workflows/ci.yml](../../.github/workflows/ci.yml)), junto con `bun audit`, los tests en
+otras dos zonas horarias, `check-shared-drift.sh`, el build y `check-client-bundle.sh`, más un
+trabajo aparte para `mobile/`. Si tocas lógica de plan,
 compra, fechas o parsers, **añade o actualiza el test** antes de cerrar — es la única
 defensa contra el bucle "arreglo un bug y salen dos".
 
@@ -101,11 +103,21 @@ nueva se añade a esa lista. Para comprobar un cambio, suele bastar con mirar lo
 escriben, enseñan la fila y piden `s/N` antes de hacerlo; sin terminal interactiva se niegan
 salvo con `--yes`.
 
-Si en algún momento se quiere consultar la BD desde el chat sin salir a la terminal, el MCP
-oficial de Supabase (`@supabase/mcp-server-supabase --read-only --project-ref <id>`) en un
-`.mcp.json` lo hace — necesita un _personal access token_ de la cuenta de Supabase, no la
-service-role key. No está montado a propósito: el script cubre el caso sin credenciales
-nuevas.
+Para lo que PostgREST no da (el esquema, las políticas, un agregado, el estado de `pg_cron` o
+de `net._http_response`) está la CLI, que ejecuta SQL de verdad en el proyecto enlazado:
+
+```sh
+supabase db query --linked "select day, sum(cost_usd) from public.ai_spend group by day"
+```
+
+Va por la Management API con la sesión de `supabase login`: entra como administrador, **sin RLS
+y sin enmascarar nada**, y puede escribir. Por eso tiene tres reglas: solo `select` salvo que la
+persona pida otra cosa para ese caso; para mirar filas de personas se sigue usando `bun run db`,
+que tapa lo sensible (lo que imprima `db query` acaba en la transcripción); y un cambio de
+esquema va siempre como migración, nunca como SQL suelto.
+
+El MCP oficial de Supabase (`@supabase/mcp-server-supabase --read-only`) sigue sin montarse: la
+CLI ya cubre el caso.
 
 ## 4. App móvil (`mobile/`)
 

@@ -53,9 +53,16 @@ antes de tocar algo ahí.
 ## Arquitectura de la web
 
 **Stack:** TanStack Start (React con SSR) + TypeScript + Tailwind v4 + Supabase + OpenRouter
-(`google/gemini-2.5-flash` vía `@openrouter/ai-sdk-provider`, ver
-[src/lib/ai-provider.server.ts](src/lib/ai-provider.server.ts)). Se despliega en Vercel (preset
-`vercel` de Nitro, configurado en [vite.config.ts](vite.config.ts)).
+(vía `@openrouter/ai-sdk-provider`). Se despliega en Vercel (preset `vercel` de Nitro, configurado
+en [vite.config.ts](vite.config.ts)).
+
+**Modelos — uno por tarea**, cada uno una constante de
+[src/lib/ai-provider.server.ts](src/lib/ai-provider.server.ts) con su porqué: `COACH_MODEL`
+(`google/gemini-2.5-flash`: el coach y todo lo que no pida otro), `PLAN_MODEL`
+(`google/gemini-2.5-pro`: qué hay en el plan), `DISH_MODEL` (`openai/gpt-5`: `decomposeDishes`,
+con `DISH_FALLBACK_MODEL` de otra familia) y `DISAMBIGUATION_MODEL`
+(`google/gemini-2.5-flash-lite`). Cambiar uno obliga a cambiar su precio en
+[src/lib/ai-spend.ts](src/lib/ai-spend.ts).
 
 **Rutas:** enrutado por archivos en `src/routes/`, según las convenciones de TanStack Start (no
 las de Next.js/Remix) — están explicadas en [src/routes/README.md](src/routes/README.md).
@@ -91,7 +98,8 @@ y, vía cabecera `Authorization`, también las peticiones de `/api/v1/*`). Las m
 en `supabase/migrations/` y se aplican con la CLI (`supabase db push`, siempre tras `--dry-run`),
 no pegándolas en el panel; las que aún no tocan, en `supabase/pending/`. Después, `bun run
 db:types` regenera `types.ts` y su copia del móvil (`mobile/lib/database.types.ts`): no se editan
-a mano. Flujo en `docs/agents/verification.md`.
+a mano. Flujo en `docs/agents/verification.md`, que explica también cómo mirar la base de datos
+(`bun run db`, enmascarado, o `supabase db query --linked`, SQL sin enmascarar contra producción).
 
 **Plan de comidas — dos caminos deliberadamente separados** (detalle en «Platos del plan: cambio
 a mano vs. recolocación» de AGENTS.md). `setPlanMeal` cambia un plato tal cual lo pide la persona,
@@ -361,6 +369,11 @@ la descomposición de platos va con `createAiProvider(key, userId, { capScope: "
 `generateDailyGuide` entra con `enforceUserRateLimit(…, "guide", "month")`: el tope DIARIO no las
 corta (el mensual sí), porque dejar un plato sin calcular rompe D13 y cuesta céntimos. Siguen
 sumando al gasto y a las cuotas por hora; el texto de la guía sí respeta el tope diario.
+**Disyuntor global** (ticket 14): con `AI_GLOBAL_DAILY_USD` definida, `enforceGlobalSpend` pausa
+la IA para todos cuando la suma del día (`ai_spend_total_today`) la alcanza, sin excepción para
+los platos; sin la variable está apagado. **Lo que no pasa por aquí:** `eval:recipes` y
+`eval:plan-lite` llaman sin `userId`, así que su gasto no se apunta ni lo frena ningún tope,
+aunque usan la misma `OPENROUTER_API_KEY` y el mismo crédito que la app.
 
 **Presupuesto de tiempo por petición** ([src/lib/deadline.ts](src/lib/deadline.ts), ticket 22
 de la auditoría). Toda la app es UNA función de Vercel de 300 s, y la cadena de platos, el plan

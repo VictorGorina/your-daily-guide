@@ -46,8 +46,9 @@ npx expo run:ios
 ### Base de datos
 
 Supabase (Postgres con RLS y Auth). Las migraciones están en
-[`supabase/migrations/`](supabase/migrations/) y de momento se aplican a mano en el SQL Editor
-del proyecto.
+[`supabase/migrations/`](supabase/migrations/) y se aplican con la CLI de Supabase
+(`supabase db push`, siempre tras `--dry-run`); después, `bun run db:types` regenera los tipos de
+las dos apps. El flujo completo está en [docs/agents/verification.md](docs/agents/verification.md).
 
 ## Documentación
 
@@ -60,5 +61,6 @@ del proyecto.
 - [TanStack Start](https://tanstack.com/start) (React 19 con SSR) y TypeScript
 - Tailwind CSS v4 y shadcn/ui
 - [Supabase](https://supabase.com)
-- [OpenRouter](https://openrouter.ai) (Gemini 2.5 Flash para el coach)
+- [OpenRouter](https://openrouter.ai) (Gemini 2.5 Flash para el coach, Gemini 2.5 Pro para el plan
+  y GPT-5 para descomponer los platos)
 - Desplegada en [Vercel](https://vercel.com)

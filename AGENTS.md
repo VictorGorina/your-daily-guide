@@ -5,12 +5,18 @@ La IA (chat del coach, guía diaria, plan mensual) usa OpenRouter (modelo `googl
 por defecto) a través de `@openrouter/ai-sdk-provider`
 (ver [src/lib/ai-provider.server.ts](src/lib/ai-provider.server.ts)); requiere `OPENROUTER_API_KEY` en `.env`.
 
-El modelo se queda deliberadamente en la gama barata: cuando la calidad de una salida flojea, la
+El modelo se queda en la gama barata por defecto: cuando la calidad de una salida flojea, la
 respuesta es **sacar el trabajo verificable del modelo hacia código**, no subir de modelo. Primer
 ejemplo: las **kcal y macros** ya no las estima el modelo — `src/lib/nutrition/` descompone cada
 plato en ingredientes (una llamada) y los suma contra una tabla de composición estática. Ver
 "Macros y kcal — receta canónica, no del modelo" en CLAUDE.md, `.scratch/nutricion-determinista/`
 y `.scratch/precision-nutricional/`.
+
+Hay dos excepciones medidas, fuera del chat y de poco volumen (decisión del 2026-09-19): el plan
+usa `PLAN_MODEL` (`google/gemini-2.5-pro`) y la descomposición de platos `DISH_MODEL`
+(`openai/gpt-5`), unas cuatro veces más caros que Flash. El coach sigue en `COACH_MODEL`. Cada
+constante lleva su porqué y su comparación en `ai-provider.server.ts`; subir otro sitio de modelo
+pide la misma prueba y cuadrar con `AI_SPEND_CAPS`.
 
 ## API HTTP (`/api/v1/*`)
 
@@ -255,7 +261,7 @@ El asentamiento no cambia nunca la compra, hoy ni el pasado. `composeDayForUser`
 `kids` si el conjunto no cambia, para que congelar las compartidas no reescriba días pasados solo
 por reordenarlo. El registro guiado del chat (picoteo y deporte) y la herramienta
 `registrar_deporte` acaban en este mismo asentamiento (`scheduleDaySettle`), nunca en
-`ajustar_plan_mensual`: ver "El chat tampoco compensa por origen" en CLAUDE.md.
+`ajustar_plan_mensual`: ver "El chat tampoco compensa por origen" más abajo.
 
 ## Balance del día (`balance-del-dia`)
 
@@ -464,8 +470,7 @@ ingredientes; `triturados` lleva SIEMPRE su propio plato en `PlanDay.kids` cada 
 en casa (puré sin sal, ración pequeña, sus ingredientes al `weekQty`). El prompt de
 `generateMonthlyPlan` y `describeRoster` distinguen las dos categorías. UI: selector "¿Qué
 come?" en `child-sheet.tsx` (oculta Apetito si no es `mesa`), y Familia agrupa a los bebés
-bajo "Bebés · aún no comen de la mesa". `selectWithOptionalColumns`
-([household.server.ts](src/lib/household.server.ts)) tolera la columna sin migrar.
+bajo "Bebés · aún no comen de la mesa".
 
 **El coach conoce la mesa.** `householdContext` (roster con raciones vía `describeRoster`,
 slots compartidos derivados de los horarios, niños con alergias, quién planifica) alimenta `generateMonthlyPlan`,
@@ -581,7 +586,7 @@ un cambio suele romper sin querer:
   `profiles.training`, su parte normal ya va en el objetivo y solo `kcal` (lo que desvía el día)
   lleva el exceso. Un perfil sin `daily_activity` no tiene rutina separada (todo extra, como antes).
   La hoja guiada del chat usa la misma cifra y compensa igual que Hoy, con `settleDay` (ver "El
-  chat tampoco compensa por origen" en CLAUDE.md).
+  chat tampoco compensa por origen" en «Balance del día»).
 - **Reajuste medido (18, puente hasta el 12)**: `reflowMeals({ measure: true })` mide con las
   recetas cuánto compensan de verdad los platos cambiados (`absorbedKcal`); por debajo del 50 %
   insiste UNA vez con los números. `DayAdjustment.absorbedKcal` y la tarjeta lo dicen
@@ -596,8 +601,9 @@ un cambio suele romper sin querer:
 - **USDA (22, `usda.server.ts`)**: `USDA_FDC_API_KEY` en `.env` y en Vercel (clave gratuita de api.data.gov; sin ella
   no se busca). Lo encontrado va a `foods_extra` y se registra como una fila más
   (`registerExtraFoods`, `ensureExtraFoods`). `bun run foods:review` para pasarlas a la tabla.
-- **Migraciones manuales**: `20260925140000_dish_recipes.sql` y `20260925150000_foods_extra.sql`
-  (SQL Editor). Hasta aplicarlas no hay caché global ni filas de USDA persistentes.
+- **Migraciones**: `dish_recipes` y `foods_extra` (`20260925140000` y `20260925150000`) ya están
+  aplicadas en producción. Una tabla nueva de esta parte llega como las demás, con la CLI (ver
+  `docs/agents/verification.md`).
 - **`foods.data.ts` no entra en el bundle del navegador.** El cliente solo importa módulos de
   `src/lib/nutrition/` que no la cargan (`energy`, `portion`; `nutrition.ts` y `recipe.ts` sí la
   cargan), y un lint prohíbe importarla fuera de su carpeta, de un `*.server.ts` o de un test.
