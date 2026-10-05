@@ -1,4 +1,5 @@
 import { Apple, Bean, Beef, Carrot, Drumstick, Fish, Milk, Wheat } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { classifyDish, dishAsset, FOOD_CATEGORIES, type FoodCategory } from "@/lib/food-categories";
 
@@ -102,6 +103,7 @@ export function DishCategoryIcon({
  * el color de categoría es el propio dato, un punto de su color puro basta.
  */
 export function FoodCategoryBadge({ dish }: { dish: string }) {
+  const { t } = useTranslation();
   const cat = classifyDish(dish);
   const entry = FOOD_CATEGORIES[cat];
   if (cat === "otro") return null;
@@ -120,7 +122,7 @@ export function FoodCategoryBadge({ dish }: { dish: string }) {
         className="h-1.5 w-1.5 shrink-0 rounded-full"
         style={{ backgroundColor: entry.accent }}
       />
-      {entry.label}
+      {t(`foodCategory.${cat}`)}
     </span>
   );
 }

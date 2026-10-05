@@ -14,6 +14,7 @@
 import { ageFromDOB } from "@/lib/age";
 import { deriveGoalType, normalizeGoalType } from "@/lib/goal";
 import { effectiveMealSlots, type MealSlot } from "@/lib/plan-shared";
+import type { Translate } from "@/lib/week-nav";
 
 import { parseTraining, routineDailyKcal, type TrainingRoutine } from "./exercise-energy";
 
@@ -271,15 +272,27 @@ const round50 = (n: number) => Math.round(n / 50) * 50;
  * El texto de "calorías del día" de la guía, escrito en código a partir del
  * objetivo (antes lo escribía el modelo y convivía con otra cifra en la misma
  * pantalla, H13): el objetivo ±7 %, redondeado a 50. Sin objetivo o sin ver
- * cifras, un texto sin números.
+ * cifras, un texto sin números. La pantalla pasa su traductor (`calories.*`)
+ * y la etiqueta `Intl` de las cifras; el servidor no, y escribe el español que
+ * guarda en la guía. Un test comprueba que los dos textos en español coinciden.
  */
-export function caloriesText(targets: EnergyTargets | null, showNumbers: boolean): string {
-  if (!showNumbers) return "Platos completos y a tu ritmo, sin mirar números.";
-  if (!targets) return "Rango orientativo según tu día, sin obsesión por la cifra.";
-  const low = round50(targets.kcal * 0.93);
-  const high = round50(targets.kcal * 1.07);
-  const fmt = (n: number) => n.toLocaleString("es-ES");
-  return `entre ${fmt(low)} y ${fmt(high)} kcal`;
+export function caloriesText(
+  targets: EnergyTargets | null,
+  showNumbers: boolean,
+  t?: Translate,
+  numberLocale = "es-ES",
+): string {
+  if (!showNumbers) {
+    return t ? t("calories.noNumbers") : "Platos completos y a tu ritmo, sin mirar números.";
+  }
+  if (!targets) {
+    return t
+      ? t("calories.noTarget")
+      : "Rango orientativo según tu día, sin obsesión por la cifra.";
+  }
+  const low = round50(targets.kcal * 0.93).toLocaleString(numberLocale);
+  const high = round50(targets.kcal * 1.07).toLocaleString(numberLocale);
+  return t ? t("calories.range", { low, high }) : `entre ${low} y ${high} kcal`;
 }
 
 /** Forma de `MacroEstimate` del objetivo, para la barra de macros y el semáforo. */

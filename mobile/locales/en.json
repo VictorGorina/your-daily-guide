@@ -851,5 +851,151 @@
     "macrosTitle": "Macros for the day",
     "eatenThatDay": "~{{kcal}} kcal from what you ate that day",
     "noMacros": "There is no macro estimate for this day."
+  },
+  "quotes": [
+    {
+      "text": "He who has a why to live can bear almost any how.",
+      "author": "Nietzsche"
+    },
+    {
+      "text": "There is no favourable wind for the one who does not know where they are going.",
+      "author": "Seneca"
+    },
+    {
+      "text": "Chance favours the prepared mind.",
+      "author": "Louis Pasteur"
+    },
+    {
+      "text": "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+      "author": "Winston Churchill"
+    },
+    {
+      "text": "Be the change you wish to see in the world.",
+      "author": "Mahatma Gandhi"
+    },
+    {
+      "text": "Life is what happens while you are busy making other plans.",
+      "author": "John Lennon"
+    },
+    {
+      "text": "I know only that I know nothing.",
+      "author": "Socrates"
+    },
+    {
+      "text": "The man who moves a mountain begins by carrying away small stones.",
+      "author": "Confucius"
+    },
+    {
+      "text": "Discipline is the bridge between goals and accomplishment.",
+      "author": "Jim Rohn"
+    },
+    {
+      "text": "It is not the strongest that survives, but the one best able to adapt to change.",
+      "author": "Charles Darwin"
+    },
+    {
+      "text": "Everything you can imagine is real.",
+      "author": "Pablo Picasso"
+    },
+    {
+      "text": "Imagination is more important than knowledge.",
+      "author": "Albert Einstein"
+    },
+    {
+      "text": "None of us, acting alone, can achieve success.",
+      "author": "Nelson Mandela"
+    },
+    {
+      "text": "Failure is simply the opportunity to begin again, this time more intelligently.",
+      "author": "Henry Ford"
+    },
+    {
+      "text": "There is no path to peace; peace is the path.",
+      "author": "Mahatma Gandhi"
+    },
+    {
+      "text": "Great things never come from comfort.",
+      "author": "Marcus Aurelius"
+    },
+    {
+      "text": "A river cuts through rock not because of its power, but because of its persistence.",
+      "author": "Jim Watkins"
+    },
+    {
+      "text": "Rise more times than you fall.",
+      "author": "Confucius"
+    },
+    {
+      "text": "Nothing in life is to be feared, it is only to be understood.",
+      "author": "Marie Curie"
+    },
+    {
+      "text": "Nothing ventured, nothing gained.",
+      "author": "Miguel de Cervantes"
+    },
+    {
+      "text": "Diligence is the mother of good fortune.",
+      "author": "Miguel de Cervantes"
+    },
+    {
+      "text": "There is nothing permanent except change.",
+      "author": "Heraclitus"
+    },
+    {
+      "text": "The first step to achieving something is deciding that you can.",
+      "author": "Nelson Mandela"
+    },
+    {
+      "text": "Take care of your body. It's the only place you have to live.",
+      "author": "Jim Rohn"
+    },
+    {
+      "text": "Knowledge speaks, but wisdom listens.",
+      "author": "Jimi Hendrix"
+    },
+    {
+      "text": "Start where you are, use what you have, do what you can.",
+      "author": "Arthur Ashe"
+    },
+    {
+      "text": "Greatness is measured not by what you have, but by what you overcome.",
+      "author": "Booker T. Washington"
+    },
+    {
+      "text": "Motion is proved by walking.",
+      "author": "Diogenes"
+    },
+    {
+      "text": "Don't count the days, make the days count.",
+      "author": "Muhammad Ali"
+    },
+    {
+      "text": "Patience is bitter, but its fruit is sweet.",
+      "author": "Aristotle"
+    },
+    {
+      "text": "He who has health has hope, and he who has hope has everything.",
+      "author": "Thomas Carlyle"
+    }
+  ],
+  "foodCategory": {
+    "verdura": "Vegetables",
+    "pescado": "Fish",
+    "carne": "Meat",
+    "pollo": "Poultry",
+    "pasta": "Grains",
+    "fruta": "Fruit",
+    "lacteo": "Dairy",
+    "legumbre": "Pulses",
+    "otro": "Other"
+  },
+  "food": {
+    "blocked": "That isn't food. Write a real dish.",
+    "offList": "Not in your shopping: {{names}}"
+  },
+  "calories": {
+    "noNumbers": "Complete dishes at your own pace, without looking at numbers.",
+    "noTarget": "A rough range for your day, with no fixation on the figure.",
+    "range": "between {{low}} and {{high}} kcal"
   }
 }

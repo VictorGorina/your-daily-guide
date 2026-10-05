@@ -1,4 +1,4 @@
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
+import { isCleanFood } from "../lib/content-guard";
 import { X } from "lucide-react-native";
 import type { TFunction } from "i18next";
 import { useState } from "react";
@@ -187,7 +187,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       return;
     }
     if (!isCleanFood(text.trim())) {
-      setError(BLOCKED_FOOD_MESSAGE);
+      setError(t("food.blocked"));
       return;
     }
     setBusy("estimate");
@@ -197,7 +197,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       // No es comida: aquí NO se ofrece ponerlo a mano (ese respaldo era la
       // forma de colar una broma saltándose el cálculo).
       if (res.notFood) {
-        setError(BLOCKED_FOOD_MESSAGE);
+        setError(t("food.blocked"));
         return;
       }
       setEstimate(res);

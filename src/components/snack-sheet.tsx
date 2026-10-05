@@ -24,7 +24,7 @@ import {
   type DaySnacks,
   type SnackEntry,
 } from "@/lib/snacks";
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
+import { isCleanFood } from "@/lib/content-guard";
 import { estimateSnack, logSnack, type SnackEstimate } from "@/lib/snacks.functions";
 
 /**
@@ -156,7 +156,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       return;
     }
     if (!isCleanFood(text.trim())) {
-      setError(BLOCKED_FOOD_MESSAGE);
+      setError(t("food.blocked"));
       return;
     }
     setBusy("estimate");
@@ -167,7 +167,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
       // ponerlo a mano, porque ese respaldo era la forma de colar una broma
       // saltándose el cálculo.
       if (res.notFood) {
-        setError(BLOCKED_FOOD_MESSAGE);
+        setError(t("food.blocked"));
         return;
       }
       setEstimate(res);

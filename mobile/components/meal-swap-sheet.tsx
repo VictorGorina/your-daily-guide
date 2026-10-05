@@ -1,4 +1,4 @@
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
+import { isCleanFood } from "../lib/content-guard";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
@@ -89,7 +89,7 @@ export function MealSwapSheet({
       return;
     }
     if (!isCleanFood(desc)) {
-      setError(BLOCKED_FOOD_MESSAGE);
+      setError(t("food.blocked"));
       return;
     }
     void send(desc);

@@ -1150,7 +1150,7 @@ function PlanMonthCalendar({
             </Text>
             <View className="gap-2">
               {meals.map((meal) => {
-                const note = offListNote(meal.off);
+                const note = offListNote(meal.off, t);
                 return (
                   <View key={meal.slot} className="rounded-xl bg-secondary p-3">
                     <Text className="text-xs font-sans-semibold text-primary-ink">
@@ -1166,7 +1166,7 @@ function PlanMonthCalendar({
                       <View key={`${k.name}-${k.dish}`} className="mt-1.5">
                         <Text className="text-[11px] leading-relaxed text-muted-foreground">
                           Para {k.name}: <Text className="text-foreground">{k.dish}</Text>
-                          {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                          {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
                         </Text>
                         <DishRecipe dish={k.dish} month={month} />
                       </View>

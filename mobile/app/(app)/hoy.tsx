@@ -104,7 +104,7 @@ import {
   type MealSlot,
   type MonthlyPlan,
 } from "../../lib/plan-shared";
-import { quoteOfTheDay } from "../../lib/quotes";
+import { quoteIndexOfTheDay } from "../../lib/quotes";
 import { cleanDayAdjustment, dayBalance } from "../../lib/day-balance";
 import { scheduleDaySettle, useDaySettle } from "../../lib/day-settle";
 import { cleanDayExercise, onlyRoutineExercise } from "../../lib/exercise";
@@ -628,7 +628,7 @@ export default function Hoy() {
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id, today?.guide?.targets?.kcal, dayTarget?.kcal, generating]);
-  const quote = quoteOfTheDay();
+  const quoteIndex = quoteIndexOfTheDay();
 
   // Picoteo, deporte y cambios de plato comparten UN solo asentamiento por
   // ráfaga (`day-settle.ts`): el desvío que decide si se recolocan los próximos
@@ -793,7 +793,9 @@ export default function Hoy() {
             {generating || (!guide && todayQ.isLoading)
               ? t("hoy.guide.preparing")
               : guide
-                ? t("hoy.guide.withCalories", { calories: caloriesText(energy, showNumbers) })
+                ? t("hoy.guide.withCalories", {
+                    calories: caloriesText(energy, showNumbers, t, dateLocale(i18n.language)),
+                  })
                 : t("hoy.guide.label")}
           </Text>
           {!guide && !generating && !todayQ.isLoading ? (
@@ -885,7 +887,7 @@ export default function Hoy() {
                 const mealKeyForPin = MOMENT_TO_MEAL_KEY[h.label] ?? "snack";
                 const hideRecipe =
                   !!wasIdea && dishChangeIsMine(mealKeyForPin, homeCtxFor(todayWeekday));
-                const note = offListNote(planned?.off);
+                const note = offListNote(planned?.off, t);
                 // D13: un plato sin cifra se dice, no se rellena con un promedio.
                 const mealNumbers = guide?.mealMacros?.find(
                   (m) => m.moment === h.label && m.idea === dish,
@@ -1093,7 +1095,7 @@ export default function Hoy() {
                         <Text className="font-body text-[11px] leading-relaxed text-muted-foreground">
                           {t("hoy.meals.forChild", { name: k.name })}{" "}
                           <Text className="text-foreground">{k.dish}</Text>
-                          {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                          {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
                         </Text>
                         <DishRecipe dish={k.dish} month={month} />
                       </View>
@@ -1198,10 +1200,10 @@ export default function Hoy() {
             className="font-heading text-muted-foreground"
             style={{ fontSize: 14, lineHeight: 20, letterSpacing: -0.1 }}
           >
-            "{quote.text}"
+            "{t(`quotes.${quoteIndex}.text`)}"
           </Text>
           <Text className="font-mono-medium mt-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/60">
-            {quote.author}
+            {t(`quotes.${quoteIndex}.author`)}
           </Text>
         </View>
       </ScrollView>
@@ -1394,7 +1396,7 @@ function DayMenu({
               key={m.slot}
               label={t(`moments.${m.moment}`, { defaultValue: m.moment })}
               value={m.idea}
-              note={offListNote(m.off)}
+              note={offListNote(m.off, t)}
               recipeMonth={date.slice(0, 7)}
               pinned={isPinnedByViewer(day, m.slot, homeCtx)}
             />

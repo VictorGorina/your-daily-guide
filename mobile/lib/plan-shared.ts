@@ -10,6 +10,7 @@
 import { isCleanFood } from "./content-guard";
 import { dateInMonth, weekdayIndex } from "./dates";
 import { shelfLifeDays } from "./shelf-life";
+import type { Translate } from "./week-nav";
 import {
   isSharedSlot,
   MEAL_KEYS,
@@ -944,8 +945,8 @@ export function composeMonthlyPlanForMember(
 }
 
 /** Aviso corto para pantalla cuando un plato lleva algo que no se compró. */
-export const offListNote = (names: string[] | undefined) =>
-  names?.length ? `Fuera de tu compra: ${names.join(", ")}` : null;
+export const offListNote = (names: string[] | undefined, t: Translate) =>
+  names?.length ? t("food.offList", { names: names.join(", ") }) : null;
 
 /** Suma días a una fecha YYYY-MM-DD y devuelve otra fecha YYYY-MM-DD. */
 export const addDays = (date: string, days: number) => {

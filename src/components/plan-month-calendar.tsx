@@ -209,16 +209,16 @@ export function PlanMonthCalendar({
                       <FoodCategoryBadge dish={meal.idea} />
                     </div>
                     <p className="mt-1 text-sm text-foreground">{meal.idea}</p>
-                    {offListNote(meal.off) ? (
+                    {offListNote(meal.off, t) ? (
                       <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
-                        {offListNote(meal.off)}
+                        {offListNote(meal.off, t)}
                       </span>
                     ) : null}
                     {(kidMealsBySlot.get(meal.slot) ?? []).map((k) => (
                       <div key={`${k.name}-${k.dish}`} className="mt-1.5">
                         <p className="text-[11px] leading-relaxed text-muted-foreground">
                           Para {k.name}: <span className="text-foreground">{k.dish}</span>
-                          {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                          {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
                         </p>
                         <DishRecipe dish={k.dish} month={month} />
                       </div>

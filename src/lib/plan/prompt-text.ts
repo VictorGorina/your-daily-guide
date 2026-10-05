@@ -11,10 +11,11 @@ import {
 import { projectTrips, tripLabel } from "../shopping/trips";
 import { upcomingMeals } from "./compensation";
 import type { MonthlyPlan, PlanCoverage } from "./types";
+import type { Translate } from "../week-nav";
 
 /** Aviso corto para pantalla cuando un plato lleva algo que no se compró. */
-export const offListNote = (names: string[] | undefined) =>
-  names?.length ? `Fuera de tu compra: ${names.join(", ")}` : null;
+export const offListNote = (names: string[] | undefined, t: Translate) =>
+  names?.length ? t("food.offList", { names: names.join(", ") }) : null;
 
 /**
  * Lo que el coach necesita saber del plan en cada mensaje: qué hay comprado

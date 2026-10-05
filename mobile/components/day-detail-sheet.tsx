@@ -419,7 +419,7 @@ export function DayDetailBody({
                     >
                       {t("hoy.meals.forChild", { name: k.name })}{" "}
                       <Text className="text-foreground">{k.dish}</Text>
-                      {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                      {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
                     </Text>
                   ))}
                 </Pressable>

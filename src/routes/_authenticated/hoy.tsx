@@ -108,7 +108,7 @@ import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
 import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
 import { useMealSwap } from "@/lib/use-meal-swap";
 import { applyTheme } from "@/lib/theme";
-import { quoteOfTheDay } from "@/lib/quotes";
+import { quoteIndexOfTheDay } from "@/lib/quotes";
 import { monthsOfWeek, weekDates, weekStartOf } from "@/lib/week-nav";
 import { resolveDeviceTimeZone } from "@/lib/zoned-date";
 
@@ -742,7 +742,7 @@ function Hoy() {
 
   // El momento se guarda en español canónico; aquí solo se pinta en el idioma.
   const mealName = (label: string) => t(`moments.${label}`, { defaultValue: label });
-  const quote = quoteOfTheDay();
+  const quoteIndex = quoteIndexOfTheDay();
   const dateLabel = new Date(`${today0}T00:00:00`)
     .toLocaleDateString(dateLocale(i18n.language), {
       weekday: "long",
@@ -881,7 +881,9 @@ function Hoy() {
             {generating || (!guide && todayQ.isLoading)
               ? t("hoy.guide.preparing")
               : guide
-                ? t("hoy.guide.withCalories", { calories: caloriesText(energy, showNumbers) })
+                ? t("hoy.guide.withCalories", {
+                    calories: caloriesText(energy, showNumbers, t, dateLocale(i18n.language)),
+                  })
                 : t("hoy.guide.label")}
           </span>
           {!guide && !generating && !todayQ.isLoading ? (
@@ -954,7 +956,7 @@ function Hoy() {
               const cat = FOOD_CATEGORIES[classifyDish(idea)];
               const isNext = i === nextIndex;
               const isSkip = h.status === "salteo";
-              const note = offListNote(planned?.off);
+              const note = offListNote(planned?.off, t);
               const kidMeals = childMealsFor(h.label);
               // El plato de este momento se ha cambiado hoy (desde el chat o
               // desde "comí otra cosa"): se muestra el real en naranja y debajo,
@@ -1181,7 +1183,7 @@ function Hoy() {
                       <p className="text-[11px] leading-relaxed text-muted-foreground">
                         {t("hoy.meals.forChild", { name: k.name })}{" "}
                         <span className="text-foreground">{k.dish}</span>
-                        {offListNote(k.off) ? ` · ${offListNote(k.off)}` : ""}
+                        {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
                       </p>
                       <DishRecipe dish={k.dish} month={month} />
                     </div>
@@ -1293,10 +1295,10 @@ function Hoy() {
 
       <section className="mt-6 px-0.5">
         <p className="font-title text-sm leading-[1.45] tracking-[-0.01em] text-pretty text-muted-foreground">
-          "{quote.text}"
+          "{t(`quotes.${quoteIndex}.text`)}"
         </p>
         <p className="mt-1.5 font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
-          {quote.author}
+          {t(`quotes.${quoteIndex}.author`)}
         </p>
       </section>
 
@@ -1479,7 +1481,7 @@ function DayMenu({
               key={m.slot}
               label={t(`moments.${m.moment}`, { defaultValue: m.moment })}
               value={m.idea}
-              note={offListNote(m.off)}
+              note={offListNote(m.off, t)}
               recipeMonth={date.slice(0, 7)}
               pinned={isPinnedByViewer(day, m.slot, homeCtx)}
             />

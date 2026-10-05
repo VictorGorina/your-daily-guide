@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { DictateButton } from "@/components/dictate-button";
 import { DictationField, DictationWave } from "@/components/dictation-field";
-import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
+import { isCleanFood } from "@/lib/content-guard";
 import { PORTION_SIZES, textMentionsQuantity, type PortionSize } from "@/lib/nutrition/portion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,7 +114,7 @@ export function MealSwapSheet({
     // `.validator()` de `setPlanMeal`, que es por donde pasan web, móvil y el
     // coach; esto solo evita la ida y vuelta.
     if (!isCleanFood(desc)) {
-      setError(BLOCKED_FOOD_MESSAGE);
+      setError(t("food.blocked"));
       return;
     }
     void send(desc);

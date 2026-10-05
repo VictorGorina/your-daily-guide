@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import i18n from "@/lib/i18n";
+
 import {
   caloriesText,
   ENERGY_PROFILE_COLUMNS,
@@ -208,6 +210,21 @@ describe("una sola cifra: texto de la guía y explicación", () => {
     const t = energyTargets(woman35)!;
     expect(caloriesText(t, false)).not.toMatch(/\d/);
     expect(caloriesText(null, true)).not.toMatch(/\d/);
+  });
+
+  it("con el catálogo dice lo mismo en español, y en inglés lo suyo", () => {
+    const targets = energyTargets(woman35)!;
+    const es = i18n.getFixedT("es");
+    for (const [tg, show] of [
+      [targets, true],
+      [targets, false],
+      [null, true],
+    ] as const) {
+      expect(caloriesText(tg, show, es, "es-ES")).toBe(caloriesText(tg, show));
+    }
+    expect(caloriesText(targets, true, i18n.getFixedT("en"), "en-GB")).toBe(
+      "between 1,300 and 1,500 kcal",
+    );
   });
 
   it("la explicación dice de dónde sale la cifra", () => {
