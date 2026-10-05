@@ -379,6 +379,15 @@ export default function Hoy() {
   const energy = useMemo(() => energyTargets(profile), [profile]);
   const dayTarget = energy ? targetsAsMacros(energy) : null;
   const today = todayQ.data;
+  // Sin plan el registro de hoy no se crea (arriba), pero puede existir ya:
+  // picoteo y deporte lo crean al guardar. Se lee sin crearlo y alimenta SOLO
+  // sus tarjetas y el balance; las comidas y la guía siguen saliendo de `today`.
+  const noPlanTodayQ = useQuery({
+    queryKey: ["today", "no-plan"],
+    queryFn: fetchTodayLog,
+    enabled: !!profileQ.data?.onboarding_completed && noPlanYet,
+  });
+  const dayExtras = today ?? (noPlanYet ? noPlanTodayQ.data : null);
 
   useEffect(() => {
     if (profileQ.isFetching) return;
@@ -593,14 +602,14 @@ export default function Hoy() {
   // marcan comidas, en vez de aparecer de golpe con la primera.
   // El picoteo del día (`daily_logs.snacks`) también suma: es comida de verdad,
   // aunque no cuente como comida del plan.
-  const snacks = cleanDaySnacks(today?.snacks);
+  const snacks = cleanDaySnacks(dayExtras?.snacks);
   const doneMacros = addMacros(
     sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS,
     snackTotals(snacks),
   );
   // El deporte del día (`daily_logs.exercise`) no suma a las macros: es un
   // gasto, no algo que se coma.
-  const exercise = cleanDayExercise(today?.exercise);
+  const exercise = cleanDayExercise(dayExtras?.exercise);
 
   // Los planes ya generados se hicieron antes de que existiera el objetivo
   // (ticket 07): si el plan de hoy suma muy por debajo, se dice.
@@ -722,7 +731,7 @@ export default function Hoy() {
   // que pinta `DayBalanceCard` — el desglose sale de datos que ya estaban, no
   // de estado nuevo (ver `day-balance.ts`).
   const balance = dayBalance(habits, snacks, exercise);
-  const adjustmentRecord = cleanDayAdjustment(today?.adjustment);
+  const adjustmentRecord = cleanDayAdjustment(dayExtras?.adjustment);
   const balanceChanges = adjustmentRecord?.adjustment?.changes ?? [];
 
   const pending = habits
