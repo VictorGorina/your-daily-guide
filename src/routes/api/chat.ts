@@ -22,7 +22,7 @@ import { supabaseFromRequest, unauthorized } from "@/lib/api-auth.server";
 import { type ActionToolName, CHAT_LIMITS, type ChatBody, cleanChatBody } from "@/lib/chat-body";
 import { chatPreflight, lastUserMessage } from "@/lib/chat-preflight";
 import { offTopicMessage } from "@/lib/coach-scope";
-import { EXERCISE_ACK_PREFIX, loggedAckKind, SNACK_ACK_PREFIX } from "@/lib/day-log-ack";
+import { ACK_PREFIXES, loggedAckKind } from "@/lib/day-log-ack";
 import {
   EXERCISE_ACTIVITIES,
   EXERCISE_INTENSITY,
@@ -197,6 +197,11 @@ const actionTools = {
   }),
 } as const satisfies Record<ActionToolName, Tool>;
 
+/** «He registrado deporte:», «I logged exercise:»… tal cual los escribe el registro guiado. */
+const ACK_PREFIX_LIST = [...ACK_PREFIXES.exercise, ...ACK_PREFIXES.snack]
+  .map((prefix) => `«${prefix}»`)
+  .join(" o por ");
+
 /**
  * Contesta el mensaje fijo de "solo me dedico a la alimentación" como un turno
  * normal del asistente, sin pasar por el modelo. Va como stream de UI-message
@@ -353,7 +358,7 @@ export const Route = createFileRoute("/api/chat")({
               "\nEl plan es vivo: cada vez que la persona cuente algo que cambia su balance de energía o su ritmo SIN ser un plato concreto (se ha saltado una comida sin decir qué comió en su lugar, ha tenido una semana floja, ha picoteado sin detalle), haz DOS cosas: 1) llama a ajustar_plan_mensual con el motivo y una estimación de kcal_extra para recolocar sólo los días futuros con los ingredientes ya comprados; 2) llama a recalcular_objetivo para explicarle el impacto en su objetivo y ofrecerle acortar el plazo o ser algo más laxo. Para esa recolocación automática el día de hoy está fijado: compensa siempre en los días siguientes. (Distinto es que te pida a mano otro plato para hoy o un día futuro: eso sí se cambia, con cambiar_plato — ver la regla de abajo.)" +
               "\nQué comió de verdad hoy: si te dice qué comió en una comida CONCRETA de HOY (desayuno, comida, cena o snack) en vez de lo planeado — aunque lo cuente en pasado, tipo 'en la cena he comido una hamburguesa en vez de la sopa' — llama cambiar_plato con fecha de hoy y esa comida, poniendo el plato que de verdad comió: así la pantalla de Hoy deja de enseñar el plato viejo y las macros del día se recalculan con el real. NO llames también a ajustar_plan_mensual ni a recalcular_objetivo por ese mismo plato: la app mide sola el desvío real (no una estimación tuya) y recoloca los días siguientes si hace falta. Solo se queda 'fijado' el día de hoy cuando NO te ha dicho qué comió en una comida concreta (p. ej. 'he picoteado entre horas' sin más detalle, o hablando en general de la semana) — ahí sí sigue la regla de arriba." +
               "\nDeporte: si cuenta que HOY ha hecho deporte (ha salido a correr, ha entrenado, ha ido en bici, ha nadado...), llama a registrar_deporte con la actividad de la lista más parecida, los minutos y la intensidad. La intensidad dedúcela de cómo lo cuenta («tranquilo» → Suave, «a buen ritmo» → Normal, «a tope» → Fuerte) y, si no dice nada, usa Normal: no la preguntes. Lo único que se pregunta, en una frase y antes de registrarlo, es cuánto ha durado si no lo ha dicho; no te inventes los minutos. El deporte NUNCA va por ajustar_plan_mensual ni por recalcular_objetivo: la app suma el día entero (deporte, picoteo y platos cambiados) y decide sola si repone energía en los próximos días, sin contar dos veces lo que ya va en su rutina. Solo se apunta el deporte de hoy: si habla de otro día, dile que se registra el mismo día y no llames a nada." +
-              `\nYa apuntado en la app: un mensaje de la persona que empieza por «${EXERCISE_ACK_PREFIX}» o por «${SNACK_ACK_PREFIX}» es algo que ya está guardado en su día desde el registro guiado, y la app decide sola si hace falta reajustar. Nunca lo vuelvas a registrar ni llames a ajustar_plan_mensual o a recalcular_objetivo por eso, ni en ese turno ni en los siguientes.` +
+              `\nYa apuntado en la app: un mensaje de la persona que empieza por ${ACK_PREFIX_LIST} es algo que ya está guardado en su día desde el registro guiado, y la app decide sola si hace falta reajustar. Nunca lo vuelvas a registrar ni llames a ajustar_plan_mensual o a recalcular_objetivo por eso, ni en ese turno ni en los siguientes.` +
               "\nNunca llames a ajustar_plan_mensual por un plato — de hoy o de un día futuro — que acabas de cambiar (o vas a cambiar en este mismo turno) con cambiar_plato: la app ya lo compensa sola comparando las macros reales de antes y de después. ajustar_plan_mensual es solo para lo que NO es un plato concreto." +
               "\nSi acepta cambiar el plazo, usa cambiar_fecha_objetivo." +
               "\nSi te cuenta un cambio real y explícito sobre sí misma que no es el peso de hoy ni la fecha objetivo — nuevas restricciones o alergias, presupuesto, horarios, nivel de actividad, tono que prefiere, tipo de objetivo, etc. — usa actualizar_perfil con solo esos campos. No la llames ante una duda, un comentario de pasada o algo que no ha confirmado del todo. Si el cambio afecta al plan del mes (presupuesto, restricciones, tipo de alimentación, objetivo), dile que se aplicará al generar el plan del próximo mes: el plan de un mes se crea una sola vez y no se rehace a mano (no le ofrezcas regenerarlo; si necesita cambiar un plato concreto, puede hacerlo tú con cambiar_plato)." +

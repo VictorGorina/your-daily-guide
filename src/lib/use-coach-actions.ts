@@ -2,6 +2,7 @@ import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   monthISO,
@@ -68,6 +69,9 @@ export function useCoachActions(
   confirmSensitive?: (changes: SensitiveChange[]) => Promise<boolean>,
 ) {
   const qc = useQueryClient();
+  // Solo para lo que se le ENSEÑA a la persona (la confirmación de un cambio
+  // sensible). Lo que devuelve cada herramienta lo lee el modelo: español canónico.
+  const { t } = useTranslation();
   const makeGuide = useServerFn(generateDailyGuide);
   const adjustPlan = useServerFn(adjustMonthlyPlan);
   const changeMeal = useServerFn(setPlanMeal);
@@ -361,7 +365,7 @@ export function useCoachActions(
         const { sensitive, normal } = splitProfilePatch(patch);
         const confirmed = Object.keys(sensitive).length
           ? ((await confirmSensitive?.(
-              sensitiveChanges(sensitive, qc.getQueryData<Profile | null>(["profile"])),
+              sensitiveChanges(sensitive, qc.getQueryData<Profile | null>(["profile"]), t),
             )) ?? false)
           : true;
         const toSave = confirmed ? patch : normal;
@@ -392,6 +396,7 @@ export function useCoachActions(
       makeGuide,
       qc,
       refresh,
+      t,
     ],
   );
 

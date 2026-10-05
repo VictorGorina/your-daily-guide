@@ -6,6 +6,7 @@ import type { UIMessage } from "ai";
 import { ArrowDownIcon, DownloadIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
@@ -65,6 +66,7 @@ export const ConversationScrollButton = ({
   className,
   ...props
 }: ConversationScrollButtonProps) => {
+  const { t } = useTranslation();
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
 
   const handleScrollToBottom = useCallback(() => {
@@ -82,7 +84,7 @@ export const ConversationScrollButton = ({
         size="icon"
         type="button"
         variant="outline"
-        aria-label="Ir al último mensaje"
+        aria-label={t("chat.scrollToEnd")}
         {...props}
       >
         <ArrowDownIcon className="size-4" />

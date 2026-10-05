@@ -1,6 +1,7 @@
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "./content-guard";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert } from "react-native";
 
 import { apiPost } from "./api";
@@ -34,6 +35,7 @@ import {
   splitProfilePatch,
   type SensitiveChange,
 } from "./profile-fields";
+import type { Translate } from "./week-nav";
 
 const norm = (s: string) => s.toLowerCase().trim();
 
@@ -45,8 +47,8 @@ const profileLabels = (patch: Partial<Profile>) =>
  * (ticket 31). En iOS una alerta no se cierra sin pulsar un botón; si el sistema
  * la descarta (Android), cuenta como «no».
  */
-function confirmSensitiveChanges(changes: SensitiveChange[]): Promise<boolean> {
-  const copy = sensitiveConfirmCopy(changes);
+function confirmSensitiveChanges(changes: SensitiveChange[], t: Translate): Promise<boolean> {
+  const copy = sensitiveConfirmCopy(changes, t);
   const message = [...copy.lines, ...(copy.note ? ["", copy.note] : [])].join("\n");
   return new Promise((resolve) => {
     Alert.alert(
@@ -70,6 +72,9 @@ function confirmSensitiveChanges(changes: SensitiveChange[]): Promise<boolean> {
  */
 export function useCoachActions(getLog: () => DailyLog | undefined) {
   const qc = useQueryClient();
+  // Solo para lo que se le ENSEÑA a la persona (la confirmación de un cambio
+  // sensible). Lo que devuelve cada herramienta lo lee el modelo: español canónico.
+  const { t } = useTranslation();
   const date = todayISO();
 
   const refresh = useCallback(() => {
@@ -342,7 +347,8 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
         const { sensitive, normal } = splitProfilePatch(patch);
         const confirmed = Object.keys(sensitive).length
           ? await confirmSensitiveChanges(
-              sensitiveChanges(sensitive, qc.getQueryData<Profile | null>(["profile"])),
+              sensitiveChanges(sensitive, qc.getQueryData<Profile | null>(["profile"]), t),
+              t,
             )
           : true;
         const toSave = confirmed ? patch : normal;
@@ -358,7 +364,7 @@ export function useCoachActions(getLog: () => DailyLog | undefined) {
       }
       return "Acción desconocida";
     },
-    [date, getLog, qc, refresh],
+    [date, getLog, qc, refresh, t],
   );
 
   return { runTool, refresh };

@@ -1,5 +1,6 @@
 import { Activity, Cookie } from "lucide-react-native";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
 import { apiPost } from "../lib/api";
@@ -63,6 +64,7 @@ export function GuidedLogSheet({
   /** Preferencia de ver cifras (ticket 01), para la pestaña de picoteo. */
   showNumbers?: boolean;
 }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("activity");
 
   // Actividad
@@ -89,7 +91,9 @@ export function GuidedLogSheet({
     setError(null);
     const mins = Number(minutes.replace(",", "."));
     if (!Number.isFinite(mins) || mins < EXERCISE_MINUTES_MIN || mins > EXERCISE_MINUTES_MAX) {
-      setError(`Indica entre ${EXERCISE_MINUTES_MIN} y ${EXERCISE_MINUTES_MAX} minutos.`);
+      setError(
+        t("exercise.minutesError", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX }),
+      );
       return;
     }
     setSaving(true);
@@ -102,7 +106,7 @@ export function GuidedLogSheet({
       reset();
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido guardar el deporte.");
+      setError(e instanceof Error ? e.message : t("exercise.saveFailed"));
       setSaving(false);
     }
   };
@@ -114,19 +118,15 @@ export function GuidedLogSheet({
         onOpenChange(v);
         if (!v) reset();
       }}
-      title="Registro guiado"
-      description={
-        mode === "activity"
-          ? "Apunta tu actividad física. Queda en tu día, como en «Registrar deporte», y si hace falta repongo energía en los próximos días."
-          : "Apunta lo que has comido fuera del plan. Queda en tu día, como en «Añadir picoteo», y si hace falta ajusto los próximos días."
-      }
+      title={t("chat.guided.title")}
+      description={mode === "activity" ? t("chat.guided.descActivity") : t("chat.guided.descSnack")}
     >
       <View className="gap-5 pb-8 pt-4">
         <View className="flex-row gap-2">
           {(
             [
-              { value: "activity", label: "Actividad", Icon: Activity },
-              { value: "snack", label: "Picoteo o extra", Icon: Cookie },
+              { value: "activity", label: t("chat.guided.tabActivity"), Icon: Activity },
+              { value: "snack", label: t("chat.guided.tabSnack"), Icon: Cookie },
             ] as const
           ).map(({ value, label, Icon }) => {
             const active = mode === value;
@@ -153,12 +153,12 @@ export function GuidedLogSheet({
         {mode === "activity" ? (
           <>
             <View className="gap-2">
-              <Text className="text-xs text-muted-foreground">¿Qué has hecho?</Text>
+              <Text className="text-xs text-muted-foreground">{t("exercise.what")}</Text>
               <View className="flex-row flex-wrap gap-2">
                 {ACTIVITIES.map((a) => (
                   <Chip
                     key={a.label}
-                    label={a.label}
+                    label={t(`exercise.activities.${a.label}`)}
                     active={activity === a.label}
                     onPress={() => setActivity(a.label)}
                   />
@@ -168,7 +168,7 @@ export function GuidedLogSheet({
 
             <View className="gap-2">
               <Text className="text-xs text-muted-foreground">
-                Minutos ({EXERCISE_MINUTES_MIN}-{EXERCISE_MINUTES_MAX})
+                {t("exercise.minutes", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX })}
               </Text>
               <TextInput
                 className="h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
@@ -181,12 +181,12 @@ export function GuidedLogSheet({
             </View>
 
             <View className="gap-2">
-              <Text className="text-xs text-muted-foreground">Intensidad</Text>
+              <Text className="text-xs text-muted-foreground">{t("exercise.intensityLabel")}</Text>
               <View className="flex-row gap-2">
                 {INTENSITY.map((i) => (
                   <Chip
                     key={i.label}
-                    label={i.label}
+                    label={t(`exercise.intensity.${i.label}`)}
                     active={intensity === i.label}
                     onPress={() => setIntensity(i.label)}
                   />
@@ -203,19 +203,15 @@ export function GuidedLogSheet({
             >
               {saving ? <ActivityIndicator size="small" color="#3e3d39" /> : null}
               <Text className="text-sm font-sans-semibold text-primary-foreground">
-                {saving ? "Guardando…" : "Guardar deporte"}
+                {saving ? t("common.saving") : t("exercise.save")}
               </Text>
             </Pressable>
-            <Text className="text-center text-xs text-muted-foreground">
-              Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los próximos
-              días.
-            </Text>
+            <Text className="text-center text-xs text-muted-foreground">{t("exercise.foot")}</Text>
           </>
         ) : (
           <>
             <Text className="rounded-2xl bg-secondary/60 px-4 py-3 text-xs leading-snug text-muted-foreground">
-              ¿Comiste otra cosa en lugar de una comida del plan? Cámbiala en Hoy con «Comí otra
-              cosa» o cuéntamelo en el chat: así cuento solo la diferencia con lo planeado.
+              {t("chat.guided.swapHint")}
             </Text>
             <SnackForm
               today={todayISO()}

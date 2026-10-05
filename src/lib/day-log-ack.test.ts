@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
+import en from "@/locales/en.json";
+import es from "@/locales/es.json";
+
+import i18n from "./i18n";
 import {
+  ACK_PREFIXES,
   EXERCISE_ACK_PREFIX,
   exerciseAckMessage,
   exerciseToolResult,
@@ -91,5 +96,44 @@ describe("loggedAckKind", () => {
     expect(loggedAckKind(null)).toBeNull();
     expect(loggedAckKind("exercise")).toBeNull();
     expect(loggedAckKind({ logged: "weight" })).toBeNull();
+  });
+});
+
+describe("acuses en el idioma de la persona (ticket 34)", () => {
+  const tEs = i18n.getFixedT("es");
+  const tEn = i18n.getFixedT("en");
+
+  it("con el catálogo español sale el mismo texto que sin traductor", () => {
+    for (const numbers of [true, false]) {
+      expect(exerciseAckMessage(run, numbers, tEs)).toBe(exerciseAckMessage(run, numbers));
+      expect(snackAckMessage(snack, numbers, tEs)).toBe(snackAckMessage(snack, numbers));
+    }
+    expect(exerciseAckMessage({ ...run, kcal: 0 }, true, tEs)).toBe(
+      exerciseAckMessage({ ...run, kcal: 0 }, true),
+    );
+  });
+
+  it("en inglés traduce la actividad y la intensidad guardadas en español", () => {
+    expect(exerciseAckMessage(run, true, tEn)).toBe(
+      "I logged exercise: running 30 min, moderate intensity (≈ 300 kcal of extra burn).",
+    );
+    expect(snackAckMessage(snack, true, tEn)).toBe(
+      "I logged a snack: Un puñado de frutos secos (≈ 178 kcal).",
+    );
+  });
+
+  it("una actividad fuera de la lista se queda como llegó", () => {
+    expect(exerciseAckMessage({ ...run, activity: "Yoga" }, false, tEn)).toBe(
+      "I logged exercise: yoga 30 min, moderate intensity.",
+    );
+  });
+
+  it("cada idioma del catálogo empieza por un prefijo que el prompt reconoce", () => {
+    for (const catalog of [es, en]) {
+      expect(ACK_PREFIXES.exercise.some((p) => catalog.chat.ack.exercise.startsWith(p))).toBe(true);
+      expect(ACK_PREFIXES.snack.some((p) => catalog.chat.ack.snack.startsWith(p))).toBe(true);
+    }
+    expect(ACK_PREFIXES.exercise).toHaveLength(2);
+    expect(ACK_PREFIXES.snack).toHaveLength(2);
   });
 });

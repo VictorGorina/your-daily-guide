@@ -1,5 +1,6 @@
 import { X } from "lucide-react-native";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -35,6 +36,7 @@ export function Sheet({
   description?: string;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <Modal
       visible={open}
@@ -58,7 +60,7 @@ export function Sheet({
             <Pressable
               onPress={() => onOpenChange(false)}
               hitSlop={8}
-              accessibilityLabel="Cerrar"
+              accessibilityLabel={t("common.close")}
               className="absolute right-3 top-3 z-10 h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
             >
               <X size={16} color="#6b6256" />

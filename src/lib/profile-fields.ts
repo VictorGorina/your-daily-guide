@@ -1,4 +1,5 @@
 import type { Profile } from "@/lib/daily";
+import type { Translate } from "@/lib/week-nav";
 
 /**
  * Catálogo único de los campos editables del perfil: de aquí sale tanto la
@@ -356,25 +357,38 @@ export function splitProfilePatch(patch: Partial<Profile>): {
 
 export type SensitiveChange = { key: string; label: string; before: string; after: string };
 
-function shownValue(field: ProfileField | undefined, value: unknown): string {
-  if (value === undefined || value === null || value === "") return "sin dato";
-  if (field?.kind === "chips") return valueToChip(field, String(value));
+function shownValue(field: ProfileField | undefined, value: unknown, t?: Translate): string {
+  if (value === undefined || value === null || value === "") {
+    return t ? t("chat.sensitive.noData") : "sin dato";
+  }
+  if (field?.kind === "chips") {
+    const chip = valueToChip(field, String(value));
+    // Como en «Mis respuestas»: el chip se guarda canónico y se pinta por posición.
+    const index = field.options?.indexOf(chip) ?? -1;
+    return t && index >= 0 ? t(`profileFields.${String(field.key)}.options.${index}`) : chip;
+  }
   if (field?.unit) return `${value} ${field.unit}`;
   return String(value);
 }
 
-/** Cada cambio sensible como lo lee la persona: etiqueta, antes → después. */
+/**
+ * Cada cambio sensible como lo lee la persona: etiqueta, antes → después. Con
+ * traductor, en su idioma (es lo que enseña la confirmación); sin él, el
+ * español del módulo.
+ */
 export function sensitiveChanges(
   sensitive: Partial<Profile>,
   current: Partial<Profile> | null | undefined,
+  t?: Translate,
 ): SensitiveChange[] {
   return Object.entries(sensitive).map(([key, value]) => {
     const field = PROFILE_FIELDS.find((f) => f.key === key);
+    const label = PROFILE_FIELD_LABELS[key] ?? key;
     return {
       key,
-      label: PROFILE_FIELD_LABELS[key] ?? key,
-      before: shownValue(field, current?.[key as keyof Profile]),
-      after: shownValue(field, value),
+      label: t ? t(`profileFields.${key}.label`, { defaultValue: label }) : label,
+      before: shownValue(field, current?.[key as keyof Profile], t),
+      after: shownValue(field, value, t),
     };
   });
 }
@@ -412,20 +426,34 @@ export function profileToolResult(saved: string[], declined: string[], invalid: 
  * (Alert nativo). Ver cifras es una preferencia explícita que también vive en
  * Ajustes, y se recuerda.
  */
-export function sensitiveConfirmCopy(changes: SensitiveChange[]): {
+export function sensitiveConfirmCopy(
+  changes: SensitiveChange[],
+  t?: Translate,
+): {
   title: string;
   lines: string[];
   note: string | null;
   confirm: string;
   cancel: string;
 } {
+  const numbers = changes.some((c) => c.key === "nutrition_numbers");
+  const lines = changes.map((c) => `${c.label}: ${c.before} → ${c.after}`);
+  if (t) {
+    return {
+      title: t("chat.sensitive.title", { count: changes.length }),
+      lines,
+      note: numbers ? t("chat.sensitive.note") : null,
+      confirm: t("common.save"),
+      cancel: t("chat.sensitive.cancel"),
+    };
+  }
   return {
     title:
       changes.length === 1
         ? "¿Guardo este cambio en tu perfil?"
         : "¿Guardo estos cambios en tu perfil?",
-    lines: changes.map((c) => `${c.label}: ${c.before} → ${c.after}`),
-    note: changes.some((c) => c.key === "nutrition_numbers")
+    lines,
+    note: numbers
       ? "Lo de ver calorías y macros también lo puedes cambiar cuando quieras en Ajustes."
       : null,
     confirm: "Guardar",

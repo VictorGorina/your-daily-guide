@@ -11,7 +11,8 @@
     "removeNamed": "Remove {{what}}",
     "listAnd": "{{rest}} and {{last}}",
     "saved": "Saved",
-    "saveError": "We couldn't save that"
+    "saveError": "We couldn't save that",
+    "close": "Close"
   },
   "languages": {
     "es": "Spanish",
@@ -1721,5 +1722,85 @@
     "text": "Your portions: {{factor}} of the reference portion ({{why}}).",
     "byTarget": "based on your target",
     "missingData": "as your height, weight or age is missing"
+  },
+  "chat": {
+    "title": "Your coach",
+    "todayLine": "Today's conversation · {{date}}",
+    "emptyTitle": "Tell me how your day is going",
+    "emptyDesc": "What you've eaten, how you feel or what's hard today.",
+    "error": "The coach couldn't reply. Try again in a moment.",
+    "placeholder": "Message your coach...",
+    "messageLabel": "Message for your coach",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "scrollToEnd": "Go to the latest message",
+    "thinkingCoach": "The coach is thinking...",
+    "quick": [
+      "I've had breakfast",
+      "I ate out",
+      "I skipped the plan",
+      "I went for a run",
+      "I'm very hungry today",
+      "I feel low on energy",
+      "Adjust tomorrow's plan",
+      "Change tomorrow's breakfast",
+      "What's for dinner tonight?"
+    ],
+    "fab": {
+      "open": "Talk to the coach",
+      "close": "Close coach",
+      "title": "Quick coach",
+      "subtitle": "Tell me and I'll change it on your screen",
+      "emptyTitle": "What shall we adjust?",
+      "emptyDesc": "For example: \"weight 78.5\", \"mark water as done\" or \"change today's dishes\".",
+      "error": "I couldn't reply just now. Please try again.",
+      "placeholder": "Talk to your coach..."
+    },
+    "action": {
+      "actualizar_peso": "Saving your weight...",
+      "marcar_habito": "Updating your habits...",
+      "anadir_habito": "Adding the habit...",
+      "quitar_habito": "Removing the habit...",
+      "regenerar_guia": "Refreshing today's guide...",
+      "cambiar_plato": "Changing the dish in your plan...",
+      "registrar_deporte": "Logging today's exercise...",
+      "ajustar_plan_mensual": "Readjusting the days that are left...",
+      "recalcular_objetivo": "Recalculating your goal...",
+      "cambiar_fecha_objetivo": "Updating your target date...",
+      "default": "Applying the change...",
+      "failed": "The change couldn't be applied"
+    },
+    "history": {
+      "button": "History",
+      "allDays": "All days",
+      "readOnly": "Saved conversation, read-only.",
+      "title": "Conversation history",
+      "desc": "Look back at what you talked about on earlier days.",
+      "loading": "Loading…",
+      "empty": "No earlier days yet. Today's conversation is saved automatically.",
+      "count_one": "{{count}} message",
+      "count_other": "{{count}} messages"
+    },
+    "guided": {
+      "title": "Guided log",
+      "descActivity": "Note your physical activity. It's saved to your day, like “Log exercise”, and if needed I'll add energy back over the coming days.",
+      "descSnack": "Note what you ate outside the plan. It's saved to your day, like “Add a snack”, and if needed I'll adjust the coming days.",
+      "tabActivity": "Activity",
+      "tabSnack": "Snack or extra",
+      "swapHint": "Did you eat something else instead of a planned meal? Change it in Today with “I ate something else” or tell me in the chat: that way I only count the difference from what was planned."
+    },
+    "ack": {
+      "exercise": "I logged exercise: {{activity}} {{minutes}} min, {{intensity}} intensity{{kcal}}.",
+      "exerciseKcal": " (≈ {{kcal}} kcal of extra burn)",
+      "snack": "I logged a snack: {{text}}{{kcal}}.",
+      "snackKcal": " (≈ {{kcal}} kcal)"
+    },
+    "sensitive": {
+      "title_one": "Shall I save this change to your profile?",
+      "title_other": "Shall I save these changes to your profile?",
+      "note": "You can also change whether you see calories and macros any time in Settings.",
+      "cancel": "No, leave it as it was",
+      "noData": "no data"
+    }
   }
 }

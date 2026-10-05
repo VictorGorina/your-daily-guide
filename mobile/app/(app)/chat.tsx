@@ -9,6 +9,7 @@ import { fetch as expoFetch } from "expo/fetch";
 import { useRouter } from "expo-router";
 import { ArrowUp, ChevronLeft, ClipboardList } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -37,26 +38,19 @@ import {
 import { ensureDaySettleDeps, scheduleDaySettle } from "../../lib/day-settle";
 import type { ExerciseEntry } from "../../lib/exercise";
 import { exerciseAckMessage, LOGGED_ACK_METADATA, snackAckMessage } from "../../lib/day-log-ack";
+import { dateLocale } from "../../lib/i18n";
 import { showsNutritionNumbers } from "../../lib/macros";
 import type { SnackEntry } from "../../lib/snacks";
 import { consumePendingChatMessage } from "../../lib/pending-chat-message";
 import { coachPlanContext, type ShoppingList } from "../../lib/plan-shared";
 import { useCoachActions } from "../../lib/use-coach-actions";
 
-const QUICK_PROMPTS = [
-  "Ya he desayunado",
-  "He comido fuera de casa",
-  "Me he saltado el plan",
-  "He salido a correr",
-  "Hoy tengo mucha hambre",
-  "Me siento sin energía",
-  "Ajusta el plan de mañana",
-  "Cámbiame el desayuno de mañana",
-  "¿Qué ceno hoy?",
-];
+// Sugerencias rápidas: van al coach como mensaje de la persona, en su idioma (`chat.quick`).
+const QUICK_PROMPT_COUNT = 9;
 
 export default function Chat() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const date = todayISO();
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
@@ -199,8 +193,8 @@ export default function Chat() {
 
   // Mantén la conversación pegada al final según crece la respuesta.
   useEffect(() => {
-    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    return () => clearTimeout(timer);
   }, [messages, busy]);
 
   const send = (text: string) => {
@@ -226,9 +220,9 @@ export default function Chat() {
     void sendMessage({ text, metadata });
   };
   const onExerciseLogged = (entry: ExerciseEntry) =>
-    afterDayLogged(exerciseAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.exercise);
+    afterDayLogged(exerciseAckMessage(entry, showNumbers, t), LOGGED_ACK_METADATA.exercise);
   const onSnackLogged = (entry: SnackEntry) =>
-    afterDayLogged(snackAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.snack);
+    afterDayLogged(snackAckMessage(entry, showNumbers, t), LOGGED_ACK_METADATA.snack);
 
   const handleSubmit = () => {
     if (!input.trim() || busy) return;
@@ -250,7 +244,9 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyQ.isSuccess]);
 
-  const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString("es-ES", { dateStyle: "long" });
+  const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
+    dateStyle: "long",
+  });
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -265,20 +261,24 @@ export default function Chat() {
               <Pressable
                 onPress={() => (router.canGoBack() ? router.back() : router.navigate("/hoy"))}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t("common.back")}
                 className="-ml-1 h-9 w-9 items-center justify-center rounded-full active:opacity-70"
               >
                 <ChevronLeft size={22} color="#6b6256" />
               </Pressable>
               <View>
-                <Text className="font-heading text-2xl text-foreground">Tu coach</Text>
+                <Text className="font-heading text-2xl text-foreground">{t("chat.title")}</Text>
                 <Text className="text-xs text-muted-foreground">
-                  Conversación de hoy · {dateLabel}
+                  {t("chat.todayLine", { date: dateLabel })}
                 </Text>
               </View>
             </View>
             <Pressable
               onPress={() => setGuidedOpen(true)}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t("chat.guided.title")}
               className="h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70"
             >
               <ClipboardList size={18} color="#6b6256" />
@@ -295,10 +295,10 @@ export default function Chat() {
             {messages.length === 0 ? (
               <View className="mt-10 items-center gap-1 px-6">
                 <Text className="text-center text-lg font-sans-semibold text-foreground">
-                  Cuéntame cómo va tu día
+                  {t("chat.emptyTitle")}
                 </Text>
                 <Text className="text-center text-sm text-muted-foreground">
-                  Qué has comido, cómo te sientes o qué te cuesta hoy.
+                  {t("chat.emptyDesc")}
                 </Text>
               </View>
             ) : (
@@ -325,13 +325,11 @@ export default function Chat() {
             {status === "submitted" ? (
               <View className="flex-row items-center gap-2 self-start rounded-3xl bg-surface px-4 py-3">
                 <ActivityIndicator size="small" color="#6dbe7b" />
-                <Text className="text-sm text-muted-foreground">El coach está pensando...</Text>
+                <Text className="text-sm text-muted-foreground">{t("chat.thinkingCoach")}</Text>
               </View>
             ) : null}
             {error ? (
-              <Text className="self-start text-sm text-destructive">
-                El coach no ha podido responder. Inténtalo de nuevo en un momento.
-              </Text>
+              <Text className="self-start text-sm text-destructive">{t("chat.error")}</Text>
             ) : null}
           </ScrollView>
 
@@ -343,7 +341,7 @@ export default function Chat() {
             contentContainerClassName="gap-2 px-4 py-1"
             keyboardShouldPersistTaps="handled"
           >
-            {QUICK_PROMPTS.map((q) => (
+            {Array.from({ length: QUICK_PROMPT_COUNT }, (_, i) => t(`chat.quick.${i}`)).map((q) => (
               <Pressable
                 key={q}
                 disabled={busy}
@@ -363,7 +361,8 @@ export default function Chat() {
                 <TextInput
                   value={input}
                   onChangeText={setInput}
-                  placeholder="Escribe a tu coach..."
+                  placeholder={t("chat.placeholder")}
+                  accessibilityLabel={t("chat.messageLabel")}
                   placeholderTextColor="#a69d8f"
                   multiline
                   editable={!busy}
@@ -373,11 +372,15 @@ export default function Chat() {
                 <DictationWave />
               </View>
               <DictateButton
-                onText={(t) => setInput((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))}
+                onText={(said) =>
+                  setInput((prev) => (prev.trim() ? `${prev.trim()} ${said}` : said))
+                }
               />
               <Pressable
                 onPress={handleSubmit}
                 disabled={busy || !input.trim()}
+                accessibilityRole="button"
+                accessibilityLabel={t("chat.send")}
                 className="h-12 w-12 items-center justify-center rounded-full bg-primary active:opacity-80"
                 style={busy || !input.trim() ? { opacity: 0.4 } : undefined}
               >

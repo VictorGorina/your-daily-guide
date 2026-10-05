@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   Conversation,
@@ -59,22 +60,22 @@ type ToolCall = { toolCallId: string; toolName: string; input: unknown };
 type ActionState = "running" | "done" | "error";
 type ActionEntry = { id: string; tool: string; state: ActionState; text: string };
 
-const ACTION_META: Record<string, { icon: typeof Scale; running: string }> = {
-  actualizar_peso: { icon: Scale, running: "Guardando tu peso..." },
-  marcar_habito: { icon: ListChecks, running: "Actualizando tus hábitos..." },
-  anadir_habito: { icon: ListChecks, running: "Añadiendo el hábito..." },
-  quitar_habito: { icon: ListChecks, running: "Quitando el hábito..." },
-  regenerar_guia: { icon: Sparkles, running: "Regenerando tu guía de hoy..." },
-  cambiar_plato: { icon: UtensilsCrossed, running: "Cambiando el plato en tu plan..." },
-  registrar_deporte: { icon: Activity, running: "Apuntando tu deporte de hoy..." },
-  ajustar_plan_mensual: { icon: CalendarRange, running: "Reajustando los días que quedan..." },
-  recalcular_objetivo: { icon: Target, running: "Recalculando tu objetivo..." },
-  cambiar_fecha_objetivo: { icon: Target, running: "Actualizando tu fecha objetivo..." },
+// El texto de cada acción en curso vive en el catálogo (`chat.action.<herramienta>`).
+const ACTION_ICON: Record<string, typeof Scale> = {
+  actualizar_peso: Scale,
+  marcar_habito: ListChecks,
+  anadir_habito: ListChecks,
+  quitar_habito: ListChecks,
+  regenerar_guia: Sparkles,
+  cambiar_plato: UtensilsCrossed,
+  registrar_deporte: Activity,
+  ajustar_plan_mensual: CalendarRange,
+  recalcular_objetivo: Target,
+  cambiar_fecha_objetivo: Target,
 };
 
 function ActionRow({ action }: { action: ActionEntry }) {
-  const Icon =
-    action.state === "error" ? AlertCircle : (ACTION_META[action.tool]?.icon ?? Sparkles);
+  const Icon = action.state === "error" ? AlertCircle : (ACTION_ICON[action.tool] ?? Sparkles);
   const running = action.state === "running";
   return (
     <div
@@ -107,6 +108,7 @@ export default function CoachPanel({
   hidden: boolean;
   defaultOpen: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const [actions, setActions] = useState<ActionEntry[]>([]);
   const [flash, setFlash] = useState<ActionState | null>(null);
@@ -199,7 +201,7 @@ export default function CoachPanel({
           id: toolCallId,
           tool: toolName,
           state: "running",
-          text: ACTION_META[toolName]?.running ?? "Aplicando el cambio...",
+          text: t(`chat.action.${toolName}`, { defaultValue: t("chat.action.default") }),
         },
       ]);
       try {
@@ -210,8 +212,7 @@ export default function CoachPanel({
       } catch (e) {
         // Mismo criterio que en /chat: el motivo real llega al coach (y a la
         // fila de acción) para que pueda explicarlo con sus palabras.
-        const reason =
-          e instanceof Error && e.message ? e.message : "No se ha podido aplicar el cambio";
+        const reason = e instanceof Error && e.message ? e.message : t("chat.action.failed");
         settle(toolCallId, "error", reason);
         addToolResult({ tool: toolName as never, toolCallId, output: reason });
       }
@@ -282,7 +283,7 @@ export default function CoachPanel({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Hablar con el coach"
+        aria-label={t("chat.fab.open")}
         className={`${FAB_CLASS} ${
           flash === "done"
             ? "bg-primary text-primary-foreground scale-105"
@@ -309,7 +310,7 @@ export default function CoachPanel({
         <div className="animate-fade-in fixed inset-0 z-50 flex flex-col justify-end bg-foreground/30 backdrop-blur-sm">
           <button
             type="button"
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
             onClick={() => setOpen(false)}
             className="flex-1"
           />
@@ -325,14 +326,14 @@ export default function CoachPanel({
                   id="coach-fab-title"
                   className="font-title text-lg font-semibold tracking-[-0.02em]"
                 >
-                  Coach rápido
+                  {t("chat.fab.title")}
                 </h2>
-                <p className="text-xs text-muted-foreground">Cuéntame y lo cambio en tu pantalla</p>
+                <p className="text-xs text-muted-foreground">{t("chat.fab.subtitle")}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                aria-label="Cerrar coach"
+                aria-label={t("chat.fab.close")}
                 className="grid h-9 w-9 place-items-center rounded-full bg-secondary text-muted-foreground"
               >
                 <X className="h-4 w-4" />
@@ -343,8 +344,8 @@ export default function CoachPanel({
               <ConversationContent className="gap-4 px-0">
                 {messages.length === 0 ? (
                   <ConversationEmptyState
-                    title="¿Qué ajustamos?"
-                    description='Por ejemplo: "peso 78,5", "marca el agua como hecha" o "cambia los platos de hoy".'
+                    title={t("chat.fab.emptyTitle")}
+                    description={t("chat.fab.emptyDesc")}
                   />
                 ) : (
                   messages.map((m) => {
@@ -375,13 +376,9 @@ export default function CoachPanel({
                     ))}
                   </div>
                 ) : null}
-                {busy && !working ? <Shimmer>Pensando...</Shimmer> : null}
+                {busy && !working ? <Shimmer>{t("chat.thinking")}</Shimmer> : null}
 
-                {error ? (
-                  <p className="text-sm text-destructive">
-                    No he podido responder ahora mismo. Inténtalo otra vez.
-                  </p>
-                ) : null}
+                {error ? <p className="text-sm text-destructive">{t("chat.fab.error")}</p> : null}
               </ConversationContent>
               <ConversationScrollButton />
             </Conversation>
@@ -390,8 +387,8 @@ export default function CoachPanel({
               <PromptInput onSubmit={handleSubmit} className="mt-3">
                 <PromptInputTextarea
                   ref={textareaRef}
-                  placeholder="Habla con tu coach..."
-                  aria-label="Mensaje para tu coach"
+                  placeholder={t("chat.fab.placeholder")}
+                  aria-label={t("chat.messageLabel")}
                 />
                 {/* Solo sobre el texto: los botones de debajo siguen a la vista. */}
                 <DictationWave className="bottom-12 rounded-none" />

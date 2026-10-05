@@ -10,6 +10,7 @@ import {
   type UIMessage,
 } from "ai";
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { ChatHistorySheet } from "@/components/chat-history-sheet";
@@ -44,6 +45,7 @@ import { ensureDaySettleDeps, scheduleDaySettle } from "@/lib/day-settle";
 import { settleDay } from "@/lib/day-settle.functions";
 import type { ExerciseEntry } from "@/lib/exercise";
 import { exerciseAckMessage, LOGGED_ACK_METADATA, snackAckMessage } from "@/lib/day-log-ack";
+import { dateLocale } from "@/lib/i18n";
 import { showsNutritionNumbers } from "@/lib/macros";
 import type { SnackEntry } from "@/lib/snacks";
 import { consumePendingChatMessage } from "@/lib/pending-chat-message";
@@ -55,19 +57,11 @@ export const Route = createFileRoute("/_authenticated/chat")({
   component: ChatPage,
 });
 
-const QUICK_PROMPTS = [
-  "Ya he desayunado",
-  "He comido fuera de casa",
-  "Me he saltado el plan",
-  "He salido a correr",
-  "Hoy tengo mucha hambre",
-  "Me siento sin energía",
-  "Ajusta el plan de mañana",
-  "Cámbiame el desayuno de mañana",
-  "¿Qué ceno hoy?",
-];
+// Sugerencias rápidas: van al coach como mensaje de la persona, en su idioma (`chat.quick`).
+const QUICK_PROMPT_COUNT = 9;
 
 function ChatPage() {
+  const { t, i18n } = useTranslation();
   const date = todayISO();
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const todayQ = useQuery({ queryKey: ["today"], queryFn: () => ensureTodayLog([]) });
@@ -234,9 +228,9 @@ function ChatPage() {
     void sendMessage({ text, metadata });
   };
   const onExerciseLogged = (entry: ExerciseEntry) =>
-    afterDayLogged(exerciseAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.exercise);
+    afterDayLogged(exerciseAckMessage(entry, showNumbers, t), LOGGED_ACK_METADATA.exercise);
   const onSnackLogged = (entry: SnackEntry) =>
-    afterDayLogged(snackAckMessage(entry, showNumbers), LOGGED_ACK_METADATA.snack);
+    afterDayLogged(snackAckMessage(entry, showNumbers, t), LOGGED_ACK_METADATA.snack);
 
   // Mensaje dejado desde fuera de /chat (p.ej. el registro guiado de "Comí
   // distinto" en hoy.tsx). Se envía en cuanto el historial de hoy ha cargado,
@@ -257,9 +251,13 @@ function ChatPage() {
       {sensitiveDialog}
       <header className="flex items-end justify-between px-1 pb-3">
         <div>
-          <h1 className="font-title text-2xl font-semibold tracking-[-0.02em]">Tu coach</h1>
+          <h1 className="font-title text-2xl font-semibold tracking-[-0.02em]">
+            {t("chat.title")}
+          </h1>
           <p className="text-xs text-muted-foreground">
-            Conversación de hoy · {new Date().toLocaleDateString("es-ES", { dateStyle: "long" })}
+            {t("chat.todayLine", {
+              date: new Date().toLocaleDateString(dateLocale(i18n.language), { dateStyle: "long" }),
+            })}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -277,8 +275,8 @@ function ChatPage() {
         <ConversationContent className="gap-4 px-0">
           {messages.length === 0 ? (
             <ConversationEmptyState
-              title="Cuéntame cómo va tu día"
-              description="Qué has comido, cómo te sientes o qué te cuesta hoy."
+              title={t("chat.emptyTitle")}
+              description={t("chat.emptyDesc")}
             />
           ) : (
             messages.map((m) => (
@@ -298,17 +296,13 @@ function ChatPage() {
             ))
           )}
           {status === "submitted" ? <CoachThinking /> : null}
-          {error ? (
-            <p className="text-sm text-destructive">
-              El coach no ha podido responder. Inténtalo de nuevo en un momento.
-            </p>
-          ) : null}
+          {error ? <p className="text-sm text-destructive">{t("chat.error")}</p> : null}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
 
       <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {QUICK_PROMPTS.map((q) => (
+        {Array.from({ length: QUICK_PROMPT_COUNT }, (_, i) => t(`chat.quick.${i}`)).map((q) => (
           <button
             key={q}
             type="button"
@@ -325,8 +319,8 @@ function ChatPage() {
         <PromptInput onSubmit={handleSubmit} className="mt-2">
           <PromptInputTextarea
             ref={textareaRef}
-            placeholder="Escribe a tu coach..."
-            aria-label="Mensaje para tu coach"
+            placeholder={t("chat.placeholder")}
+            aria-label={t("chat.messageLabel")}
           />
           {/* Solo sobre el texto: los botones de debajo siguen a la vista. */}
           <DictationWave className="bottom-12 rounded-none" />

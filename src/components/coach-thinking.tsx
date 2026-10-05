@@ -1,8 +1,11 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
+
 import { Message, MessageContent } from "@/components/ai-elements/message";
 
 export function CoachThinking() {
+  const { t } = useTranslation();
   return (
     <Message from="assistant">
       <MessageContent className="relative min-w-[8rem] overflow-hidden rounded-2xl bg-surface px-4 py-3 text-foreground">
@@ -17,7 +20,7 @@ export function CoachThinking() {
             <span className="h-2 w-2 rounded-full bg-primary/70 animate-coach-dot [animation-delay:0.15s]" />
             <span className="h-2 w-2 rounded-full bg-primary/50 animate-coach-dot [animation-delay:0.3s]" />
           </span>
-          <span className="text-xs font-medium text-muted-foreground">Pensando...</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("chat.thinking")}</span>
         </span>
       </MessageContent>
     </Message>

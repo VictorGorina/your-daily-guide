@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { Loader2, MessageCircle } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { fetchProfile } from "@/lib/daily";
 
@@ -18,6 +19,7 @@ export const FAB_CLASS =
   "fixed bottom-[calc(6.5rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 grid h-14 w-14 place-items-center rounded-full shadow-[0_6px_18px_-6px_rgba(0,0,0,.35)] transition-all duration-300 active:scale-90";
 
 export function CoachFab() {
+  const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [openOnMount, setOpenOnMount] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -46,7 +48,7 @@ export function CoachFab() {
         setOpenOnMount(true);
         setMounted(true);
       }}
-      aria-label="Hablar con el coach"
+      aria-label={t("chat.fab.open")}
       className={`${FAB_CLASS} bg-primary text-primary-foreground hover:scale-105`}
     >
       {openOnMount ? (

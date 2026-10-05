@@ -11,7 +11,8 @@
     "removeNamed": "Quitar {{what}}",
     "listAnd": "{{rest}} y {{last}}",
     "saved": "Guardado",
-    "saveError": "No hemos podido guardar"
+    "saveError": "No hemos podido guardar",
+    "close": "Cerrar"
   },
   "languages": {
     "es": "Español",
@@ -1726,5 +1727,85 @@
     "text": "Tus raciones: {{factor}} de la ración de referencia ({{why}}).",
     "byTarget": "según tu objetivo",
     "missingData": "a falta de tu altura, peso o edad"
+  },
+  "chat": {
+    "title": "Tu coach",
+    "todayLine": "Conversación de hoy · {{date}}",
+    "emptyTitle": "Cuéntame cómo va tu día",
+    "emptyDesc": "Qué has comido, cómo te sientes o qué te cuesta hoy.",
+    "error": "El coach no ha podido responder. Inténtalo de nuevo en un momento.",
+    "placeholder": "Escribe a tu coach...",
+    "messageLabel": "Mensaje para tu coach",
+    "send": "Enviar",
+    "thinking": "Pensando...",
+    "scrollToEnd": "Ir al último mensaje",
+    "thinkingCoach": "El coach está pensando...",
+    "quick": [
+      "Ya he desayunado",
+      "He comido fuera de casa",
+      "Me he saltado el plan",
+      "He salido a correr",
+      "Hoy tengo mucha hambre",
+      "Me siento sin energía",
+      "Ajusta el plan de mañana",
+      "Cámbiame el desayuno de mañana",
+      "¿Qué ceno hoy?"
+    ],
+    "fab": {
+      "open": "Hablar con el coach",
+      "close": "Cerrar coach",
+      "title": "Coach rápido",
+      "subtitle": "Cuéntame y lo cambio en tu pantalla",
+      "emptyTitle": "¿Qué ajustamos?",
+      "emptyDesc": "Por ejemplo: \"peso 78,5\", \"marca el agua como hecha\" o \"cambia los platos de hoy\".",
+      "error": "No he podido responder ahora mismo. Inténtalo otra vez.",
+      "placeholder": "Habla con tu coach..."
+    },
+    "action": {
+      "actualizar_peso": "Guardando tu peso...",
+      "marcar_habito": "Actualizando tus hábitos...",
+      "anadir_habito": "Añadiendo el hábito...",
+      "quitar_habito": "Quitando el hábito...",
+      "regenerar_guia": "Regenerando tu guía de hoy...",
+      "cambiar_plato": "Cambiando el plato en tu plan...",
+      "registrar_deporte": "Apuntando tu deporte de hoy...",
+      "ajustar_plan_mensual": "Reajustando los días que quedan...",
+      "recalcular_objetivo": "Recalculando tu objetivo...",
+      "cambiar_fecha_objetivo": "Actualizando tu fecha objetivo...",
+      "default": "Aplicando el cambio...",
+      "failed": "No se ha podido aplicar el cambio"
+    },
+    "history": {
+      "button": "Historial",
+      "allDays": "Todos los días",
+      "readOnly": "Conversación guardada, solo lectura.",
+      "title": "Historial de conversaciones",
+      "desc": "Revisa lo que hablasteis en días anteriores.",
+      "loading": "Cargando…",
+      "empty": "Aún no hay días anteriores. Lo de hoy se guardará automáticamente.",
+      "count_one": "{{count}} mensaje",
+      "count_other": "{{count}} mensajes"
+    },
+    "guided": {
+      "title": "Registro guiado",
+      "descActivity": "Apunta tu actividad física. Queda en tu día, como en «Registrar deporte», y si hace falta repongo energía en los próximos días.",
+      "descSnack": "Apunta lo que has comido fuera del plan. Queda en tu día, como en «Añadir picoteo», y si hace falta ajusto los próximos días.",
+      "tabActivity": "Actividad",
+      "tabSnack": "Picoteo o extra",
+      "swapHint": "¿Comiste otra cosa en lugar de una comida del plan? Cámbiala en Hoy con «Comí otra cosa» o cuéntamelo en el chat: así cuento solo la diferencia con lo planeado."
+    },
+    "ack": {
+      "exercise": "He registrado deporte: {{activity}} {{minutes}} min, intensidad {{intensity}}{{kcal}}.",
+      "exerciseKcal": " (≈ {{kcal}} kcal de gasto extra)",
+      "snack": "He apuntado un picoteo: {{text}}{{kcal}}.",
+      "snackKcal": " (≈ {{kcal}} kcal)"
+    },
+    "sensitive": {
+      "title_one": "¿Guardo este cambio en tu perfil?",
+      "title_other": "¿Guardo estos cambios en tu perfil?",
+      "note": "Lo de ver calorías y macros también lo puedes cambiar cuando quieras en Ajustes.",
+      "cancel": "No, déjalo como estaba",
+      "noData": "sin dato"
+    }
   }
 }

@@ -1,5 +1,6 @@
 import type { ExerciseEntry } from "@/lib/exercise";
 import type { SnackEntry } from "@/lib/snacks";
+import type { Translate } from "@/lib/week-nav";
 
 /**
  * Lo que desvía el día y se apunta desde el chat —deporte y picoteo, por el
@@ -18,16 +19,23 @@ import type { SnackEntry } from "@/lib/snacks";
  *   `/api/chat` conteste ESE turno sin herramientas. Va en el metadata y no en
  *   el texto para que escribir la frase a mano no deje al coach sin
  *   herramientas.
- * - Los prefijos (`EXERCISE_ACK_PREFIX`, `SNACK_ACK_PREFIX`) son lo que queda
- *   en el historial (solo se guarda el texto): el prompt le dice al coach que
- *   esos mensajes ya están apuntados y nunca se compensan ni se vuelven a
- *   registrar, tampoco en turnos posteriores.
+ * - Los prefijos (`ACK_PREFIXES`) son lo que queda en el historial (solo se
+ *   guarda el texto): el prompt le dice al coach que esos mensajes ya están
+ *   apuntados y nunca se compensan ni se vuelven a registrar, tampoco en
+ *   turnos posteriores. El mensaje sale en el idioma de la persona (ticket 34),
+ *   así que hay un prefijo por idioma: un test los ata al catálogo.
  *
  * Copia en `mobile/lib/day-log-ack.ts`.
  */
 
 export const EXERCISE_ACK_PREFIX = "He registrado deporte:";
 export const SNACK_ACK_PREFIX = "He apuntado un picoteo:";
+
+/** Todos los prefijos que el prompt reconoce, en cada idioma de la interfaz. */
+export const ACK_PREFIXES = {
+  exercise: [EXERCISE_ACK_PREFIX, "I logged exercise:"],
+  snack: [SNACK_ACK_PREFIX, "I logged a snack:"],
+} as const satisfies Record<"exercise" | "snack", readonly string[]>;
 
 export type LoggedKind = "exercise" | "snack";
 
@@ -58,21 +66,43 @@ const exerciseKcalNote = (entry: Pick<ExerciseEntry, "kcal">, showNumbers: boole
   return showNumbers && extra > 0 ? ` (≈ ${extra} kcal de gasto extra)` : "";
 };
 
-/** Lo que la persona "dice" en el chat tras guardar el deporte en el registro guiado. */
+/**
+ * Lo que la persona "dice" en el chat tras guardar el deporte en el registro
+ * guiado. Con traductor, en su idioma; sin él, el español de siempre.
+ */
 export function exerciseAckMessage(
   entry: Pick<ExerciseEntry, "activity" | "minutes" | "intensity" | "kcal">,
   showNumbers: boolean,
+  t?: Translate,
 ): string {
-  return `${EXERCISE_ACK_PREFIX} ${describeSession(entry)}${exerciseKcalNote(entry, showNumbers)}.`;
+  if (!t) {
+    return `${EXERCISE_ACK_PREFIX} ${describeSession(entry)}${exerciseKcalNote(entry, showNumbers)}.`;
+  }
+  const extra = Math.round(-entry.kcal);
+  return t("chat.ack.exercise", {
+    activity: t(`exercise.activities.${entry.activity}`, {
+      defaultValue: entry.activity,
+    }).toLowerCase(),
+    minutes: entry.minutes,
+    intensity: t(`exercise.intensity.${entry.intensity}`, {
+      defaultValue: entry.intensity,
+    }).toLowerCase(),
+    kcal: showNumbers && extra > 0 ? t("chat.ack.exerciseKcal", { kcal: extra }) : "",
+  });
 }
 
 /** Lo que la persona "dice" en el chat tras guardar un picoteo en el registro guiado. */
 export function snackAckMessage(
   entry: Pick<SnackEntry, "text" | "kcal">,
   showNumbers: boolean,
+  t?: Translate,
 ): string {
-  const kcal = showNumbers && entry.kcal > 0 ? ` (≈ ${Math.round(entry.kcal)} kcal)` : "";
-  return `${SNACK_ACK_PREFIX} ${entry.text}${kcal}.`;
+  const shown = showNumbers && entry.kcal > 0 ? Math.round(entry.kcal) : null;
+  if (!t) return `${SNACK_ACK_PREFIX} ${entry.text}${shown ? ` (≈ ${shown} kcal)` : ""}.`;
+  return t("chat.ack.snack", {
+    text: entry.text,
+    kcal: shown ? t("chat.ack.snackKcal", { kcal: shown }) : "",
+  });
 }
 
 /**

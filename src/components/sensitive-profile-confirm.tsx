@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   AlertDialog,
@@ -20,6 +21,7 @@ import { sensitiveConfirmCopy, type SensitiveChange } from "@/lib/profile-fields
  * fuera) cuenta como «no». Mismo texto que el Alert del móvil.
  */
 export function useSensitiveProfileConfirm() {
+  const { t } = useTranslation();
   const [changes, setChanges] = useState<SensitiveChange[] | null>(null);
   const resolver = useRef<((ok: boolean) => void) | null>(null);
 
@@ -38,7 +40,7 @@ export function useSensitiveProfileConfirm() {
     });
   }, []);
 
-  const copy = changes ? sensitiveConfirmCopy(changes) : null;
+  const copy = changes ? sensitiveConfirmCopy(changes, t) : null;
   const dialog = (
     <AlertDialog open={copy !== null} onOpenChange={(open) => !open && settle(false)}>
       <AlertDialogContent className="rounded-3xl">

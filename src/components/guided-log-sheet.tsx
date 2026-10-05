@@ -1,6 +1,7 @@
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, ClipboardList, Cookie, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { SnackForm } from "@/components/snack-sheet";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ export function GuidedLogSheet({
   /** Preferencia de ver cifras (ticket 01), para la pestaña de picoteo. */
   showNumbers?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("actividad");
 
@@ -86,7 +88,9 @@ export function GuidedLogSheet({
     setError(null);
     const mins = Number(minutes.replace(",", "."));
     if (!Number.isFinite(mins) || mins < EXERCISE_MINUTES_MIN || mins > EXERCISE_MINUTES_MAX) {
-      setError(`Indica entre ${EXERCISE_MINUTES_MIN} y ${EXERCISE_MINUTES_MAX} minutos.`);
+      setError(
+        t("exercise.minutesError", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX }),
+      );
       return;
     }
     setSaving(true);
@@ -98,7 +102,7 @@ export function GuidedLogSheet({
       reset();
       setOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No he podido guardar el deporte.");
+      setError(e instanceof Error ? e.message : t("exercise.saveFailed"));
       setSaving(false);
     }
   };
@@ -119,19 +123,17 @@ export function GuidedLogSheet({
           className="gap-1.5 text-muted-foreground"
         >
           <ClipboardList className="size-4" aria-hidden />
-          Registro guiado
+          {t("chat.guided.title")}
         </Button>
       </SheetTrigger>
 
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
-            Registro guiado
+            {t("chat.guided.title")}
           </SheetTitle>
           <SheetDescription>
-            {mode === "actividad"
-              ? "Apunta tu actividad física. Queda en tu día, como en «Registrar deporte», y si hace falta repongo energía en los próximos días."
-              : "Apunta lo que has comido fuera del plan. Queda en tu día, como en «Añadir picoteo», y si hace falta ajusto los próximos días."}
+            {mode === "actividad" ? t("chat.guided.descActivity") : t("chat.guided.descSnack")}
           </SheetDescription>
         </SheetHeader>
 
@@ -150,7 +152,7 @@ export function GuidedLogSheet({
               }`}
             >
               <Activity className="size-4" aria-hidden />
-              Actividad
+              {t("chat.guided.tabActivity")}
             </button>
             <button
               type="button"
@@ -165,14 +167,14 @@ export function GuidedLogSheet({
               }`}
             >
               <Cookie className="size-4" aria-hidden />
-              Picoteo o extra
+              {t("chat.guided.tabSnack")}
             </button>
           </div>
 
           {mode === "actividad" ? (
             <>
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">¿Qué has hecho?</Label>
+                <Label className="text-xs text-muted-foreground">{t("exercise.what")}</Label>
                 <div className="flex flex-wrap gap-2">
                   {ACTIVITIES.map((a) => (
                     <button
@@ -181,7 +183,7 @@ export function GuidedLogSheet({
                       onClick={() => setActivity(a.label)}
                       className={chipClass(activity === a.label)}
                     >
-                      {a.label}
+                      {t(`exercise.activities.${a.label}`)}
                     </button>
                   ))}
                 </div>
@@ -189,7 +191,7 @@ export function GuidedLogSheet({
 
               <div className="space-y-2">
                 <Label htmlFor="glog-min" className="text-xs text-muted-foreground">
-                  Minutos ({EXERCISE_MINUTES_MIN}-{EXERCISE_MINUTES_MAX})
+                  {t("exercise.minutes", { min: EXERCISE_MINUTES_MIN, max: EXERCISE_MINUTES_MAX })}
                 </Label>
                 <Input
                   id="glog-min"
@@ -201,7 +203,9 @@ export function GuidedLogSheet({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Intensidad</Label>
+                <Label className="text-xs text-muted-foreground">
+                  {t("exercise.intensityLabel")}
+                </Label>
                 <div className="flex gap-2">
                   {INTENSITY.map((i) => (
                     <button
@@ -210,7 +214,7 @@ export function GuidedLogSheet({
                       onClick={() => setIntensity(i.label)}
                       className={chipClass(intensity === i.label)}
                     >
-                      {i.label}
+                      {t(`exercise.intensity.${i.label}`)}
                     </button>
                   ))}
                 </div>
@@ -226,22 +230,18 @@ export function GuidedLogSheet({
                 {saving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                    Guardando…
+                    {t("common.saving")}
                   </>
                 ) : (
-                  "Guardar deporte"
+                  t("exercise.save")
                 )}
               </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                Hoy y la lista de la compra no cambian: si hace falta, repongo energía en los
-                próximos días.
-              </p>
+              <p className="text-center text-xs text-muted-foreground">{t("exercise.foot")}</p>
             </>
           ) : (
             <>
               <p className="rounded-2xl bg-secondary/60 px-4 py-3 text-xs leading-snug text-muted-foreground">
-                ¿Comiste otra cosa en lugar de una comida del plan? Cámbiala en Hoy con «Comí otra
-                cosa» o cuéntamelo en el chat: así cuento solo la diferencia con lo planeado.
+                {t("chat.guided.swapHint")}
               </p>
               <SnackForm
                 today={todayISO()}

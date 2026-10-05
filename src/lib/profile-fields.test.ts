@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import en from "@/locales/en.json";
 import es from "@/locales/es.json";
 
+import i18n from "./i18n";
 import {
   PROFILE_FIELDS,
   PROFILE_SECTIONS,
@@ -175,6 +176,51 @@ describe("sensitiveConfirmCopy", () => {
     expect(copy.title).toBe("¿Guardo estos cambios en tu perfil?");
     expect(copy.lines).toHaveLength(2);
     expect(copy.note).toContain("Ajustes");
+  });
+});
+
+// Ticket 34: la confirmación sale en el idioma de la persona; sin traductor
+// (y con el catálogo español) el texto es el de siempre.
+describe("confirmación de cambios sensibles con traductor", () => {
+  const tEs = i18n.getFixedT("es");
+  const tEn = i18n.getFixedT("en");
+  const patch = {
+    pregnancy_status: "embarazada",
+    nutrition_numbers: "ocultar",
+    medications: "x",
+  } as const;
+  const current = {
+    pregnancy_status: "no",
+    nutrition_numbers: "mostrar",
+    medications: null,
+  } as const;
+
+  test("con el catálogo español, lo mismo que sin traductor", () => {
+    const plain = sensitiveChanges(patch, current);
+    const viaCatalog = sensitiveChanges(patch, current, tEs);
+    expect(viaCatalog).toEqual(plain);
+    expect(sensitiveConfirmCopy(viaCatalog, tEs)).toEqual(sensitiveConfirmCopy(plain));
+    expect(sensitiveConfirmCopy(viaCatalog.slice(0, 1), tEs)).toEqual(
+      sensitiveConfirmCopy(plain.slice(0, 1)),
+    );
+  });
+
+  test("en inglés: etiqueta, chips por posición y «sin dato»", () => {
+    const lines = sensitiveChanges(patch, current, tEn);
+    expect(lines.map((l) => l.label)).toEqual(
+      ["pregnancy_status", "nutrition_numbers", "medications"].map(
+        (key) => (en.profileFields as Record<string, { label: string }>)[key]!.label,
+      ),
+    );
+    expect(lines[1]?.after).toBe(en.profileFields.nutrition_numbers.options[1]);
+    expect(lines[2]?.before).toBe("no data");
+    const copy = sensitiveConfirmCopy(lines, tEn);
+    expect(copy.title).toBe("Shall I save these changes to your profile?");
+    expect(copy.confirm).toBe("Save");
+    expect(copy.note).toContain("Settings");
+    expect(sensitiveConfirmCopy(lines.slice(0, 1), tEn).title).toBe(
+      "Shall I save this change to your profile?",
+    );
   });
 });
 
