@@ -1470,10 +1470,8 @@
       "heightCm": "Height (cm)",
       "targetWeightKg": "Target weight (kg)",
       "weightHelp": "Needed to work out your progress.",
-      "weightHelpShort": "Needed for your progress.",
       "heightHelp": "Adjusts the amounts in your guide.",
-      "targetHelp": "The weight you want to reach and stay at.",
-      "targetHelpAuto": "The weight you want to reach. The direction is worked out automatically."
+      "targetHelp": "The weight you want to reach and stay at."
     },
     "errors": {
       "required": "We need this to track your progress",
@@ -1515,8 +1513,6 @@
       "preparing": "Preparing…",
       "empty": "There's nothing to export yet",
       "error": "We couldn't prepare your history",
-      "emptyBody": "There's nothing to export yet.",
-      "errorBody": "We couldn't prepare your history.",
       "nextVersion": "It will be available in the next version of the app."
     },
     "signOut": {

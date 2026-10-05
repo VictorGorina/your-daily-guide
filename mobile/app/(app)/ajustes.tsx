@@ -114,7 +114,7 @@ export default function Ajustes() {
     try {
       const logs = await fetchAllLogs();
       if (!logs.length) {
-        Alert.alert(t("ajustes.history.title"), t("ajustes.history.emptyBody"));
+        Alert.alert(t("ajustes.history.title"), t("ajustes.history.empty"));
         return;
       }
       const csv = buildHistoryCsv(logs, { numbers: showsNutritionNumbers(profile) });
@@ -136,7 +136,7 @@ export default function Ajustes() {
       await Share.share({ url: uri });
     } catch (error) {
       console.warn("ajustes: exportar el historial", error);
-      Alert.alert(t("ajustes.history.title"), t("ajustes.history.errorBody"));
+      Alert.alert(t("ajustes.history.title"), t("ajustes.history.error"));
     } finally {
       setExporting(false);
     }
@@ -262,7 +262,7 @@ export default function Ajustes() {
               />
               <FieldNote
                 error={errors["current_weight_kg"]}
-                help={t("ajustes.basics.weightHelpShort")}
+                help={t("ajustes.basics.weightHelp")}
               />
             </View>
             <View className="flex-1">
@@ -306,10 +306,7 @@ export default function Ajustes() {
               }
               className={inputClass}
             />
-            <FieldNote
-              error={errors["target_weight_kg"]}
-              help={t("ajustes.basics.targetHelpAuto")}
-            />
+            <FieldNote error={errors["target_weight_kg"]} help={t("ajustes.basics.targetHelp")} />
           </View>
         </View>
 

@@ -1475,10 +1475,8 @@
       "heightCm": "Altura (cm)",
       "targetWeightKg": "Peso objetivo (kg)",
       "weightHelp": "Necesario para calcular tu progreso.",
-      "weightHelpShort": "Necesario para tu progreso.",
       "heightHelp": "Ajusta las cantidades de tu guía.",
-      "targetHelp": "El peso al que quieres llegar y mantenerte.",
-      "targetHelpAuto": "El peso al que quieres llegar. La dirección se calcula sola."
+      "targetHelp": "El peso al que quieres llegar y mantenerte."
     },
     "errors": {
       "required": "Este dato es necesario para tu progreso",
@@ -1520,8 +1518,6 @@
       "preparing": "Preparando…",
       "empty": "Todavía no hay nada que exportar",
       "error": "No hemos podido preparar tu historial",
-      "emptyBody": "Todavía no hay nada que exportar.",
-      "errorBody": "No hemos podido preparar tu historial.",
       "nextVersion": "Estará disponible en la próxima versión de la app."
     },
     "signOut": {
