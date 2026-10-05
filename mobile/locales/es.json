@@ -741,5 +741,89 @@
     "unavailableLabel": "{{label}} (no disponible en este navegador)",
     "holdTo": "Mantén pulsado para {{action}}",
     "listening": "Escuchando…"
+  },
+  "mealSwap": {
+    "title": "Comí distinto",
+    "insteadBefore": "En vez de",
+    "insteadAfter": ", ¿qué has comido?",
+    "whatAt": "¿Qué has comido en {{meal}}?",
+    "fieldLabel": "Qué has comido en {{meal}}",
+    "placeholder": "Ej: Una pizza margarita con ensalada",
+    "tooShort": "Escribe qué has comido.",
+    "kcalRange": "Escribe las kcal aproximadas, entre 1 y 5000.",
+    "amount": "Cantidad",
+    "sizes": {
+      "pequena": "Pequeño",
+      "normal": "Normal",
+      "grande": "Grande"
+    },
+    "usualBigger": "Sueles servirte más: lo he dejado en grande.",
+    "usualSmaller": "Sueles servirte menos: lo he dejado en pequeño.",
+    "usualNormal": "Sobre tu ración de siempre.",
+    "manualOffer": "¿Prefieres apuntar las calorías tú? Cuentan tal cual las escribas.",
+    "kcalPlaceholder": "kcal aproximadas",
+    "kcalLabel": "Calorías aproximadas",
+    "note": "Apuntar",
+    "changing": "Cambiando…",
+    "skipped": "Me lo salté"
+  },
+  "nightly": {
+    "title": "Repaso de hoy",
+    "subtitle": "Menos de un minuto, sin nota ni examen.",
+    "pendingTitle": "Sin marcar todavía",
+    "pendingBody": "{{meals}} — si ya no vas a más hoy, puedes cerrarlas sin más, no cuentan como un fallo.",
+    "skipPending": "Hoy paso de estas",
+    "mealsTitle": "Comidas de hoy",
+    "summaryPlan": "{{count}} del plan",
+    "summaryDifferent": ", {{count}} distinto",
+    "summarySkipped_one": ", {{count}} saltada",
+    "summarySkipped_other": ", {{count}} saltadas",
+    "summaryTotal": " · {{count}} en total.",
+    "noMeals": "Hoy no se han registrado comidas.",
+    "momentum": "Impulso: {{value}}%",
+    "weekTitle": "Esta semana",
+    "done": "Listo, hasta mañana",
+    "reaction": {
+      "full": {
+        "relajado": "Día redondo, sin ni siquiera proponértelo. Disfrútalo.",
+        "neutro": "Día completo. Bien hecho.",
+        "exigente": "Día completo — así se construye un buen mes."
+      },
+      "partial": {
+        "relajado": "Parte del día ha ido bien, y eso ya suma. Sin más cuentas.",
+        "neutro": "Un día parcial. Lo que has hecho también cuenta.",
+        "exigente": "Día a medias — mañana puedes cerrarlo del todo."
+      },
+      "none": {
+        "relajado": "Hoy no ha tocado, y no pasa nada. Mañana es otro día.",
+        "neutro": "Hoy no se ha registrado nada, sin drama.",
+        "exigente": "Hoy se ha quedado en cero — mañana toca retomarlo."
+      }
+    },
+    "trend": {
+      "up": {
+        "relajado": "Esta semana vas mejor que la anterior ({{thisWeek}}% vs {{lastWeek}}%) — nota lo que ha funcionado.",
+        "neutro": "Tendencia semanal: {{thisWeek}}%, frente al {{lastWeek}}% de la semana pasada. Vas a mejor.",
+        "exigente": "Semana en subida: {{thisWeek}}% vs {{lastWeek}}%. Sigue empujando."
+      },
+      "down": {
+        "relajado": "Esta semana ha costado algo más ({{thisWeek}}% vs {{lastWeek}}%), y está bien. No todas las semanas son iguales.",
+        "neutro": "Esta semana: {{thisWeek}}%, algo por debajo del {{lastWeek}}% anterior.",
+        "exigente": "Esta semana baja al {{thisWeek}}% (antes {{lastWeek}}%). Toca reajustar, no rendirse."
+      },
+      "flat": {
+        "relajado": "Esta semana vas parecido a la anterior ({{thisWeek}}%). Constancia tranquila.",
+        "neutro": "Esta semana: {{thisWeek}}%, similar a la pasada.",
+        "exigente": "Semana estable en {{thisWeek}}%. Para subir, un empujón más cada día."
+      }
+    },
+    "closing": [
+      "Mañana es una página en blanco. Hoy ya has hecho lo que has podido.",
+      "No hace falta un día perfecto, solo un día intentado.",
+      "Cada comida registrada es información para ir mejor, no un examen.",
+      "Descansa. El cuerpo también avanza mientras duerme.",
+      "Lo que cuenta no es hoy solo, es la semana entera.",
+      "Un paso más, aunque hoy haya sido pequeño."
+    ]
   }
 }

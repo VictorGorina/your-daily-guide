@@ -1,13 +1,9 @@
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "../lib/content-guard";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
-import {
-  PORTION_SIZE_LABEL,
-  PORTION_SIZES,
-  textMentionsQuantity,
-  type PortionSize,
-} from "../lib/portion";
+import { PORTION_SIZES, textMentionsQuantity, type PortionSize } from "../lib/portion";
 import { DictateButton } from "./dictate-button";
 import { Sheet } from "./ui/sheet";
 
@@ -49,6 +45,8 @@ export function MealSwapSheet({
   /** El tamaño que suele elegir (`learnedPortionSize`): viene preseleccionado. */
   defaultSize?: PortionSize;
 }) {
+  const { t } = useTranslation();
+  const meal = t(`moments.${mealLabel}`, { defaultValue: mealLabel }).toLowerCase();
   const [what, setWhat] = useState("");
   const [size, setSize] = useState<PortionSize>(defaultSize);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +85,7 @@ export function MealSwapSheet({
   const submit = () => {
     const desc = what.trim();
     if (desc.length < 2) {
-      setError("Escribe qué has comido.");
+      setError(t("mealSwap.tooShort"));
       return;
     }
     if (!isCleanFood(desc)) {
@@ -100,7 +98,7 @@ export function MealSwapSheet({
   const submitManual = () => {
     const value = Number(kcal.replace(",", "."));
     if (!Number.isFinite(value) || value <= 0 || value > 5000) {
-      setError("Escribe las kcal aproximadas, entre 1 y 5000.");
+      setError(t("mealSwap.kcalRange"));
       return;
     }
     void send(what.trim(), Math.round(value));
@@ -115,22 +113,21 @@ export function MealSwapSheet({
         onOpenChange(v);
         if (!v) reset();
       }}
-      title="Comí distinto"
+      title={t("mealSwap.title")}
     >
       <View className="gap-4 px-4 pb-8">
         {plannedDish ? (
           <Text className="text-sm text-muted-foreground">
-            En vez de <Text className="line-through">{plannedDish}</Text>, ¿qué has comido?
+            {t("mealSwap.insteadBefore")} <Text className="line-through">{plannedDish}</Text>
+            {t("mealSwap.insteadAfter")}
           </Text>
         ) : (
-          <Text className="text-sm text-muted-foreground">
-            ¿Qué has comido en {mealLabel.toLowerCase()}?
-          </Text>
+          <Text className="text-sm text-muted-foreground">{t("mealSwap.whatAt", { meal })}</Text>
         )}
 
         <View className="relative">
           <TextInput
-            placeholder="Ej: Una pizza margarita con ensalada"
+            placeholder={t("mealSwap.placeholder")}
             placeholderTextColor="#a8a096"
             value={what}
             onChangeText={(t) => {
@@ -143,7 +140,7 @@ export function MealSwapSheet({
             className="min-h-[64px] rounded-2xl bg-secondary px-3.5 py-3 pr-11 text-sm text-foreground"
           />
           <DictateButton
-            onText={(t) => setWhat((prev) => (prev ? `${prev} ${t}` : t))}
+            onText={(said) => setWhat((prev) => (prev ? `${prev} ${said}` : said))}
             className="absolute right-2 top-2"
           />
         </View>
@@ -165,17 +162,17 @@ export function MealSwapSheet({
                       size === s ? "text-primary-foreground" : "text-muted-foreground"
                     }`}
                   >
-                    {PORTION_SIZE_LABEL[s]}
+                    {t(`mealSwap.sizes.${s}`)}
                   </Text>
                 </Pressable>
               ))}
             </View>
             <Text className="text-[11px] text-muted-foreground">
               {defaultSize === "grande"
-                ? "Sueles servirte más: lo he dejado en grande."
+                ? t("mealSwap.usualBigger")
                 : defaultSize === "pequena"
-                  ? "Sueles servirte menos: lo he dejado en pequeño."
-                  : "Sobre tu ración de siempre."}
+                  ? t("mealSwap.usualSmaller")
+                  : t("mealSwap.usualNormal")}
             </Text>
           </View>
         ) : null}
@@ -188,13 +185,11 @@ export function MealSwapSheet({
 
         {vague && showNumbers ? (
           <View className="gap-2 rounded-2xl bg-surface p-3">
-            <Text className="text-xs text-muted-foreground">
-              ¿Prefieres apuntar las calorías tú? Cuentan tal cual las escribas.
-            </Text>
+            <Text className="text-xs text-muted-foreground">{t("mealSwap.manualOffer")}</Text>
             <View className="flex-row gap-2">
               <TextInput
                 keyboardType="number-pad"
-                placeholder="kcal aproximadas"
+                placeholder={t("mealSwap.kcalPlaceholder")}
                 placeholderTextColor="#a8a096"
                 value={kcal}
                 onChangeText={setKcal}
@@ -208,7 +203,7 @@ export function MealSwapSheet({
                   locked || !kcal.trim() ? "opacity-60" : ""
                 }`}
               >
-                <Text className="text-sm font-semibold text-foreground">Apuntar</Text>
+                <Text className="text-sm font-semibold text-foreground">{t("mealSwap.note")}</Text>
               </Pressable>
             </View>
           </View>
@@ -223,7 +218,7 @@ export function MealSwapSheet({
         >
           {locked ? <ActivityIndicator size="small" color="#fff" /> : null}
           <Text className="text-sm font-semibold text-primary-foreground">
-            {locked ? "Cambiando…" : "Cambiar"}
+            {locked ? t("mealSwap.changing") : t("common.change")}
           </Text>
         </Pressable>
 
@@ -236,7 +231,7 @@ export function MealSwapSheet({
           disabled={locked}
           className="items-center py-1 active:opacity-70"
         >
-          <Text className="text-sm font-medium text-muted-foreground">Me lo salté</Text>
+          <Text className="text-sm font-medium text-muted-foreground">{t("mealSwap.skipped")}</Text>
         </Pressable>
       </View>
     </Sheet>

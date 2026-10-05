@@ -1,75 +1,33 @@
 import { Moon } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 
 import type { MealStatus, WeeklyTrend } from "../lib/daily";
 import { Sheet } from "./ui/sheet";
 
-// Frases de cierre del día, cortas y sin presión — rotan por día del año.
-const CLOSING_LINES = [
-  "Mañana es una página en blanco. Hoy ya has hecho lo que has podido.",
-  "No hace falta un día perfecto, solo un día intentado.",
-  "Cada comida registrada es información para ir mejor, no un examen.",
-  "Descansa. El cuerpo también avanza mientras duerme.",
-  "Lo que cuenta no es hoy solo, es la semana entera.",
-  "Un paso más, aunque hoy haya sido pequeño.",
-];
+/** Frases de cierre del catálogo (`nightly.closing`): una por día, en rotación. */
+const CLOSING_LINES = 6;
 
-function closingLineOfDay(date: Date = new Date()): string {
+function closingLineIndex(date: Date = new Date()): number {
   const start = new Date(date.getFullYear(), 0, 0);
   const dayOfYear = Math.floor((date.getTime() - start.getTime()) / 86400000);
-  return CLOSING_LINES[dayOfYear % CLOSING_LINES.length]!;
+  return dayOfYear % CLOSING_LINES;
 }
 
+// El coach de chat ya adapta su tono vía toneLine en ai-provider.server.ts;
+// esto lleva el mismo matiz a un texto puramente local, sin llamada a IA. El
+// texto de cada tono está en el catálogo (`nightly.reaction`, `nightly.trend`).
 type Tone = "relajado" | "neutro" | "exigente";
 const toneOf = (tone?: string | null): Tone =>
   tone === "relajado" || tone === "exigente" ? tone : "neutro";
 
-// Reacción al día de hoy, adaptada al matiz elegido en el perfil (Ajustes).
-function reactionLine(tone: Tone, ratio: number): string {
-  if (ratio >= 1) {
-    return {
-      relajado: "Día redondo, sin ni siquiera proponértelo. Disfrútalo.",
-      neutro: "Día completo. Bien hecho.",
-      exigente: "Día completo — así se construye un buen mes.",
-    }[tone];
-  }
-  if (ratio > 0) {
-    return {
-      relajado: "Parte del día ha ido bien, y eso ya suma. Sin más cuentas.",
-      neutro: "Un día parcial. Lo que has hecho también cuenta.",
-      exigente: "Día a medias — mañana puedes cerrarlo del todo.",
-    }[tone];
-  }
-  return {
-    relajado: "Hoy no ha tocado, y no pasa nada. Mañana es otro día.",
-    neutro: "Hoy no se ha registrado nada, sin drama.",
-    exigente: "Hoy se ha quedado en cero — mañana toca retomarlo.",
-  }[tone];
-}
+const reactionKey = (ratio: number) => (ratio >= 1 ? "full" : ratio > 0 ? "partial" : "none");
 
-// Feedback de tendencia semanal, también matizado por tono.
-function weeklyTrendLine(tone: Tone, trend: WeeklyTrend | null): string | null {
-  if (!trend) return null;
-  if (trend.deltaPts >= 5) {
-    return {
-      relajado: `Esta semana vas mejor que la anterior (${trend.thisWeek}% vs ${trend.lastWeek}%) — nota lo que ha funcionado.`,
-      neutro: `Tendencia semanal: ${trend.thisWeek}%, frente al ${trend.lastWeek}% de la semana pasada. Vas a mejor.`,
-      exigente: `Semana en subida: ${trend.thisWeek}% vs ${trend.lastWeek}%. Sigue empujando.`,
-    }[tone];
-  }
-  if (trend.deltaPts <= -5) {
-    return {
-      relajado: `Esta semana ha costado algo más (${trend.thisWeek}% vs ${trend.lastWeek}%), y está bien. No todas las semanas son iguales.`,
-      neutro: `Esta semana: ${trend.thisWeek}%, algo por debajo del ${trend.lastWeek}% anterior.`,
-      exigente: `Esta semana baja al ${trend.thisWeek}% (antes ${trend.lastWeek}%). Toca reajustar, no rendirse.`,
-    }[tone];
-  }
-  return {
-    relajado: `Esta semana vas parecido a la anterior (${trend.thisWeek}%). Constancia tranquila.`,
-    neutro: `Esta semana: ${trend.thisWeek}%, similar a la pasada.`,
-    exigente: `Semana estable en ${trend.thisWeek}%. Para subir, un empujón más cada día.`,
-  }[tone];
-}
+// Tendencia semanal (en vez de fijarse solo en el cumplimiento de hoy).
+// weeklyTrendFrom exige al menos 2 días registrados en cada una de las dos
+// semanas, así que null es habitual al principio.
+const trendKey = (trend: WeeklyTrend) =>
+  trend.deltaPts >= 5 ? "up" : trend.deltaPts <= -5 ? "down" : "flat";
 
 type Meal = { label: string; done: boolean; status?: MealStatus };
 
@@ -99,8 +57,20 @@ export function NightlyReviewSheet({
   const skippedCount = habits.filter((h) => h.status === "salteo").length;
   const pending = habits.filter((h) => h.status == null);
   const ratio = total ? habits.filter((h) => h.done).length / total : 0;
-  const t = toneOf(tone);
-  const trendLine = weeklyTrendLine(t, weeklyTrend);
+  const { t } = useTranslation();
+  const toneKey = toneOf(tone);
+  const trendLine = weeklyTrend
+    ? t(`nightly.trend.${trendKey(weeklyTrend)}.${toneKey}`, {
+        thisWeek: weeklyTrend.thisWeek,
+        lastWeek: weeklyTrend.lastWeek,
+      })
+    : null;
+  const summary = total
+    ? t("nightly.summaryPlan", { count: doneCount }) +
+      (distintoCount ? t("nightly.summaryDifferent", { count: distintoCount }) : "") +
+      (skippedCount ? t("nightly.summarySkipped", { count: skippedCount }) : "") +
+      t("nightly.summaryTotal", { count: total })
+    : t("nightly.noMeals");
 
   return (
     <Sheet
@@ -109,27 +79,30 @@ export function NightlyReviewSheet({
       title={
         <View className="flex-row items-center gap-2">
           <Moon size={16} color="#6dbe7b" />
-          <Text className="font-heading-medium text-lg text-foreground">Repaso de hoy</Text>
+          <Text className="font-heading-medium text-lg text-foreground">{t("nightly.title")}</Text>
         </View>
       }
-      description="Menos de un minuto, sin nota ni examen."
+      description={t("nightly.subtitle")}
     >
       <View className="gap-4 pb-8 pt-4">
         {pending.length > 0 && onSkipPending ? (
           <View className="rounded-3xl bg-primary-soft p-4">
             <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
-              Sin marcar todavía
+              {t("nightly.pendingTitle")}
             </Text>
             <Text className="mt-1 text-sm text-foreground">
-              {pending.map((h) => h.label).join(", ")} — si ya no vas a más hoy, puedes cerrarlas
-              sin más, no cuentan como un fallo.
+              {t("nightly.pendingBody", {
+                meals: pending
+                  .map((h) => t(`moments.${h.label}`, { defaultValue: h.label }))
+                  .join(", "),
+              })}
             </Text>
             <Pressable
               onPress={onSkipPending}
               className="mt-3 w-full items-center rounded-full bg-secondary py-3 active:opacity-90"
             >
               <Text className="text-sm font-sans-medium text-secondary-foreground">
-                Hoy paso de estas
+                {t("nightly.skipPending")}
               </Text>
             </Pressable>
           </View>
@@ -137,30 +110,30 @@ export function NightlyReviewSheet({
 
         <View className="rounded-3xl bg-surface p-4">
           <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
-            Comidas de hoy
+            {t("nightly.mealsTitle")}
           </Text>
-          <Text className="mt-1 text-sm text-foreground">
-            {total
-              ? `${doneCount} del plan${distintoCount ? `, ${distintoCount} distinto` : ""}${
-                  skippedCount ? `, ${skippedCount} saltada${skippedCount > 1 ? "s" : ""}` : ""
-                } · ${total} en total.`
-              : "Hoy no se han registrado comidas."}
+          <Text className="mt-1 text-sm text-foreground">{summary}</Text>
+          <Text className="mt-2 text-sm text-foreground">
+            {t(`nightly.reaction.${reactionKey(ratio)}.${toneKey}`)}
           </Text>
-          <Text className="mt-2 text-sm text-foreground">{reactionLine(t, ratio)}</Text>
-          <Text className="mt-1 text-xs text-muted-foreground">Impulso: {impulso}%</Text>
+          <Text className="mt-1 text-xs text-muted-foreground">
+            {t("nightly.momentum", { value: impulso })}
+          </Text>
         </View>
 
         {trendLine ? (
           <View className="rounded-3xl bg-surface p-4">
             <Text className="text-[11px] font-sans-medium uppercase tracking-wide text-muted-foreground">
-              Esta semana
+              {t("nightly.weekTitle")}
             </Text>
             <Text className="mt-1 text-sm text-foreground">{trendLine}</Text>
           </View>
         ) : null}
 
         <View className="rounded-3xl bg-surface p-4">
-          <Text className="text-sm leading-relaxed text-foreground">{closingLineOfDay()}</Text>
+          <Text className="text-sm leading-relaxed text-foreground">
+            {t(`nightly.closing.${closingLineIndex()}`)}
+          </Text>
         </View>
 
         <Pressable
@@ -168,7 +141,7 @@ export function NightlyReviewSheet({
           className="w-full items-center rounded-full bg-primary py-4 active:opacity-90"
         >
           <Text className="text-sm font-sans-semibold text-primary-foreground">
-            Listo, hasta mañana
+            {t("nightly.done")}
           </Text>
         </Pressable>
       </View>

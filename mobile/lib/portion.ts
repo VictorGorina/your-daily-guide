@@ -104,12 +104,6 @@ export const SIZE_FACTOR: Record<PortionSize, number> = {
   grande: 1.3,
 };
 
-export const PORTION_SIZE_LABEL: Record<PortionSize, string> = {
-  pequena: "Pequeño",
-  normal: "Normal",
-  grande: "Grande",
-};
-
 export const parsePortionSize = (raw: unknown): PortionSize | null =>
   (PORTION_SIZES as readonly string[]).includes(String(raw)) ? (raw as PortionSize) : null;
 

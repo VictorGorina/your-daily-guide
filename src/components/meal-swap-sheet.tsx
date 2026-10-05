@@ -1,15 +1,11 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { DictateButton } from "@/components/dictate-button";
 import { DictationField, DictationWave } from "@/components/dictation-field";
 import { BLOCKED_FOOD_MESSAGE, isCleanFood } from "@/lib/content-guard";
-import {
-  PORTION_SIZE_LABEL,
-  PORTION_SIZES,
-  textMentionsQuantity,
-  type PortionSize,
-} from "@/lib/nutrition/portion";
+import { PORTION_SIZES, textMentionsQuantity, type PortionSize } from "@/lib/nutrition/portion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -71,6 +67,8 @@ export function MealSwapSheet({
   /** El tamaño que suele elegir (`learnedPortionSize`): viene preseleccionado. */
   defaultSize?: PortionSize;
 }) {
+  const { t } = useTranslation();
+  const meal = t(`moments.${mealLabel}`, { defaultValue: mealLabel }).toLowerCase();
   const [what, setWhat] = useState("");
   const [size, setSize] = useState<PortionSize>(defaultSize);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +107,7 @@ export function MealSwapSheet({
   const submit = () => {
     const desc = what.trim();
     if (desc.length < 2) {
-      setError("Escribe qué has comido.");
+      setError(t("mealSwap.tooShort"));
       return;
     }
     // Aviso inmediato, sin esperar al servidor. El rechazo de verdad lo hace el
@@ -126,7 +124,7 @@ export function MealSwapSheet({
     const desc = what.trim();
     const value = Number(kcal.replace(",", "."));
     if (!Number.isFinite(value) || value <= 0 || value > 5000) {
-      setError("Escribe las kcal aproximadas, entre 1 y 5000.");
+      setError(t("mealSwap.kcalRange"));
       return;
     }
     void send(desc, Math.round(value));
@@ -145,15 +143,16 @@ export function MealSwapSheet({
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-title font-semibold tracking-[-0.02em]">
-            Comí distinto
+            {t("mealSwap.title")}
           </SheetTitle>
           <SheetDescription>
             {plannedDish ? (
               <>
-                En vez de <span className="line-through">{plannedDish}</span>, ¿qué has comido?
+                {t("mealSwap.insteadBefore")} <span className="line-through">{plannedDish}</span>
+                {t("mealSwap.insteadAfter")}
               </>
             ) : (
-              `¿Qué has comido en ${mealLabel.toLowerCase()}?`
+              t("mealSwap.whatAt", { meal })
             )}
           </SheetDescription>
         </SheetHeader>
@@ -162,8 +161,8 @@ export function MealSwapSheet({
           <DictationField>
             <div className="relative rounded-2xl">
               <Textarea
-                placeholder="Ej: Una pizza margarita con ensalada"
-                aria-label={`Qué has comido en ${mealLabel.toLowerCase()}`}
+                placeholder={t("mealSwap.placeholder")}
+                aria-label={t("mealSwap.fieldLabel", { meal })}
                 value={what}
                 onChange={(e) => {
                   setWhat(e.target.value);
@@ -176,7 +175,7 @@ export function MealSwapSheet({
                 autoFocus
               />
               <DictateButton
-                onText={(t) => setWhat((prev) => (prev ? `${prev} ${t}` : t))}
+                onText={(said) => setWhat((prev) => (prev ? `${prev} ${said}` : said))}
                 className="absolute right-2 top-2"
               />
               <DictationWave />
@@ -185,7 +184,7 @@ export function MealSwapSheet({
 
           {!textMentionsQuantity(what) ? (
             <div className="space-y-1.5">
-              <div className="flex gap-2" role="radiogroup" aria-label="Cantidad">
+              <div className="flex gap-2" role="radiogroup" aria-label={t("mealSwap.amount")}>
                 {PORTION_SIZES.map((s) => (
                   <button
                     key={s}
@@ -200,16 +199,16 @@ export function MealSwapSheet({
                         : "bg-secondary text-muted-foreground"
                     }`}
                   >
-                    {PORTION_SIZE_LABEL[s]}
+                    {t(`mealSwap.sizes.${s}`)}
                   </button>
                 ))}
               </div>
               <p className="text-[11px] text-muted-foreground">
                 {defaultSize === "grande"
-                  ? "Sueles servirte más: lo he dejado en grande."
+                  ? t("mealSwap.usualBigger")
                   : defaultSize === "pequena"
-                    ? "Sueles servirte menos: lo he dejado en pequeño."
-                    : "Sobre tu ración de siempre."}
+                    ? t("mealSwap.usualSmaller")
+                    : t("mealSwap.usualNormal")}
               </p>
             </div>
           ) : null}
@@ -222,14 +221,12 @@ export function MealSwapSheet({
 
           {vague && showNumbers ? (
             <div className="space-y-2 rounded-2xl bg-surface p-3">
-              <p className="text-xs text-muted-foreground">
-                ¿Prefieres apuntar las calorías tú? Cuentan tal cual las escribas.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("mealSwap.manualOffer")}</p>
               <div className="flex gap-2">
                 <Input
                   inputMode="numeric"
-                  placeholder="kcal aproximadas"
-                  aria-label="Calorías aproximadas"
+                  placeholder={t("mealSwap.kcalPlaceholder")}
+                  aria-label={t("mealSwap.kcalLabel")}
                   value={kcal}
                   onChange={(e) => setKcal(e.target.value)}
                   disabled={locked}
@@ -240,7 +237,7 @@ export function MealSwapSheet({
                   onClick={submitManual}
                   disabled={locked || !kcal.trim()}
                 >
-                  Apuntar
+                  {t("mealSwap.note")}
                 </Button>
               </div>
             </div>
@@ -250,10 +247,10 @@ export function MealSwapSheet({
             {locked ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Cambiando…
+                {t("mealSwap.changing")}
               </>
             ) : (
-              "Cambiar"
+              t("common.change")
             )}
           </Button>
 
@@ -267,7 +264,7 @@ export function MealSwapSheet({
             disabled={locked}
             className="w-full text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            Me lo salté
+            {t("mealSwap.skipped")}
           </button>
         </div>
       </SheetContent>

@@ -741,5 +741,89 @@
     "unavailableLabel": "{{label}} (not available in this browser)",
     "holdTo": "Hold to {{action}}",
     "listening": "Listening…"
+  },
+  "mealSwap": {
+    "title": "I ate something else",
+    "insteadBefore": "Instead of",
+    "insteadAfter": ", what did you eat?",
+    "whatAt": "What did you eat for {{meal}}?",
+    "fieldLabel": "What you ate for {{meal}}",
+    "placeholder": "E.g. a margherita pizza with salad",
+    "tooShort": "Write what you ate.",
+    "kcalRange": "Write the approximate kcal, between 1 and 5000.",
+    "amount": "Amount",
+    "sizes": {
+      "pequena": "Small",
+      "normal": "Normal",
+      "grande": "Large"
+    },
+    "usualBigger": "You usually serve yourself more: I've left it on large.",
+    "usualSmaller": "You usually serve yourself less: I've left it on small.",
+    "usualNormal": "Based on your usual portion.",
+    "manualOffer": "Would you rather note the calories yourself? They count exactly as you write them.",
+    "kcalPlaceholder": "approximate kcal",
+    "kcalLabel": "Approximate calories",
+    "note": "Note",
+    "changing": "Changing…",
+    "skipped": "I skipped it"
+  },
+  "nightly": {
+    "title": "Today's review",
+    "subtitle": "Less than a minute, no marks and no exam.",
+    "pendingTitle": "Not marked yet",
+    "pendingBody": "{{meals}} — if you're done for today, you can simply close them; they don't count as a failure.",
+    "skipPending": "I'll skip these today",
+    "mealsTitle": "Today's meals",
+    "summaryPlan": "{{count}} from the plan",
+    "summaryDifferent": ", {{count}} different",
+    "summarySkipped_one": ", {{count}} skipped",
+    "summarySkipped_other": ", {{count}} skipped",
+    "summaryTotal": " · {{count}} in total.",
+    "noMeals": "No meals were logged today.",
+    "momentum": "Momentum: {{value}}%",
+    "weekTitle": "This week",
+    "done": "Done, see you tomorrow",
+    "reaction": {
+      "full": {
+        "relajado": "A perfect day, without even trying. Enjoy it.",
+        "neutro": "A complete day. Well done.",
+        "exigente": "A complete day — that's how a good month is built."
+      },
+      "partial": {
+        "relajado": "Part of the day went well, and that already counts. No more sums.",
+        "neutro": "A partial day. What you did counts too.",
+        "exigente": "Half a day — tomorrow you can finish it properly."
+      },
+      "none": {
+        "relajado": "Today wasn't the day, and that's fine. Tomorrow is another day.",
+        "neutro": "Nothing was logged today, no drama.",
+        "exigente": "Today stayed at zero — tomorrow it's time to pick it back up."
+      }
+    },
+    "trend": {
+      "up": {
+        "relajado": "This week is going better than the last ({{thisWeek}}% vs {{lastWeek}}%) — notice what worked.",
+        "neutro": "Weekly trend: {{thisWeek}}%, against {{lastWeek}}% last week. You're improving.",
+        "exigente": "A week on the rise: {{thisWeek}}% vs {{lastWeek}}%. Keep pushing."
+      },
+      "down": {
+        "relajado": "This week has been a bit harder ({{thisWeek}}% vs {{lastWeek}}%), and that's okay. Not every week is the same.",
+        "neutro": "This week: {{thisWeek}}%, a little below last week's {{lastWeek}}%.",
+        "exigente": "This week drops to {{thisWeek}}% (it was {{lastWeek}}%). Time to readjust, not to give up."
+      },
+      "flat": {
+        "relajado": "This week is much like the last ({{thisWeek}}%). Calm consistency.",
+        "neutro": "This week: {{thisWeek}}%, similar to last week.",
+        "exigente": "A steady week at {{thisWeek}}%. To go up, one more push each day."
+      }
+    },
+    "closing": [
+      "Tomorrow is a blank page. Today you've done what you could.",
+      "You don't need a perfect day, just a day you tried.",
+      "Every meal you log is information to do better, not an exam.",
+      "Rest. The body moves forward while it sleeps too.",
+      "What counts isn't today alone, it's the whole week.",
+      "One more step, even if today's was small."
+    ]
   }
 }
