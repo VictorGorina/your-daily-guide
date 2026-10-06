@@ -2,7 +2,7 @@ name: CI
 
 # Puertas de la web en cada push y PR: formato/lint, typecheck, la suite de
 # tests de lógica (también en dos zonas horarias, porque parte del código de
-# fechas depende de la hora local), el build de producción y que nada de
+# fechas depende de la hora local), los tests de componentes, el build de producción y que nada de
 # servidor acabe en el bundle del navegador. Ver docs/agents/verification.md y
 # docs/agents/testing.md. La app móvil (mobile/) tiene su propio job, `mobile`,
 # con su propio toolchain (npm, no Bun: Metro no corre sobre Bun). El job `db`
@@ -58,6 +58,11 @@ jobs:
       - name: Tests
         if: ${{ !cancelled() }}
         run: bun test
+
+      # Componentes sobre jsdom (Vitest + Testing Library, `*.vitest.tsx`).
+      - name: Tests de componentes
+        if: ${{ !cancelled() }}
+        run: bun run test:ui
 
       - name: Tests (Europe/Madrid)
         if: ${{ !cancelled() }}

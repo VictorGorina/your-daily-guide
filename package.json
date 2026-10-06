@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "typecheck:test": "tsc -p tsconfig.test.json",
     "test": "bun test",
+    "test:ui": "vitest run",
     "db": "bun scripts/db.ts",
     "db:types": "bash scripts/db-types.sh",
     "db:types:check": "bash scripts/db-types.sh --check-local",
@@ -75,6 +76,9 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@tanstack/devtools-vite": "^0.8.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
@@ -86,11 +90,13 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
+    "jsdom": "^30.1.2",
     "lightningcss": "^1.30.0",
     "nitro": "3.0.260603-beta",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^5.0.3"
   }
 }
