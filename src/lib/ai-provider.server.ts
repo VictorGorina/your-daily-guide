@@ -79,6 +79,18 @@ export function requireAiKey(): string {
 }
 
 /**
+ * Otra dirección para la API de OpenRouter, solo para los tests E2E (ticket 25
+ * de la auditoría): `e2e/mock-openrouter.ts` responde ahí con respuestas fijas.
+ * En el despliegue de producción se ignora aunque esté definida: los prompts
+ * llevan datos de la persona y no pueden acabar en otro servidor por una
+ * variable mal puesta.
+ */
+export function aiBaseUrl(env: Record<string, string | undefined> = process.env) {
+  if (env.VERCEL_ENV === "production") return undefined;
+  return env.OPENROUTER_BASE_URL || undefined;
+}
+
+/**
  * Modelos de OpenRouter que cuentan su gasto contra el tope de la persona.
  *
  * `userId` es obligatorio a propósito: toda llamada a la IA tiene que decir a
@@ -95,7 +107,8 @@ export function createAiProvider(
    */
   opts: { capScope?: SpendCapScope } = {},
 ) {
-  const openrouter = createOpenRouter({ apiKey });
+  const baseURL = aiBaseUrl();
+  const openrouter = createOpenRouter({ apiKey, ...(baseURL ? { baseURL } : {}) });
   const capScope = opts.capScope ?? "day";
   return (modelId: string) => {
     // Sin `usage.include`, OpenRouter no manda `usage.cost` y solo quedaría

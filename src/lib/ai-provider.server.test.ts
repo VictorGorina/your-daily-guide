@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
-import { asPromptData, requireAiKey, onFinishPart } from "./ai-provider.server";
+import { aiBaseUrl, asPromptData, requireAiKey, onFinishPart } from "./ai-provider.server";
 
 describe("requireAiKey", () => {
   const saved = process.env.OPENROUTER_API_KEY;
@@ -19,6 +19,25 @@ describe("requireAiKey", () => {
     expect(() => requireAiKey()).toThrow("Falta la clave de IA");
     process.env.OPENROUTER_API_KEY = "";
     expect(() => requireAiKey()).toThrow("Falta la clave de IA");
+  });
+});
+
+describe("aiBaseUrl", () => {
+  it("sin la variable, la dirección de OpenRouter de siempre", () => {
+    expect(aiBaseUrl({})).toBeUndefined();
+    expect(aiBaseUrl({ OPENROUTER_BASE_URL: "" })).toBeUndefined();
+  });
+
+  it("con la variable, esa (los tests E2E)", () => {
+    expect(aiBaseUrl({ OPENROUTER_BASE_URL: "http://127.0.0.1:4010/api/v1" })).toBe(
+      "http://127.0.0.1:4010/api/v1",
+    );
+  });
+
+  it("en producción se ignora: los prompts no salen a otro servidor", () => {
+    expect(
+      aiBaseUrl({ VERCEL_ENV: "production", OPENROUTER_BASE_URL: "http://otro.example" }),
+    ).toBeUndefined();
   });
 });
 
