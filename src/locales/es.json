@@ -1103,7 +1103,7 @@
     "updating": "Actualizando…",
     "trips_one": "{{count}} compra.",
     "trips_other": "{{count}} compras.",
-    "overBudget": "El mes se pasa de tu presupuesto ({{budget}}). Puedo ajustarlo: regenera el plan o dímelo en el chat.",
+    "overBudget": "El mes se pasa de tu presupuesto ({{budget}}). Dímelo en el chat y lo ajusto.",
     "previousTrip": "Compra anterior",
     "nextTrip": "Compra siguiente",
     "tripSingle": "Compra única del mes",
@@ -1128,7 +1128,7 @@
     "empty": {
       "past": "No hubo lista de la compra este mes.",
       "house": "Aún no hay lista de la casa. La prepara {{name}}.",
-      "own": "Aún no hay lista. Regenera el plan para crearla."
+      "own": "Aún no hay lista. Crea tu plan del mes para tenerla."
     },
     "plannerFallback": "quien planifica",
     "emptyFilter": {
