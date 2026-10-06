@@ -14,6 +14,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.victorgorina.dailyguide",
+      "appleTeamId": "WR7LMWQ7ZQ",
+      "associatedDomains": ["applinks:www.peppersfam.es"],
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,

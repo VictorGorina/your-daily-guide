@@ -11,7 +11,8 @@ import { supabase } from "../lib/supabase";
 
 /**
  * Destino del enlace del correo de confirmación de alta cuando el alta se pidió
- * desde el móvil (`platform: "mobile"` → `dailyguide://confirmado`, ver
+ * desde el móvil (`platform: "mobile"` → `https://…/confirmado?app=1`, que iOS
+ * abre aquí por Universal Link; `dailyguide://confirmado` sigue valiendo. Ver
  * requestSignupConfirmation en la web). Confirmar el correo deja la sesión
  * abierta, así que aquí solo hay que instalarla y entrar.
  *

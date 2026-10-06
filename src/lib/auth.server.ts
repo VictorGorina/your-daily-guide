@@ -25,6 +25,13 @@ export type AuthEmailDeps = {
  */
 const MIN_RESPONSE_MS = 2_000;
 
+/**
+ * Marca de los enlaces pedidos desde el móvil. El dominio solo está asociado a
+ * la app para las URLs que la llevan (`.well-known/apple-app-site-association`),
+ * así los enlaces de la web no abren la app. La página web la ignora.
+ */
+const MOBILE_LINK_MARK = "?app=1";
+
 async function atLeast<T>(ms: number, body: () => Promise<T>): Promise<T> {
   const [result] = await Promise.all([body(), new Promise((r) => setTimeout(r, ms))]);
   return result;
@@ -117,8 +124,9 @@ export async function requestPasswordResetHandler(
     // token de sesión en la URL — justo lo que evita `safeInternalPath` en las
     // rutas de la web.
     const publicUrl = (await import("@/lib/env.server")).publicUrl();
-    const redirectTo =
-      platform === "mobile" ? "dailyguide://restablecer" : `${publicUrl}/restablecer`;
+    // El móvil, por Universal Link (`?app=1`, ver `apple-app-site-association`):
+    // con la app instalada la abre; sin ella, es la misma página de la web.
+    const redirectTo = `${publicUrl}/restablecer${platform === "mobile" ? MOBILE_LINK_MARK : ""}`;
 
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -176,7 +184,7 @@ export async function requestSignupConfirmationHandler(
     const publicUrl = (await import("@/lib/env.server")).publicUrl();
     const redirectTo =
       platform === "mobile"
-        ? "dailyguide://confirmado"
+        ? `${publicUrl}/confirmado${MOBILE_LINK_MARK}`
         : `${publicUrl}/confirmado${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 
     try {

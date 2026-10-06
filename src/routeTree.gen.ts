@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ConfirmadoRouteImport } from './routes/confirmado'
 import { Route as PrivacidadRouteImport } from './routes/privacidad'
 import { Route as RestablecerRouteImport } from './routes/restablecer'
+import { Route as DotwellKnownAppleAppSiteAssociationRouteImport } from './routes/[.]well-known/apple-app-site-association'
 import { Route as AuthenticatedAjustesRouteImport } from './routes/_authenticated/ajustes'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedHistorialRouteImport } from './routes/_authenticated/historial'
@@ -95,6 +96,12 @@ const RestablecerRoute = RestablecerRouteImport.update({
   path: '/restablecer',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotwellKnownAppleAppSiteAssociationRoute =
+  DotwellKnownAppleAppSiteAssociationRouteImport.update({
+    id: '/.well-known/apple-app-site-association',
+    path: '/.well-known/apple-app-site-association',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedAjustesRoute = AuthenticatedAjustesRouteImport.update({
   id: '/ajustes',
   path: '/ajustes',
@@ -355,6 +362,7 @@ export interface FileRoutesByFullPath {
   '/confirmado': typeof ConfirmadoRoute
   '/privacidad': typeof PrivacidadRoute
   '/restablecer': typeof RestablecerRoute
+  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
   '/ajustes': typeof AuthenticatedAjustesRoute
   '/chat': typeof AuthenticatedChatRoute
   '/historial': typeof AuthenticatedHistorialRoute
@@ -412,6 +420,7 @@ export interface FileRoutesByTo {
   '/confirmado': typeof ConfirmadoRoute
   '/privacidad': typeof PrivacidadRoute
   '/restablecer': typeof RestablecerRoute
+  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
   '/ajustes': typeof AuthenticatedAjustesRoute
   '/chat': typeof AuthenticatedChatRoute
   '/historial': typeof AuthenticatedHistorialRoute
@@ -471,6 +480,7 @@ export interface FileRoutesById {
   '/confirmado': typeof ConfirmadoRoute
   '/privacidad': typeof PrivacidadRoute
   '/restablecer': typeof RestablecerRoute
+  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
   '/_authenticated/ajustes': typeof AuthenticatedAjustesRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/historial': typeof AuthenticatedHistorialRoute
@@ -530,6 +540,7 @@ export interface FileRouteTypes {
     | '/confirmado'
     | '/privacidad'
     | '/restablecer'
+    | '/.well-known/apple-app-site-association'
     | '/ajustes'
     | '/chat'
     | '/historial'
@@ -587,6 +598,7 @@ export interface FileRouteTypes {
     | '/confirmado'
     | '/privacidad'
     | '/restablecer'
+    | '/.well-known/apple-app-site-association'
     | '/ajustes'
     | '/chat'
     | '/historial'
@@ -645,6 +657,7 @@ export interface FileRouteTypes {
     | '/confirmado'
     | '/privacidad'
     | '/restablecer'
+    | '/.well-known/apple-app-site-association'
     | '/_authenticated/ajustes'
     | '/_authenticated/chat'
     | '/_authenticated/historial'
@@ -704,6 +717,7 @@ export interface RootRouteChildren {
   ConfirmadoRoute: typeof ConfirmadoRoute
   PrivacidadRoute: typeof PrivacidadRoute
   RestablecerRoute: typeof RestablecerRoute
+  DotwellKnownAppleAppSiteAssociationRoute: typeof DotwellKnownAppleAppSiteAssociationRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiCspReportRoute: typeof ApiCspReportRoute
   ApiHealthRoute: typeof ApiHealthRoute
@@ -790,6 +804,13 @@ declare module '@tanstack/react-router' {
       path: '/restablecer'
       fullPath: '/restablecer'
       preLoaderRoute: typeof RestablecerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/apple-app-site-association': {
+      id: '/.well-known/apple-app-site-association'
+      path: '/.well-known/apple-app-site-association'
+      fullPath: '/.well-known/apple-app-site-association'
+      preLoaderRoute: typeof DotwellKnownAppleAppSiteAssociationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/ajustes': {
@@ -1177,6 +1198,8 @@ const rootRouteChildren: RootRouteChildren = {
   ConfirmadoRoute: ConfirmadoRoute,
   PrivacidadRoute: PrivacidadRoute,
   RestablecerRoute: RestablecerRoute,
+  DotwellKnownAppleAppSiteAssociationRoute:
+    DotwellKnownAppleAppSiteAssociationRoute,
   ApiChatRoute: ApiChatRoute,
   ApiCspReportRoute: ApiCspReportRoute,
   ApiHealthRoute: ApiHealthRoute,

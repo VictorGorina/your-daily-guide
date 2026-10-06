@@ -269,3 +269,32 @@ describe("createSendThrottle", () => {
     expect(t.throttled("password-reset", "d@x.es")).toBe(true);
   });
 });
+
+// Ticket 38 (MOB-02): el enlace pedido desde el móvil ya no va por el esquema
+// `dailyguide://`, que cualquier app puede registrar, sino por https con la
+// marca que el dominio tiene asociada a la app.
+describe("destino del enlace según la plataforma", () => {
+  const redirectOf = (call: unknown) =>
+    (call as { options?: { redirectTo?: string } }).options?.redirectTo ?? "";
+
+  it("el móvil recibe un enlace https del dominio con `?app=1`, nunca el esquema propio", async () => {
+    const calls = adminWith(() => link("https://auth.example/x"));
+    await requestPasswordResetHandler(
+      { email: "ul-reset@example.com", platform: "mobile" },
+      mailbox(),
+    );
+    await requestSignupConfirmationHandler(
+      { email: "ul-alta@example.com", password: "secreta123", platform: "mobile" },
+      mailbox(),
+    );
+    const [reset, signup] = calls.map(redirectOf);
+    expect(reset).toMatch(/^https?:\/\/[^/]+\/restablecer\?app=1$/);
+    expect(signup).toMatch(/^https?:\/\/[^/]+\/confirmado\?app=1$/);
+  });
+
+  it("la web no lleva la marca: sus enlaces no deben abrir la app", async () => {
+    const calls = adminWith(() => link("https://auth.example/x"));
+    await requestPasswordResetHandler({ email: "ul-web@example.com", platform: "web" }, mailbox());
+    expect(redirectOf(calls[0])).toMatch(/\/restablecer$/);
+  });
+});
