@@ -63,6 +63,16 @@ const profileLabels = (patch: Partial<Profile>) =>
  * del perfil (ticket 31; ver `useSensitiveProfileConfirm`). Sin él, lo sensible
  * no se guarda.
  */
+/**
+ * Lo que devuelve una herramienta: `output` lo lee el modelo (español canónico,
+ * con instrucciones para él) y NO se enseña; `applied` dice si de verdad cambió
+ * algo, que es lo único que la pantalla necesita para su aviso.
+ */
+export type ToolOutcome = { output: string; applied: boolean };
+
+type NotApplied = { notApplied: string };
+const notApplied = (output: string): NotApplied => ({ notApplied: output });
+
 export function useCoachActions(
   getLog: () => DailyLog | undefined,
   getPlan?: () => MonthlyPlanRow | null | undefined,
@@ -94,13 +104,13 @@ export function useCoachActions(
     qc.invalidateQueries({ queryKey: ["plan"] });
   }, [qc]);
 
-  const runTool = useCallback(
-    async (toolName: string, input: Record<string, unknown>): Promise<string> => {
+  const runToolRaw = useCallback(
+    async (toolName: string, input: Record<string, unknown>): Promise<string | NotApplied> => {
       const habits = getLog()?.habits ?? [];
 
       if (toolName === "actualizar_peso") {
         const kg = Number(input.kg);
-        if (!Number.isFinite(kg)) return "Peso no válido";
+        if (!Number.isFinite(kg)) return notApplied("Peso no válido");
         await updateTodayLog({ weight_kg: kg });
         await saveProfile({ current_weight_kg: kg });
         return `Peso de hoy guardado: ${kg} kg`;
@@ -118,10 +128,10 @@ export function useCoachActions(
       }
       if (toolName === "anadir_habito") {
         const label = String(input.label ?? "").trim();
-        if (!label) return "Falta el nombre del hábito";
+        if (!label) return notApplied("Falta el nombre del hábito");
         // El hábito solo lo escribe el coach, pero su texto sale de lo que le
         // dicte la persona y se queda en `daily_logs.habits`.
-        if (!isCleanFood(label)) return BLOCKED_FOOD_MESSAGE;
+        if (!isCleanFood(label)) return notApplied(BLOCKED_FOOD_MESSAGE);
         await updateTodayLog({ habits: [...habits, { label, done: false }] });
         return `Hábito añadido: ${label}`;
       }
@@ -354,7 +364,7 @@ export function useCoachActions(
       }
       if (toolName === "cambiar_fecha_objetivo") {
         const targetDate = String(input.fecha ?? "");
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return "Fecha no válida";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return notApplied("Fecha no válida");
         await saveProfile({ goal_target_date: targetDate });
         return `Nueva fecha objetivo guardada: ${targetDate}`;
       }
@@ -373,13 +383,14 @@ export function useCoachActions(
         // solo el `meal_slots` estructurado del onboarding — si no,
         // `effectiveMealSlots` seguiría prefiriendo la elección vieja.
         if (Object.keys(toSave).length) await saveProfile(toSave);
-        return profileToolResult(
+        const output = profileToolResult(
           profileLabels(toSave),
           confirmed ? [] : profileLabels(sensitive),
           invalid,
         );
+        return Object.keys(toSave).length ? output : notApplied(output);
       }
-      return "Acción desconocida";
+      return notApplied("Acción desconocida");
     },
     [
       adjustPlan,
@@ -400,5 +411,21 @@ export function useCoachActions(
     ],
   );
 
-  return { runTool, refresh };
+  const runToolDetailed = useCallback(
+    async (toolName: string, input: Record<string, unknown>): Promise<ToolOutcome> => {
+      const result = await runToolRaw(toolName, input);
+      return typeof result === "string"
+        ? { output: result, applied: true }
+        : { output: result.notApplied, applied: false };
+    },
+    [runToolRaw],
+  );
+
+  const runTool = useCallback(
+    async (toolName: string, input: Record<string, unknown>): Promise<string> =>
+      (await runToolDetailed(toolName, input)).output,
+    [runToolDetailed],
+  );
+
+  return { runTool, runToolDetailed, refresh };
 }

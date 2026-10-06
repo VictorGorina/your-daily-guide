@@ -1781,6 +1781,22 @@
       "default": "Applying the change...",
       "failed": "The change couldn't be applied"
     },
+    "actionDone": {
+      "actualizar_peso": "Weight saved",
+      "marcar_habito": "Habits updated",
+      "anadir_habito": "Habit added",
+      "quitar_habito": "Habit removed",
+      "regenerar_guia": "Today's guide refreshed",
+      "cambiar_plato": "Dish changed",
+      "cambiar_plato_nino": "Dish changed",
+      "registrar_deporte": "Exercise logged",
+      "ajustar_plan_mensual": "Plan readjusted",
+      "recalcular_objetivo": "Goal reviewed",
+      "cambiar_fecha_objetivo": "Target date saved",
+      "actualizar_perfil": "Profile updated",
+      "default": "Change applied",
+      "notApplied": "No change was applied"
+    },
     "history": {
       "button": "History",
       "allDays": "All days",

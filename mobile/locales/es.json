@@ -1786,6 +1786,22 @@
       "default": "Aplicando el cambio...",
       "failed": "No se ha podido aplicar el cambio"
     },
+    "actionDone": {
+      "actualizar_peso": "Peso guardado",
+      "marcar_habito": "Hábitos actualizados",
+      "anadir_habito": "Hábito añadido",
+      "quitar_habito": "Hábito quitado",
+      "regenerar_guia": "Guía de hoy actualizada",
+      "cambiar_plato": "Plato cambiado",
+      "cambiar_plato_nino": "Plato cambiado",
+      "registrar_deporte": "Deporte apuntado",
+      "ajustar_plan_mensual": "Plan reajustado",
+      "recalcular_objetivo": "Objetivo revisado",
+      "cambiar_fecha_objetivo": "Fecha objetivo guardada",
+      "actualizar_perfil": "Perfil actualizado",
+      "default": "Cambio aplicado",
+      "notApplied": "No se ha aplicado ningún cambio"
+    },
     "history": {
       "button": "Historial",
       "allDays": "Todos los días",

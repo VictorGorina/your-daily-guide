@@ -60,7 +60,8 @@ type ToolCall = { toolCallId: string; toolName: string; input: unknown };
 type ActionState = "running" | "done" | "error";
 type ActionEntry = { id: string; tool: string; state: ActionState; text: string };
 
-// El texto de cada acción en curso vive en el catálogo (`chat.action.<herramienta>`).
+// El texto de cada acción vive en el catálogo: `chat.action.<herramienta>` mientras
+// corre y `chat.actionDone.<herramienta>` al acabar.
 const ACTION_ICON: Record<string, typeof Scale> = {
   actualizar_peso: Scale,
   marcar_habito: ListChecks,
@@ -146,7 +147,7 @@ export default function CoachPanel({
   };
   // Cambios sensibles del perfil que propone el coach: se confirman antes (ticket 31).
   const { confirm: confirmSensitive, dialog: sensitiveDialog } = useSensitiveProfileConfirm();
-  const { runTool, refresh } = useCoachActions(
+  const { runToolDetailed, refresh } = useCoachActions(
     () => ctx.current.log,
     () => ctx.current.plan,
     confirmSensitive,
@@ -205,9 +206,22 @@ export default function CoachPanel({
         },
       ]);
       try {
-        const output = await runTool(toolName, (input ?? {}) as Record<string, unknown>);
+        const { output, applied } = await runToolDetailed(
+          toolName,
+          (input ?? {}) as Record<string, unknown>,
+        );
         refresh();
-        settle(toolCallId, "done", output);
+        // `output` es para el modelo (español canónico, con instrucciones): la
+        // chapa enseña su propia etiqueta, y solo dice «hecho» si se aplicó.
+        if (applied) {
+          settle(
+            toolCallId,
+            "done",
+            t(`chat.actionDone.${toolName}`, { defaultValue: t("chat.actionDone.default") }),
+          );
+        } else {
+          settle(toolCallId, "error", t("chat.actionDone.notApplied"));
+        }
         addToolResult({ tool: toolName as never, toolCallId, output });
       } catch (e) {
         // Mismo criterio que en /chat: el motivo real llega al coach (y a la
