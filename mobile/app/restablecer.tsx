@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { passwordProblem } from "../lib/auth-errors";
 import { useDeepLinkUrl } from "../lib/deep-link";
+import { mayUseLinkSession } from "../lib/link-account";
 import { supabase } from "../lib/supabase";
 
 /**
@@ -98,15 +99,25 @@ export default function Restablecer() {
     if (exchanged.current) return;
     exchanged.current = true;
 
+    // Con tokens en el enlace y otra cuenta ya abierta aquí, se pregunta antes
+    // (MOB-01). Un `code` solo lo canjea quien lo pidió desde este móvil.
     const resolve =
       accessToken && refreshToken
-        ? supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        ? mayUseLinkSession(accessToken, t).then((ok) =>
+            ok
+              ? supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+              : null,
+          )
         : supabase.auth.exchangeCodeForSession(code as string);
 
     resolve
-      .then(({ error }) => setStatus(error ? "error" : "ready"))
+      .then((result) => {
+        // Ha preferido seguir con su cuenta: no se toca nada.
+        if (!result) router.replace("/hoy");
+        else setStatus(result.error ? "error" : "ready");
+      })
       .catch(() => setStatus("error"));
-  }, [code, error_description, url]);
+  }, [code, error_description, router, t, url]);
 
   const submit = async () => {
     if (passwordProblem(password)) {

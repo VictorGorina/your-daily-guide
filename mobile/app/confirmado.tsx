@@ -1,10 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { AlertCircle, Check } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useDeepLinkUrl } from "../lib/deep-link";
+import { mayUseLinkSession } from "../lib/link-account";
 import { supabase } from "../lib/supabase";
 
 /**
@@ -24,6 +26,7 @@ import { supabase } from "../lib/supabase";
  */
 export default function Confirmado() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { code, error_description } = useLocalSearchParams<{
     code?: string;
     error_description?: string;
@@ -67,14 +70,26 @@ export default function Confirmado() {
     if (resolved.current) return;
     resolved.current = true;
 
+    // Con tokens en el enlace y otra cuenta ya abierta aquí, se pregunta antes
+    // (ticket 38, MOB-01): confirmar la cuenta de otra persona no debe sacarte
+    // de la tuya sin avisar.
     const resolve =
       accessToken && refreshToken
-        ? supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        ? mayUseLinkSession(accessToken, t).then((ok) =>
+            ok
+              ? supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+              : null,
+          )
         : supabase.auth.exchangeCodeForSession(code as string);
 
     resolve
-      .then(({ error }) => {
-        if (error) {
+      .then((result) => {
+        // Ha preferido seguir con su cuenta: no se toca nada.
+        if (!result) {
+          router.replace("/hoy");
+          return;
+        }
+        if (result.error) {
           setStatus("error");
           return;
         }
@@ -83,7 +98,7 @@ export default function Confirmado() {
         setTimeout(() => router.replace("/hoy"), 1200);
       })
       .catch(() => setStatus("error"));
-  }, [code, error_description, router, url]);
+  }, [code, error_description, router, t, url]);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -92,9 +107,9 @@ export default function Confirmado() {
           <View className="items-center">
             <ActivityIndicator color="#a84a17" />
             <Text className="mt-6 text-2xl font-display text-foreground">
-              Confirmando tu cuenta…
+              {t("auth.confirm.confirming")}
             </Text>
-            <Text className="mt-2 text-sm text-muted-foreground">Un momento, ya casi está.</Text>
+            <Text className="mt-2 text-sm text-muted-foreground">{t("auth.oneMoment")}</Text>
           </View>
         )}
 
@@ -103,8 +118,10 @@ export default function Confirmado() {
             <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
               <Check color="#a84a17" size={28} />
             </View>
-            <Text className="mt-6 text-2xl font-display text-foreground">¡Cuenta confirmada!</Text>
-            <Text className="mt-2 text-sm text-muted-foreground">Entrando en Peppers…</Text>
+            <Text className="mt-6 text-2xl font-display text-foreground">
+              {t("auth.confirm.confirmed")}
+            </Text>
+            <Text className="mt-2 text-sm text-muted-foreground">{t("auth.enteringApp")}</Text>
           </View>
         )}
 
@@ -114,18 +131,17 @@ export default function Confirmado() {
               <AlertCircle color="#b8433b" size={28} />
             </View>
             <Text className="mt-6 text-2xl font-display text-foreground">
-              Este enlace ya no funciona
+              {t("auth.linkErrorTitle")}
             </Text>
             <Text className="mt-2 text-center text-sm text-muted-foreground">
-              Puede haber caducado o haberse usado ya. Entra con tu correo y te reenviamos uno
-              nuevo.
+              {t("auth.confirm.linkErrorBody")}
             </Text>
             <Pressable
               onPress={() => router.replace("/auth")}
               className="mt-8 w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90"
             >
               <Text className="text-sm font-sans-semibold text-primary-foreground">
-                Volver a entrar
+                {t("auth.backToSignIn")}
               </Text>
             </Pressable>
           </View>

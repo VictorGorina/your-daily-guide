@@ -58,7 +58,8 @@
     },
     "confirm": {
       "confirming": "Confirming your account…",
-      "confirmed": "Account confirmed!"
+      "confirmed": "Account confirmed!",
+      "linkErrorBody": "It may have expired or already been used. Sign in with your email and we'll send you a new one."
     },
     "reset": {
       "checkingLink": "Checking the link…",
@@ -125,7 +126,14 @@
     "enteringApp": "Entering Peppers…",
     "linkErrorTitle": "This link doesn't work anymore",
     "linkErrorBody": "It may have expired or already been used. Request a new one from the sign-in screen.",
-    "linkErrorBodySameDevice": "It may have expired or already been used. Request a new one from the sign-in screen and open it on this same phone."
+    "linkErrorBodySameDevice": "It may have expired or already been used. Request a new one from the sign-in screen and open it on this same phone.",
+    "otherAccount": {
+      "title": "This link is for another account",
+      "body": "It's for {{email}}. Do you want to sign out and sign in with it?",
+      "bodyNoEmail": "It isn't for the account you're signed in with. Do you want to sign out and sign in with the link's account?",
+      "switch": "Sign in with that account",
+      "keep": "Stay in mine"
+    }
   },
   "errorScreen": {
     "title": "Something didn’t load",

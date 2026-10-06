@@ -58,7 +58,8 @@
     },
     "confirm": {
       "confirming": "Confirmando tu cuenta…",
-      "confirmed": "¡Cuenta confirmada!"
+      "confirmed": "¡Cuenta confirmada!",
+      "linkErrorBody": "Puede haber caducado o haberse usado ya. Entra con tu correo y te reenviamos uno nuevo."
     },
     "reset": {
       "checkingLink": "Comprobando el enlace…",
@@ -125,7 +126,14 @@
     "enteringApp": "Entrando en Peppers…",
     "linkErrorTitle": "Este enlace ya no funciona",
     "linkErrorBody": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar.",
-    "linkErrorBodySameDevice": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar y ábrelo en este mismo móvil."
+    "linkErrorBodySameDevice": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar y ábrelo en este mismo móvil.",
+    "otherAccount": {
+      "title": "Este enlace es para otra cuenta",
+      "body": "Es para {{email}}. ¿Quieres cerrar tu sesión y entrar con ella?",
+      "bodyNoEmail": "No es de la cuenta con la que has entrado. ¿Quieres cerrar tu sesión y entrar con la del enlace?",
+      "switch": "Entrar con esa cuenta",
+      "keep": "Seguir con la mía"
+    }
   },
   "errorScreen": {
     "title": "Algo no ha cargado",
