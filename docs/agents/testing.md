@@ -243,7 +243,7 @@ PR y se mira el job `db`. Con Docker serían `supabase start` y `supabase test d
 
 Un solo recorrido ([e2e/smoke.spec.ts](../../e2e/smoke.spec.ts)), en el job **`e2e`** del CI: Ana,
 la persona del seed, entra, ve en Hoy las comidas de su plan con los platos calculados, marca la
-comida, recarga y sigue marcada; abre Plan (el calendario del mes) y Familia (el hueco de Leo y la
+comida, ve que suma sus kcal en la barra del día, recarga y sigue marcada; abre Plan (el calendario del mes) y Familia (el hueco de Leo y la
 peque, Vera). No es una batería: comprueba lo que ninguna otra suite ve junto: que el build
 arranca, que la sesión llega al servidor y que las políticas RLS dejan leer y escribir lo propio.
 
@@ -264,7 +264,12 @@ Las piezas ([playwright.config.ts](../../playwright.config.ts)):
   el principio de un prompt o añades un plato al seed, ese test avisa antes que el CI.**
 
 Al escribir en el smoke: los textos salen del catálogo (`src/locales/es.json`), los elementos se
-buscan por rol o etiqueta, y antes de recargar se espera a la respuesta de la escritura. Si falla
+buscan por rol o etiqueta, y antes de recargar se espera a la respuesta de la escritura. Se
+comprueba lo que TIENE que verse, no lo que no: «no hay ningún "Calculando…"» también es cierto
+mientras la guía no ha llegado, y con el mock devolviendo recetas vacías el smoke seguía en verde;
+la cifra de la barra del día (`macros.eatenToday` con kcal > 0) solo sale con el plato calculado.
+Una aserción nueva se prueba una vez al revés: un commit temporal en la rama que rompa lo que mira
+tiene que poner `e2e` en rojo. Si falla
 en el CI, el artefacto `playwright` del run trae la traza y la captura
 (`bunx playwright show-trace`). Como pgTAP, **no se puede lanzar en esta máquina** (sin Docker):
 rama + PR. Con Docker: `supabase start`, `bunx playwright install chromium` y `bun run test:e2e`.
