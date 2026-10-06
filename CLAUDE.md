@@ -21,7 +21,7 @@ AGENTS.md tiene la explicación larga de varias piezas no obvias.
 bun install       # instalar dependencias
 bun run dev       # servidor de desarrollo, http://localhost:8080
 bun run build     # build de producción (preset Vercel vía Nitro)
-bun run preview   # sirve el build de producción en local
+bun run preview   # construye con el preset node-server y lo sirve en http://localhost:4173
 bun run lint      # ESLint
 bun run typecheck # tsc del código de app
 bun run typecheck:test # tsc con los *.test.ts (tsconfig.test.json, ver docs/agents/testing.md)

@@ -250,7 +250,8 @@ arranca, que la sesión llega al servidor y que las políticas RLS dejan leer y 
 Las piezas ([playwright.config.ts](../../playwright.config.ts)):
 
 - **La app** es el build de siempre con el preset `node-server` de Nitro (`NITRO_PRESET`), que
-  deja un servidor arrancable en `.output/server/index.mjs`. `bun run preview` no sirve para esto:
+  deja un servidor arrancable en `.output/server/index.mjs` (lo mismo que hace `bun run preview`
+  en local, con tu `.env`). `vite preview` no sirve para esto:
   no sabe servir la salida del preset de Vercel.
 - **La base** es el Supabase local con [supabase/seed.sql](../../supabase/seed.sql).
   `scripts/e2e.sh` saca la URL y las claves de `supabase status` y la config **no arranca** si la

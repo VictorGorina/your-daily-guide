@@ -11,7 +11,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "preview": "vite preview",
+    "preview": "NITRO_PRESET=node-server vite build && PORT=${PORT:-4173} node --env-file-if-exists=.env .output/server/index.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "typecheck:test": "tsc -p tsconfig.test.json",

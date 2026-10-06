@@ -11,7 +11,7 @@
     {
       "name": "your-daily-guide-preview",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "PORT=4173 HOST=127.0.0.1 node .output/server/index.mjs"],
+      "runtimeArgs": ["-c", "PORT=4173 HOST=127.0.0.1 bun run preview"],
       "port": 4173
     },
     {
