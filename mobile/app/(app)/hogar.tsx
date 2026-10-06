@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Baby,
   ChevronDown,
@@ -29,23 +29,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/bottom-nav";
 import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { ChildSheet } from "../../components/child-sheet";
-import { apiPost } from "../../lib/api";
 import { fetchMonthlyPlan, monthISO, todayISO } from "../../lib/daily";
-import {
-  addAdultSlot,
-  claimSlot,
-  createHousehold,
-  fetchHousehold,
-  leaveHousehold,
-  openSlots,
-  removeMember,
-  renameHousehold,
-  saveHomeSchedule,
-  setPlanner,
-  updateMember,
-  type HouseholdChild,
-  type OpenSlot,
-} from "../../lib/household";
+import { fetchHousehold, type HouseholdChild, type OpenSlot } from "../../lib/household";
 import {
   EMPTY_SCHEDULE,
   MEAL_KEYS,
@@ -59,7 +44,7 @@ import {
   type HomeSchedule,
 } from "../../lib/household-shared";
 import { childPureeGaps, type MonthlyPlan } from "../../lib/plan-shared";
-import { rebuildPlanWithHousehold } from "../../lib/plan-recalc";
+import { useHouseholdMutations } from "../../lib/use-household-mutations";
 
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 
@@ -74,15 +59,8 @@ const APPETITES: readonly [Appetite, number][] = [
 ];
 const portionFor = (a: Appetite) => APPETITES.find(([key]) => key === a)![1];
 
-// La sincronización del plan compartido toca el plan del otro miembro con la
-// clave de servicio, así que va por /api/v1/* como en la web (el resto del CRUD
-// del hogar es directo a Supabase).
-const syncSharedPlan = () =>
-  apiPost<{ synced: number }>("household/sync", { month: monthISO(), today: todayISO() });
-
 export default function Hogar() {
   const { t } = useTranslation();
-  const qc = useQueryClient();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
   const [name, setName] = useState(() => t("hogar.create.defaultName"));
@@ -126,36 +104,6 @@ export default function Hogar() {
     }
   }, [state.data?.household, state.data?.members, state.data?.children]);
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["household"] });
-
-  const create = useMutation({
-    mutationFn: () => createHousehold(name),
-    onSuccess: () => {
-      Alert.alert(t("hogar.create.done"));
-      refresh();
-    },
-    onError: () => Alert.alert(t("hogar.create.failed")),
-  });
-
-  const lookup = useMutation({
-    mutationFn: () => openSlots(code),
-    onSuccess: (found) => setSlots(found),
-    // La búsqueda cuenta los códigos malos: al llegar al límite, que lo diga.
-    onError: (e: Error) =>
-      Alert.alert(e.message.includes("Demasiados") ? e.message : t("hogar.join.lookupFailed")),
-  });
-
-  const claim = useMutation({
-    mutationFn: (memberId: string) => claimSlot(code, memberId),
-    onSuccess: () => {
-      Alert.alert(t("hogar.join.joined"));
-      setCode("");
-      setSlots(null);
-      refresh();
-    },
-    onError: (e: Error) => Alert.alert(e.message),
-  });
-
   const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
   const isPlanner = !!state.data?.me?.is_planner;
   const plannerName = state.data?.planner?.display_name ?? t("hogar.roster.plannerFallback");
@@ -173,104 +121,26 @@ export default function Hogar() {
   // Aquí solo se deja constancia para avisarle.
   const recalcRoster = () => setTableChanged(true);
 
-  const addAdult = useMutation({
-    mutationFn: () => {
-      const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error(t("hogar.roster.noHousehold"));
-      return addAdultSlot(householdId, {
-        display_name: newAdult.name.trim(),
-        uses_app: newAdult.usesApp,
-        portion: portionFor(newAdult.appetite),
-      });
-    },
-    onSuccess: () => {
-      setNewAdult({ name: "", usesApp: true, appetite: "normal" });
-      Alert.alert(t("hogar.add.added"));
-      refresh();
-      recalcRoster();
-    },
-    // Antes se descartaba el error real y siempre salía el mismo texto
-    // genérico, así que un fallo (RLS, validación, lo que fuera) no se podía
-    // diagnosticar ni por el usuario ni por nosotros.
-    onError: (e: Error) => Alert.alert(e.message),
-  });
-
-  const markUsesApp = useMutation({
-    mutationFn: (id: string) => updateMember(id, { uses_app: true }),
-    onSuccess: refresh,
-  });
-
-  const dropMember = useMutation({
-    mutationFn: (id: string) => removeMember(id),
-    onSuccess: () => {
-      refresh();
-      recalcRoster();
-    },
-  });
-
-  const makePlanner = useMutation({
-    mutationFn: (id: string) => {
-      const householdId = state.data?.household?.id;
-      if (!householdId) throw new Error(t("hogar.roster.noHousehold"));
-      return setPlanner(householdId, id);
-    },
-    onSuccess: () => {
-      Alert.alert(t("hogar.roster.plannerChanged"));
-      refresh();
-    },
-    onError: (e: Error) => Alert.alert(e.message),
-  });
-
-  const renameMember = (id: string, value: string) =>
-    void updateMember(id, { display_name: value.trim() || t("hogar.roster.memberFallback") }).then(
-      refresh,
-    );
-  const setMemberPortion = (id: string, portion: number) =>
-    void updateMember(id, { portion }).then(() => {
-      refresh();
-      recalcRoster();
-    });
-
-  const leave = useMutation({
-    mutationFn: leaveHousehold,
-    onSuccess: () => {
-      Alert.alert(t("hogar.leave.done"));
-      refresh();
-    },
-  });
-
-  const persistSchedule = useMutation({
-    mutationFn: async (opts: { memberId?: string; childId?: string; schedule: HomeSchedule }) => {
-      await saveHomeSchedule(opts);
-      await syncSharedPlan();
-    },
-    onSuccess: () => {
-      Alert.alert(t("hogar.schedule.saved"));
-      refresh();
-      setTableChanged(true);
-      qc.invalidateQueries({ queryKey: ["plan", month] });
-    },
-    onError: (e: Error) => Alert.alert(e.message || t("hogar.schedule.saveFailed")),
-  });
-
-  // Regenera platos y cantidades con la mesa actual y copia las comidas
-  // compartidas a quien tiene la app; quien no la tiene solo cuenta como
-  // raciones. Tarda lo que una generación (~1-2 min).
-  const rebuild = useMutation({
-    mutationFn: () => rebuildPlanWithHousehold(month, todayISO()),
-    onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ["plan", month] });
-      if (r?.skipped === "no-plan") {
-        Alert.alert(t("hogar.rebuild.noPlanToast"));
-        return;
-      }
-      setTableChanged(false);
-      Alert.alert(t(r?.synced ? "hogar.rebuild.doneSynced" : "hogar.rebuild.done"));
-    },
-    onError: (e: Error) => {
-      console.warn("hogar: rehaciendo el plan con la familia", e);
-      Alert.alert(t("hogar.rebuild.failed"));
-    },
+  const {
+    create,
+    lookup,
+    claim,
+    addAdult,
+    markUsesApp,
+    dropMember,
+    makePlanner,
+    renameMember,
+    setMemberPortion,
+    renameHousehold,
+    leave,
+    persistSchedule,
+    rebuild,
+    fillKids: fillKidsMut,
+  } = useHouseholdMutations({
+    householdId: state.data?.household?.id,
+    month,
+    onTableChanged: recalcRoster,
+    onPlanRebuilt: () => setTableChanged(false),
   });
 
   const confirmLeave = () =>
@@ -306,21 +176,6 @@ export default function Hogar() {
         today,
       ).length > 0,
   );
-  const fillKidsMut = useMutation({
-    mutationFn: () =>
-      apiPost<{ plan: MonthlyPlan; filled: number; children: string[] }>("plan/child-meal-fill", {
-        today,
-      }),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["plan", month] });
-      Alert.alert(
-        res.filled
-          ? t("hogar.child.menuUpdated", { names: res.children.join(", ") })
-          : t("hogar.child.upToDate"),
-      );
-    },
-    onError: (e) => Alert.alert(e instanceof Error ? e.message : t("hogar.child.menuFailed")),
-  });
   const renderChildRow = (c: HouseholdChild) => {
     const pal = personColor(c.id);
     // Quien aún no come de la mesa enseña su etapa en vez de alergias y apetito.
@@ -395,7 +250,7 @@ export default function Hogar() {
                   />
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => lookup.mutate()}
+                    onPress={() => lookup.mutate(code, { onSuccess: setSlots })}
                     disabled={lookup.isPending || code.trim().length < 4}
                     className="mt-1 items-center rounded-full bg-primary py-3.5 active:opacity-90"
                     style={
@@ -416,7 +271,17 @@ export default function Hogar() {
                       <Pressable
                         accessibilityRole="button"
                         key={s.id}
-                        onPress={() => claim.mutate(s.id)}
+                        onPress={() =>
+                          claim.mutate(
+                            { code, memberId: s.id },
+                            {
+                              onSuccess: () => {
+                                setCode("");
+                                setSlots(null);
+                              },
+                            },
+                          )
+                        }
                         disabled={claim.isPending}
                         className="flex-row items-center gap-3 rounded-2xl bg-surface px-4 py-3 active:opacity-80"
                         style={claim.isPending ? { opacity: 0.6 } : undefined}
@@ -486,7 +351,7 @@ export default function Hogar() {
               />
               <Pressable
                 accessibilityRole="button"
-                onPress={() => create.mutate()}
+                onPress={() => create.mutate(name)}
                 disabled={create.isPending}
                 className="items-center rounded-full bg-secondary py-3.5 active:opacity-80"
                 style={create.isPending ? { opacity: 0.6 } : undefined}
@@ -517,7 +382,7 @@ export default function Hogar() {
                     defaultValue={household.name}
                     placeholderTextColor="#a69d8f"
                     onEndEditing={(e) => {
-                      void renameHousehold(household.id, e.nativeEvent.text).then(refresh);
+                      renameHousehold(household.id, e.nativeEvent.text);
                       setEditingName(false);
                     }}
                   />
@@ -818,7 +683,19 @@ export default function Hogar() {
                       </View>
                       <Pressable
                         accessibilityRole="button"
-                        onPress={() => addAdult.mutate()}
+                        onPress={() =>
+                          addAdult.mutate(
+                            {
+                              name: newAdult.name,
+                              usesApp: newAdult.usesApp,
+                              portion: portionFor(newAdult.appetite),
+                            },
+                            {
+                              onSuccess: () =>
+                                setNewAdult({ name: "", usesApp: true, appetite: "normal" }),
+                            },
+                          )
+                        }
                         disabled={addAdult.isPending || !newAdult.name.trim()}
                         className="flex-row items-center justify-center gap-2 rounded-full bg-secondary py-2.5 active:opacity-80"
                         style={
