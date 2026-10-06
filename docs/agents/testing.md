@@ -1,8 +1,8 @@
 # Tests (web)
 
-Suite de lógica pura con el runner de Bun. Cubre las funciones donde un bug pasa
-desapercibido: cálculo del plan y de la compra, fechas, parsers defensivos de la salida de
-la IA. No hay tests de componentes ni end-to-end (todavía).
+Tres suites, cada una con su runner: la **lógica pura** con el runner de Bun (cálculo del plan y
+de la compra, fechas, parsers defensivos de la salida de la IA), los **componentes** con Vitest y
+Testing Library, y la **base de datos** con pgTAP. No hay tests end-to-end (todavía).
 
 ## Comandos
 
@@ -12,6 +12,8 @@ bun test src/lib/plan-shared    # un archivo
 bun test --watch                # en watch
 bun run typecheck               # tsc del código de app
 bun run typecheck:test          # tsc con los tests dentro (ver abajo)
+bun run test:ui                 # componentes (Vitest): src/**/*.vitest.tsx
+bunx vitest src/components/child-sheet   # uno solo, en watch
 ```
 
 El CI ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)) corre `bun install`,
@@ -155,6 +157,43 @@ servidor no necesita parámetros para inyectar el cliente.
 llama desde `.handler()` y el test la importa del `.server.ts`. **Nunca** se exporta desde el
 `.functions.ts`: ahí conservaría su cuerpo en el bundle del cliente y rompería la protección de
 imports (ver «Server-only» en CLAUDE.md).
+
+## Tests de componentes: Vitest + Testing Library
+
+`src/**/<componente>.vitest.tsx`, junto al componente (ticket 25 de la auditoría). El sufijo es a
+propósito: `bun test` recoge `*.test.*`, así que cada runner ve solo lo suyo.
+[vitest.config.ts](../../vitest.config.ts) va aparte de `vite.config.ts` (sin el plugin de
+TanStack Start) y monta jsdom con [src/test/vitest-setup.ts](../../src/test/vitest-setup.ts).
+
+Un test de componentes comprueba **qué se pinta y qué se lanza** con cada acción, no cómo está
+hecho por dentro:
+
+- **`renderApp(ui, { queries })`** ([src/test/render.tsx](../../src/test/render.tsx)) en vez de
+  `render`: pone el `QueryClient` y **siembra** las consultas (`[queryKey, dato]`). Un dato
+  sembrado no dispara su `queryFn`, así que el test decide qué ve el componente.
+- **Supabase nunca es el real.** El setup sustituye `@/integrations/supabase/client` por un
+  cliente que lanza al usarlo; el test que escribe lo apunta al doble con
+  `setFakeBrowser(createFakeSupabase({...}).client)` y luego mira `fake.tables` y `fake.calls`
+  (así `child-sheet.vitest.tsx` ejercita las funciones de verdad de `@/lib/household`).
+- **El texto se busca con el catálogo** (`i18next.t("mealSwap.note")`), y los elementos por rol y
+  nombre accesible (`getByRole("button", { name })`): retocar una frase no rompe el test, y que
+  un botón pierda su etiqueta sí.
+- **Una server function se simula** con `vi.mock("@/lib/…functions", …)`; lo que se pide al
+  servidor al desplegar algo (p. ej. `DishRecipe`) se sustituye por un componente vacío.
+- **"Hoy" se fija** con `vi.useFakeTimers({ toFake: ["Date"] })` + `vi.setSystemTime(...)`: solo
+  la fecha, para que `userEvent` siga funcionando.
+- Lo que jsdom no trae y piden Radix o los componentes (`ResizeObserver`, `matchMedia`, captura
+  de puntero) está en el setup; lo nuevo se añade ahí, no en cada test.
+
+| Archivo                                     | Qué fija                                                                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `components/meal-swap-sheet.vitest.tsx`     | "Comí otra cosa": el tamaño que se manda (o ninguno si el texto ya dice cuánto), el texto vago y las kcal a mano, sin cifras, "Me lo salté" |
+| `components/day-balance-card.vitest.tsx`    | "Balance de hoy": desglose por origen, "Ajustando…", platos movidos y "Ver", la nota cuando no se mueve nada, el fallo, sin cifras          |
+| `components/plan-month-calendar.vitest.tsx` | la celda que abre cada día (la fila la marca el día del mes; 29-31 aparte), las comidas planificadas, día pasado, antes del alta            |
+| `components/child-sheet.vitest.tsx`         | alta, edición y baja de un peque contra el doble: qué fila queda, la ración por etapa, qué se invalida y que un fallo no cierra la hoja     |
+
+Todavía no hay tests de las pantallas enteras (`hoy.tsx`, `plan.tsx`, `hogar.tsx`): llegan con
+el ticket 28, que las parte en piezas que se puedan montar solas.
 
 ## Tests de la base de datos: pgTAP sobre un Supabase local
 

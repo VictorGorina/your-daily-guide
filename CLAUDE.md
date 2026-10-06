@@ -26,13 +26,15 @@ bun run lint      # ESLint
 bun run typecheck # tsc del código de app
 bun run typecheck:test # tsc con los *.test.ts (tsconfig.test.json, ver docs/agents/testing.md)
 bun run test      # suite de lógica pura con el runner de Bun
+bun run test:ui   # tests de componentes (Vitest + Testing Library)
 bun run format    # Prettier --write
 ```
 
 `bun run test` cubre la lógica pura donde un bug pasa desapercibido — plan, compra, fechas,
 parsers de la salida de la IA — con el runner de Bun (sin dependencias nuevas). Ver
-[docs/agents/testing.md](docs/agents/testing.md). No hay tests de componentes ni E2E todavía;
-Vitest es el siguiente escalón cuando hagan falta.
+[docs/agents/testing.md](docs/agents/testing.md). Los componentes van con Vitest y Testing
+Library (`bun run test:ui`, archivos `*.vitest.tsx`) y la base de datos con pgTAP en el job `db`
+del CI (`supabase/tests/`); no hay E2E todavía.
 
 Necesitas un `.env` con tus propias claves (Supabase + `OPENROUTER_API_KEY` para el coach; VAPID y
 `CRON_SECRET` para las notificaciones push). La lista completa, con qué hace cada variable, es
