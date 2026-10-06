@@ -21,6 +21,20 @@ código compartido por ahora — cuando duela duplicar, se monta `packages/share
   dispositivo); y un 429 trae `retryAfter` en segundos, sin reintento automático. Cada petición
   lleva `X-Client-Version` (`version+buildNumber` de `app.json`).
 
+## Sesión y enlaces
+
+- **La sesión va cifrada** ([lib/secure-session-storage.ts](lib/secure-session-storage.ts)): la
+  clave AES en el llavero (`expo-secure-store`) y la sesión cifrada en AsyncStorage con el prefijo
+  `enc1:`. Un valor sin prefijo es de una versión anterior y se cifra al leerlo. No guardes tokens
+  en AsyncStorage a pelo, y no uses `aesjs.utils.utf8` para el texto: no lee UTF-8 de 4 bytes (un
+  emoji) y la sesión quedaba ilegible.
+- **Un enlace de confirmar o restablecer no cambia de cuenta sin preguntar**
+  (`mayUseLinkSession`, [lib/link-account.ts](lib/link-account.ts)): toda pantalla nueva que
+  instale una sesión a partir de un enlace pasa antes por ahí.
+- **Accesibilidad:** todo `Pressable` lleva `accessibilityRole`; si no tiene texto visible,
+  `accessibilityLabel`; si es un chip o una pestaña, `accessibilityState`; y menos de 44 pt de lado
+  se compensa con `hitSlop`.
+
 ## Versiones que no se pueden tocar a la ligera
 
 **NativeWind v4 exige Tailwind v3, no v4.** La v4 quitó la API de configuración en la que se apoya
