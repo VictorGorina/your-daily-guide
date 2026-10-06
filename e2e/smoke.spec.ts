@@ -67,7 +67,7 @@ test("Ana entra, marca la comida y ve su plan y su familia", async ({ page, requ
   await expect(page.getByText(es.planCalendar.title)).toBeVisible();
   // Un día pasado se llama «Ver el día N» y uno futuro solo lleva su número:
   // el 28 existe en cualquier mes, sea lo uno o lo otro.
-  await expect(page.getByRole("button", { name: /^(Ver el día )?28$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^(Ver el día )?28(:|$)/ })).toBeVisible();
 
   // Familia: el hueco sin cuenta (Leo) y la peque (Vera).
   await page.locator('a[href="/hogar"]').click();
