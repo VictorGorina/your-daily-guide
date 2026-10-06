@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { makeRedirectUri } from "expo-auth-session";
 import * as Linking from "expo-linking";
 import { Redirect } from "expo-router";
@@ -101,6 +102,7 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const qc = useQueryClient();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [sent, setSent] = useState(false);
   // La cuenta existe pero nadie abrió el correo de confirmación. Es el único
@@ -135,6 +137,9 @@ export default function Auth() {
         if (error) throw error;
       }
       await saveProfile(randomDemoProfile());
+      // La raíz (`useLocale`) ya pidió el perfil al aparecer la sesión, todavía
+      // vacío: sin esto Hoy lee esa copia y rebota al onboarding.
+      await qc.invalidateQueries({ queryKey: ["profile"] });
     } catch (error) {
       Alert.alert(t("auth.errDemo"), error instanceof Error ? error.message : t("common.retry"));
     } finally {
