@@ -78,7 +78,10 @@ bun run db:types              # después: regenera los tipos de las dos apps
   `src/integrations/supabase/types.ts` y su copia `mobile/lib/database.types.ts`, ya formateados.
   No se editan a mano: una tabla o columna nueva llega con su migración y con esta orden, en el
   mismo commit. `check-shared-drift.sh` falla si las dos copias difieren.
-- No hay Docker en esta máquina: `supabase db diff`, `start` y `reset` no funcionan.
+- No hay Docker en esta máquina: `supabase db diff`, `start` y `reset` no funcionan. Lo que
+  necesita una base de verdad (una migración nueva aplicada desde cero, un test de RLS) se
+  comprueba en el job `db` del CI, subiendo la rama con un PR (ver `testing.md`).
+- Una migración que cambia una política o un privilegio lleva su caso en `supabase/tests/`.
 
 Para inspeccionar datos desde la terminal, `scripts/db.ts` (atajo `bun run db`) es un
 inspector de solo lectura por PostgREST — no ejecuta SQL, solo `select` / count / probe:

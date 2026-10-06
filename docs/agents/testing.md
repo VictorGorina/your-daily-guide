@@ -17,7 +17,8 @@ bun run typecheck:test          # tsc con los tests dentro (ver abajo)
 El CI ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)) corre `bun install`,
 `bun audit`, `lint`, `typecheck`, `typecheck:test` y `test` en cada push y PR. La suite se repite
 con `TZ` de Madrid y de Ciudad de México, y después van `check-shared-drift.sh`, el build y
-`check-client-bundle.sh`.
+`check-client-bundle.sh`. Dos jobs más: `mobile` (puertas del móvil) y `db` (la base de datos,
+[más abajo](#tests-de-la-base-de-datos-pgtap-sobre-un-supabase-local)).
 
 ## Dónde viven
 
@@ -154,6 +155,48 @@ servidor no necesita parámetros para inyectar el cliente.
 llama desde `.handler()` y el test la importa del `.server.ts`. **Nunca** se exporta desde el
 `.functions.ts`: ahí conservaría su cuerpo en el bundle del cliente y rompería la protección de
 imports (ver «Server-only» en CLAUDE.md).
+
+## Tests de la base de datos: pgTAP sobre un Supabase local
+
+Las políticas RLS, los privilegios y las funciones SQL no se pueden probar con el doble: el doble
+no es Postgres. Sus tests son SQL con [pgTAP](https://pgtap.org) en `supabase/tests/*.test.sql`
+y los lanza el job **`db`** del CI en cada push y PR (ticket 25 de la auditoría):
+
+1. `supabase start` aplica **todas** las migraciones de `supabase/migrations/` a una base vacía y
+   carga [supabase/seed.sql](../../supabase/seed.sql). Una migración que solo funciona sobre lo
+   que ya hay en producción falla aquí.
+2. `supabase test db` pasa los tests.
+3. `scripts/check-seed-login.sh`: una persona del seed entra por GoTrue y lee su plan y su mesa
+   por PostgREST.
+4. `bun run db:types:check`: los tipos versionados tienen que ser los que dejan las migraciones
+   (compara el esquema, no el texto; el porqué está en `scripts/db-types.sh`). Una migración sin
+   `bun run db:types`, o un cambio hecho a mano en producción sin su migración, no pasa.
+
+| Archivo                           | Qué fija                                                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `household_rls.test.sql`          | los 16 ataques del ticket 04 quedan bloqueados, los 19 flujos de la app siguen pasando y los privilegios por defecto |
+| `daily_logs_rls.test.sql`         | solo días propios; se crea entre hace 45 días y mañana; se corrige cualquier día propio                              |
+| `monthly_plans_rls.test.sql`      | cada uno escribe su fila; un miembro LEE la de quien planifica en su casa y nadie la de otro hogar                   |
+| `push_subscriptions_rls.test.sql` | solo el servidor inserta, el endpoint es https, una zona horaria inválida se guarda como Madrid (ticket 06)          |
+| `due_push_profiles.test.sql`      | a quién le toca un aviso en un instante: ventana, ya enviado, cruce de medianoche, otra zona, hora mal formada       |
+| `dish_recipe_hits.test.sql`       | `increment_dish_recipe_hits` suma con muestreo, recorta a 100 y solo la ejecuta el servidor                          |
+
+Cómo se escribe uno:
+
+- Todo el archivo va entre `BEGIN;` y `ROLLBACK;`, con `SELECT plan(n)` y `SELECT * FROM finish()`.
+  Crea sus propios usuarios en `auth.users` (el trigger de alta les crea el perfil) con ids fijos
+  que no sean los del seed, y no da por hecho que la base esté vacía.
+- Para probar una política se suplanta la sesión como hace PostgREST: `pg_temp.vs_run(uid, rol,
+sentencias)` pone `request.jwt.claims` y el rol, ejecuta, **deshace** y devuelve `PERMITIDO`,
+  `sin efecto` (la RLS filtró las filas) o `DENEGADO (motivo)`. Cada caso es una fila de
+  `vs_casos`. La función se copia en cada archivo: pgTAP no comparte código entre archivos.
+- Las aserciones (`ok`, `is`, `set_eq`) se llaman como `postgres`, nunca con el rol suplantado:
+  los privilegios por defecto del proyecto quitan `EXECUTE` a `PUBLIC`.
+- Un test de RLS nuevo se comprueba una vez al revés: se afloja la política en una migración
+  temporal y el test tiene que ponerse rojo.
+
+En esta máquina no hay Docker, así que **no se pueden lanzar en local**: se suben en una rama con
+PR y se mira el job `db`. Con Docker serían `supabase start` y `supabase test db`.
 
 ## Regla al tocar esta lógica
 
