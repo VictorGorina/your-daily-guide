@@ -1,11 +1,12 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
+import { secureSessionStorage } from "./secure-session-storage";
 import "react-native-url-polyfill/auto";
 
 /**
  * Mismo Supabase que la web, con dos diferencias propias de React Native:
- * la sesión se guarda en AsyncStorage (aquí no hay localStorage) y hay que
+ * la sesión se guarda cifrada (`secure-session-storage.ts`: aquí no hay
+ * localStorage, y AsyncStorage a secas va en claro) y hay que
  * cargar el polyfill de URL, del que depende supabase-js y que el runtime de
  * Hermes no trae.
  *
@@ -24,20 +25,20 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: AsyncStorage,
+    storage: secureSessionStorage,
     persistSession: true,
     autoRefreshToken: true,
     // En móvil no hay redirect de navegador que dejar la sesión en la URL.
     detectSessionInUrl: false,
     // Flujo PKCE: al abrir el OAuth de Google, supabase-js guarda el code
-    // verifier en AsyncStorage y luego lo canjea con exchangeCodeForSession
+    // verifier en ese mismo almacén y luego lo canjea con exchangeCodeForSession
     // desde la URL de vuelta (ver el handler de Google en app/auth.tsx).
     flowType: "pkce",
   },
 });
 
 /**
- * Id del usuario actual leído de la sesión LOCAL (AsyncStorage), sin llamada
+ * Id del usuario actual leído de la sesión LOCAL (la guardada), sin llamada
  * de red, igual que `currentUserId` de la web (src/lib/auth-headers.ts).
  * `supabase.auth.getUser()` revalida el token contra el servidor de Auth en
  * cada llamada, y cada función de datos lo hacía antes de su consulta. Para

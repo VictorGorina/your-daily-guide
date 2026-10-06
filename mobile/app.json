@@ -56,7 +56,8 @@
         }
       ],
       "expo-localization",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      ["expo-secure-store", { "faceIDPermission": false }]
     ],
     "scheme": "dailyguide",
     "extra": {
