@@ -4,9 +4,10 @@ import SwiftUI
 // MARK: - Datos compartidos
 //
 // El widget lee un "snapshot del día" que la app RN escribe en el App Group
-// (Hito 2). En el Hito 1 aún no hay escritor, así que si no encuentra nada cae
-// en `.sample` y verás datos de muestra: eso confirma que el target compila y
-// se pinta sin depender todavía del puente nativo.
+// (Hito 2). Mientras no haya nada escrito, en la pantalla de inicio invita a
+// abrir la app: los datos de muestra (`.sample`) son SOLO para la galería de
+// widgets y el marcador de carga, nunca para hacerse pasar por el día de
+// alguien (ticket 38, MOB-06).
 
 private let appGroup = "group.com.victorgorina.dailyguide"
 private let snapshotKey = "day_snapshot"
@@ -38,14 +39,14 @@ struct DaySnapshot: Codable {
         quoteAuthor: "Muhammad Ali"
     )
 
-    /// Lee el snapshot del App Group; si no hay o no decodifica, usa el de muestra.
-    static var current: DaySnapshot {
+    /// Lee el snapshot del App Group; `nil` si no hay o no decodifica.
+    static var current: DaySnapshot? {
         guard
             let defaults = UserDefaults(suiteName: appGroup),
             let raw = defaults.string(forKey: snapshotKey),
             let data = raw.data(using: .utf8),
             let decoded = try? JSONDecoder().decode(DaySnapshot.self, from: data)
-        else { return .sample }
+        else { return nil }
         return decoded
     }
 }
@@ -54,7 +55,8 @@ struct DaySnapshot: Codable {
 
 struct DayEntry: TimelineEntry {
     let date: Date
-    let snapshot: DaySnapshot
+    /// `nil`: la app aún no ha escrito el día.
+    let snapshot: DaySnapshot?
 }
 
 struct Provider: TimelineProvider {
@@ -63,7 +65,8 @@ struct Provider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (DayEntry) -> Void) {
-        completion(DayEntry(date: Date(), snapshot: .current))
+        // La galería de widgets enseña un ejemplo; fuera de ella, lo que haya.
+        completion(DayEntry(date: Date(), snapshot: context.isPreview ? .sample : .current))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<DayEntry>) -> Void) {
@@ -217,17 +220,38 @@ struct MediumWidgetView: View {
     }
 }
 
+/// Sin día escrito por la app: no se inventa nada.
+struct EmptyWidgetView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: "fork.knife")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.dgPrimary)
+            Spacer(minLength: 0)
+            Text("Abre Peppers para ver tu día")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.dgForeground)
+                .lineLimit(3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+}
+
 struct DailyGuideWidgetView: View {
     @Environment(\.widgetFamily) var family
     var entry: Provider.Entry
 
     var body: some View {
         Group {
-            switch family {
-            case .systemMedium:
-                MediumWidgetView(s: entry.snapshot)
-            default:
-                SmallWidgetView(s: entry.snapshot)
+            if let snapshot = entry.snapshot {
+                switch family {
+                case .systemMedium:
+                    MediumWidgetView(s: snapshot)
+                default:
+                    SmallWidgetView(s: snapshot)
+                }
+            } else {
+                EmptyWidgetView()
             }
         }
         .containerBackground(for: .widget) { Color.dgBackground }
