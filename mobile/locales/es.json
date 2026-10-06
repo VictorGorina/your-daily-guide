@@ -1152,7 +1152,6 @@
     "photoNote": "La foto se usa solo para leer el total y los productos; no se guarda.",
     "complete": "Compra completa · guardar gasto",
     "finish": "Terminar compra",
-    "photosPermission": "Necesito acceso a tus fotos para leer el tiquet",
     "scanUnavailable": "El escaneo de tiquets estará disponible en la próxima versión de la app."
   },
   "freshRisk": {

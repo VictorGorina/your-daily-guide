@@ -1908,11 +1908,8 @@ function ShopModeView({
     try {
       const ImagePicker = await import("expo-image-picker");
       const ImageManipulator = await import("expo-image-manipulator");
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(t("shopMode.photosPermission"));
-        return;
-      }
+      // Sin pedir permiso de fotos: desde iOS 14 el selector del sistema corre
+      // fuera de la app y solo entrega la imagen elegida (ticket 38, MOB-17).
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         quality: 1,

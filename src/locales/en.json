@@ -1152,7 +1152,6 @@
     "photoNote": "The photo is only used to read the total and the products; it isn't stored.",
     "complete": "Shopping done · save spend",
     "finish": "Finish shopping",
-    "photosPermission": "I need access to your photos to read the receipt",
     "scanUnavailable": "Receipt scanning will be available in the next version of the app."
   },
   "freshRisk": {
