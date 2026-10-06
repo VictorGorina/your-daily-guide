@@ -62,6 +62,9 @@ BEGIN
     height_cm = 165, start_weight_kg = 68, current_weight_kg = 67, target_weight_kg = 62,
     goal_type = 'perder', daily_activity = 'de_pie', activity_level = 'ligero',
     meal_slots = ARRAY['desayuno', 'comida', 'cena', 'snack'],
+    -- Al final del día: pasada esta hora, Hoy abre solo el repaso nocturno y
+    -- taparía la pantalla al smoke E2E si el CI corre de noche.
+    evening_time = '23:59',
     app_started_on = date_trunc('month', current_date)::date, onboarding_completed = true
   WHERE id = ana;
   UPDATE public.profiles SET

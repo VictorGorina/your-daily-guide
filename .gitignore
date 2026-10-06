@@ -41,3 +41,7 @@ dist-ssr
 
 # Estado local de la CLI de Supabase (enlace del proyecto, versión del pooler)
 supabase/.temp/
+
+# Playwright (smoke E2E): informe y trazas de la última pasada
+playwright-report
+test-results

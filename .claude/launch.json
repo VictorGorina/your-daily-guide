@@ -9,6 +9,12 @@
       "autoPort": true
     },
     {
+      "name": "your-daily-guide-preview",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "PORT=4173 HOST=127.0.0.1 node .output/server/index.mjs"],
+      "port": 4173
+    },
+    {
       "name": "mobile-metro",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-c", "cd mobile && npx expo start --port 8081"],

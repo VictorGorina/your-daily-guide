@@ -23,3 +23,7 @@ skills-lock.json
 # nativos ("author": "expo" dentro de cada Contents.json) y los vuelve a
 # escribir a su manera en el siguiente prebuild.
 **/Assets.xcassets
+
+# Salida de Playwright
+playwright-report
+test-results

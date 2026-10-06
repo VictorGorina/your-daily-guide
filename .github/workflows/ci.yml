@@ -6,7 +6,8 @@ name: CI
 # servidor acabe en el bundle del navegador. Ver docs/agents/verification.md y
 # docs/agents/testing.md. La app móvil (mobile/) tiene su propio job, `mobile`,
 # con su propio toolchain (npm, no Bun: Metro no corre sobre Bun). El job `db`
-# levanta un Supabase local y pasa los tests de la base de datos.
+# levanta un Supabase local y pasa los tests de la base de datos, y el job
+# `e2e` recorre la app en un navegador contra otro igual.
 on:
   push:
     branches: [main]
@@ -174,3 +175,56 @@ jobs:
       - name: Tipos generados = versionados
         if: ${{ !cancelled() }}
         run: bun run db:types:check
+
+  # Smoke de punta a punta (ticket 25 de la auditoría): Playwright recorre Hoy,
+  # Plan y Familia en el build de producción, contra un Supabase local con los
+  # datos de supabase/seed.sql y un OpenRouter de mentira. Va después de `db`:
+  # si las migraciones o el seed fallan, esto no tiene nada que probar. No toca
+  # producción ni necesita secretos.
+  e2e:
+    needs: db
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.119.0
+
+      - name: Supabase local (migraciones y seed)
+        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Instalar dependencias
+        run: bun install --frozen-lockfile
+
+      # El navegador pesa ~150 MB: se guarda por versión de Playwright.
+      - name: Versión de Playwright
+        id: playwright
+        run: echo "version=$(bun -e 'console.log(require("@playwright/test/package.json").version)')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # Con caché solo instala las librerías del sistema que le faltan.
+      - name: Navegador de Playwright
+        run: bunx playwright install --with-deps chromium
+
+      - name: Smoke E2E
+        run: bash scripts/e2e.sh
+
+      # La traza y la captura del fallo, para verlo sin repetirlo.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ failure() }}
+        with:
+          name: playwright
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7

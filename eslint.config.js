@@ -55,6 +55,9 @@ export default tseslint.config(
       ".wrangler",
       "mobile",
       "src/routeTree.gen.ts",
+      // Salida de Playwright (smoke E2E).
+      "playwright-report",
+      "test-results",
       // Worktrees de Claude Code: copias completas del repo que no son código de la app.
       ".claude",
     ],
