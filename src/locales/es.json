@@ -743,7 +743,11 @@
     "unavailable": "El dictado por voz no está disponible en este navegador",
     "unavailableLabel": "{{label}} (no disponible en este navegador)",
     "holdTo": "Mantén pulsado para {{action}}",
-    "listening": "Escuchando…"
+    "listening": "Escuchando…",
+    "failedTitle": "No se pudo dictar",
+    "failedBody": "Revisa que Peppers tenga permiso de micrófono y reconocimiento de voz en Ajustes.",
+    "micOffTitle": "Micrófono desactivado",
+    "micOffBody": "Activa el micrófono y el reconocimiento de voz para Peppers en Ajustes para poder dictar."
   },
   "mealSwap": {
     "title": "Comí distinto",

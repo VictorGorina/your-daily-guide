@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert } from "react-native";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 
@@ -43,8 +44,13 @@ const haptic = (strength: "start" | "end") => {
 const VOLUME_INTERVAL_MS = 70;
 
 export function useDictation(onText: (text: string) => void) {
+  const { t } = useTranslation();
   const [state, setState] = useState<DictationState>("idle");
   const activeRef = useRef(false);
+  // Si el dedo sigue en el botón. Pedir permiso tarda (la primera vez sale el
+  // diálogo de iOS): quien suelta mientras tanto no quiere que se abra el micro
+  // al contestar (ticket 38, MOB-05).
+  const wantRef = useRef(false);
   // Volumen de la voz (0..1) mientras se escucha. En un ref y no en estado:
   // cambia muchas veces por segundo y solo lo lee la onda (`DictationWave`).
   const level = useRef(0);
@@ -72,24 +78,21 @@ export function useDictation(onText: (text: string) => void) {
 
   useSpeechRecognitionEvent("error", (event) => {
     if (event.error === "no-speech" || event.error === "aborted") return;
-    Alert.alert(
-      "No se pudo dictar",
-      "Revisa que Peppers tenga permiso de micrófono y reconocimiento de voz en Ajustes.",
-    );
+    Alert.alert(t("dictation.failedTitle"), t("dictation.failedBody"));
   });
 
   const start = useCallback(async () => {
+    wantRef.current = true;
     if (activeRef.current) return;
     // Antes de abrir el micrófono: iOS apaga la vibración mientras se graba.
     haptic("start");
     const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
-        "Micrófono desactivado",
-        "Activa el micrófono y el reconocimiento de voz para Peppers en Ajustes para poder dictar.",
-      );
+      Alert.alert(t("dictation.micOffTitle"), t("dictation.micOffBody"));
       return;
     }
+    // Soltó durante el diálogo de permiso, u otra llamada ya abrió el micro.
+    if (!wantRef.current || activeRef.current) return;
     activeRef.current = true;
     setState("listening");
     ExpoSpeechRecognitionModule.start({
@@ -98,12 +101,21 @@ export function useDictation(onText: (text: string) => void) {
       continuous: true,
       volumeChangeEventOptions: { enabled: true, intervalMillis: VOLUME_INTERVAL_MS },
     });
-  }, [lang]);
+  }, [lang, t]);
 
   const stop = useCallback(() => {
-    if (!activeRef.current) return;
-    ExpoSpeechRecognitionModule.stop();
+    wantRef.current = false;
+    if (activeRef.current) ExpoSpeechRecognitionModule.stop();
   }, []);
+
+  // El campo desaparece a medio dictar (se cierra la hoja, se cambia de pantalla).
+  useEffect(
+    () => () => {
+      wantRef.current = false;
+      if (activeRef.current) ExpoSpeechRecognitionModule.abort();
+    },
+    [],
+  );
 
   return { state, start, stop, level };
 }

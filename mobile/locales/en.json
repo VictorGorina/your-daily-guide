@@ -743,7 +743,11 @@
     "unavailable": "Voice dictation isn't available in this browser",
     "unavailableLabel": "{{label}} (not available in this browser)",
     "holdTo": "Hold to {{action}}",
-    "listening": "Listening…"
+    "listening": "Listening…",
+    "failedTitle": "Dictation failed",
+    "failedBody": "Check that Peppers has microphone and speech recognition permission in Settings.",
+    "micOffTitle": "Microphone is off",
+    "micOffBody": "Turn on the microphone and speech recognition for Peppers in Settings to dictate."
   },
   "mealSwap": {
     "title": "I ate something else",
