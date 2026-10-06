@@ -1,47 +1,32 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Baby,
-  ChevronDown,
   ChevronRight,
   ChefHat,
   Copy,
   LogOut,
   Pencil,
-  RefreshCw,
   ShieldCheck,
   UserPlus,
-  Users,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  Share,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/bottom-nav";
 import { ChildMealGapBanner } from "../../components/child-meal-gap-banner";
 import { ChildSheet } from "../../components/child-sheet";
+import { JoinOrCreateHousehold } from "../../components/hogar/join-or-create";
+import { HouseholdRebuildCard } from "../../components/hogar/rebuild-card";
+import { HouseholdScheduleSection } from "../../components/hogar/schedule-section";
 import { fetchMonthlyPlan, monthISO, todayISO } from "../../lib/daily";
-import { fetchHousehold, type HouseholdChild, type OpenSlot } from "../../lib/household";
+import { fetchHousehold, type HouseholdChild } from "../../lib/household";
 import {
   EMPTY_SCHEDULE,
-  MEAL_KEYS,
-  MEAL_LABEL,
-  deriveSharedSlots,
-  describeSharedSlots,
   eatsTableFood,
   personColor,
-  toggleDay,
   type Appetite,
-  type HomeSchedule,
 } from "../../lib/household-shared";
 import { childPureeGaps, type MonthlyPlan } from "../../lib/plan-shared";
 import { useHouseholdMutations } from "../../lib/use-household-mutations";
@@ -63,12 +48,7 @@ export default function Hogar() {
   const { t } = useTranslation();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
-  const [name, setName] = useState(() => t("hogar.create.defaultName"));
-  const [code, setCode] = useState("");
-  const [slots, setSlots] = useState<OpenSlot[] | null>(null);
   const [addingType, setAddingType] = useState<"adult" | "child">("adult");
-  const [schedDrafts, setSchedDrafts] = useState<Record<string, HomeSchedule>>({});
-  const [schedExpanded, setSchedExpanded] = useState<Record<string, boolean>>({});
   const [newAdult, setNewAdult] = useState<{ name: string; usesApp: boolean; appetite: Appetite }>({
     name: "",
     usesApp: true,
@@ -77,7 +57,6 @@ export default function Hogar() {
   // La mesa o los horarios cambiaron en esta visita: el plan del mes aún no
   // cuenta con ello hasta que quien planifica lo rehaga.
   const [tableChanged, setTableChanged] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [childSheet, setChildSheet] = useState<{ open: boolean; child: HouseholdChild | null }>({
     open: false,
@@ -86,23 +65,6 @@ export default function Hogar() {
 
   const month = monthISO();
   const planQ = useQuery({ queryKey: ["plan", month], queryFn: () => fetchMonthlyPlan(month) });
-
-  useEffect(() => {
-    // Initialize per-member schedule drafts from server data.
-    if (state.data?.members?.length || state.data?.children?.length) {
-      // Sin horario propio se parte de los días compartidos del hogar (no de
-      // vacío): así "Guardar horario" no deja a nadie en "nunca en casa".
-      const baseline = state.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
-      const drafts: Record<string, HomeSchedule> = {};
-      for (const m of state.data?.members ?? []) {
-        drafts[m.id] = m.home_schedule ?? baseline;
-      }
-      for (const c of state.data?.children ?? []) {
-        drafts[c.id] = c.home_schedule ?? baseline;
-      }
-      setSchedDrafts(drafts);
-    }
-  }, [state.data?.household, state.data?.members, state.data?.children]);
 
   const isCreator = state.data?.household?.created_by === state.data?.me?.user_id;
   const isPlanner = !!state.data?.me?.is_planner;
@@ -226,146 +188,7 @@ export default function Hogar() {
       >
         {!household ? (
           <>
-            <Text className="font-heading text-3xl text-foreground">{t("hogar.title")}</Text>
-            <Text className="mt-2 text-sm text-muted-foreground">{t("hogar.intro")}</Text>
-
-            <View className="mt-6 gap-2 rounded-3xl bg-primary-soft p-5">
-              <Text className="text-sm font-sans-semibold text-foreground">
-                {t("hogar.join.title")}
-              </Text>
-              <Text className="text-xs leading-5 text-muted-foreground">
-                {t("hogar.join.hint")}
-              </Text>
-              {!slots ? (
-                <>
-                  <TextInput
-                    className="mt-1 h-[60px] w-full rounded-2xl bg-surface px-4 text-center font-heading text-2xl uppercase tracking-widest text-foreground"
-                    value={code}
-                    onChangeText={(v) => setCode(v.toUpperCase())}
-                    placeholder="ABC123"
-                    accessibilityLabel={t("hogar.join.codeLabel")}
-                    placeholderTextColor="#a69d8f"
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                  />
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => lookup.mutate(code, { onSuccess: setSlots })}
-                    disabled={lookup.isPending || code.trim().length < 4}
-                    className="mt-1 items-center rounded-full bg-primary py-3.5 active:opacity-90"
-                    style={
-                      lookup.isPending || code.trim().length < 4 ? { opacity: 0.6 } : undefined
-                    }
-                  >
-                    <Text className="text-sm font-sans-semibold text-primary-foreground">
-                      {lookup.isPending ? t("hogar.join.searching") : t("hogar.join.submit")}
-                    </Text>
-                  </Pressable>
-                </>
-              ) : slots.length ? (
-                <View className="gap-2">
-                  <Text className="text-xs text-muted-foreground">{t("hogar.join.pickWho")}</Text>
-                  {slots.map((s) => {
-                    const pal = personColor(s.id);
-                    return (
-                      <Pressable
-                        accessibilityRole="button"
-                        key={s.id}
-                        onPress={() =>
-                          claim.mutate(
-                            { code, memberId: s.id },
-                            {
-                              onSuccess: () => {
-                                setCode("");
-                                setSlots(null);
-                              },
-                            },
-                          )
-                        }
-                        disabled={claim.isPending}
-                        className="flex-row items-center gap-3 rounded-2xl bg-surface px-4 py-3 active:opacity-80"
-                        style={claim.isPending ? { opacity: 0.6 } : undefined}
-                      >
-                        <View
-                          className="h-9 w-9 items-center justify-center rounded-full"
-                          style={{ backgroundColor: pal.soft }}
-                        >
-                          <Text className="font-heading text-sm" style={{ color: pal.ink }}>
-                            {(s.display_name.trim()[0] ?? "?").toUpperCase()}
-                          </Text>
-                        </View>
-                        <Text className="text-sm font-sans-medium text-foreground">
-                          {s.display_name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setSlots(null)}
-                    className="active:opacity-70"
-                  >
-                    <Text className="text-xs font-sans-medium text-muted-foreground underline">
-                      {t("hogar.join.otherCode")}
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <View className="gap-2">
-                  <Text className="text-xs text-muted-foreground">{t("hogar.join.noSlots")}</Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setSlots(null)}
-                    className="active:opacity-70"
-                  >
-                    <Text className="text-xs font-sans-medium text-muted-foreground underline">
-                      {t("hogar.join.otherCode")}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-
-            <View className="my-5 flex-row items-center gap-3">
-              <View className="h-px flex-1 bg-border" />
-              <Text className="text-[11px] font-sans-semibold uppercase tracking-widest text-muted-foreground">
-                {t("hogar.orStart")}
-              </Text>
-              <View className="h-px flex-1 bg-border" />
-            </View>
-
-            <View className="gap-3 rounded-3xl bg-surface p-5">
-              <View className="flex-row items-center gap-2">
-                <Users size={16} color="#6dbe7b" />
-                <Text className="text-sm font-sans-semibold text-foreground">
-                  {t("hogar.create.title")}
-                </Text>
-              </View>
-              <Text className="text-xs text-muted-foreground">{t("hogar.create.hint")}</Text>
-              <TextInput
-                className={INPUT}
-                value={name}
-                onChangeText={setName}
-                placeholder={t("hogar.create.nameLabel")}
-                placeholderTextColor="#a69d8f"
-              />
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => create.mutate(name)}
-                disabled={create.isPending}
-                className="items-center rounded-full bg-secondary py-3.5 active:opacity-80"
-                style={create.isPending ? { opacity: 0.6 } : undefined}
-              >
-                <Text className="text-sm font-sans-semibold text-foreground">
-                  {create.isPending ? t("hogar.create.creating") : t("hogar.create.submit")}
-                </Text>
-              </Pressable>
-            </View>
-
-            <View className="mt-4 flex-row items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3">
-              <ShieldCheck size={16} color="#6dbe7b" style={{ marginTop: 1 }} />
-              <Text className="flex-1 text-xs text-muted-foreground">{t("hogar.privacy")}</Text>
-            </View>
+            <JoinOrCreateHousehold create={create} lookup={lookup} claim={claim} />
           </>
         ) : (
           <>
@@ -742,275 +565,22 @@ export default function Hogar() {
               </View>
             </View>
 
-            <View className="mt-4 rounded-3xl bg-surface p-5">
-              <Text className="text-sm font-sans-semibold text-foreground">
-                {t("hogar.schedule.title")}
-              </Text>
-              <Text className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("hogar.schedule.intro")}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setShowHelp((v) => !v)}
-                className="mt-2 flex-row items-center gap-1.5 active:opacity-70"
-              >
-                <Text className="text-xs font-sans-medium text-primary-ink">
-                  {showHelp ? t("hogar.schedule.hideHelp") : t("hogar.schedule.showHelp")}
-                </Text>
-                <ChevronDown
-                  size={14}
-                  color="#a84a17"
-                  style={{ transform: [{ rotate: showHelp ? "180deg" : "0deg" }] }}
-                />
-              </Pressable>
-              {showHelp ? (
-                <Text className="mt-2.5 rounded-2xl bg-muted px-3.5 py-3 text-xs leading-5 text-muted-foreground">
-                  {t("hogar.schedule.help", { planner: plannerName })}
-                </Text>
-              ) : null}
-
-              {/* Per-member schedule grids */}
-              <View className="mt-4 gap-3">
-                {[
-                  ...members.map((m) => ({
-                    key: m.id,
-                    name: m.display_name,
-                    isChild: false,
-                    canEdit: m.user_id === state.data?.me?.user_id || isPlanner,
-                    colors: personColor(m.id),
-                    memberId: m.id,
-                    childId: undefined as string | undefined,
-                    isPlannerMember: m.is_planner,
-                  })),
-                  ...children.map((c) => ({
-                    key: c.id,
-                    name: c.name,
-                    isChild: true,
-                    canEdit: isPlanner,
-                    colors: personColor(c.id),
-                    memberId: undefined as string | undefined,
-                    childId: c.id,
-                    isPlannerMember: false,
-                  })),
-                ].map((person) => {
-                  const expanded = schedExpanded[person.key] ?? false;
-                  const scheduleBaseline = state.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
-                  const draft = schedDrafts[person.key] ?? scheduleBaseline;
-                  const serverSched = person.isChild
-                    ? children.find((ch) => ch.id === person.key)?.home_schedule
-                    : members.find((mm) => mm.id === person.key)?.home_schedule;
-                  // Sin horario propio, el punto de partida es el del hogar: así
-                  // no se marca "sin guardar" nada más abrir.
-                  const hasChanges =
-                    JSON.stringify(draft) !== JSON.stringify(serverSched ?? scheduleBaseline);
-
-                  return (
-                    <View key={person.key} className="rounded-[14px] bg-secondary/50 p-3">
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => setSchedExpanded((p) => ({ ...p, [person.key]: !expanded }))}
-                        className="flex-row items-center gap-2.5"
-                      >
-                        <View
-                          className="h-7 w-7 items-center justify-center rounded-full"
-                          style={{
-                            backgroundColor: person.colors.soft,
-                          }}
-                        >
-                          {person.isChild ? (
-                            <Baby size={14} color={person.colors.ink} />
-                          ) : (
-                            <Text
-                              className="text-xs font-sans-semibold"
-                              style={{ color: person.colors.ink }}
-                            >
-                              {person.name.charAt(0).toUpperCase()}
-                            </Text>
-                          )}
-                        </View>
-                        <View className="flex-1 flex-row items-center">
-                          <Text className="text-sm font-sans-medium text-foreground">
-                            {person.name}
-                          </Text>
-                          {person.isPlannerMember ? (
-                            <ChefHat size={14} color="#6dbe7b" style={{ marginLeft: 6 }} />
-                          ) : null}
-                        </View>
-                        <Text className="text-[11px] text-muted-foreground">
-                          {t("hogar.schedule.mealsPerWeek", {
-                            n: MEAL_KEYS.reduce((sum, m) => sum + draft[m].length, 0),
-                          })}
-                        </Text>
-                        <ChevronDown
-                          size={16}
-                          color="#6b6256"
-                          style={{
-                            transform: [{ rotate: expanded ? "180deg" : "0deg" }],
-                          }}
-                        />
-                      </Pressable>
-                      {expanded ? (
-                        <View className="mt-3 gap-3">
-                          {MEAL_KEYS.map((meal) => {
-                            const picked = draft[meal];
-                            const mealLabel = t(`moments.${MEAL_LABEL[meal]}`);
-                            return (
-                              <View key={meal}>
-                                <View className="flex-row items-baseline justify-between">
-                                  <Text className="text-xs font-sans-medium text-foreground">
-                                    {mealLabel}
-                                  </Text>
-                                  <Text className="text-[11px] text-muted-foreground">
-                                    {picked.length
-                                      ? t("hogar.schedule.ofSeven", { n: picked.length })
-                                      : "—"}
-                                  </Text>
-                                </View>
-                                <View className="mt-1.5 flex-row gap-1.5">
-                                  {[0, 1, 2, 3, 4, 5, 6].map((day) => {
-                                    const active = picked.includes(day);
-                                    return (
-                                      <Pressable
-                                        accessibilityRole="button"
-                                        accessibilityState={{ selected: active }}
-                                        key={day}
-                                        disabled={!person.canEdit}
-                                        accessibilityLabel={t("hogar.schedule.dayLabel", {
-                                          name: person.name,
-                                          meal: mealLabel,
-                                          day: t(`weekdaysLong.${day}`),
-                                        })}
-                                        onPress={() =>
-                                          setSchedDrafts((prev) => ({
-                                            ...prev,
-                                            [person.key]: {
-                                              ...draft,
-                                              [meal]: toggleDay(draft[meal], day),
-                                            },
-                                          }))
-                                        }
-                                        className={`h-[38px] flex-1 items-center justify-center rounded-[12px] active:opacity-80 ${
-                                          active ? "bg-primary-soft" : "bg-secondary"
-                                        }`}
-                                        style={person.canEdit ? undefined : { opacity: 0.6 }}
-                                      >
-                                        <Text
-                                          className={`text-xs font-sans-medium ${
-                                            active ? "text-primary-ink" : "text-muted-foreground"
-                                          }`}
-                                        >
-                                          {t(`weekdaysInitial.${day}`)}
-                                        </Text>
-                                      </Pressable>
-                                    );
-                                  })}
-                                </View>
-                              </View>
-                            );
-                          })}
-                          {person.canEdit && hasChanges ? (
-                            <Pressable
-                              accessibilityRole="button"
-                              onPress={() =>
-                                persistSchedule.mutate({
-                                  memberId: person.isChild ? undefined : person.memberId,
-                                  childId: person.isChild ? person.childId : undefined,
-                                  schedule: draft,
-                                })
-                              }
-                              disabled={persistSchedule.isPending}
-                              className="items-center rounded-full bg-primary py-2.5 active:opacity-90"
-                              style={persistSchedule.isPending ? { opacity: 0.6 } : undefined}
-                            >
-                              <Text className="text-xs font-sans-semibold text-primary-foreground">
-                                {persistSchedule.isPending
-                                  ? t("hogar.schedule.saving")
-                                  : t("hogar.schedule.save")}
-                              </Text>
-                            </Pressable>
-                          ) : null}
-                          {!person.canEdit ? (
-                            <Text className="text-[11px] text-muted-foreground">
-                              {t("hogar.schedule.onlyPlanner", { planner: plannerName })}
-                            </Text>
-                          ) : null}
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* Derived shared-slots summary */}
-              {(() => {
-                const baseline = state.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
-                const derivedSlots = deriveSharedSlots(
-                  members.map((m) => ({
-                    id: m.id,
-                    isPlanner: m.is_planner,
-                    homeSchedule: schedDrafts[m.id] ?? m.home_schedule ?? baseline,
-                  })),
-                  children.map((c) => ({
-                    id: c.id,
-                    homeSchedule: schedDrafts[c.id] ?? c.home_schedule ?? baseline,
-                    stage: c.feeding_stage,
-                  })),
-                );
-                const anyShared = MEAL_KEYS.some((m) => derivedSlots[m].length);
-                return anyShared ? (
-                  <View className="mt-4 rounded-[14px] bg-muted px-3.5 py-3">
-                    <Text className="text-[11px] font-sans-medium text-muted-foreground">
-                      {t("hogar.schedule.shared", {
-                        slots: describeSharedSlots(derivedSlots, t),
-                      })}
-                    </Text>
-                  </View>
-                ) : null;
-              })()}
-            </View>
+            <HouseholdScheduleSection
+              members={members}
+              kids={children}
+              sharedSlots={household.shared_slots}
+              meUserId={state.data?.me?.user_id}
+              isPlanner={isPlanner}
+              plannerName={plannerName}
+              persistSchedule={persistSchedule}
+            />
 
             {isPlanner && (members.length > 1 || children.length > 0) ? (
-              <View className="mt-4 rounded-3xl bg-surface p-5">
-                <View className="flex-row items-center gap-2">
-                  <RefreshCw size={16} color="#6dbe7b" />
-                  <Text className="text-sm font-sans-semibold text-foreground">
-                    {t("hogar.rebuild.title")}
-                  </Text>
-                </View>
-                <Text className="mt-1 text-xs text-muted-foreground">
-                  {t("hogar.rebuild.intro")}
-                </Text>
-                {tableChanged ? (
-                  <View className="mt-3 rounded-2xl bg-primary-soft px-4 py-3">
-                    <Text className="text-xs text-primary-ink">{t("hogar.rebuild.changed")}</Text>
-                  </View>
-                ) : null}
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => rebuild.mutate()}
-                  disabled={rebuild.isPending || !planQ.data?.plan}
-                  className="mt-3 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
-                  style={rebuild.isPending || !planQ.data?.plan ? { opacity: 0.6 } : undefined}
-                >
-                  {rebuild.isPending ? (
-                    <ActivityIndicator size="small" color="#3e3d39" />
-                  ) : (
-                    <RefreshCw size={16} color="#3e3d39" />
-                  )}
-                  <Text className="text-sm font-sans-semibold text-primary-foreground">
-                    {rebuild.isPending ? t("hogar.rebuild.running") : t("hogar.rebuild.submit")}
-                  </Text>
-                </Pressable>
-                {rebuild.isPending ? (
-                  <Text className="mt-2 text-center text-[11px] text-muted-foreground">
-                    {t("hogar.rebuild.wait")}
-                  </Text>
-                ) : !planQ.data?.plan ? (
-                  <Text className="mt-2 text-center text-[11px] text-muted-foreground">
-                    {t("hogar.rebuild.noPlan")}
-                  </Text>
-                ) : null}
-              </View>
+              <HouseholdRebuildCard
+                tableChanged={tableChanged}
+                hasPlan={!!planQ.data?.plan}
+                rebuild={rebuild}
+              />
             ) : null}
 
             <Pressable
