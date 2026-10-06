@@ -151,6 +151,12 @@ jobs:
       - name: Tests de la base de datos (pgTAP)
         run: supabase test db
 
+      # El seed sirve para entrar de verdad: GoTrue acepta la contraseña y
+      # PostgREST devuelve, con esa sesión, el plan del mes y su casa.
+      - name: La persona del seed entra y lee su plan
+        if: ${{ !cancelled() }}
+        run: bash scripts/check-seed-login.sh
+
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         if: ${{ !cancelled() }}
         with:
