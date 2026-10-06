@@ -31,6 +31,9 @@ test("Ana entra, marca la comida y ve su plan y su familia", async ({ page, requ
   await page.waitForURL("**/hoy");
   const ate = page.getByRole("button", { name: label(es.hoy.meals.ateThisLabel) });
   const undo = page.getByRole("button", { name: label(es.hoy.meals.undoLabel) });
+  await expect(ate.or(undo)).toBeVisible();
+  // Un reintento encuentra la comida ya marcada por el intento anterior.
+  if (await undo.isVisible()) await undo.click();
   await expect(ate).toBeVisible();
   await expect(page.getByText(SEED_LUNCH).first()).toBeVisible();
 
@@ -62,7 +65,9 @@ test("Ana entra, marca la comida y ve su plan y su familia", async ({ page, requ
   await page.locator('a[href="/plan"]').click();
   await page.waitForURL("**/plan");
   await expect(page.getByText(es.planCalendar.title)).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Ver el día 15/ })).toBeVisible();
+  // Un día pasado se llama «Ver el día N» y uno futuro solo lleva su número:
+  // el 28 existe en cualquier mes, sea lo uno o lo otro.
+  await expect(page.getByRole("button", { name: /^(Ver el día )?28$/ })).toBeVisible();
 
   // Familia: el hueco sin cuenta (Leo) y la peque (Vera).
   await page.locator('a[href="/hogar"]').click();
