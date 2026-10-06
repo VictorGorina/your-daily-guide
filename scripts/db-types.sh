@@ -45,9 +45,23 @@ trap 'rm -f "$tmp"' EXIT
 bunx prettier --log-level warn --write "$tmp"
 
 if [ "$MODE" = "--check-local" ]; then
-  # La versión de PostgREST es la del servidor, no del esquema: la imagen local
-  # y producción no tienen por qué llevar la misma.
-  schema_only() { sed -E 's/(PostgrestVersion: )"[^"]*"/\1"-"/' "$1"; }
+  # Se compara el ESQUEMA, no el texto: el generador de la API (el de
+  # `bun run db:types`) y el de la imagen local escriben distinto lo mismo.
+  # Fuera comentarios, la versión de PostgREST (es del servidor) y los
+  # espacios; `NonNullable<Json>` y `Record<PropertyKey, never>` son lo que el
+  # otro llama `Json` y `never`. Luego una línea por `;`, `{` o `}`, para que
+  # una diferencia de verdad se lea columna a columna.
+  schema_only() {
+    perl -0pe '
+      s/^\s*\/\/.*\n//mg;
+      s/__InternalSupabase:\s*\{[^}]*\};?//;
+      s/NonNullable<Json>/Json/g;
+      s/Record<PropertyKey, never>/never/g;
+      s/\s+//g;
+      s/;\}/}/g;
+      s/([;{}])/$1\n/g;
+    ' "$1"
+  }
   if diff -u <(schema_only "$WEB") <(schema_only "$tmp"); then
     echo "Los tipos versionados coinciden con las migraciones."
     exit 0
