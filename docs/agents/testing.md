@@ -1,8 +1,8 @@
 # Tests (web)
 
-Tres suites, cada una con su runner: la **lógica pura** con el runner de Bun (cálculo del plan y
+Cuatro suites, cada una con su runner: la **lógica pura** con el runner de Bun (cálculo del plan y
 de la compra, fechas, parsers defensivos de la salida de la IA), los **componentes** con Vitest y
-Testing Library, y la **base de datos** con pgTAP. No hay tests end-to-end (todavía).
+Testing Library, la **base de datos** con pgTAP y un **smoke de punta a punta** con Playwright.
 
 ## Comandos
 
@@ -14,13 +14,15 @@ bun run typecheck               # tsc del código de app
 bun run typecheck:test          # tsc con los tests dentro (ver abajo)
 bun run test:ui                 # componentes (Vitest): src/**/*.vitest.tsx
 bunx vitest src/components/child-sheet   # uno solo, en watch
+bun run test:e2e                # smoke E2E (Playwright); necesita `supabase start`
 ```
 
 El CI ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)) corre `bun install`,
 `bun audit`, `lint`, `typecheck`, `typecheck:test` y `test` en cada push y PR. La suite se repite
 con `TZ` de Madrid y de Ciudad de México, y después van `check-shared-drift.sh`, el build y
-`check-client-bundle.sh`. Dos jobs más: `mobile` (puertas del móvil) y `db` (la base de datos,
-[más abajo](#tests-de-la-base-de-datos-pgtap-sobre-un-supabase-local)).
+`check-client-bundle.sh`. Tres jobs más: `mobile` (puertas del móvil), `db` (la base de datos,
+[más abajo](#tests-de-la-base-de-datos-pgtap-sobre-un-supabase-local)) y, detrás de `db`, `e2e`
+([el smoke](#smoke-de-punta-a-punta-playwright)).
 
 ## Dónde viven
 
@@ -236,6 +238,36 @@ sentencias)` pone `request.jwt.claims` y el rol, ejecuta, **deshace** y devuelve
 
 En esta máquina no hay Docker, así que **no se pueden lanzar en local**: se suben en una rama con
 PR y se mira el job `db`. Con Docker serían `supabase start` y `supabase test db`.
+
+## Smoke de punta a punta: Playwright
+
+Un solo recorrido ([e2e/smoke.spec.ts](../../e2e/smoke.spec.ts)), en el job **`e2e`** del CI: Ana,
+la persona del seed, entra, ve en Hoy las comidas de su plan con los platos calculados, marca la
+comida, recarga y sigue marcada; abre Plan (el calendario del mes) y Familia (el hueco de Leo y la
+peque, Vera). No es una batería: comprueba lo que ninguna otra suite ve junto: que el build
+arranca, que la sesión llega al servidor y que las políticas RLS dejan leer y escribir lo propio.
+
+Las piezas ([playwright.config.ts](../../playwright.config.ts)):
+
+- **La app** es el build de siempre con el preset `node-server` de Nitro (`NITRO_PRESET`), que
+  deja un servidor arrancable en `.output/server/index.mjs`. `bun run preview` no sirve para esto:
+  no sabe servir la salida del preset de Vercel.
+- **La base** es el Supabase local con [supabase/seed.sql](../../supabase/seed.sql).
+  `scripts/e2e.sh` saca la URL y las claves de `supabase status` y la config **no arranca** si la
+  URL no es local: el smoke escribe, y nunca puede hacerlo en producción.
+- **La IA** es [e2e/mock-openrouter.ts](../../e2e/mock-openrouter.ts): el servidor de la app lo usa
+  por `OPENROUTER_BASE_URL` (`aiBaseUrl`, que la ignora en producción). Contesta lo mismo a lo
+  mismo y reconoce cada petición por cómo empieza su prompt (recetas, guía del día, alimento más
+  parecido, ajuste del plan); lo que no reconoce contesta `{}` y lo deja en el log. La receta de un
+  plato sale de las palabras de su nombre. `src/test/mock-openrouter.test.ts` lo prueba en
+  `bun test` contra el SDK de verdad: los platos del seed tienen que salir calculados. **Si cambias
+  el principio de un prompt o añades un plato al seed, ese test avisa antes que el CI.**
+
+Al escribir en el smoke: los textos salen del catálogo (`src/locales/es.json`), los elementos se
+buscan por rol o etiqueta, y antes de recargar se espera a la respuesta de la escritura. Si falla
+en el CI, el artefacto `playwright` del run trae la traza y la captura
+(`bunx playwright show-trace`). Como pgTAP, **no se puede lanzar en esta máquina** (sin Docker):
+rama + PR. Con Docker: `supabase start`, `bunx playwright install chromium` y `bun run test:e2e`.
 
 ## Regla al tocar esta lógica
 
