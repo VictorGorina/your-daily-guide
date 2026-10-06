@@ -5,7 +5,8 @@ name: CI
 # fechas depende de la hora local), el build de producción y que nada de
 # servidor acabe en el bundle del navegador. Ver docs/agents/verification.md y
 # docs/agents/testing.md. La app móvil (mobile/) tiene su propio job, `mobile`,
-# con su propio toolchain (npm, no Bun: Metro no corre sobre Bun).
+# con su propio toolchain (npm, no Bun: Metro no corre sobre Bun). El job `db`
+# levanta un Supabase local y pasa los tests de la base de datos.
 on:
   push:
     branches: [main]
@@ -126,3 +127,39 @@ jobs:
       - name: Formato (Prettier)
         if: ${{ !cancelled() }}
         run: npx prettier --check .
+
+  # Base de datos (ticket 25 de la auditoría): `supabase start` aplica todas las
+  # migraciones a una base vacía, `supabase test db` pasa los tests de pgTAP de
+  # supabase/tests/ (RLS y funciones) y los tipos versionados tienen que ser los
+  # que dejan esas migraciones. No toca producción ni necesita secretos.
+  db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          # La misma CLI que en local (`supabase --version`).
+          version: 2.119.0
+
+      # Solo la base de datos y lo que hace falta para generar los tipos y
+      # entrar con un usuario: sin Studio, imágenes, correo, funciones ni logs.
+      - name: Supabase local (migraciones desde cero)
+        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api
+
+      - name: Tests de la base de datos (pgTAP)
+        run: supabase test db
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: ${{ !cancelled() }}
+        with:
+          bun-version-file: .bun-version
+
+      - name: Instalar dependencias
+        if: ${{ !cancelled() }}
+        run: bun install --frozen-lockfile
+
+      - name: Tipos generados = versionados
+        if: ${{ !cancelled() }}
+        run: bun run db:types:check

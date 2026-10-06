@@ -9,10 +9,17 @@
 #   mobile/lib/database.types.ts
 #
 # Se lanza después de aplicar una migración (docs/agents/verification.md §3).
+#
+# Con `--check-local` (`bun run db:types:check`, job `db` del CI) no escribe
+# nada: genera los tipos del Supabase LOCAL, que sale de aplicar
+# supabase/migrations/ a una base vacía, y falla si no coinciden con los
+# versionados. Así una migración sin `bun run db:types`, o un cambio hecho a
+# mano en producción sin su migración, no pasa del CI.
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+MODE="${1:-}"
 PROJECT_ID="tocmrlmxrwylyniyjtlv"
 WEB="src/integrations/supabase/types.ts"
 MOBILE="mobile/lib/database.types.ts"
@@ -26,12 +33,29 @@ trap 'rm -f "$tmp"' EXIT
   echo "// Generado por \`bun run db:types\` a partir del esquema de producción: no se edita a mano."
   echo "// Tras una migración se regenera; la copia del móvil es mobile/lib/database.types.ts."
   echo
-  supabase gen types typescript --project-id "$PROJECT_ID"
+  if [ "$MODE" = "--check-local" ]; then
+    supabase gen types typescript --local
+  else
+    supabase gen types typescript --project-id "$PROJECT_ID"
+  fi
 } > "$tmp"
 
 # La CLI escribe sin `;` y el lint del repo incluye Prettier: se formatea aquí
 # para que el resultado sea siempre el mismo.
 bunx prettier --log-level warn --write "$tmp"
+
+if [ "$MODE" = "--check-local" ]; then
+  # La versión de PostgREST es la del servidor, no del esquema: la imagen local
+  # y producción no tienen por qué llevar la misma.
+  schema_only() { sed -E 's/(PostgrestVersion: )"[^"]*"/\1"-"/' "$1"; }
+  if diff -u <(schema_only "$WEB") <(schema_only "$tmp"); then
+    echo "Los tipos versionados coinciden con las migraciones."
+    exit 0
+  fi
+  echo "Los tipos versionados (-) no coinciden con lo que dejan las migraciones (+)." >&2
+  echo "Tras una migración: bun run db:types, en el mismo commit." >&2
+  exit 1
+fi
 
 cp "$tmp" "$WEB"
 cp "$tmp" "$MOBILE"
