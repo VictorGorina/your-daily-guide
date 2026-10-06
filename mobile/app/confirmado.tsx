@@ -137,6 +137,7 @@ export default function Confirmado() {
               {t("auth.confirm.linkErrorBody")}
             </Text>
             <Pressable
+              accessibilityRole="button"
               onPress={() => router.replace("/auth")}
               className="mt-8 w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90"
             >

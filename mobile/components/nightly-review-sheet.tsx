@@ -98,6 +98,7 @@ export function NightlyReviewSheet({
               })}
             </Text>
             <Pressable
+              accessibilityRole="button"
               onPress={onSkipPending}
               className="mt-3 w-full items-center rounded-full bg-secondary py-3 active:opacity-90"
             >
@@ -137,6 +138,7 @@ export function NightlyReviewSheet({
         </View>
 
         <Pressable
+          accessibilityRole="button"
           onPress={onDone}
           className="w-full items-center rounded-full bg-primary py-4 active:opacity-90"
         >

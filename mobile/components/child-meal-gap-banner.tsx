@@ -34,6 +34,7 @@ export function ChildMealGapBanner({
         {t("childGap.missing", { names: label })}
       </Text>
       <Pressable
+        accessibilityRole="button"
         onPress={onUpdate}
         disabled={pending}
         className={`flex-row items-center gap-1.5 rounded-full bg-foreground px-3.5 py-2 active:opacity-80 ${

@@ -808,7 +808,7 @@ export default function Hoy() {
                 : t("hoy.guide.label")}
           </Text>
           {!guide && !generating && !todayQ.isLoading ? (
-            <Pressable onPress={() => requestGuide()}>
+            <Pressable accessibilityRole="button" onPress={() => requestGuide()}>
               <Text className="font-body-medium text-xs text-primary-ink">
                 {t("hoy.guide.generate")}
               </Text>
@@ -841,6 +841,7 @@ export default function Hoy() {
               // Un mes se genera una vez, tras la conversación con el coach en
               // Plan: aquí no se genera nada, solo se lleva allí.
               <Pressable
+                accessibilityRole="button"
                 onPress={() => router.navigate("/plan")}
                 className="flex-row items-center gap-3 rounded-[20px] bg-surface p-4 active:opacity-80"
               >
@@ -860,7 +861,7 @@ export default function Hoy() {
             ) : (
               <View className="rounded-[20px] bg-surface p-4">
                 {todayQ.isError ? (
-                  <Pressable onPress={() => todayQ.refetch()}>
+                  <Pressable accessibilityRole="button" onPress={() => todayQ.refetch()}>
                     <Text className="font-body-medium text-sm text-primary-ink">
                       {t("hoy.meals.loadFailed")}
                     </Text>
@@ -1005,12 +1006,22 @@ export default function Hoy() {
                         {isPending ? (
                           <>
                             <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={t("hoy.meals.ateOtherLabel", {
+                                meal: t(`moments.${h.label}`, { defaultValue: h.label }),
+                              })}
+                              hitSlop={7}
                               onPress={() => setSwapIndex(i)}
                               className="h-[30px] w-[30px] items-center justify-center rounded-full bg-surface active:opacity-80"
                             >
                               <PencilLine size={14} color="#6b6256" />
                             </Pressable>
                             <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={t("hoy.meals.ateThisLabel", {
+                                meal: t(`moments.${h.label}`, { defaultValue: h.label }),
+                              })}
+                              hitSlop={5}
                               onPress={() => setMealStatus(i, "plan")}
                               className="h-[34px] w-[34px] items-center justify-center rounded-full active:opacity-80"
                               style={{ backgroundColor: accent }}
@@ -1020,6 +1031,11 @@ export default function Hoy() {
                           </>
                         ) : isDone ? (
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t("hoy.meals.undoLabel", {
+                              meal: t(`moments.${h.label}`, { defaultValue: h.label }),
+                            })}
+                            hitSlop={5}
                             onPress={() => clearMealStatus(i)}
                             className="h-[34px] w-[34px] items-center justify-center rounded-full bg-success"
                           >
@@ -1027,6 +1043,11 @@ export default function Hoy() {
                           </Pressable>
                         ) : isSkip ? (
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t("hoy.meals.undoLabel", {
+                              meal: t(`moments.${h.label}`, { defaultValue: h.label }),
+                            })}
+                            hitSlop={5}
                             onPress={() => clearMealStatus(i)}
                             className="h-[34px] w-[34px] items-center justify-center rounded-full bg-secondary"
                           >
@@ -1135,6 +1156,7 @@ export default function Hoy() {
 
         {/* ── Añadir picoteo: justo encima de "Registrar deporte" ── */}
         <Pressable
+          accessibilityRole="button"
           onPress={() => setSnackOpen(true)}
           className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
         >
@@ -1144,6 +1166,7 @@ export default function Hoy() {
 
         {/* ── Registrar deporte: pegado encima de la tira de la semana ── */}
         <Pressable
+          accessibilityRole="button"
           onPress={() => setActivityOpen(true)}
           className="mt-2.5 flex-row items-center justify-center gap-2 rounded-full bg-surface py-3.5 active:opacity-80"
         >
@@ -1219,6 +1242,8 @@ export default function Hoy() {
 
       {/* ── FAB de chat: pegado justo encima de la barra de pestañas ── */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("chat.fab.open")}
         onPress={() => router.navigate("/chat")}
         className="absolute bottom-32 right-5 h-14 w-14 items-center justify-center rounded-full active:opacity-90"
         style={{

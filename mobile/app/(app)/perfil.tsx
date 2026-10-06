@@ -147,6 +147,7 @@ export default function Perfil() {
         keyboardShouldPersistTaps="handled"
       >
         <Pressable
+          accessibilityRole="button"
           onPress={() => (router.canGoBack() ? router.back() : router.navigate("/ajustes"))}
           className="flex-row items-center gap-1 self-start active:opacity-70"
           hitSlop={8}
@@ -202,6 +203,8 @@ export default function Perfil() {
                               const active = draft === opt;
                               return (
                                 <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityState={{ selected: active }}
                                   key={opt}
                                   onPress={() => commit(field, opt)}
                                   className={`rounded-full px-3 py-2 active:opacity-80 ${
@@ -270,6 +273,7 @@ export default function Perfil() {
                         {field.kind !== "chips" ? (
                           <View className="mt-3 flex-row gap-2">
                             <Pressable
+                              accessibilityRole="button"
                               onPress={() => commit(field)}
                               className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 active:opacity-90"
                             >
@@ -279,6 +283,7 @@ export default function Perfil() {
                               </Text>
                             </Pressable>
                             <Pressable
+                              accessibilityRole="button"
                               onPress={() => setEditing(null)}
                               className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface px-4 py-2.5 active:opacity-80"
                             >
@@ -289,7 +294,11 @@ export default function Perfil() {
                             </Pressable>
                           </View>
                         ) : (
-                          <Pressable onPress={() => setEditing(null)} className="mt-3">
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => setEditing(null)}
+                            className="mt-3"
+                          >
                             <Text className="text-[11px] font-sans-medium text-muted-foreground">
                               {t("common.cancel")}
                             </Text>
@@ -298,6 +307,7 @@ export default function Perfil() {
                       </View>
                     ) : (
                       <Pressable
+                        accessibilityRole="button"
                         onPress={() => open(field)}
                         className="flex-row items-start gap-3 rounded-2xl px-1 py-2 active:opacity-70"
                       >

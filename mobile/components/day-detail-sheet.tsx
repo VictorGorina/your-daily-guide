@@ -359,6 +359,7 @@ export function DayDetailBody({
             return (
               <View key={h.label}>
                 <Pressable
+                  accessibilityRole="button"
                   disabled={!editable}
                   onPress={() => {
                     setEditing((prev) => (prev === i ? null : i));
@@ -430,6 +431,8 @@ export function DayDetailBody({
                         const active = h.status === s;
                         return (
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: active }}
                             key={s}
                             onPress={() => {
                               if (s === "distinto") {
@@ -456,6 +459,8 @@ export function DayDetailBody({
                     {/* Toggle "toda la familia comió esto" para comidas compartidas */}
                     {isShared(h.label) ? (
                       <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: familyToggle[i] }}
                         onPress={() => setFamilyToggle((t) => ({ ...t, [i]: !t[i] }))}
                         className={`flex-row items-center gap-2 rounded-lg px-3 py-2 ${
                           familyToggle[i] ? "bg-primary-soft" : "bg-surface"
@@ -489,6 +494,7 @@ export function DayDetailBody({
                         className="rounded-lg bg-surface px-3 py-2 text-sm text-foreground"
                       />
                       <Pressable
+                        accessibilityRole="button"
                         disabled={!actualDraft[i]?.trim() && !h.actual}
                         onPress={() => {
                           if (h.status === "distinto") saveActual(i);
@@ -538,6 +544,7 @@ export function DayDetailBody({
               ) : null}
               {!beforeStart ? (
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() => void removeSnack(e.id)}
                   disabled={removingSnackId != null}
                   hitSlop={6}
@@ -555,6 +562,7 @@ export function DayDetailBody({
           ))}
           {!beforeStart ? (
             <Pressable
+              accessibilityRole="button"
               onPress={() => setSnackSheetOpen(true)}
               className="flex-row items-center justify-center gap-1.5 rounded-full bg-secondary/50 py-2 active:opacity-80"
             >

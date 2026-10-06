@@ -681,6 +681,7 @@ export default function Plan() {
                   : t("plan.create.bodyCurrent")}
             </Text>
             <Pressable
+              accessibilityRole="button"
               onPress={() => setIntakeOpen(true)}
               disabled={generate.isPending || planQ.isLoading}
               className="mt-5 w-full items-center rounded-full bg-primary py-4 active:opacity-90"
@@ -709,6 +710,8 @@ export default function Plan() {
                 const active = tab === key;
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     key={key}
                     onPress={() => setTab(key)}
                     className={`flex-1 flex-row items-center justify-center gap-1 rounded-full py-2.5 active:opacity-80 ${
@@ -902,6 +905,7 @@ export default function Plan() {
                       </Text>
                       {actionable ? (
                         <Pressable
+                          accessibilityRole="button"
                           onPress={() => setIntakeOpen(true)}
                           disabled={generate.isPending}
                           className="mt-4 w-full items-center rounded-full bg-primary py-3.5 active:opacity-90"
@@ -971,6 +975,7 @@ export default function Plan() {
       {showShopCta ? (
         <View className="absolute inset-x-0 bottom-[124px] px-5">
           <Pressable
+            accessibilityRole="button"
             onPress={() => {
               setShopSource("own");
               setShopMode(true);
@@ -1132,6 +1137,7 @@ function PlanMonthCalendar({
           return (
             <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
               <Pressable
+                accessibilityRole="button"
                 onPress={() => setSelected(date)}
                 className={`aspect-square items-center justify-center rounded-xl active:opacity-80 ${
                   isWeekend ? "bg-accent/60" : "bg-secondary"
@@ -1325,6 +1331,7 @@ function PantryExtrasCard({
           disabled={pantry.isPending || !name.trim()}
           accessibilityRole="button"
           accessibilityLabel={t("shopping.pantry.add")}
+          hitSlop={4}
           className="h-9 w-9 items-center justify-center rounded-full bg-foreground active:opacity-80"
           style={pantry.isPending || !name.trim() ? { opacity: 0.4 } : undefined}
         >
@@ -1733,6 +1740,8 @@ function IngredientsTab({
           const active = filter === key;
           return (
             <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
               key={key}
               onPress={() => setFilter(key)}
               className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 active:opacity-80 ${
@@ -1771,6 +1780,7 @@ function IngredientsTab({
               const have = !!item.owned;
               return (
                 <Pressable
+                  accessibilityRole="button"
                   key={`${item.name}-${i}`}
                   onPress={() => {
                     if (!editable) return;
@@ -1851,6 +1861,7 @@ function IngredientsTab({
           lista el CTA lo pinta la pantalla, fijo al fondo. */}
       {onEnterShopMode && editable && (shopping?.length ?? 0) > 0 && needCount > 0 ? (
         <Pressable
+          accessibilityRole="button"
           onPress={onEnterShopMode}
           className="mt-1 flex-row items-center justify-center gap-2 rounded-[20px] bg-primary py-4 active:opacity-90"
         >
@@ -1984,6 +1995,7 @@ function ShopModeView({
             onPress={onClose}
             accessibilityRole="button"
             accessibilityLabel={t("shopMode.exit")}
+            hitSlop={4}
             className="h-9 w-9 items-center justify-center rounded-full bg-surface active:opacity-70"
           >
             <ChevronLeft size={16} color="#6b6256" />
@@ -2053,6 +2065,8 @@ function ShopModeView({
                   const done = item.owned === "store";
                   return (
                     <Pressable
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: done }}
                       key={`${item.name}-${i}`}
                       onPress={() => onToggle(item.name, done ? null : "store")}
                       className={`flex-row items-center gap-3.5 rounded-2xl px-4 py-3.5 active:opacity-80 ${
@@ -2113,6 +2127,7 @@ function ShopModeView({
                 <Text className="text-xs text-muted-foreground">{currencySign}</Text>
               </View>
               <Pressable
+                accessibilityRole="button"
                 onPress={pickReceipt}
                 disabled={scanningReceipt}
                 className="flex-row items-center justify-center gap-2 rounded-2xl border border-secondary py-3 active:opacity-80"
@@ -2127,6 +2142,7 @@ function ShopModeView({
                 {t("shopMode.photoNote")}
               </Text>
               <Pressable
+                accessibilityRole="button"
                 onPress={() => {
                   // El botón "guardar gasto" no puede fiarse solo del onBlur del
                   // campo: si se pulsa con el teclado abierto, RN cierra la
@@ -2143,6 +2159,7 @@ function ShopModeView({
             </View>
           ) : (
             <Pressable
+              accessibilityRole="button"
               onPress={onClose}
               className="items-center rounded-2xl bg-foreground py-4 active:opacity-90"
             >

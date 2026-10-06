@@ -16,6 +16,8 @@ import { Sheet } from "./ui/sheet";
 function Chip({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       className={`rounded-full px-3 py-1.5 active:opacity-80 ${
         active ? "bg-primary" : "bg-secondary"
@@ -172,6 +174,7 @@ export function ExerciseSheet({
         {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
 
         <Pressable
+          accessibilityRole="button"
           onPress={() => void save()}
           disabled={busy}
           className="w-full flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"

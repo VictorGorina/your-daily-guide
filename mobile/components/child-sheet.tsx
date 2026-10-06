@@ -165,6 +165,8 @@ export function ChildSheet({
               const active = draft.stage === key;
               return (
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
                   key={key}
                   onPress={() => patch({ stage: key })}
                   className={`rounded-2xl px-4 py-2.5 ${active ? "bg-primary-soft" : "bg-muted"}`}
@@ -195,6 +197,8 @@ export function ChildSheet({
                 const active = draft.appetite === key;
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     key={key}
                     onPress={() => patch({ appetite: key })}
                     className={`flex-1 items-center rounded-full py-2 ${active ? "bg-surface" : ""}`}
@@ -239,6 +243,7 @@ export function ChildSheet({
       </View>
 
       <Pressable
+        accessibilityRole="button"
         onPress={() => save.mutate()}
         disabled={save.isPending || !draft.name.trim()}
         className="mt-5 items-center rounded-full bg-primary py-3.5 active:opacity-90"
@@ -251,6 +256,7 @@ export function ChildSheet({
 
       {child ? (
         <Pressable
+          accessibilityRole="button"
           onPress={confirmDrop}
           disabled={drop.isPending}
           className="mt-2 flex-row items-center justify-center gap-2 rounded-full py-3 active:opacity-70"

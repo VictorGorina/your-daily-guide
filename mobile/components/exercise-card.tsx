@@ -70,6 +70,7 @@ export function ExerciseCard({
               <Text className="font-mono text-[11px] text-muted-foreground">{-e.kcal} kcal</Text>
             ) : null}
             <Pressable
+              accessibilityRole="button"
               onPress={() => onRemove(e.id)}
               disabled={removingId != null}
               hitSlop={6}

@@ -354,12 +354,17 @@ function WeightPanel({
             className="w-16 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm text-foreground"
           />
           <Text className="text-xs text-muted-foreground">kg</Text>
-          <Pressable onPress={() => setEditing(false)} className="ml-auto active:opacity-60">
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setEditing(false)}
+            className="ml-auto active:opacity-60"
+          >
             <Text className="text-xs font-sans-medium text-muted-foreground">
               {t("common.cancel")}
             </Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
             onPress={commit}
             disabled={save.isPending}
             className="rounded-full bg-foreground px-3 py-1.5 active:opacity-80"
@@ -387,6 +392,7 @@ function WeightPanel({
             )}
           </View>
           <Pressable
+            accessibilityRole="button"
             onPress={() => {
               setValue(last != null ? String(last) : "");
               setEditing(true);

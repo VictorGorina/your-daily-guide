@@ -61,7 +61,11 @@ function Chip({
     <View
       className={`flex-row items-center rounded-full ${active ? "bg-primary" : "bg-secondary"}`}
     >
-      <Pressable onPress={onPress} className="px-3 py-1.5 active:opacity-80">
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        className="px-3 py-1.5 active:opacity-80"
+      >
         <Text className={`text-xs ${active ? "text-primary-foreground" : "text-muted-foreground"}`}>
           {label}
           {active && count > 1 ? ` ×${count}` : ""}
@@ -276,6 +280,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
 
       {!estimate ? (
         <Pressable
+          accessibilityRole="button"
           onPress={calculate}
           disabled={busy != null || !text.trim()}
           className={`h-12 flex-row items-center justify-center gap-2 rounded-full bg-secondary active:opacity-80 ${
@@ -303,6 +308,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                   ≈ {estimate.macros.kcal} kcal
                 </Text>
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() => setKcalInput(String(estimate.macros?.kcal ?? ""))}
                   hitSlop={8}
                   className="active:opacity-70"
@@ -336,6 +342,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
                 <Text className="text-sm text-muted-foreground">kcal</Text>
                 {estimate.resolved ? (
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => setKcalInput(null)}
                     hitSlop={8}
                     className="ml-auto active:opacity-70"
@@ -365,6 +372,7 @@ export function SnackForm({ today, onSaved, pastDay = false, showNumbers = true 
 
       {estimate ? (
         <Pressable
+          accessibilityRole="button"
           onPress={save}
           disabled={busy != null || !macros}
           className={`h-12 flex-row items-center justify-center gap-2 rounded-full bg-primary active:opacity-90 ${

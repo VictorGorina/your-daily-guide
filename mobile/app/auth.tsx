@@ -318,6 +318,7 @@ export default function Auth() {
             <View className="flex-row items-center gap-2 pt-1">
               {stage === "access" && (
                 <Pressable
+                  accessibilityRole="button"
                   onPress={backToIntro}
                   className="rounded-full bg-surface px-3.5 py-2 active:opacity-80"
                 >
@@ -331,6 +332,8 @@ export default function Auth() {
                 <View className="flex-row gap-1 rounded-full bg-secondary p-0.5">
                   {offeredLocales(ENGLISH_ENABLED, locale).map((l) => (
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: l === locale }}
                       key={l}
                       onPress={() => void setLocale(l)}
                       className={`rounded-full px-2 py-1 ${l === locale ? "bg-foreground" : ""}`}
@@ -397,7 +400,11 @@ export default function Auth() {
                       {mode === "forgot" ? t("auth.sentReset") : t("auth.sentConfirm")}
                     </Text>
                   </View>
-                  <Pressable onPress={backToIntro} className="w-full py-2">
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={backToIntro}
+                    className="w-full py-2"
+                  >
                     <Text className="text-center text-xs font-body text-muted-foreground">
                       {t("auth.backToSignIn")}
                     </Text>
@@ -440,6 +447,7 @@ export default function Auth() {
                         {t("auth.errEmailNotConfirmed")}
                       </Text>
                       <Pressable
+                        accessibilityRole="button"
                         onPress={resendConfirmation}
                         disabled={loading}
                         className="mt-2.5 w-full items-center rounded-full bg-surface py-2.5 active:opacity-90 disabled:opacity-60"
@@ -452,7 +460,11 @@ export default function Auth() {
                   )}
 
                   {mode === "in" && (
-                    <Pressable onPress={() => setMode("forgot")} className="w-full py-1">
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setMode("forgot")}
+                      className="w-full py-1"
+                    >
                       <Text className="text-right text-xs font-body text-muted-foreground">
                         {t("auth.forgotLink")}
                       </Text>
@@ -472,6 +484,7 @@ export default function Auth() {
                           </View>
 
                           <Pressable
+                            accessibilityRole="button"
                             onPress={google}
                             disabled={googleLoading}
                             className="w-full flex-row items-center justify-center rounded-full bg-surface py-3.5 active:opacity-90 disabled:opacity-60"
@@ -488,6 +501,7 @@ export default function Auth() {
                       )}
 
                       <Pressable
+                        accessibilityRole="button"
                         onPress={demo}
                         disabled={demoLoading}
                         className="w-full items-center py-2.5 active:opacity-80 disabled:opacity-60"
@@ -508,6 +522,7 @@ export default function Auth() {
           <PepperRow />
 
           <Pressable
+            accessibilityRole="button"
             onPress={onPrimary}
             disabled={loading}
             className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
@@ -522,7 +537,11 @@ export default function Auth() {
           </Pressable>
 
           {stage === "intro" && (
-            <Pressable onPress={() => openAccess("in")} className="w-full py-2.5 active:opacity-80">
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => openAccess("in")}
+              className="w-full py-2.5 active:opacity-80"
+            >
               <Text className="text-center text-xs font-body-medium text-muted-foreground">
                 {t("auth.intro.haveAccount")}
               </Text>
@@ -531,6 +550,7 @@ export default function Auth() {
 
           {stage === "access" && !sent && (
             <Pressable
+              accessibilityRole="button"
               onPress={() => setMode(mode === "in" ? "up" : mode === "up" ? "in" : "in")}
               className="w-full py-2.5 active:opacity-80"
             >

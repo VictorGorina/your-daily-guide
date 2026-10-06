@@ -23,6 +23,7 @@ export function PlanUpdatedBanner({ onDismiss }: { onDismiss: () => void }) {
       </Text>
       <Pressable
         onPress={onDismiss}
+        hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel={t("planUpdated.dismiss")}
         className="h-6 w-6 items-center justify-center rounded-full active:opacity-70"

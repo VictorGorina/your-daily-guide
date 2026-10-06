@@ -86,6 +86,7 @@ export function RegionStep({ profile, onDone }: Props) {
         </View>
 
         <Pressable
+          accessibilityRole="button"
           onPress={confirm}
           disabled={saving}
           className="mt-8 items-center rounded-full bg-primary py-4 active:opacity-80 disabled:opacity-60"

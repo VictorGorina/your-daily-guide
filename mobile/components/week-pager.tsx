@@ -208,6 +208,9 @@ export function WeekPager({
       {/* ── Cabecera: chevrons + etiqueta + "Hoy" ── */}
       <View className="mb-2 flex-row items-center justify-between">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("week.previous")}
+          accessibilityState={{ disabled: atStart }}
           onPress={() => goTo(visibleIndex - 1)}
           disabled={atStart}
           hitSlop={8}
@@ -228,6 +231,7 @@ export function WeekPager({
           </Animated.Text>
           {showTodayPill ? (
             <Pressable
+              accessibilityRole="button"
               onPress={() => goTo(weekIndexOf(today, bounds))}
               hitSlop={6}
               className="rounded-full bg-primary/10 px-2 py-0.5 active:opacity-70"
@@ -239,6 +243,9 @@ export function WeekPager({
           ) : null}
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("week.following")}
+          accessibilityState={{ disabled: atEnd }}
           onPress={() => goTo(visibleIndex + 1)}
           disabled={atEnd}
           hitSlop={8}

@@ -71,7 +71,14 @@ export function BottomNav() {
             <Pressable
               key={href}
               onPress={() => router.navigate(href)}
-              className="flex-1 items-center gap-1 rounded-3xl py-2 active:opacity-70"
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={
+                href === "/plan" && planNeedsAction
+                  ? `${t(`nav.${label}`)}, ${t("nav.planDue")}`
+                  : t(`nav.${label}`)
+              }
+              className="min-h-[44px] flex-1 items-center gap-1 rounded-3xl py-2 active:opacity-70"
             >
               <View
                 className={`h-8 w-[38px] items-center justify-center rounded-[14px] ${
@@ -80,10 +87,7 @@ export function BottomNav() {
               >
                 <Icon size={18} color={active ? "#f3f1ed" : "#6b6256"} />
                 {href === "/plan" && planNeedsAction ? (
-                  <View
-                    accessibilityLabel={t("nav.planDue")}
-                    className="absolute right-0.5 top-0 h-3 w-3 rounded-full border-2 border-surface bg-primary"
-                  />
+                  <View className="absolute right-0.5 top-0 h-3 w-3 rounded-full border-2 border-surface bg-primary" />
                 ) : null}
               </View>
               <Text

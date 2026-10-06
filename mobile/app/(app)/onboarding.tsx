@@ -550,6 +550,7 @@ export default function Onboarding() {
             {t("onboarding.intro.body", { count: total })}
           </Text>
           <Pressable
+            accessibilityRole="button"
             onPress={() => setIntroDismissed(true)}
             className="mt-8 flex-row items-center gap-2 rounded-full bg-primary px-8 py-3.5 active:opacity-90"
           >
@@ -585,6 +586,7 @@ export default function Onboarding() {
             const first = nodes[0];
             return (
               <Pressable
+                accessibilityRole="button"
                 key={s.id}
                 onPress={() => first && goTo(first.key)}
                 className="flex-row items-center gap-3.5 rounded-2xl bg-surface p-4 active:opacity-90"
@@ -623,6 +625,7 @@ export default function Onboarding() {
           })}
         </ScrollView>
         <Pressable
+          accessibilityRole="button"
           onPress={() => void openResumen()}
           className="mt-3 flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90"
         >
@@ -699,6 +702,7 @@ export default function Onboarding() {
               </Text>
               {pending.map((n) => (
                 <Pressable
+                  accessibilityRole="button"
                   key={n.key}
                   onPress={() => goTo(n.key)}
                   className="flex-row items-center gap-3 rounded-2xl bg-surface p-3.5 active:opacity-90"
@@ -721,6 +725,7 @@ export default function Onboarding() {
               </Text>
               {s.items.map((n) => (
                 <Pressable
+                  accessibilityRole="button"
                   key={n.key}
                   onPress={() => goTo(n.key)}
                   className="rounded-3xl bg-surface p-4 active:opacity-90"
@@ -758,6 +763,7 @@ export default function Onboarding() {
         ) : null}
 
         <Pressable
+          accessibilityRole="button"
           disabled={saving}
           onPress={() => (canConfirm ? void confirmAndSave() : closeToChat())}
           className="flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-50"
@@ -800,6 +806,7 @@ export default function Onboarding() {
           </Text>
           <View className="w-full max-w-[320px] gap-2.5">
             <Pressable
+              accessibilityRole="button"
               onPress={closeToChat}
               className="items-center rounded-full bg-primary py-4 active:opacity-90"
             >
@@ -808,6 +815,7 @@ export default function Onboarding() {
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               onPress={() => void openResumen()}
               className="items-center rounded-full bg-surface py-4 active:opacity-90"
             >
@@ -844,6 +852,7 @@ export default function Onboarding() {
         <View className="flex-1 px-5 pt-2">
           <View className="flex-row items-center gap-2">
             <Pressable
+              accessibilityRole="button"
               onPress={back}
               disabled={curIndex <= 0 && !stageEnd}
               accessibilityLabel={t("onboarding.chat.back")}
@@ -852,6 +861,7 @@ export default function Onboarding() {
               <ArrowLeft size={18} color={C.fg} />
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               onPress={() => setView("index")}
               className="h-11 flex-1 flex-row items-center justify-between rounded-full bg-surface px-4 active:opacity-90"
             >
@@ -869,6 +879,7 @@ export default function Onboarding() {
               <ChevronDown size={16} color={C.muted} />
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               onPress={() => setView("saved")}
               accessibilityLabel={t("onboarding.chat.saveAndExit")}
               className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80"
@@ -913,6 +924,7 @@ export default function Onboarding() {
                 {answers[n.key] !== undefined ? (
                   <View className="items-end">
                     <Pressable
+                      accessibilityRole="button"
                       onPress={() => goTo(n.key)}
                       className="max-w-[85%] flex-row items-center gap-2 rounded-3xl bg-primary px-4 py-3 active:opacity-90"
                     >
@@ -925,6 +937,7 @@ export default function Onboarding() {
                 ) : skipped[n.key] ? (
                   <View className="items-end">
                     <Pressable
+                      accessibilityRole="button"
                       onPress={() => goTo(n.key)}
                       className="flex-row items-center gap-2 rounded-full bg-secondary px-4 py-2.5 active:opacity-80"
                     >
@@ -962,6 +975,7 @@ export default function Onboarding() {
               </Text>
               <View className="flex-row gap-2.5">
                 <Pressable
+                  accessibilityRole="button"
                   onPress={back}
                   className="flex-row items-center justify-center gap-1.5 rounded-full bg-secondary px-4 py-3 active:opacity-80"
                 >
@@ -971,6 +985,7 @@ export default function Onboarding() {
                   </Text>
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
                   onPress={advanceStage}
                   className="flex-1 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3 active:opacity-90"
                 >
@@ -989,6 +1004,8 @@ export default function Onboarding() {
                     const active = selectedChips.has(c);
                     return (
                       <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
                         key={c}
                         onPress={() => toggleChip(c)}
                         className={`min-h-[44px] flex-row items-center gap-1.5 rounded-full px-4 active:opacity-80 ${
@@ -1036,6 +1053,7 @@ export default function Onboarding() {
                   </View>
                   <View className="flex-row items-center justify-between px-1">
                     <Pressable
+                      accessibilityRole="button"
                       onPress={skipCurrent}
                       disabled={saving}
                       className="flex-row items-center gap-1.5 rounded-full px-2.5 py-1.5 active:opacity-70"
@@ -1052,6 +1070,7 @@ export default function Onboarding() {
                         />
                       ) : null}
                       <Pressable
+                        accessibilityRole="button"
                         onPress={() => commit(value)}
                         disabled={saving || !value.trim()}
                         accessibilityLabel={t("onboarding.chat.send")}
@@ -1106,6 +1125,7 @@ function OverlayHeader({
         <Text className="mt-0.5 font-display text-[22px] text-foreground">{title}</Text>
       </View>
       <Pressable
+        accessibilityRole="button"
         onPress={onClose}
         accessibilityLabel={closeLabel}
         className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80"

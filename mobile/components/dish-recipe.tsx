@@ -30,6 +30,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
   return (
     <View className="mt-2">
       <Pressable
+        accessibilityRole="button"
         onPress={() => setOpen((o) => !o)}
         className="flex-row items-center gap-1.5 self-start active:opacity-70"
       >
@@ -79,7 +80,7 @@ export function DishRecipe({ dish, month }: { dish: string; month?: string }) {
               </View>
             </View>
           ) : (
-            <Pressable onPress={() => q.refetch()}>
+            <Pressable accessibilityRole="button" onPress={() => q.refetch()}>
               <Text className="font-body-medium text-xs text-primary-ink">
                 {t("recipe.failed")}
               </Text>

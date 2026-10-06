@@ -238,6 +238,7 @@ export function MonthIntakeChat({
         <View className="gap-3">
           <CoachLine>{t("monthIntake.ready", { month: monthName })}</CoachLine>
           <Pressable
+            accessibilityRole="button"
             onPress={() => submit.mutate()}
             disabled={busy}
             className="w-full items-center rounded-full bg-primary py-4 active:opacity-90"
@@ -249,6 +250,7 @@ export function MonthIntakeChat({
           </Pressable>
           {!busy ? (
             <Pressable
+              accessibilityRole="button"
               onPress={() => setStep(LAST_STEP - 1)}
               className="w-full items-center py-1 active:opacity-70"
             >
@@ -261,7 +263,11 @@ export function MonthIntakeChat({
       ) : null}
 
       {step === 0 ? (
-        <Pressable onPress={onCancel} className="w-full items-center py-1 active:opacity-70">
+        <Pressable
+          accessibilityRole="button"
+          onPress={onCancel}
+          className="w-full items-center py-1 active:opacity-70"
+        >
           <Text className="text-xs font-sans-medium text-muted-foreground">
             {t("monthIntake.notNow")}
           </Text>
@@ -301,6 +307,8 @@ function Chips<T extends string>({
         const active = value === option.value;
         return (
           <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
             key={option.value}
             onPress={() => onPick(option.value)}
             disabled={disabled}
@@ -338,11 +346,16 @@ function StepButtons({
   return (
     <View className="flex-row gap-2">
       {onBack ? (
-        <Pressable onPress={onBack} className="rounded-full bg-muted px-5 py-3 active:opacity-80">
+        <Pressable
+          accessibilityRole="button"
+          onPress={onBack}
+          className="rounded-full bg-muted px-5 py-3 active:opacity-80"
+        >
           <Text className="text-sm font-sans-medium text-foreground">{t("common.back")}</Text>
         </Pressable>
       ) : null}
       <Pressable
+        accessibilityRole="button"
         onPress={onNext}
         disabled={nextDisabled}
         className="flex-1 items-center rounded-full bg-primary py-3 active:opacity-90"

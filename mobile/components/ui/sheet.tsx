@@ -49,6 +49,8 @@ export function Sheet({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("common.close")}
           className="absolute inset-0 bg-foreground/30"
           onPress={() => onOpenChange(false)}
         />
@@ -58,6 +60,7 @@ export function Sheet({
               <View className="h-1 w-10 rounded-full bg-secondary" />
             </View>
             <Pressable
+              accessibilityRole="button"
               onPress={() => onOpenChange(false)}
               hitSlop={8}
               accessibilityLabel={t("common.close")}

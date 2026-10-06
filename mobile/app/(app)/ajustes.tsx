@@ -197,6 +197,7 @@ export default function Ajustes() {
         </Text>
         <View className="mt-2 overflow-hidden rounded-3xl bg-surface">
           <Pressable
+            accessibilityRole="button"
             onPress={() => router.navigate("/hogar")}
             className="flex-row items-center gap-3 border-b border-border px-4 py-4 active:opacity-70"
           >
@@ -210,6 +211,7 @@ export default function Ajustes() {
             <ChevronRight size={16} color="#6b6256" />
           </Pressable>
           <Pressable
+            accessibilityRole="button"
             onPress={() => router.navigate("/perfil")}
             className="flex-row items-center gap-3 px-4 py-4 active:opacity-70"
           >
@@ -324,6 +326,8 @@ export default function Ajustes() {
                 const active = profile?.tone === tone;
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     key={tone}
                     onPress={() => save.mutate({ tone })}
                     className={`flex-1 items-center rounded-2xl px-3 py-3 active:opacity-80 ${
@@ -418,6 +422,7 @@ export default function Ajustes() {
             {t("ajustes.history.desc")}
           </Text>
           <Pressable
+            accessibilityRole="button"
             onPress={() => void exportHistory()}
             disabled={exporting}
             className="mt-4 w-full flex-row items-center justify-center gap-2 rounded-full bg-secondary py-3 active:opacity-80"
@@ -430,6 +435,7 @@ export default function Ajustes() {
           </Pressable>
         </View>
         <Pressable
+          accessibilityRole="button"
           onPress={confirmSignOut}
           className="mt-3 w-full items-center rounded-full bg-surface py-4 active:opacity-80"
         >
@@ -438,6 +444,7 @@ export default function Ajustes() {
           </Text>
         </Pressable>
         <Pressable
+          accessibilityRole="button"
           onPress={confirmDelete}
           disabled={deleting}
           className="mt-3 w-full items-center rounded-full bg-destructive/10 py-4 active:opacity-80"

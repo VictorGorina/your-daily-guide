@@ -197,6 +197,7 @@ export function MealSwapSheet({
                 className="h-11 flex-1 rounded-xl bg-secondary px-3 text-sm text-foreground"
               />
               <Pressable
+                accessibilityRole="button"
                 onPress={submitManual}
                 disabled={locked || !kcal.trim()}
                 className={`h-11 items-center justify-center rounded-xl bg-secondary px-4 active:opacity-80 ${
@@ -210,6 +211,7 @@ export function MealSwapSheet({
         ) : null}
 
         <Pressable
+          accessibilityRole="button"
           onPress={submit}
           disabled={locked || !what.trim()}
           className={`h-12 flex-row items-center justify-center gap-2 rounded-full bg-primary active:opacity-90 ${
@@ -223,6 +225,7 @@ export function MealSwapSheet({
         </Pressable>
 
         <Pressable
+          accessibilityRole="button"
           onPress={() => {
             onSkip();
             reset();

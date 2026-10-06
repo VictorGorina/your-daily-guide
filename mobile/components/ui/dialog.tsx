@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 /**
@@ -16,6 +17,7 @@ export function Dialog({
   title?: string;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <Modal
       visible={open}
@@ -25,6 +27,8 @@ export function Dialog({
     >
       <View className="flex-1 items-center justify-center px-6">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("common.close")}
           className="absolute inset-0 bg-foreground/30"
           onPress={() => onOpenChange(false)}
         />

@@ -157,7 +157,11 @@ export function DayBalanceCard({
             ))}
           </View>
           {changes.length > INLINE_CHANGES ? (
-            <Pressable onPress={onShowAdjustment} className="mt-2.5 active:opacity-70">
+            <Pressable
+              accessibilityRole="button"
+              onPress={onShowAdjustment}
+              className="mt-2.5 active:opacity-70"
+            >
               <Text className="font-body-medium text-[12px] text-primary-ink">
                 {t("balance.seeAll", { count: changes.length })}
               </Text>

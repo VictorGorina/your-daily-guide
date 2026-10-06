@@ -22,6 +22,8 @@ type Mode = "activity" | "snack";
 function Chip({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       className={`rounded-full px-3 py-1.5 active:opacity-80 ${
         active ? "bg-primary" : "bg-secondary"
@@ -132,6 +134,8 @@ export function GuidedLogSheet({
             const active = mode === value;
             return (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
                 key={value}
                 onPress={() => {
                   setMode(value);
@@ -197,6 +201,7 @@ export function GuidedLogSheet({
             {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
 
             <Pressable
+              accessibilityRole="button"
               onPress={() => void saveActivity()}
               disabled={disabled || saving}
               className="w-full flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"

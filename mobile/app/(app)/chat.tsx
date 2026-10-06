@@ -343,6 +343,7 @@ export default function Chat() {
           >
             {Array.from({ length: QUICK_PROMPT_COUNT }, (_, i) => t(`chat.quick.${i}`)).map((q) => (
               <Pressable
+                accessibilityRole="button"
                 key={q}
                 disabled={busy}
                 onPress={() => send(q)}

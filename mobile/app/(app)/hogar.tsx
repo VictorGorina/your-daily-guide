@@ -329,6 +329,7 @@ export default function Hogar() {
       : t(`hogar.child.stageNote.${c.feeding_stage}`);
     return (
       <Pressable
+        accessibilityRole="button"
         key={c.id}
         onPress={() => setChildSheet({ open: true, child: c })}
         className="flex-row items-center gap-3 rounded-2xl bg-secondary px-4 py-3 active:opacity-80"
@@ -393,6 +394,7 @@ export default function Hogar() {
                     autoCorrect={false}
                   />
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => lookup.mutate()}
                     disabled={lookup.isPending || code.trim().length < 4}
                     className="mt-1 items-center rounded-full bg-primary py-3.5 active:opacity-90"
@@ -412,6 +414,7 @@ export default function Hogar() {
                     const pal = personColor(s.id);
                     return (
                       <Pressable
+                        accessibilityRole="button"
                         key={s.id}
                         onPress={() => claim.mutate(s.id)}
                         disabled={claim.isPending}
@@ -432,7 +435,11 @@ export default function Hogar() {
                       </Pressable>
                     );
                   })}
-                  <Pressable onPress={() => setSlots(null)} className="active:opacity-70">
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setSlots(null)}
+                    className="active:opacity-70"
+                  >
                     <Text className="text-xs font-sans-medium text-muted-foreground underline">
                       {t("hogar.join.otherCode")}
                     </Text>
@@ -441,7 +448,11 @@ export default function Hogar() {
               ) : (
                 <View className="gap-2">
                   <Text className="text-xs text-muted-foreground">{t("hogar.join.noSlots")}</Text>
-                  <Pressable onPress={() => setSlots(null)} className="active:opacity-70">
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setSlots(null)}
+                    className="active:opacity-70"
+                  >
                     <Text className="text-xs font-sans-medium text-muted-foreground underline">
                       {t("hogar.join.otherCode")}
                     </Text>
@@ -474,6 +485,7 @@ export default function Hogar() {
                 placeholderTextColor="#a69d8f"
               />
               <Pressable
+                accessibilityRole="button"
                 onPress={() => create.mutate()}
                 disabled={create.isPending}
                 className="items-center rounded-full bg-secondary py-3.5 active:opacity-80"
@@ -517,6 +529,7 @@ export default function Hogar() {
               </View>
               {!editingName ? (
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() => setEditingName(true)}
                   accessibilityLabel={t("hogar.rename")}
                   hitSlop={8}
@@ -543,6 +556,7 @@ export default function Hogar() {
                   {household.invite_code}
                 </Text>
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() => shareCode(household.invite_code)}
                   className="flex-row items-center gap-2 rounded-full bg-surface px-4 py-3 active:opacity-80"
                 >
@@ -629,6 +643,8 @@ export default function Hogar() {
                           const active = Math.abs(m.portion - value) < 0.01;
                           return (
                             <Pressable
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: active }}
                               key={key}
                               disabled={!canManageRoster}
                               onPress={() => setMemberPortion(m.id, value)}
@@ -652,20 +668,29 @@ export default function Hogar() {
                       {canManageRoster && !isMe ? (
                         <View className="mt-2 flex-row flex-wrap gap-x-3 gap-y-1">
                           {!m.uses_app ? (
-                            <Pressable onPress={() => markUsesApp.mutate(m.id)}>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => markUsesApp.mutate(m.id)}
+                            >
                               <Text className="text-[11px] font-sans-medium text-primary-ink underline">
                                 {t("hogar.roster.usesAppNow")}
                               </Text>
                             </Pressable>
                           ) : null}
                           {m.user_id && !m.is_planner ? (
-                            <Pressable onPress={() => makePlanner.mutate(m.id)}>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => makePlanner.mutate(m.id)}
+                            >
                               <Text className="text-[11px] font-sans-medium text-muted-foreground underline">
                                 {t("hogar.roster.makePlanner")}
                               </Text>
                             </Pressable>
                           ) : null}
-                          <Pressable onPress={() => dropMember.mutate(m.id)}>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => dropMember.mutate(m.id)}
+                          >
                             <Text className="text-[11px] font-sans-medium text-destructive underline">
                               {t("hogar.roster.remove")}
                             </Text>
@@ -708,6 +733,8 @@ export default function Hogar() {
                       ] as const
                     ).map(([key, labelKey]) => (
                       <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: addingType === key }}
                         key={key}
                         onPress={() => setAddingType(key)}
                         className={`flex-1 items-center rounded-xl py-2.5 ${
@@ -743,6 +770,8 @@ export default function Hogar() {
                           ] as const
                         ).map(([value, labelKey]) => (
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: newAdult.usesApp === value }}
                             key={labelKey}
                             onPress={() => setNewAdult((p) => ({ ...p, usesApp: value }))}
                             className={`flex-1 items-center rounded-xl py-2 ${
@@ -767,6 +796,8 @@ export default function Hogar() {
                         </Text>
                         {APPETITES.map(([key]) => (
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: newAdult.appetite === key }}
                             key={key}
                             onPress={() => setNewAdult((p) => ({ ...p, appetite: key }))}
                             className={`rounded-full px-2.5 py-1 ${
@@ -786,6 +817,7 @@ export default function Hogar() {
                         ))}
                       </View>
                       <Pressable
+                        accessibilityRole="button"
                         onPress={() => addAdult.mutate()}
                         disabled={addAdult.isPending || !newAdult.name.trim()}
                         className="flex-row items-center justify-center gap-2 rounded-full bg-secondary py-2.5 active:opacity-80"
@@ -804,6 +836,7 @@ export default function Hogar() {
                     </>
                   ) : (
                     <Pressable
+                      accessibilityRole="button"
                       onPress={() => setChildSheet({ open: true, child: null })}
                       className="flex-row items-center justify-center gap-2 rounded-full bg-secondary py-2.5 active:opacity-80"
                     >
@@ -840,6 +873,7 @@ export default function Hogar() {
                 {t("hogar.schedule.intro")}
               </Text>
               <Pressable
+                accessibilityRole="button"
                 onPress={() => setShowHelp((v) => !v)}
                 className="mt-2 flex-row items-center gap-1.5 active:opacity-70"
               >
@@ -896,6 +930,7 @@ export default function Hogar() {
                   return (
                     <View key={person.key} className="rounded-[14px] bg-secondary/50 p-3">
                       <Pressable
+                        accessibilityRole="button"
                         onPress={() => setSchedExpanded((p) => ({ ...p, [person.key]: !expanded }))}
                         className="flex-row items-center gap-2.5"
                       >
@@ -959,6 +994,8 @@ export default function Hogar() {
                                     const active = picked.includes(day);
                                     return (
                                       <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityState={{ selected: active }}
                                         key={day}
                                         disabled={!person.canEdit}
                                         accessibilityLabel={t("hogar.schedule.dayLabel", {
@@ -996,6 +1033,7 @@ export default function Hogar() {
                           })}
                           {person.canEdit && hasChanges ? (
                             <Pressable
+                              accessibilityRole="button"
                               onPress={() =>
                                 persistSchedule.mutate({
                                   memberId: person.isChild ? undefined : person.memberId,
@@ -1071,6 +1109,7 @@ export default function Hogar() {
                   </View>
                 ) : null}
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() => rebuild.mutate()}
                   disabled={rebuild.isPending || !planQ.data?.plan}
                   className="mt-3 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3.5 active:opacity-90"
@@ -1098,6 +1137,7 @@ export default function Hogar() {
             ) : null}
 
             <Pressable
+              accessibilityRole="button"
               onPress={confirmLeave}
               className="mt-6 flex-row items-center justify-center gap-2 rounded-full bg-surface py-4 active:opacity-80"
             >

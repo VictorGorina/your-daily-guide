@@ -29,6 +29,7 @@ export function DictateButton({
 
   return (
     <Pressable
+      accessibilityRole="button"
       onPressIn={() => void start()}
       onPressOut={stop}
       hitSlop={8}

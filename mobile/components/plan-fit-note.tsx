@@ -74,7 +74,12 @@ export function PlanFitNote({ fit, fitting }: { fit?: PlanFitMark; fitting: bool
         ))}
       </View>
       {n > INLINE_CHANGES ? (
-        <Pressable onPress={() => setAll((v) => !v)} hitSlop={8} className="mt-2">
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setAll((v) => !v)}
+          hitSlop={8}
+          className="mt-2"
+        >
           <Text className="text-xs font-sans-medium text-primary-ink">
             {all ? t("planFit.less") : t("planFit.all", { n })}
           </Text>

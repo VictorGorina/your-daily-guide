@@ -57,6 +57,8 @@ export function RegionFields({
               const active = locale === l;
               return (
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
                   key={l}
                   onPress={() => onLocaleChange(l)}
                   className={`flex-1 items-center rounded-2xl px-3 py-3 active:opacity-80 ${
@@ -84,6 +86,8 @@ export function RegionFields({
             const active = country === c.code;
             return (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
                 key={c.code}
                 onPress={() => onCountryChange(c.code)}
                 className={`flex-row items-center justify-between rounded-2xl px-4 py-3 active:opacity-80 ${
@@ -132,6 +136,7 @@ export function RegionFields({
             </View>
             {onTimezoneChange ? (
               <Pressable
+                accessibilityRole="button"
                 onPress={() => {
                   setTzDraft(timezone);
                   setEditingTz(true);
