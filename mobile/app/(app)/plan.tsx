@@ -86,9 +86,6 @@ import {
   tripsForCoverage,
   tripTiming,
   WEEK_COUNT,
-  withOwnedMark,
-  withPantryExtra,
-  withTripActual,
   type HouseholdPinContext,
   type MealSlot,
   type MonthlyPlan,
@@ -99,11 +96,10 @@ import {
   type ShoppingCadence,
   type ShoppingItem,
   type ShoppingList,
-  type TripActuals,
   type TripReceipts,
 } from "../../lib/plan-shared";
 import type { SharedSlots } from "../../lib/household-shared";
-import { useShoppingMutation } from "../../lib/use-shopping-mutation";
+import { useShoppingMutations } from "../../lib/use-shopping-mutations";
 import { freshRisksForTrip, freshRiskText } from "../../lib/perishability";
 import {
   flushPlanRecalc,
@@ -116,15 +112,6 @@ import {
 
 type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList; firstPlan?: boolean };
 
-type ReceiptScanResult = {
-  trip_actuals: TripActuals;
-  pantry_extras: PantryExtra[];
-  trip_receipts: TripReceipts;
-  total: number;
-  added: string[];
-  discarded: { name: string; reason: string }[];
-};
-
 type TripGroups = { trip: number; groups: { category: string; items: ShoppingItem[] }[] };
 
 const FULL_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
@@ -132,7 +119,6 @@ const FULL_COVERAGE: PlanCoverage = { fromDay: 1, toDay: 31 };
 export default function Plan() {
   const { t, i18n } = useTranslation();
   const locale = dateLocale(i18n.language);
-  const money = useMoney();
   const qc = useQueryClient();
   const today = todayISO();
   const params = useLocalSearchParams<{ tab?: string; month?: string }>();
@@ -208,99 +194,6 @@ export default function Plan() {
   const hhCurrentTrip = hhTrips[hhClampedTrip] ?? hhTrips[0];
   const hasHouseholdShopping = isSoloPlanner && (plannerShopping?.length ?? 0) > 0;
 
-  // Estado de la compra (propia y de la casa): optimista y en serie por mes,
-  // ver `useShoppingMutation` (ticket 21). El cambio optimista es la misma
-  // función pura que aplica el servidor sobre la fila más reciente.
-  type ShoppingRow = NonNullable<typeof planQ.data> | NonNullable<typeof plannerShoppingQ.data>;
-  type OwnedVars = { itemName: string; trip: number; source: "fridge" | "store" | null };
-  type ActualVars = { trip: number; amount: number | null };
-  type PantryVars = { name: string; qty?: string; remove?: boolean };
-  const shoppingOps = <Row extends ShoppingRow>() => ({
-    owned: {
-      kind: "owned",
-      mutationFn: (vars: OwnedVars) =>
-        apiPost<{ shopping: ShoppingList }>("plan/shopping-owned", { month, ...vars }),
-      optimistic: (row: Row, v: OwnedVars): Row =>
-        row.shopping
-          ? { ...row, shopping: withOwnedMark(row.shopping, v.itemName, v.trip, v.source) }
-          : row,
-      settle: (row: Row, res: { shopping: ShoppingList }): Row => ({
-        ...row,
-        shopping: res.shopping,
-      }),
-      onError: () => Alert.alert(t("plan.errors.saveChange")),
-    },
-    actual: {
-      kind: "actual",
-      mutationFn: (vars: ActualVars) =>
-        apiPost<{ trip_actuals: TripActuals }>("plan/trip-actual", { month, ...vars }),
-      optimistic: (row: Row, v: ActualVars): Row => ({
-        ...row,
-        trip_actuals: withTripActual(row.trip_actuals ?? {}, v.trip, v.amount),
-      }),
-      settle: (row: Row, res: { trip_actuals: TripActuals }): Row => ({
-        ...row,
-        trip_actuals: res.trip_actuals,
-      }),
-      onError: () => Alert.alert(t("plan.errors.saveSpend")),
-    },
-    pantry: {
-      kind: "pantry",
-      mutationFn: (vars: PantryVars) =>
-        apiPost<{ pantry_extras: PantryExtra[] }>("plan/pantry-extra", { month, ...vars }),
-      optimistic: (row: Row, v: PantryVars): Row => ({
-        ...row,
-        pantry_extras: withPantryExtra(row.pantry_extras ?? [], v, new Date().toISOString()),
-      }),
-      settle: (row: Row, res: { pantry_extras: PantryExtra[] }): Row => ({
-        ...row,
-        pantry_extras: res.pantry_extras,
-      }),
-      onError: () => Alert.alert(t("plan.errors.saveIngredient")),
-    },
-    receipt: {
-      kind: "receipt",
-      mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
-        apiPost<ReceiptScanResult>("plan/receipt", { month, ...vars }),
-      settle: (row: Row, res: ReceiptScanResult): Row => ({
-        ...row,
-        trip_actuals: res.trip_actuals,
-        trip_receipts: res.trip_receipts,
-        pantry_extras: res.pantry_extras,
-      }),
-      onError: (e: unknown) =>
-        Alert.alert(e instanceof Error ? e.message : t("plan.errors.receipt")),
-    },
-  });
-  const receiptAlert = (res: ReceiptScanResult, pantryOf: "own" | "house") => {
-    const parts = [t("plan.receipt.saved", { amount: money(res.total) })];
-    if (res.added.length) {
-      const names = res.added.join(", ");
-      parts.push(
-        pantryOf === "house"
-          ? t("plan.receipt.addedHouse", { names })
-          : t("plan.receipt.addedOwn", { names }),
-      );
-    }
-    if (res.discarded.length) {
-      const names = res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ");
-      parts.push(t("plan.receipt.discarded", { names }));
-    }
-    Alert.alert(t("plan.receipt.title"), parts.join("\n"));
-  };
-
-  type HouseRow = NonNullable<typeof plannerShoppingQ.data>;
-  const house = shoppingOps<HouseRow>();
-  const houseKey = { queryKey: ["planner-shopping", month], month };
-  const hhOwned = useShoppingMutation({ ...houseKey, ...house.owned });
-  const hhSetActual = useShoppingMutation({ ...houseKey, ...house.actual });
-  const hhPantry = useShoppingMutation({ ...houseKey, ...house.pantry });
-  const hhReceipt = useShoppingMutation({
-    ...houseKey,
-    ...house.receipt,
-    onSuccess: (res) => receiptAlert(res, "house"),
-  });
-
   const appStartedOn = profileQ.data?.app_started_on ?? null;
   const monthStatus = planMonthStatus(month, today);
   const actionable = isMonthActionable(month, today);
@@ -362,25 +255,12 @@ export default function Plan() {
     if (!isSoloPlanner) schedulePlanRecalc(month, today, "meals");
   };
 
-  type OwnRow = NonNullable<typeof planQ.data>;
-  const own = shoppingOps<OwnRow>();
-  const ownKey = { queryKey: ["plan", month], month };
-  const pantry = useShoppingMutation({
-    ...ownKey,
-    ...own.pantry,
-    onSuccess: () => recalcFromPantry(),
-  });
-  const receipt = useShoppingMutation({
-    ...ownKey,
-    ...own.receipt,
-    onSuccess: (res) => {
-      receiptAlert(res, "own");
-      if (res.added.length) recalcFromPantry();
-    },
-  });
-
-  const owned = useShoppingMutation({ ...ownKey, ...own.owned });
-  const setActual = useShoppingMutation({ ...ownKey, ...own.actual });
+  // Estado de la compra (propia y de la casa): optimista y en serie por mes,
+  // ver `useShoppingMutations`.
+  const {
+    own: { owned, actual: setActual, pantry, receipt },
+    house: { owned: hhOwned, actual: hhSetActual, pantry: hhPantry, receipt: hhReceipt },
+  } = useShoppingMutations(month, { onOwnPantryChanged: recalcFromPantry });
 
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
