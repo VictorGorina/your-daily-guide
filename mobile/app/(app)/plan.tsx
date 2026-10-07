@@ -10,7 +10,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -141,12 +141,17 @@ export default function Plan() {
   const plannerCadence: ShoppingCadence = plannerPlan?.cadence ?? cadenceOf(plannerShopping);
   const plannerCoverage = plannerPlan?.coverage;
   const plannerTripsTotal = tripsForCoverage(plannerCadence, plannerCoverage);
-  const hhTrips = projectTrips(
-    plannerShopping,
-    plannerCadence,
-    plannerCoverage ?? { fromDay: 1, toDay: daysInMonth(month) },
-    WEEK_COUNT,
-    plannerPlan?.cadenceFrom,
+  const plannerCadenceFrom = plannerPlan?.cadenceFrom;
+  const hhTrips = useMemo(
+    () =>
+      projectTrips(
+        plannerShopping,
+        plannerCadence,
+        plannerCoverage ?? { fromDay: 1, toDay: daysInMonth(month) },
+        WEEK_COUNT,
+        plannerCadenceFrom,
+      ),
+    [plannerShopping, plannerCadence, plannerCoverage, month, plannerCadenceFrom],
   );
   const hhTripActuals = plannerShoppingQ.data?.trip_actuals ?? {};
   const hhPantryExtras: PantryExtra[] = plannerShoppingQ.data?.pantry_extras ?? [];
@@ -240,8 +245,17 @@ export default function Plan() {
   // (`projectTrips`); cambiar de cadencia solo re-trocea el mismo total del mes.
   // La compra va siempre en `WEEK_COUNT` semanas, aunque el plan tenga la fila
   // de los días 29-31: esos días cuentan en la última.
-  const projCoverage = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
-  const trips = projectTrips(shopping, activeCadence, projCoverage, WEEK_COUNT, plan?.cadenceFrom);
+  // Memoizado (ticket 28): sin esto cada render daba una lista nueva y el
+  // `useMemo` de `IngredientsTab` sobre la compra seleccionada no servía.
+  const projCoverage = useMemo(
+    () => coverage ?? { fromDay: 1, toDay: daysInMonth(month) },
+    [coverage, month],
+  );
+  const cadenceFrom = plan?.cadenceFrom;
+  const trips = useMemo(
+    () => projectTrips(shopping, activeCadence, projCoverage, WEEK_COUNT, cadenceFrom),
+    [shopping, activeCadence, projCoverage, cadenceFrom],
+  );
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   // Compra seleccionada: por defecto la que toca hoy (current) o la primera
@@ -265,7 +279,7 @@ export default function Plan() {
 
   const clampedTrip = Math.min(selectedTrip, Math.max(0, tripsTotal - 1));
   const currentTrip = trips[clampedTrip] ?? trips[0];
-  const spendBars = tripSpendBars(trips, projCoverage);
+  const spendBars = useMemo(() => tripSpendBars(trips, projCoverage), [trips, projCoverage]);
   const readOnlyMonth = monthStatus === "past";
 
   // Al cambiar de mes, el índice de compra y el modo compra dejan de tener
