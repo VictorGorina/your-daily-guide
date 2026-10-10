@@ -85,11 +85,6 @@ export function ShoppingMode({
   const currencySign = useCurrencySymbol();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
   const spendId = useId();
-  // Quién tenía el foco al abrir («Ir a comprar»), para devolvérselo al cerrar:
-  // Radix solo sabe volver a su propio `Trigger`, y este panel se abre por estado.
-  const [opener] = useState(() =>
-    typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null),
-  );
   const fileRef = useRef<HTMLInputElement>(null);
   const pickReceipt = async (file: File | undefined) => {
     if (!file) return;
@@ -160,7 +155,7 @@ export function ShoppingMode({
   return (
     // Modo compra: pantalla completa enfocada (diseño 1b), sobre el `Sheet` de
     // Radix (A11Y-04): el foco no sale del panel y Escape lo cierra; al cerrar,
-    // el foco vuelve al botón que lo abrió (`opener`). Tapa la barra de navegación y la
+    // el foco vuelve al botón que lo abrió (lo hace el `Sheet`). Tapa la barra de navegación y la
     // burbuja del coach; se sale con la flecha ←, que ya hace de cierre.
     <Sheet
       open
@@ -172,10 +167,6 @@ export function ShoppingMode({
         side="bottom"
         hideClose
         aria-describedby={undefined}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          opener?.focus();
-        }}
         className="inset-0 z-[60] flex flex-col gap-0 rounded-none p-0"
       >
         <div className="flex-1 overflow-y-auto px-5 pb-6 pt-12">

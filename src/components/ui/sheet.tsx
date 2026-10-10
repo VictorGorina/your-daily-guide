@@ -8,9 +8,13 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const Sheet = SheetPrimitive.Root;
+import { FocusReturnContent, FocusReturnRoot, FocusReturnTrigger } from "./focus-return";
 
-const SheetTrigger = SheetPrimitive.Trigger;
+// Al cerrar, el foco vuelve a quien abrió el panel aunque no haya `SheetTrigger`
+// (ver `focus-return.tsx`).
+const Sheet = FocusReturnRoot;
+
+const SheetTrigger = FocusReturnTrigger;
 
 const SheetClose = SheetPrimitive.Close;
 
@@ -70,7 +74,7 @@ const SheetContent = React.forwardRef<
 >(({ side = "right", className, children, hideClose = false, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
-    <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+    <FocusReturnContent ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
       {hideClose ? null : (
         <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background cursor-pointer transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
           <X className="h-4 w-4" />
@@ -78,7 +82,7 @@ const SheetContent = React.forwardRef<
         </SheetPrimitive.Close>
       )}
       {children}
-    </SheetPrimitive.Content>
+    </FocusReturnContent>
   </SheetPortal>
 ));
 SheetContent.displayName = SheetPrimitive.Content.displayName;

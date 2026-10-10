@@ -1,5 +1,6 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import i18next from "@/lib/i18n";
@@ -111,5 +112,36 @@ describe("MealSwapSheet", () => {
     expect(onSkip).toHaveBeenCalledOnce();
     expect(onSwap).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("al cerrar con Escape el foco vuelve a la comida que lo abrió", async () => {
+    // Como en Hoy: la hoja vive montada con `open={false}` y la abre una fila.
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Cena
+          </button>
+          <MealSwapSheet
+            open={open}
+            onOpenChange={setOpen}
+            mealLabel="Cena"
+            plannedDish="Merluza a la plancha con brócoli"
+            onSwap={async () => ({ ok: true })}
+            onSkip={() => {}}
+          />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    renderApp(<Harness />);
+    const opener = screen.getByRole("button", { name: "Cena" });
+    await user.click(opener);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    // Radix devuelve el foco en un `setTimeout`.
+    await waitFor(() => expect(opener).toHaveFocus());
   });
 });

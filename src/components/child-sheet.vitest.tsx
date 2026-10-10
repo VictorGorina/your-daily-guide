@@ -1,5 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HouseholdChild } from "@/lib/household";
@@ -124,5 +125,36 @@ describe("ChildSheet", () => {
     await waitFor(() => expect(save()).toBeEnabled());
     expect(onClose).not.toHaveBeenCalled();
     expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("al cerrar con Escape el foco vuelve al botón que la abrió", async () => {
+    setFakeBrowser(createFakeSupabase({}).client);
+    // Como en Familia: la hoja vive montada con `open={false}`.
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Añadir peque
+          </button>
+          <ChildSheet
+            open={open}
+            child={null}
+            householdId={HOME}
+            onClose={() => setOpen(false)}
+            onChanged={() => {}}
+          />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    renderApp(<Harness />);
+    const opener = screen.getByRole("button", { name: "Añadir peque" });
+    await user.click(opener);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    // Radix devuelve el foco en un `setTimeout`.
+    await waitFor(() => expect(opener).toHaveFocus());
   });
 });
