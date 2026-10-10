@@ -37,12 +37,12 @@ jobs:
       - name: Instalar dependencias
         run: bun install --frozen-lockfile
 
-      # Informativo hasta revisar el primer informe (ticket 09 de la auditoría);
-      # después se corta en high/critical con --audit-level=high.
+      # Corta en high/critical desde que el informe quedó limpio (ticket 41 de la
+      # auditoría). Es la única alarma de las dependencias transitivas de la
+      # web: GitHub no lee bun.lock, así que Dependabot no las ve.
       - name: Avisos de seguridad (bun audit)
         if: ${{ !cancelled() }}
-        continue-on-error: true
-        run: bun audit
+        run: bun audit --audit-level=high
 
       - name: Lint (ESLint + Prettier)
         if: ${{ !cancelled() }}
@@ -116,7 +116,9 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      # Informativo hasta revisar el primer informe (ticket 27, `## Comments`).
+      # Sigue informativo (ticket 41): quedan dos avisos altos sin versión
+      # corregida publicada, braces y node-forge. Cuando la tengan, se quita el
+      # continue-on-error, como en la web.
       - name: Avisos de seguridad (npm audit)
         if: ${{ !cancelled() }}
         continue-on-error: true

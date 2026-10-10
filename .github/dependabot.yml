@@ -2,7 +2,9 @@ version: 2
 updates:
   # Solo avisos de seguridad: con el límite a 0 no abre PRs de versión, pero las
   # "Dependabot security updates" (Settings → Code security) siguen funcionando.
-  - package-ecosystem: "npm" # Dependabot lee bun.lock con el ecosistema npm
+  # De la web GitHub solo ve las dependencias directas de package.json: no lee
+  # bun.lock. Las transitivas las vigila `bun audit` en el CI.
+  - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
