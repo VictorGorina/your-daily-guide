@@ -68,15 +68,10 @@ import {
   WEEK_COUNT,
   tripTiming,
   shoppingTotal,
-  withOwnedMark,
-  withPantryExtra,
-  withTripActual,
   type PantryExtra,
   type PlanMonthStatus,
   type ShoppingCadence,
   type ShoppingItem,
-  type ShoppingList,
-  type TripActuals,
   type TripReceipts,
 } from "@/lib/plan-shared";
 import { freshRisksForTrip, freshRiskText } from "@/lib/perishability";
@@ -100,14 +95,9 @@ import {
   fitMonthlyPlan,
   generateMonthlyPlan,
   recadenceMonthlyPlan,
-  scanTripReceipt,
-  setPantryExtra,
-  setTripActual,
-  toggleShoppingOwned,
   welcomeBriefing,
-  type ReceiptScan,
 } from "@/lib/plan.functions";
-import { useShoppingMutation } from "@/lib/use-shopping-mutation";
+import { useShoppingMutations } from "@/lib/use-shopping-mutations";
 
 export const Route = createFileRoute("/_authenticated/plan")({
   validateSearch: (search: Record<string, unknown>): { tab?: "compra"; month?: string } => ({
@@ -140,7 +130,6 @@ export const Route = createFileRoute("/_authenticated/plan")({
 function PlanPage() {
   const { t, i18n } = useTranslation();
   const locale = dateLocale(i18n.language);
-  const money = useMoney();
   const qc = useQueryClient();
   const today = todayISO();
   const make = useServerFn(generateMonthlyPlan);
@@ -263,94 +252,6 @@ function PlanPage() {
     },
   });
 
-  // Estado de la compra (propia y de la casa): optimista y en serie por mes,
-  // ver `useShoppingMutation` (ticket 21). El cambio optimista es la misma
-  // función pura que aplica el servidor sobre la fila más reciente.
-  type ShoppingRow = NonNullable<typeof planQ.data> | NonNullable<typeof plannerShoppingQ.data>;
-  type OwnedVars = { itemName: string; trip: number; source: "fridge" | "store" | null };
-  type ActualVars = { trip: number; amount: number | null };
-  type PantryVars = { name: string; qty?: string; remove?: boolean };
-  const toggleOwned = useServerFn(toggleShoppingOwned);
-  const tripActual = useServerFn(setTripActual);
-  const pantryFn = useServerFn(setPantryExtra);
-  const receiptFn = useServerFn(scanTripReceipt);
-  const shoppingOps = <Row extends ShoppingRow>() => ({
-    owned: {
-      kind: "owned",
-      mutationFn: (vars: OwnedVars) => toggleOwned({ data: { month, ...vars } }),
-      optimistic: (row: Row, v: OwnedVars): Row =>
-        row.shopping
-          ? { ...row, shopping: withOwnedMark(row.shopping, v.itemName, v.trip, v.source) }
-          : row,
-      settle: (row: Row, res: { shopping: ShoppingList }): Row => ({
-        ...row,
-        shopping: res.shopping,
-      }),
-      onError: () => toast.error(t("plan.errors.saveChange")),
-    },
-    actual: {
-      kind: "actual",
-      mutationFn: (vars: ActualVars) => tripActual({ data: { month, ...vars } }),
-      optimistic: (row: Row, v: ActualVars): Row => ({
-        ...row,
-        trip_actuals: withTripActual(row.trip_actuals ?? {}, v.trip, v.amount),
-      }),
-      settle: (row: Row, res: { trip_actuals: TripActuals }): Row => ({
-        ...row,
-        trip_actuals: res.trip_actuals,
-      }),
-      onError: () => toast.error(t("plan.errors.saveSpend")),
-    },
-    pantry: {
-      kind: "pantry",
-      mutationFn: (vars: PantryVars) => pantryFn({ data: { month, ...vars } }),
-      optimistic: (row: Row, v: PantryVars): Row => ({
-        ...row,
-        pantry_extras: withPantryExtra(row.pantry_extras ?? [], v, new Date().toISOString()),
-      }),
-      settle: (row: Row, res: { pantry_extras: PantryExtra[] }): Row => ({
-        ...row,
-        pantry_extras: res.pantry_extras,
-      }),
-      onError: () => toast.error(t("plan.errors.saveIngredient")),
-    },
-    receipt: {
-      kind: "receipt",
-      mutationFn: (vars: { trip: number; imageBase64: string; mime: string }) =>
-        receiptFn({ data: { month, ...vars } }),
-      settle: (row: Row, res: ReceiptScan): Row => ({
-        ...row,
-        trip_actuals: res.trip_actuals,
-        trip_receipts: res.trip_receipts,
-        pantry_extras: res.pantry_extras,
-      }),
-      onError: (e: unknown) =>
-        toast.error(e instanceof Error ? e.message : t("plan.errors.receipt")),
-    },
-  });
-  const receiptToast = (res: ReceiptScan, pantryOf: "own" | "house") => {
-    const parts = [t("plan.receipt.saved", { amount: money(res.total) })];
-    if (res.added.length) {
-      const names = res.added.join(", ");
-      parts.push(
-        pantryOf === "house"
-          ? t("plan.receipt.addedHouse", { names })
-          : t("plan.receipt.addedOwn", { names }),
-      );
-    }
-    if (res.discarded.length) {
-      const names = res.discarded.map((d) => `${d.name} (${d.reason})`).join(", ");
-      parts.push(t("plan.receipt.discarded", { names }));
-    }
-    toast.success(parts.join(". "));
-  };
-
-  type OwnRow = NonNullable<typeof planQ.data>;
-  const own = shoppingOps<OwnRow>();
-  const ownKey = { queryKey: ["plan", month], month };
-  const owned = useShoppingMutation({ ...ownKey, ...own.owned });
-  const setActual = useShoppingMutation({ ...ownKey, ...own.actual });
-
   // Un cambio en la despensa propia invalida los platos de los días futuros: se
   // programa un recálculo silencioso con debounce (issue 05). No para un no
   // planificador (su despensa va a la fila del planificador y el servidor no
@@ -359,34 +260,12 @@ function PlanPage() {
     if (!isSoloPlanner) schedulePlanRecalc(month, today, "meals");
   };
 
-  const pantry = useShoppingMutation({
-    ...ownKey,
-    ...own.pantry,
-    onSuccess: () => recalcFromPantry(),
-  });
-  const receipt = useShoppingMutation({
-    ...ownKey,
-    ...own.receipt,
-    onSuccess: (res) => {
-      receiptToast(res, "own");
-      if (res.added.length) recalcFromPantry();
-    },
-  });
-
-  // Mutaciones de la compra de la casa (issue 06): mismas server fns, pero el
-  // servidor escribe en la fila del planificador y el cache es el de
-  // `["planner-shopping", month]`. Los platos y las cantidades no se tocan.
-  type HouseRow = NonNullable<typeof plannerShoppingQ.data>;
-  const house = shoppingOps<HouseRow>();
-  const houseKey = { queryKey: ["planner-shopping", month], month };
-  const hhOwned = useShoppingMutation({ ...houseKey, ...house.owned });
-  const hhSetActual = useShoppingMutation({ ...houseKey, ...house.actual });
-  const hhPantry = useShoppingMutation({ ...houseKey, ...house.pantry });
-  const hhReceipt = useShoppingMutation({
-    ...houseKey,
-    ...house.receipt,
-    onSuccess: (res) => receiptToast(res, "house"),
-  });
+  // Estado de la compra (propia y de la casa): optimista y en serie por mes,
+  // ver `useShoppingMutations`.
+  const {
+    own: { owned, actual: setActual, pantry, receipt },
+    house: { owned: hhOwned, actual: hhSetActual, pantry: hhPantry, receipt: hhReceipt },
+  } = useShoppingMutations(month, { onOwnPantryChanged: recalcFromPantry });
 
   const plan = planQ.data?.plan ?? null;
   const shopping = planQ.data?.shopping ?? null;
