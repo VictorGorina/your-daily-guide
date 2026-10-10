@@ -49,6 +49,16 @@ de la web. Si allí cambia un color, hay que copiarlo aquí: son dos copias.
 `.npmrc` fija `legacy-peer-deps` porque el árbol de Expo 57 choca consigo mismo (expo-router
 arrastra react-dom 19.2.8 y expo fija react 19.2.3); sin eso npm no instala nada.
 
+**Los `overrides` de `package.json`** (ticket 41 de la auditoría) fuerzan versiones corregidas en
+herramientas de prebuild y de build; ninguna llega al bundle de la app. El tope de cada una no es
+casual:
+
+- `@bacons/xcode` → `@xmldom/xmldom ^0.8.15`. Su `@expo/plist` 0.0.18 pide `~0.7.0`, una rama sin
+  parches. **No subir a 0.9:** ahí `parseFromString` exige el tipo MIME y lanza `TypeError`. Se
+  quita cuando `@bacons/apple-targets` traiga un `@expo/plist` actual.
+- `uuid ^11.1.1` bajo `xcode` y `@bacons/xcode`. `xcode` solo llama a `uuid.v4()`, con `require`.
+  **No pasar de la 11:** la 12 ya no publica CommonJS.
+
 ## El directorio `ios/` no se toca a mano
 
 `expo run:ios` genera `ios/` con _prebuild_ a partir de `app.json`, y está en `.gitignore` a
