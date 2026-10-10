@@ -104,5 +104,11 @@ Supabase y a la misma API de producción. Es una decisión, no un olvido: el pla
 solo proyecto, así que un build de prueba escribe datos reales (usa un perfil demo). Un proyecto
 de staging sería un coste nuevo y queda fuera por ahora.
 
+**`eas-cli` no es dependencia del proyecto** (ticket 41 de la auditoría, MOB-20). Los scripts
+`build:ios` y `submit:ios` usan el `eas` instalado global (`npm install --global eas-cli`; vale
+también `npx eas-cli@latest`), que es lo que pide su README. Como `devDependency` metía unos 320
+paquetes en el lockfile con versiones fijadas (`joi`, `nanoid`, `minimatch`) que desde aquí no se
+podían subir. `eas.json` ya exige la versión mínima (`cli.version`).
+
 Requiere **Xcode** para el simulador (no basta con las Command Line Tools) y **Node** (Metro no
 corre sobre Bun, a diferencia de la web).
