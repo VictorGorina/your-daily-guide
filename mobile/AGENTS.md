@@ -58,6 +58,10 @@ casual:
   quita cuando `@bacons/apple-targets` traiga un `@expo/plist` actual.
 - `uuid ^11.1.1` bajo `xcode` y `@bacons/xcode`. `xcode` solo llama a `uuid.v4()`, con `require`.
   **No pasar de la 11:** la 12 ya no publica CommonJS.
+- `postcss-selector-parser ^7.1.6`. Tailwind 3 pide `^6`, que no tiene parche. Es el único que
+  puede fallar sin avisar (ver arriba, NativeWind y Tailwind): al tocarlo, genera el CSS antes y
+  después (`NATIVEWIND_OS=ios npx tailwindcss --input ./global.css --output <archivo>`) y
+  comprueba que sale idéntico.
 
 ## El directorio `ios/` no se toca a mano
 
