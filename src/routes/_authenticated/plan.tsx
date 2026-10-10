@@ -10,7 +10,7 @@ import {
   Sparkle,
   Users,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -169,12 +169,17 @@ function PlanPage() {
   const plannerCadence: ShoppingCadence = plannerPlan?.cadence ?? cadenceOf(plannerShopping);
   const plannerCoverage = plannerPlan?.coverage;
   const plannerTripsTotal = tripsForCoverage(plannerCadence, plannerCoverage);
-  const hhTrips = projectTrips(
-    plannerShopping,
-    plannerCadence,
-    plannerCoverage ?? { fromDay: 1, toDay: daysInMonth(month) },
-    WEEK_COUNT,
-    plannerPlan?.cadenceFrom,
+  const plannerCadenceFrom = plannerPlan?.cadenceFrom;
+  const hhTrips = useMemo(
+    () =>
+      projectTrips(
+        plannerShopping,
+        plannerCadence,
+        plannerCoverage ?? { fromDay: 1, toDay: daysInMonth(month) },
+        WEEK_COUNT,
+        plannerCadenceFrom,
+      ),
+    [plannerShopping, plannerCadence, plannerCoverage, month, plannerCadenceFrom],
   );
   const hhTripActuals = plannerShoppingQ.data?.trip_actuals ?? {};
   const hhPantryExtras: PantryExtra[] = plannerShoppingQ.data?.pantry_extras ?? [];
@@ -260,8 +265,20 @@ function PlanPage() {
   // (`projectTrips`); cambiar de cadencia solo re-trocea el mismo total del mes.
   // La compra va siempre en `WEEK_COUNT` semanas, aunque el plan tenga la fila
   // de los días 29-31: esos días cuentan en la última.
-  const projCoverage = coverage ?? { fromDay: 1, toDay: daysInMonth(month) };
-  const trips = projectTrips(shopping, activeCadence, projCoverage, WEEK_COUNT, plan?.cadenceFrom);
+  // Memoizado (ticket 28): sin esto cada render daba una lista nueva y el
+  // `useMemo` de `IngredientsTab` sobre la compra seleccionada no servía.
+  const cadenceFrom = plan?.cadenceFrom;
+  const trips = useMemo(
+    () =>
+      projectTrips(
+        shopping,
+        activeCadence,
+        coverage ?? { fromDay: 1, toDay: daysInMonth(month) },
+        WEEK_COUNT,
+        cadenceFrom,
+      ),
+    [shopping, activeCadence, coverage, month, cadenceFrom],
+  );
   const todayDayOfMonth = Number(todayISO().slice(8, 10));
 
   // Compra seleccionada: por defecto la que toca hoy (current) o la primera
@@ -592,22 +609,6 @@ function PlanPage() {
                 </p>
               ) : null}
             </section>
-          ) : shopMode && actionable ? (
-            <ShoppingMode
-              trip={shop.trip}
-              cadence={shop.cadence}
-              coverage={shop.coverage}
-              tripsTotal={shop.tripsTotal}
-              selectedTrip={shop.selectedTrip}
-              month={month}
-              onToggle={shop.onToggle}
-              onClose={() => setShopMode(false)}
-              tripActual={shop.tripActual}
-              savingActual={shop.savingActual}
-              onSaveActual={shop.onSaveActual}
-              onScanReceipt={shop.onScanReceipt}
-              scanningReceipt={shop.scanningReceipt}
-            />
           ) : isSoloPlanner ? (
             <div className="mt-5 space-y-6">
               {hasHouseholdShopping ? (
@@ -768,8 +769,27 @@ function PlanPage() {
         onClose={() => setOpenDay(null)}
       />
 
-      {/* En Modo compra la pantalla es completa (diseño 1b): sin barra de nav. */}
-      {shopMode && actionable ? null : <BottomNav />}
+      {/* El modo compra se pinta ENCIMA de la lista, no en su lugar: el botón
+          que lo abre sigue montado y Radix le devuelve el foco al cerrar. */}
+      {tab === "compra" && shopMode && actionable ? (
+        <ShoppingMode
+          trip={shop.trip}
+          cadence={shop.cadence}
+          coverage={shop.coverage}
+          tripsTotal={shop.tripsTotal}
+          selectedTrip={shop.selectedTrip}
+          month={month}
+          onToggle={shop.onToggle}
+          onClose={() => setShopMode(false)}
+          tripActual={shop.tripActual}
+          savingActual={shop.savingActual}
+          onSaveActual={shop.onSaveActual}
+          onScanReceipt={shop.onScanReceipt}
+          scanningReceipt={shop.scanningReceipt}
+        />
+      ) : null}
+
+      <BottomNav />
     </main>
   );
 }

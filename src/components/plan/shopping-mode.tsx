@@ -11,6 +11,7 @@ import {
   type ShoppingItem,
 } from "@/lib/plan-shared";
 import { freshRisksForTrip, freshRiskText } from "@/lib/perishability";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { CategoryIcon } from "./shopping-bits";
 
 /**
@@ -84,6 +85,11 @@ export function ShoppingMode({
   const currencySign = useCurrencySymbol();
   const [text, setText] = useState(tripActual != null ? String(tripActual) : "");
   const spendId = useId();
+  // Quién tenía el foco al abrir («Ir a comprar»), para devolvérselo al cerrar:
+  // Radix solo sabe volver a su propio `Trigger`, y este panel se abre por estado.
+  const [opener] = useState(() =>
+    typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null),
+  );
   const fileRef = useRef<HTMLInputElement>(null);
   const pickReceipt = async (file: File | undefined) => {
     if (!file) return;
@@ -152,215 +158,227 @@ export function ShoppingMode({
   };
 
   return (
-    // Modo compra: pantalla completa enfocada (diseño 1b). El overlay tapa la
-    // barra de navegación y la burbuja del coach; se sale con la flecha ←.
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="shopping-mode-title"
-      className="fixed inset-0 z-[60] flex flex-col bg-background"
+    // Modo compra: pantalla completa enfocada (diseño 1b), sobre el `Sheet` de
+    // Radix (A11Y-04): el foco no sale del panel y Escape lo cierra; al cerrar,
+    // el foco vuelve al botón que lo abrió (`opener`). Tapa la barra de navegación y la
+    // burbuja del coach; se sale con la flecha ←, que ya hace de cierre.
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="flex-1 overflow-y-auto px-5 pb-6 pt-12">
-        <div className="mx-auto max-w-lg">
-          {/* Cabecera modo compra */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t("shopMode.exit")}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("shopMode.header", {
-                  n: selectedTrip + 1,
-                  total: tripsTotal,
-                  from: tripRange.from,
-                  to: tripRange.to,
-                  month: monthShort,
-                })}
-              </p>
-              <h1
-                id="shopping-mode-title"
-                className="font-title text-2xl font-semibold tracking-[-0.02em] leading-tight"
+      <SheetContent
+        side="bottom"
+        hideClose
+        aria-describedby={undefined}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          opener?.focus();
+        }}
+        className="inset-0 z-[60] flex flex-col gap-0 rounded-none p-0"
+      >
+        <div className="flex-1 overflow-y-auto px-5 pb-6 pt-12">
+          <div className="mx-auto max-w-lg">
+            {/* Cabecera modo compra */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={t("shopMode.exit")}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-muted-foreground"
               >
-                {t("shopMode.title")}
-              </h1>
-            </div>
-          </div>
-
-          {/* Resumen compra */}
-          <div className="mt-4 surface-card p-5">
-            <div className="flex items-end justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-muted-foreground">{t("shopMode.left")}</p>
-                <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary-ink">
-                  {money(Math.round(leftTotal * 100) / 100)}
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("shopMode.header", {
+                    n: selectedTrip + 1,
+                    total: tripsTotal,
+                    from: tripRange.from,
+                    to: tripRange.to,
+                    month: monthShort,
+                  })}
                 </p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="font-mono text-[11px] text-muted-foreground">
-                  {t("shopMode.inCart")}
-                </p>
-                <p className="mt-0.5 font-mono text-[15px] font-medium text-success">
-                  {money(Math.round(doneTotal * 100) / 100)}
-                </p>
+                <SheetTitle className="font-title text-2xl font-semibold tracking-[-0.02em] leading-tight">
+                  {t("shopMode.title")}
+                </SheetTitle>
               </div>
             </div>
-            <div className="mt-3.5 h-2 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className="h-full rounded-full bg-success transition-[width] duration-500"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="mt-2 text-[11.5px] text-muted-foreground">
-              {t("shopMode.progress", { left: leftItems.length, total: allItems.length })}
-            </p>
-          </div>
 
-          {freshRisks.length ? (
-            <div className="mt-3.5 rounded-[18px] bg-warning/20 px-4 py-3">
-              <p className="text-xs leading-relaxed text-foreground">
-                {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, cadence, t, true)}
+            {/* Resumen compra */}
+            <div className="mt-4 surface-card p-5">
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {t("shopMode.left")}
+                  </p>
+                  <p className="mt-0.5 font-title text-[30px] font-semibold tabular-nums tracking-tight text-primary-ink">
+                    {money(Math.round(leftTotal * 100) / 100)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {t("shopMode.inCart")}
+                  </p>
+                  <p className="mt-0.5 font-mono text-[15px] font-medium text-success">
+                    {money(Math.round(doneTotal * 100) / 100)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3.5 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full rounded-full bg-success transition-[width] duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <p className="mt-2 text-[11.5px] text-muted-foreground">
+                {t("shopMode.progress", { left: leftItems.length, total: allItems.length })}
               </p>
             </div>
-          ) : null}
 
-          {/* Lista de ingredientes agrupados */}
-          <div className="mt-3.5 flex flex-col gap-4">
-            {shopGroups.map((g) => (
-              <div key={g.category}>
-                <div className="flex items-center gap-2 px-1 pb-2">
-                  <CategoryIcon
-                    category={g.category}
-                    className="h-[15px] w-[15px] text-primary-ink"
-                  />
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    {g.category}
-                  </h3>
-                </div>
-                <ul className="flex flex-col gap-1.5 p-0">
-                  {g.items.map((item, i) => {
-                    const done = item.owned === "store";
-                    return (
-                      <li
-                        key={`${item.name}-${i}`}
-                        role="checkbox"
-                        aria-checked={done}
-                        tabIndex={0}
-                        // En modo compra, tocar (o Espacio/Intro) alterna "store" (comprado)
-                        onClick={() => onToggle(item.name)}
-                        onKeyDown={(e) => {
-                          if (e.key === " " || e.key === "Enter") {
-                            e.preventDefault(); // sin esto, Espacio hace scroll
-                            onToggle(item.name);
-                          }
-                        }}
-                        className={`flex cursor-pointer items-center gap-3.5 rounded-[18px] px-4 py-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.99] ${
-                          done ? "bg-secondary/45" : "bg-surface"
-                        }`}
-                      >
-                        {/* Checkbox cuadrado redondeado */}
-                        <span
-                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-[9px] transition-colors ${
-                            done
-                              ? "bg-success text-success-foreground"
-                              : "border-[1.5px] border-border text-transparent"
+            {freshRisks.length ? (
+              <div className="mt-3.5 rounded-[18px] bg-warning/20 px-4 py-3">
+                <p className="text-xs leading-relaxed text-foreground">
+                  {freshRiskText(freshRisks, tripRange.to - tripRange.from + 1, cadence, t, true)}
+                </p>
+              </div>
+            ) : null}
+
+            {/* Lista de ingredientes agrupados */}
+            <div className="mt-3.5 flex flex-col gap-4">
+              {shopGroups.map((g) => (
+                <div key={g.category}>
+                  <div className="flex items-center gap-2 px-1 pb-2">
+                    <CategoryIcon
+                      category={g.category}
+                      className="h-[15px] w-[15px] text-primary-ink"
+                    />
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {g.category}
+                    </h3>
+                  </div>
+                  <ul className="flex flex-col gap-1.5 p-0">
+                    {g.items.map((item, i) => {
+                      const done = item.owned === "store";
+                      return (
+                        <li
+                          key={`${item.name}-${i}`}
+                          role="checkbox"
+                          aria-checked={done}
+                          tabIndex={0}
+                          // En modo compra, tocar (o Espacio/Intro) alterna "store" (comprado)
+                          onClick={() => onToggle(item.name)}
+                          onKeyDown={(e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault(); // sin esto, Espacio hace scroll
+                              onToggle(item.name);
+                            }
+                          }}
+                          className={`flex cursor-pointer items-center gap-3.5 rounded-[18px] px-4 py-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.99] ${
+                            done ? "bg-secondary/45" : "bg-surface"
                           }`}
                         >
-                          <Check className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0 flex-1">
+                          {/* Checkbox cuadrado redondeado */}
                           <span
-                            className={`block text-base font-semibold tracking-[-0.01em] ${done ? "text-muted-foreground line-through" : ""}`}
+                            className={`grid h-7 w-7 shrink-0 place-items-center rounded-[9px] transition-colors ${
+                              done
+                                ? "bg-success text-success-foreground"
+                                : "border-[1.5px] border-border text-transparent"
+                            }`}
                           >
-                            {item.name}
+                            <Check className="h-4 w-4" />
                           </span>
-                          <span className="block font-mono text-[11px] text-muted-foreground">
-                            {item.qty} · {money(item.price_eur)}
+                          <span className="min-w-0 flex-1">
+                            <span
+                              className={`block text-base font-semibold tracking-[-0.01em] ${done ? "text-muted-foreground line-through" : ""}`}
+                            >
+                              {item.name}
+                            </span>
+                            <span className="block font-mono text-[11px] text-muted-foreground">
+                              {item.qty} · {money(item.price_eur)}
+                            </span>
                           </span>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Botón fijo al fondo (diseño 1b) */}
-      <div className="border-t border-secondary bg-background px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
-        <div className="mx-auto max-w-lg">
-          {allDone ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 rounded-[20px] bg-surface px-4 py-3">
-                <label htmlFor={spendId} className="flex-1 text-xs text-muted-foreground">
-                  {t("shopMode.spendQuestion")}
-                </label>
+        {/* Botón fijo al fondo (diseño 1b) */}
+        <div className="border-t border-secondary bg-background px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
+          <div className="mx-auto max-w-lg">
+            {allDone ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 rounded-[20px] bg-surface px-4 py-3">
+                  <label htmlFor={spendId} className="flex-1 text-xs text-muted-foreground">
+                    {t("shopMode.spendQuestion")}
+                  </label>
+                  <input
+                    id={spendId}
+                    type="text"
+                    inputMode="decimal"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onBlur={commitActual}
+                    placeholder={money(Math.round(doneTotal * 100) / 100)}
+                    disabled={savingActual}
+                    className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
+                  />
+                  <span className="text-xs text-muted-foreground">{currencySign}</span>
+                </div>
                 <input
-                  id={spendId}
-                  type="text"
-                  inputMode="decimal"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onBlur={commitActual}
-                  placeholder={money(Math.round(doneTotal * 100) / 100)}
-                  disabled={savingActual}
-                  className="w-24 rounded-lg bg-secondary px-2 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    void pickReceipt(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
                 />
-                <span className="text-xs text-muted-foreground">{currencySign}</span>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={scanningReceipt}
+                  className="flex w-full items-center justify-center gap-2 rounded-[20px] border border-secondary py-3 text-xs font-semibold text-muted-foreground disabled:opacity-60"
+                >
+                  <Receipt className="h-4 w-4" />
+                  {scanningReceipt ? t("shopMode.scanning") : t("shopMode.scan")}
+                </button>
+                <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+                  {t("shopMode.photoNote")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // "guardar gasto" tiene que guardar aunque el foco siga en el
+                    // campo (Enter, o clic sin que dispare el onBlur antes).
+                    commitActual();
+                    onClose();
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-success py-[17px] text-sm font-bold text-success-foreground"
+                >
+                  {t("shopMode.complete")}
+                </button>
               </div>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  void pickReceipt(e.target.files?.[0]);
-                  e.target.value = "";
-                }}
-              />
+            ) : (
               <button
                 type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={scanningReceipt}
-                className="flex w-full items-center justify-center gap-2 rounded-[20px] border border-secondary py-3 text-xs font-semibold text-muted-foreground disabled:opacity-60"
+                onClick={onClose}
+                className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-foreground py-[17px] text-sm font-bold text-background"
               >
-                <Receipt className="h-4 w-4" />
-                {scanningReceipt ? t("shopMode.scanning") : t("shopMode.scan")}
+                {t("shopMode.finish")}
               </button>
-              <p className="text-[10.5px] leading-relaxed text-muted-foreground">
-                {t("shopMode.photoNote")}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  // "guardar gasto" tiene que guardar aunque el foco siga en el
-                  // campo (Enter, o clic sin que dispare el onBlur antes).
-                  commitActual();
-                  onClose();
-                }}
-                className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-success py-[17px] text-sm font-bold text-success-foreground"
-              >
-                {t("shopMode.complete")}
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-foreground py-[17px] text-sm font-bold text-background"
-            >
-              {t("shopMode.finish")}
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
