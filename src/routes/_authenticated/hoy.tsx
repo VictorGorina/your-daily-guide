@@ -1,215 +1,60 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Activity,
-  Briefcase,
-  CalendarRange,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Cookie,
-  Home,
-  Loader2,
-  PencilLine,
-  Undo2,
-  X,
-} from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { AdjustmentInfoSheet } from "@/components/adjustment-info-sheet";
 import { BottomNav } from "@/components/bottom-nav";
-import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
-import { DayBalanceCard } from "@/components/day-balance-card";
-import { DayDetailBody, type DayDetailHousehold } from "@/components/day-detail-sheet";
-import { DishRecipe } from "@/components/dish-recipe";
-import { ExerciseCard } from "@/components/exercise-card";
 import { ExerciseSheet } from "@/components/exercise-sheet";
-import { DishCategoryIcon, foodBgStyle, FoodCategoryBadge } from "@/components/food-category-bg";
-import { MacroBars } from "@/components/macro-bars";
+import { DayBalanceSection } from "@/components/hoy/day-balance-section";
+import { HoyHeader, MacroSection } from "@/components/hoy/day-summary";
+import { MealStrip } from "@/components/hoy/meal-strip";
+import { WeekSection } from "@/components/hoy/week-section";
 import { MealSwapSheet } from "@/components/meal-swap-sheet";
 import { NightlyReviewSheet } from "@/components/nightly-review-sheet";
-import { SnackCard } from "@/components/snack-card";
 import { SnackSheet } from "@/components/snack-sheet";
-import { WeekPager } from "@/components/week-pager";
-import { classifyDish, FOOD_CATEGORIES } from "@/lib/food-categories";
 import {
   ensureTodayLog,
   fetchLogs,
-  fetchLogsForMonth,
   fetchMonthlyPlan,
   fetchProfile,
   impulsoFrom,
   fetchTodayLog,
   monthISO,
-  patchTodayHabits,
-  saveProfile,
   todayISO,
   updateTodayLog,
   weeklyTrendFrom,
-  type DailyGuide,
   type DailyLog,
   type MealStatus,
-  type Profile,
 } from "@/lib/daily";
 
-import { generateDailyGuide } from "@/lib/guide.functions";
-import { caloriesText, energyTargets, targetsAsMacros } from "@/lib/nutrition/energy";
+import { energyTargets, targetsAsMacros } from "@/lib/nutrition/energy";
 import { learnedPortionSize, portionSizeHistory } from "@/lib/nutrition/portion";
-import {
-  addMacros,
-  donePendingMeals,
-  guideMeals,
-  guideReuse,
-  mealsToRecalculate,
-  mergeGuide,
-  showsNutritionNumbers,
-  sumDoneMacros,
-  ZERO_MACROS,
-} from "@/lib/macros";
+import { addMacros, showsNutritionNumbers, sumDoneMacros, ZERO_MACROS } from "@/lib/macros";
 import { weekdayIndex } from "@/lib/dates";
-import { dateLocale } from "@/lib/i18n";
 import { fetchHousehold, householdSharedSlots } from "@/lib/household";
-import {
-  EMPTY_SCHEDULE,
-  isSharedSlot,
-  personColor,
-  whoIsHome,
-  type MealKey,
-  type SharedSlots,
-} from "@/lib/household-shared";
-import {
-  capitalizeFirst,
-  childMealsForDate,
-  childPureeGaps,
-  dishChangeIsMine,
-  effectiveMealSlots,
-  isPinnedByViewer,
-  mealsForDate,
-  offListNote,
-  planForDate,
-  reconcileHabits,
-  sameHabits,
-  suggestedDish,
-  type HouseholdPinContext,
-  type MealChange,
-  type MealSlot,
-  type MonthlyPlan,
-} from "@/lib/plan-shared";
-import { fillChildMeals } from "@/lib/plan.functions";
-import { cleanDayAdjustment, dayBalance } from "@/lib/day-balance";
-import { scheduleDaySettle, useDaySettle } from "@/lib/day-settle";
-import { cleanDayExercise, onlyRoutineExercise } from "@/lib/exercise";
-import { removeExercise as removeExerciseFn } from "@/lib/exercise.functions";
-import { cleanDaySnacks, snackTotals } from "@/lib/snacks";
-import { removeSnack as removeSnackFn } from "@/lib/snacks.functions";
+import { dishChangeIsMine, effectiveMealSlots, mealsForDate } from "@/lib/plan-shared";
+import { snackTotals } from "@/lib/snacks";
+import { MOMENT_TO_MEAL_KEY } from "@/lib/today-meals";
+import { useDayExtras } from "@/lib/use-day-extras";
+import { useDayReconcile } from "@/lib/use-day-reconcile";
+import { useGuideAutoGeneration, useGuideTargetsSync } from "@/lib/use-guide-auto-generation";
 import { useMealSwap } from "@/lib/use-meal-swap";
+import { useTimezoneSync } from "@/lib/use-timezone-sync";
 import { applyTheme } from "@/lib/theme";
 import { quoteIndexOfTheDay } from "@/lib/quotes";
-import { monthsOfWeek, weekDates, weekStartOf } from "@/lib/week-nav";
-import { resolveDeviceTimeZone } from "@/lib/zoned-date";
-
-// Misma curva que el resto de la app (docs/design-guidelines.md §7) y que
-// `week-pager.tsx`, para que el panel del día y la tira se muevan igual.
-const EASE = [0.22, 1, 0.36, 1] as const;
 
 export const Route = createFileRoute("/_authenticated/hoy")({
   component: Hoy,
 });
 
-// Orden cronológico aproximado de cada momento, para saber cuál toca ahora.
-// Las comidas que no aparecen (nombres personalizados desde el chat) caen
-// en un rango intermedio en vez de romper el orden.
-const MOMENT_RANK: Record<string, number> = {
-  Desayuno: 0,
-  Comida: 1,
-  Merienda: 2,
-  Snack: 2,
-  Cena: 3,
-};
-const rankOf = (label: string) => MOMENT_RANK[label] ?? 1.5;
-
-// Hora orientativa de cada momento del día. La app no guarda horas por comida
-// (el perfil solo tiene `meal_schedule` en texto libre), así que la tira usa
-// estas de referencia; un momento con nombre propio simplemente no muestra
-// hora. Coherentes con MOMENT_RANK para que la tira se lea de arriba abajo.
-const MOMENT_TIME: Record<string, string> = {
-  Desayuno: "8:30",
-  Almuerzo: "11:00",
-  Comida: "14:00",
-  Merienda: "17:30",
-  Snack: "17:30",
-  Cena: "20:30",
-};
-
-// Solo desayuno/comida/cena pueden ser comidas compartidas del hogar (el snack no).
-const MOMENT_TO_MEAL_KEY: Record<string, MealKey | undefined> = {
-  Desayuno: "desayuno",
-  Comida: "comida",
-  Cena: "cena",
-};
-
-/** Tinte del acento de la categoría sobre la superficie del tema activo. */
-const tint = (accent: string, pct: number) =>
-  `color-mix(in oklab, ${accent} ${pct}%, var(--color-surface))`;
-
-/**
- * Color legible encima de un acento de categoría. Los acentos claros (lácteos,
- * cereales, aves) dejarían invisible un check blanco, así que se decide por
- * luminancia. Son hex fijos, independientes del tema, por eso el par de
- * contraste también lo es.
- */
-function onAccent(hex: string) {
-  const n = Number.parseInt(hex.slice(1), 16);
-  const channel = (v: number) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  const lum =
-    0.2126 * channel((n >> 16) & 255) +
-    0.7152 * channel((n >> 8) & 255) +
-    0.0722 * channel(n & 255);
-  return lum > 0.45 ? "#3e3d39" : "#fbfaf7";
-}
-
-// La guía del día se pide sola al abrir Hoy si falta o está incompleta. Dos
-// salvaguardas para que ese reintento automático no se convierta en spam:
-//   1. Si falla, no se avisa (`silent`): el toast de error solo sale al pulsar
-//      "Generar" a mano. Si no, cada fallo mientras Hoy se re-monta (el backend
-//      caído un rato, volver a la pantalla) deja un toast tras otro.
-//   2. No se relanza sola más de una vez por minuto entre montajes (variable a
-//      nivel de módulo, no por montaje), para no martillear la IA.
-const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
-const AUTO_GUIDE_BACKOFF_MS = 600_000;
-let lastAutoGuideAttempt = 0;
-let lastAutoGuideFailed = false;
-/** Por qué se pidió la guía la última vez (ver `guideNeed`). */
-let lastAutoGuideKey = "";
-// Platos que quedaron "calculando" (ticket 13 de `precision-nutricional`, D13):
-// se reintentan al abrir Hoy, al volver a la app y cada 2 minutos mientras está
-// abierta, como mucho 5 veces seguidas; después, en el siguiente arranque (el
-// contador vive en el módulo, así que recargar la app lo pone a cero). Cada
-// intento solo descompone lo que falta (`macrosOnly` + `reuse`).
-const CALC_RETRY_MS = 120_000;
-const CALC_MAX_ATTEMPTS = 5;
-let calcAttempts = 0;
-let lastCalcAttempt = 0;
-
 function Hoy() {
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const qc = useQueryClient();
-  const makeGuide = useServerFn(generateDailyGuide);
-  const fillKids = useServerFn(fillChildMeals);
-  const [generating, setGenerating] = useState(false);
-  const [openDay, setOpenDay] = useState<string | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
-  const [removingExercise, setRemovingExercise] = useState<string | null>(null);
   const [snackOpen, setSnackOpen] = useState(false);
-  const [removingSnack, setRemovingSnack] = useState<string | null>(null);
   /** Hoja con TODO lo que el día ha movido en los próximos días. */
   const [balanceInfoOpen, setBalanceInfoOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
@@ -232,64 +77,6 @@ function Hoy() {
   const noPlanYet = planQ.isFetched && !planQ.data;
 
   const today0 = todayISO();
-  const [visibleWeek, setVisibleWeek] = useState(() => weekStartOf(today0));
-  // Dirección (izquierda/derecha) del último cambio de día abierto en la
-  // tira, para que el panel entre desde el lado del día tocado (ver
-  // `DayPanel` más abajo). Se fija al tocar un día nuevo; da igual mientras
-  // `openDay` sea null.
-  const [dayDir, setDayDir] = useState(1);
-  const appStartedOn = profileQ.data?.app_started_on ?? null;
-
-  // Meses que puede llegar a pisar la tira: la semana visible y sus dos
-  // vecinas (lo que `WeekPager` puede llegar a pintar con su ventana de ±2),
-  // para que deslizar hasta el borde de un mes no se quede sin datos. Solo
-  // cambia cuando cambia de semana, no en cada frame de scroll.
-  const pagerMonths = useMemo(() => {
-    const months = new Set([
-      ...monthsOfWeek(visibleWeek),
-      ...monthsOfWeek(weekDates(visibleWeek)[0]),
-      ...monthsOfWeek(weekDates(visibleWeek)[6]),
-    ]);
-    return [...months].sort();
-  }, [visibleWeek]);
-  const pagerLogsQ = useQueries({
-    queries: pagerMonths.map((m) => ({
-      queryKey: ["logs", m],
-      queryFn: () => fetchLogsForMonth(m),
-    })),
-  });
-  const pagerPlanQ = useQueries({
-    queries: pagerMonths.map((m) => ({
-      queryKey: ["plan", m],
-      queryFn: () => fetchMonthlyPlan(m),
-    })),
-  });
-  const logByDate = useMemo(() => {
-    const map = new Map<string, DailyLog>();
-    for (const q of pagerLogsQ) for (const l of q.data ?? []) map.set(l.log_date, l);
-    return map;
-  }, [pagerLogsQ]);
-  const planByMonth = useMemo(() => {
-    const map = new Map<string, MonthlyPlan | null>();
-    pagerMonths.forEach((m, i) => map.set(m, (pagerPlanQ[i]?.data?.plan as MonthlyPlan) ?? null));
-    return map;
-  }, [pagerMonths, pagerPlanQ]);
-
-  const onSelectDay = (d: string) => {
-    if (openDay === d) {
-      setOpenDay(null);
-      return;
-    }
-    if (openDay) setDayDir(d > openDay ? 1 : -1);
-    setOpenDay(d);
-  };
-  // Plegar el panel del día si deja de pertenecer a la semana visible (p. ej.
-  // tras deslizar a otra semana con el día abierto).
-  useEffect(() => {
-    if (openDay && !weekDates(visibleWeek).includes(openDay)) setOpenDay(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleWeek]);
-
   // Cinturón extra sobre el filtro por contenido de `mealsForDate`: si el
   // plato de hoy vino espejado de una comida compartida del hogar (que no
   // sabe de las preferencias de cada persona), esto lo descarta igual cuando
@@ -305,93 +92,6 @@ function Hoy() {
     ? { isPlanner: !!householdQ.data?.me?.is_planner, sharedSlots }
     : null;
   const homeCtxFor = (weekday: number) => (homePlanner ? { ...homePlanner, weekday } : null);
-  /** Who is eating at home for this meal today? Returns null if no household or not a main meal. */
-  const mealCompanions = (label: string) => {
-    const mealKey = MOMENT_TO_MEAL_KEY[label];
-    if (!mealKey) return null;
-    const hMembers = householdQ.data?.members ?? [];
-    const hChildren = householdQ.data?.children ?? [];
-    if (!hMembers.length) return null;
-    const hasSchedules =
-      hMembers.some((m) => m.home_schedule != null) ||
-      hChildren.some((c) => c.home_schedule != null);
-    if (hasSchedules) {
-      // Quien no ha configurado su horario hereda los días compartidos del
-      // hogar, no "nunca en casa" — así un horario a medias no borra la mesa.
-      const baseline = householdQ.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
-      const { people } = whoIsHome(
-        hMembers.map((m) => ({
-          id: m.id,
-          displayName: m.display_name,
-          portion: m.portion,
-          isPlanner: m.is_planner,
-          homeSchedule: m.home_schedule ?? baseline,
-        })),
-        hChildren.map((c) => ({
-          id: c.id,
-          name: c.name,
-          portion: c.portion,
-          homeSchedule: c.home_schedule ?? baseline,
-          stage: c.feeding_stage,
-        })),
-        mealKey,
-        todayWeekday,
-      );
-      const myMemberId = householdQ.data?.me?.id;
-      const meHome = people.some((p) => p.id === myMemberId);
-      const others = people.filter((p) => p.id !== myMemberId);
-      return { meHome, others };
-    }
-    // Nadie tiene horario: se comparte lo que diga la columna del hogar.
-    if (!sharedSlots || !isSharedSlot(sharedSlots, mealKey, todayWeekday)) {
-      return { meHome: true, others: [] };
-    }
-    const others = hMembers
-      .filter((m) => m.user_id !== householdQ.data?.me?.user_id)
-      .map((m) => ({ id: m.id, displayName: m.display_name, portion: m.portion }));
-    return { meHome: true, others };
-  };
-  // Platos aparte de los niños de la casa para ese momento de hoy (issue 07):
-  // el plato compartido no les sirve ese día y el plan lleva el suyo.
-  const childMealsFor = (label: string) => {
-    const mealKey = MOMENT_TO_MEAL_KEY[label];
-    const kids = householdQ.data?.children ?? [];
-    if (!mealKey || !kids.length) return [];
-    return kids.flatMap((c) =>
-      childMealsForDate(planQ.data?.plan ?? null, today0, c.id)
-        .filter((k) => k.slot === mealKey)
-        .map((k) => ({ name: c.name, dish: k.dish, off: k.off })),
-    );
-  };
-
-  // Peques de triturados a los que les falta su puré HOY en el plan — pasa
-  // cuando se dan de alta o cambian de etapa después de generar el plan del
-  // mes, porque solo la IA de `generateMonthlyPlan` rellena `days[].kids`.
-  // Dispara el aviso de "Actualizar" (`ChildMealGapBanner`).
-  const householdBaseline = householdQ.data?.household?.shared_slots ?? EMPTY_SCHEDULE;
-  const pendingKidMeals = (householdQ.data?.children ?? []).filter(
-    (c) =>
-      c.feeding_stage === "triturados" &&
-      childPureeGaps(
-        planQ.data?.plan ?? null,
-        { id: c.id, stage: c.feeding_stage, homeSchedule: c.home_schedule ?? householdBaseline },
-        today0,
-      ).some((g) => g.date === today0),
-  );
-
-  const fillKidsMut = useMutation({
-    mutationFn: () => fillKids({ data: { today: today0 } }),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["plan", month] });
-      toast.success(
-        res.filled
-          ? t("hoy.kids.updated", { names: res.children.join(", ") })
-          : t("hoy.kids.upToDate"),
-      );
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : t("hoy.kids.failed")),
-  });
-
   const todayQ = useQuery({
     queryKey: ["today"],
     queryFn: () => ensureTodayLog(todayMeals.map((m) => m.moment)),
@@ -436,20 +136,7 @@ function Hoy() {
     if (profile?.theme) applyTheme(profile.theme);
   }, [profile?.theme]);
 
-  // Si la persona ha viajado (o el perfil trae la zona por defecto de antes de
-  // esta feature), se actualiza `profiles.timezone` en silencio para que el
-  // push del servidor siga usando su hora local. Barato: solo escribe si cambia.
-  useEffect(() => {
-    if (!profile?.onboarding_completed) return;
-    const deviceTz = resolveDeviceTimeZone();
-    if (deviceTz && profile.timezone !== deviceTz) {
-      // Best-effort: si la escritura falla (p. ej. la migración todavía no está
-      // aplicada) no pasa nada, se reintenta en la siguiente carga de Hoy.
-      saveProfile({ timezone: deviceTz }).catch((error) =>
-        console.warn("hoy: guardar zona horaria", error),
-      );
-    }
-  }, [profile?.onboarding_completed, profile?.timezone]);
+  useTimezoneSync(profile);
 
   const save = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateTodayLog(patch),
@@ -462,129 +149,11 @@ function Hoy() {
 
   const guide = today?.guide ?? null;
 
-  const requestGuide = async ({
-    silent = false,
-    macrosOnly = false,
-  }: { silent?: boolean; macrosOnly?: boolean } = {}) => {
-    setGenerating(true);
-    try {
-      const { dishMacros: _none, ...g } = await makeGuide({
-        data: {
-          // Con lo que se comió de verdad en cada "comí distinto" (ticket 17).
-          meals: guideMeals(
-            todayMeals.map((m) => ({ moment: m.moment, idea: m.idea })),
-            today?.habits,
-          ),
-          // Lo que ya tiene cifra no se vuelve a descomponer.
-          reuse: guideReuse(today?.guide?.mealMacros, today?.habits),
-          macrosOnly,
-          today: today0,
-        },
-      });
-      // Solo cifras: el texto de la guía se queda como estaba.
-      const fresh: DailyGuide =
-        macrosOnly && today?.guide
-          ? { ...today.guide, macroEstimate: g.macroEstimate, mealMacros: g.mealMacros }
-          : g;
-      // Si la generación vuelve con el texto de respaldo y sin cifras, se
-      // conservan las que ya tuviera el día: regenerar nunca debe dejar la
-      // barra de macros peor de como estaba (ver `mergeGuide`).
-      await updateTodayLog({ guide: mergeGuide(today?.guide, fresh) });
-      lastAutoGuideFailed = false;
-      qc.invalidateQueries({ queryKey: ["today"] });
-    } catch {
-      if (silent) {
-        lastAutoGuideFailed = true;
-      } else {
-        lastAutoGuideFailed = false;
-        toast.error(t("hoy.errors.coachFailed"));
-      }
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Por qué habría que (re)generar la guía, como una cadena estable. Se calcula
-  // fuera del efecto a propósito: el efecto depende del MOTIVO y no del id del
-  // registro, porque `today.id` no cambia en todo el día y en la app móvil la
-  // pantalla de Hoy no se desmonta nunca (queda bajo el Stack de expo-router),
-  // así que un cambio de plato no volvía a disparar nada y la barra de macros
-  // se quedaba como estaba hasta pulsar "Generar" a mano.
-  const guideNeed = (() => {
-    if (!today) return "";
-    const g = today.guide;
-    if (!g || !g.meals?.length || !g.tips?.length) return "sin-guia";
-    const dishes = todayMeals.filter((m) => m.idea);
-    if (!dishes.length) return "";
-    // Guía guardada de antes de que existiera la barra de macros (o el lookup
-    // no salió): sin esto se queda sin barras para siempre, porque ya tiene
-    // `meals`/`tips` y la condición de arriba no la pilla.
-    if (g.macroEstimate == null || !g.mealMacros?.length) return "sin-macros";
-    // El hogar puede espejar por detrás un cambio del planificador sobre una
-    // comida compartida (ver `composeDayForUser`): el plato de hoy cambia sin
-    // pasar por `use-meal-swap`, que es quien normalmente regenera la guía tras
-    // un cambio. Si el plato de un momento ya no es el que tiene guardado
-    // `mealMacros`, esa cifra ya no describe lo que hay en pantalla. Solo se
-    // compara cuando la guía SÍ trajo `idea` (las guías anteriores a ese campo
-    // no fuerzan una regeneración masiva).
-    const stale = dishes.filter((m) => {
-      const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
-      return !!cached?.idea && cached.idea !== m.idea;
-    });
-    if (stale.length) return `platos:${stale.map((m) => `${m.moment}=${m.idea}`).join("|")}`;
-    // Platos que siguen "calculando" (D13): se reintentan, con su propia pauta.
-    const pending = mealsToRecalculate(g.mealMacros).filter((mm) =>
-      dishes.some((m) => m.moment === mm.moment && m.idea === mm.idea),
-    );
-    return pending.length ? `por-calcular:${pending.map((m) => m.moment).join("|")}` : "";
-  })();
-
-  // Reloj del reintento de "calculando": cada 2 minutos mientras quede algo, y
-  // al volver a la app. Solo cambia un contador; decide el efecto de abajo.
-  const recalculating = guideNeed.startsWith("por-calcular");
-  const [calcTick, setCalcTick] = useState(0);
-  const calcForceRef = useRef(true); // al abrir Hoy se intenta ya
-  useEffect(() => {
-    if (!recalculating) {
-      calcAttempts = 0;
-      return;
-    }
-    const id = window.setInterval(() => setCalcTick((t) => t + 1), CALC_RETRY_MS);
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      calcForceRef.current = true;
-      setCalcTick((t) => t + 1);
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [recalculating]);
-
-  useEffect(() => {
-    if (!guideNeed || generating) return;
-    if (guideNeed.startsWith("por-calcular")) {
-      if (calcAttempts >= CALC_MAX_ATTEMPTS) return;
-      const due = Date.now() - lastCalcAttempt >= CALC_RETRY_MS;
-      if (!due && !calcForceRef.current) return;
-      calcForceRef.current = false;
-      calcAttempts += 1;
-      lastCalcAttempt = Date.now();
-      void requestGuide({ silent: true, macrosOnly: true });
-      return;
-    }
-    const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
-    // El tope de un intento por minuto es para no repetir EL MISMO intento (ver
-    // la memoria del bucle de reintentos de 2026-09-01). Un motivo nuevo —
-    // cambió un plato de hoy — no tiene por qué esperar al minuto del intento
-    // anterior, que era de otra cosa.
-    if (guideNeed === lastAutoGuideKey && Date.now() - lastAutoGuideAttempt < cooldown) return;
-    lastAutoGuideKey = guideNeed;
-    lastAutoGuideAttempt = Date.now();
-    void requestGuide({ silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guideNeed, generating, calcTick]);
+  const { generating, requestGuide } = useGuideAutoGeneration({
+    today,
+    todayMeals,
+    date: today0,
+  });
 
   // Abre el repaso nocturno solo (una vez por carga) si ya ha pasado la hora
   // configurada y hoy aún no se ha cerrado. Se asume la hora local del
@@ -619,55 +188,16 @@ function Hoy() {
   // El tamaño que suele elegir en "comí distinto" (ticket 17).
   const learnedSize = learnedPortionSize(portionSizeHistory(logsQ.data ?? []));
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
-  // El registro del día se casa con las comidas que esta persona planifica de
-  // verdad: `daily_logs.habits` se escribe UNA vez, al crear el día, y lo crea
-  // quien lo toque primero (abrir el chat antes que Hoy lo dejaba vacío), así
-  // que sin esto una comida descartada en el onboarding seguía saliendo aquí.
-  // Se pinta siempre lo reconciliado, aunque el guardado de abajo falle.
-  const reconciled = reconcileHabits(today?.habits, todayMeals);
-  const habits = reconciled.habits;
-  // Las comidas TAL Y COMO están guardadas, que es contra lo que se reconcilió.
-  // React Query reusa el objeto si la fila vuelve igual, así que su identidad
-  // sirve de disparador: cambia solo cuando el registro cambia de verdad.
-  const storedHabits = today?.habits;
-  // El plan y el registro del día se invalidan juntos tras un cambio de plato,
-  // pero no vuelven a la vez.
-  const settled = !todayQ.isFetching && !planQ.isFetching;
-  useEffect(() => {
-    // Solo se guarda si de verdad cambia algo (si no, se escribiría en bucle),
-    // y solo el día de hoy: un día pasado es un hecho, no una preferencia.
-    if (!today || !reconciled.changed) return;
-    // Y solo con las dos consultas asentadas: la reconciliación compara
-    // `confirmedIdea` contra el plato que el plan tiene AHORA, así que con una
-    // a medio refrescar daría por caducada una confirmación que sí vale (y la
-    // borraría, que es justo lo que se está arreglando aquí).
-    if (!settled) return;
-    // `habits` es una única columna JSON y este camino manda la lista entera
-    // derivada de la caché, así que se escribe solo si la fila sigue siendo la
-    // que se reconcilió: si entre medias la ha tocado otro camino
-    // (`patchTodayHabits` de un cambio de plato, el lote del picoteo, la app
-    // móvil), se abandona en vez de pisarlo. Lo reconciliado se pinta igual, y
-    // el siguiente render lo reintenta ya con datos frescos.
-    void patchTodayHabits((stored) => (sameHabits(stored, storedHabits) ? reconciled.habits : null))
-      .then((next) => {
-        if (!next) return;
-        qc.invalidateQueries({ queryKey: ["today"] });
-        qc.invalidateQueries({ queryKey: ["logs"] });
-      })
-      // Sin aviso: es una reparación de fondo, no una acción de la persona, y
-      // lo reconciliado ya se está pintando aunque el guardado falle.
-      .catch((error) => console.warn("hoy: guardar la reconciliación de comidas", error));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today?.id, storedHabits, reconciled.changed, settled]);
-  const doneCount = habits.filter((h) => h.done).length;
+  // El registro del día, casado con las comidas que esta persona planifica de
+  // verdad (y reparado en segundo plano si la fila guardada no coincide).
+  const habits = useDayReconcile(today, todayMeals, !todayQ.isFetching && !planQ.isFetching);
   // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
   // "comí distinto"), no el menú completo del día: así deshacer una comida
   // la mueve, en vez de quedarse fija en un total del día entero. Se muestra
   // siempre (arrancando en 0) para que se vea cómo se va llenando según se
   // marcan comidas, en vez de aparecer de golpe con la primera.
-  // El picoteo del día (`daily_logs.snacks`) también suma: es comida de verdad,
-  // aunque no cuente como comida del plan.
-  const snacks = cleanDaySnacks(dayExtras?.snacks);
+  const extras = useDayExtras(today0, habits, dayExtras);
+  const { snacks, balance, balanceChanges, afterDayChange } = extras;
   const doneMacros = addMacros(
     sumDoneMacros(guide?.mealMacros, habits) ?? ZERO_MACROS,
     snackTotals(snacks),
@@ -683,82 +213,9 @@ function Hoy() {
     !planQ.data?.plan?.targetsVersion &&
     guide.macroEstimate.kcal < dayTarget.kcal * 0.85;
 
-  // La copia del objetivo en la guía de hoy se mantiene al día (peso, actividad
-  // u objetivo cambiados en Ajustes): es la que usa el semáforo de este día
-  // cuando ya sea pasado.
-  useEffect(() => {
-    if (!today?.guide || !dayTarget || generating) return;
-    if (today.guide.targets?.kcal === dayTarget.kcal) return;
-    // Se relee la fila justo antes: la guía es una sola columna JSON y la caché
-    // puede ir por detrás de una regeneración recién guardada.
-    void fetchTodayLog()
-      .then((fresh) => {
-        if (!fresh?.guide || fresh.guide.targets?.kcal === dayTarget.kcal) return;
-        return updateTodayLog({ guide: { ...fresh.guide, targets: dayTarget } }).then(() =>
-          qc.invalidateQueries({ queryKey: ["today"] }),
-        );
-      })
-      .catch((error) => console.warn("hoy: guardar el objetivo del día en la guía", error));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today?.id, today?.guide?.targets?.kcal, dayTarget?.kcal, generating]);
+  useGuideTargetsSync(today, dayTarget, generating);
 
-  // El deporte del día (`daily_logs.exercise`) no suma a las macros: es un
-  // gasto, no algo que se coma.
-  const exercise = cleanDayExercise(dayExtras?.exercise);
-
-  // Picoteo, deporte y cambios de plato comparten UN solo asentamiento por
-  // ráfaga (`day-settle.ts`): el desvío que decide si se recolocan los próximos
-  // días es el del día entero, no el de cada origen por su cuenta. Ver
-  // `day-balance.ts`.
-  const daySettle = useDaySettle(today0, () => {
-    qc.invalidateQueries({ queryKey: ["today"] });
-    qc.invalidateQueries({ queryKey: ["logs"] });
-    qc.invalidateQueries({ queryKey: ["plan"] });
-  });
-  const afterDayChange = () => {
-    qc.invalidateQueries({ queryKey: ["today"] });
-    qc.invalidateQueries({ queryKey: ["logs"] });
-    scheduleDaySettle(today0);
-  };
-
-  const removeExerciseCall = useServerFn(removeExerciseFn);
-  const afterExerciseChange = afterDayChange;
-  const removeExercise = async (id: string) => {
-    setRemovingExercise(id);
-    try {
-      await removeExerciseCall({ data: { today: today0, id } });
-      afterExerciseChange();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : t("hoy.errors.removeExercise"));
-    } finally {
-      setRemovingExercise(null);
-    }
-  };
-
-  const removeSnackCall = useServerFn(removeSnackFn);
-  const afterSnackChange = afterDayChange;
-  const removeSnack = async (id: string) => {
-    setRemovingSnack(id);
-    try {
-      await removeSnackCall({ data: { today: today0, id } });
-      afterSnackChange();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : t("hoy.errors.removeSnack"));
-    } finally {
-      setRemovingSnack(null);
-    }
-  };
-
-  // El momento se guarda en español canónico; aquí solo se pinta en el idioma.
-  const mealName = (label: string) => t(`moments.${label}`, { defaultValue: label });
   const quoteIndex = quoteIndexOfTheDay();
-  const dateLabel = new Date(`${today0}T00:00:00`)
-    .toLocaleDateString(dateLocale(i18n.language), {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    })
-    .replace(",", "");
 
   const setMealStatus = (index: number, status: MealStatus) => {
     const confirmed = status === "plan" || status === "distinto";
@@ -814,493 +271,60 @@ function Hoy() {
   const swapMeal =
     swapIndex != null ? todayMeals.find((m) => m.moment === habits[swapIndex]?.label) : undefined;
 
-  // El desvío del día, sumando los tres orígenes, y lo que ya ha movido. Es lo
-  // que pinta `DayBalanceCard` — el desglose sale de datos que ya estaban, no
-  // de estado nuevo (ver `day-balance.ts`).
-  const balance = dayBalance(habits, snacks, exercise);
-  const adjustmentRecord = cleanDayAdjustment(dayExtras?.adjustment);
-  const balanceChanges: MealChange[] = adjustmentRecord?.adjustment?.changes ?? [];
-
-  // La "siguiente comida" es la primera, en orden cronológico, que aún no
-  // tiene un estado explícito. Importante: se filtra por `status`, no por
-  // `done` — "me lo salté" deja done:false a propósito (no cuenta como
-  // hecho), pero sí queda resuelto, así que no debe seguir apareciendo como
-  // "siguiente" ni bloquear para siempre el estado de "día completo" (ver
-  // área 6 del roadmap UX, "casos límite").
-  const pending = habits
-    .map((h, i) => ({ h, i }))
-    .filter(({ h }) => h.status == null)
-    .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
-  const nextIndex = pending.length ? pending[0].i : null;
-
-  // El día se lee como una tira de arriba abajo, así que las comidas van en
-  // orden cronológico aunque el plan las guarde en otro orden.
-  const dayStrip = habits
-    .map((h, i) => ({ h, i }))
-    .sort((a, b) => rankOf(a.h.label) - rankOf(b.h.label));
-
   return (
     <main className="mx-auto min-h-screen max-w-lg px-5 pb-44 pt-12 font-ui">
-      <header className="animate-rise flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-num text-[11px] font-medium uppercase leading-none tracking-[0.09em] text-muted-foreground">
-            {dateLabel}
-          </p>
-          <h1 className="mt-1.5 font-title text-[40px] font-semibold leading-[0.98] tracking-[-0.03em] text-foreground">
-            {t("hoy.title")}
-          </h1>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1" title={t("hoy.momentumHint")}>
-          <div className="flex items-baseline gap-[3px]">
-            <span className="font-title text-[26px] font-semibold leading-none tabular-nums text-foreground">
-              {impulso}
-            </span>
-            <span className="font-num text-[11px] font-medium leading-none text-muted-foreground">
-              %
-            </span>
-          </div>
-          <span className="font-num text-[9.5px] font-medium uppercase leading-none tracking-[0.1em] text-muted-foreground">
-            {t("hoy.momentum")}
-          </span>
-        </div>
-      </header>
+      <HoyHeader today={today0} impulso={impulso} />
 
-      {showNumbers ? (
-        <MacroBars
-          estimate={doneMacros}
-          target={dayTarget ?? guide?.macroEstimate ?? null}
-          weightKg={profile?.current_weight_kg ?? null}
-          pending={donePendingMeals(guide?.mealMacros, habits).length}
-        />
-      ) : null}
-      {showNumbers && planShortOfTarget ? (
-        <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
-          {t("hoy.planShort")}
-        </p>
-      ) : null}
-
-      {/* Guía del coach: solo el rango de calorías del día, en una fila, sin
-          tarjeta expandible (intro, macros en texto, platos sugeridos,
-          consejos) — se quería menos información. Igual que en la app móvil,
-          y va justo aquí, antes de las comidas. */}
-      <section className="animate-rise mt-6">
-        <div className="flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3.5">
-          <span className="block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-          <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
-            {generating || (!guide && todayQ.isLoading)
-              ? t("hoy.guide.preparing")
-              : guide
-                ? t("hoy.guide.withCalories", {
-                    calories: caloriesText(energy, showNumbers, t, dateLocale(i18n.language)),
-                  })
-                : t("hoy.guide.label")}
-          </span>
-          {!guide && !generating && !todayQ.isLoading ? (
-            <button
-              type="button"
-              onClick={() => requestGuide()}
-              className="shrink-0 text-xs font-medium text-primary-ink"
-            >
-              {t("hoy.guide.generate")}
-            </button>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="animate-rise mt-6">
-        <div className="flex items-baseline justify-between gap-2.5">
-          <h2 className="font-title text-[21px] font-semibold leading-none tracking-[-0.02em]">
-            {t("hoy.meals.title")}
-          </h2>
-          {habits.length ? (
-            <span className="font-num text-[11px] font-medium tabular-nums text-muted-foreground">
-              {t("hoy.meals.count", { done: doneCount, total: habits.length })}
-            </span>
-          ) : null}
-        </div>
-
-        <ChildMealGapBanner
-          names={pendingKidMeals.map((c) => c.name)}
-          pending={fillKidsMut.isPending}
-          onUpdate={() => fillKidsMut.mutate()}
-        />
-
-        {!habits.length ? (
-          noPlanYet ? (
-            // Un mes se genera una vez, tras la conversación con el coach en
-            // Plan: aquí no se genera nada, solo se lleva allí.
-            <Link
-              to="/plan"
-              className="surface-card mt-3.5 flex items-center gap-3 p-4 transition-transform active:scale-[0.99]"
-            >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-ink">
-                <CalendarRange className="h-5 w-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">{t("hoy.meals.noPlanTitle")}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {t("hoy.meals.noPlanBody")}
-                </span>
-              </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </Link>
-          ) : todayQ.isError ? (
-            <button
-              type="button"
-              onClick={() => todayQ.refetch()}
-              className="mt-3.5 text-sm font-medium text-primary-ink"
-            >
-              {t("hoy.meals.loadFailed")}
-            </button>
-          ) : (
-            <p className="mt-3.5 animate-pulse text-sm text-muted-foreground">
-              {t("hoy.meals.loading")}
-            </p>
-          )
-        ) : (
-          <div className="mt-3.5 flex flex-col gap-2.5">
-            {dayStrip.map(({ h, i }) => {
-              const planned = todayMeals.find((m) => m.moment === h.label);
-              const idea = planned?.idea ?? "";
-              const cat = FOOD_CATEGORIES[classifyDish(idea)];
-              const isNext = i === nextIndex;
-              const isSkip = h.status === "salteo";
-              const note = offListNote(planned?.off, t);
-              const kidMeals = childMealsFor(h.label);
-              // El plato de este momento se ha cambiado hoy (desde el chat o
-              // desde "comí otra cosa"): se muestra el real en naranja y debajo,
-              // tachada, la sugerencia ORIGINAL del plan — congelada, así que
-              // sigue siendo la misma tras veinte cambios (ver `plannedIdea` en
-              // plan-shared.ts). Si se vuelve al plato sugerido, deja de contar
-              // como editado.
-              const wasIdea = suggestedDish(h, idea);
-              // La receta solo se oculta si el cambio lo hizo la propia
-              // persona: en un slot compartido, `wasIdea` también se dispara
-              // cuando quien planifica cambia la comida de la casa después de
-              // que esta persona ya vio el día — y no ha tocado nada ella.
-              const mealKey = MOMENT_TO_MEAL_KEY[h.label] ?? "snack";
-              const hideRecipe = !!wasIdea && dishChangeIsMine(mealKey, homeCtxFor(todayWeekday));
-              // D13: un plato sin cifra se dice, no se rellena con un promedio.
-              const mealNumbers = guide?.mealMacros?.find(
-                (m) => m.moment === h.label && m.idea === idea,
-              );
-              // Sin cifras a la vista, "Calculando…" no le dice nada a la persona;
-              // el aviso de texto vago sí (le pide concretar).
-              const calculating =
-                !!idea &&
-                mealNumbers?.status === "calculando" &&
-                (showNumbers || !!mealNumbers.vague);
-
-              return (
-                <div
-                  key={h.label}
-                  className="rounded-[20px] px-3.5 py-3.5 transition-[background-color,opacity] duration-300"
-                  style={{
-                    backgroundColor: isSkip
-                      ? "var(--color-muted)"
-                      : h.done
-                        ? "var(--color-success-soft)"
-                        : tint(cat.accent, isNext ? 22 : 13),
-                    opacity: isSkip ? 0.55 : 1,
-                  }}
-                >
-                  <div className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-x-3">
-                    <span
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full"
-                      style={{ backgroundColor: tint(cat.accent, 20) }}
-                    >
-                      {idea ? <DishCategoryIcon dish={idea} size={18} /> : null}
-                    </span>
-
-                    <div className="min-w-0">
-                      <span className="flex items-baseline gap-[7px]">
-                        <span className="text-[11.5px] font-semibold tracking-[0.01em]">
-                          {mealName(h.label)}
-                        </span>
-                        {MOMENT_TIME[h.label] ? (
-                          <span className="font-num text-[10.5px] text-muted-foreground">
-                            {MOMENT_TIME[h.label]}
-                          </span>
-                        ) : null}
-                      </span>
-                      {/* El plato es el protagonista de la fila; cuando todavía
-                          no hay menú, el hueco se rellena en pequeño y apagado
-                          para no gritar lo que falta. */}
-                      <span
-                        className={`mt-1.5 block font-title tracking-[-0.02em] text-pretty ${
-                          idea
-                            ? `text-[16.5px] font-medium leading-tight ${
-                                isSkip
-                                  ? "text-muted-foreground line-through"
-                                  : wasIdea
-                                    ? "text-primary-ink"
-                                    : "text-foreground"
-                              }`
-                            : "text-[13px] leading-snug text-muted-foreground"
-                        }`}
-                      >
-                        {idea || t("hoy.meals.noMenu")}
-                      </span>
-                      {wasIdea ? (
-                        <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground line-through">
-                          {wasIdea}
-                        </span>
-                      ) : null}
-                      {calculating ? (
-                        <span className="mt-1 flex items-center gap-1 text-[11px] leading-snug text-muted-foreground">
-                          {mealNumbers?.vague ? (
-                            t("hoy.meals.vague")
-                          ) : (
-                            <>
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              {t("hoy.meals.calculating")}
-                            </>
-                          )}
-                        </span>
-                      ) : null}
-                      {classifyDish(idea) !== "otro" ? (
-                        <span className="mt-1.5 block font-num text-[9.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                          {cat.label}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {/* Spinner mientras esta comida espera al lote del día.
-                          Es por comida, no global: cambiar una no bloquea las
-                          demás. El RESULTADO del ajuste ya no se enseña aquí —
-                          lo movido lo decide el día entero, así que atribuirlo
-                          a una comida era mentira: el servidor escribía la
-                          misma lista en todas las del lote. Vive en
-                          `DayBalanceCard`. */}
-                      {mealSwap.isAdjusting(h.label) ? (
-                        <span
-                          className="grid h-[26px] w-[26px] place-items-center rounded-full bg-primary/10"
-                          title={t("hoy.meals.adjusting")}
-                        >
-                          <Loader2 className="h-[14px] w-[14px] animate-spin text-primary-ink" />
-                        </span>
-                      ) : null}
-
-                      {h.status == null ? (
-                        <>
-                          <button
-                            type="button"
-                            title={t("hoy.meals.ateOther")}
-                            aria-label={t("hoy.meals.ateOtherLabel", { meal: mealName(h.label) })}
-                            onClick={() => setSwapIndex(i)}
-                            className="grid h-[30px] w-[30px] place-items-center rounded-full bg-surface text-muted-foreground transition-transform active:scale-95"
-                          >
-                            <PencilLine className="h-[15px] w-[15px]" />
-                          </button>
-                          <button
-                            type="button"
-                            title={t("hoy.meals.ateThis")}
-                            aria-label={t("hoy.meals.ateThisLabel", { meal: mealName(h.label) })}
-                            onClick={() => setMealStatus(i, "plan")}
-                            className="grid h-[34px] w-[34px] place-items-center rounded-full transition-transform active:scale-95"
-                            style={{
-                              backgroundColor: cat.accent,
-                              color: onAccent(cat.accent),
-                            }}
-                          >
-                            <Check className="h-[17px] w-[17px]" strokeWidth={2.6} />
-                          </button>
-                        </>
-                      ) : h.done ? (
-                        <button
-                          type="button"
-                          title={t("hoy.meals.undo")}
-                          aria-label={t("hoy.meals.undoLabel", { meal: mealName(h.label) })}
-                          onClick={() => clearMealStatus(i)}
-                          className="animate-pop grid h-[34px] w-[34px] place-items-center rounded-full bg-success text-success-foreground transition-transform active:scale-95"
-                        >
-                          <Undo2 className="h-[15px] w-[15px]" strokeWidth={2.4} />
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          title={t("hoy.meals.undo")}
-                          aria-label={t("hoy.meals.undoLabel", { meal: mealName(h.label) })}
-                          onClick={() => clearMealStatus(i)}
-                          className="grid h-[34px] w-[34px] place-items-center rounded-full bg-secondary text-muted-foreground transition-transform active:scale-95"
-                        >
-                          <X className="h-[15px] w-[15px]" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Aviso, base compartida y receta van siempre a la vista, no
-                      tras un toque oculto sin pista — como en la app móvil. La
-                      receta es un disclosure con su propio abrir/cerrar y carga
-                      perezosa (DishRecipe). */}
-                  {note ? (
-                    <span className="mt-3 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
-                      {note}
-                    </span>
-                  ) : null}
-                  {(() => {
-                    const comp = mealCompanions(h.label);
-                    if (!comp) return null;
-                    const hasOthers = comp.others.length > 0;
-                    return (
-                      <div className="mt-2 flex items-center gap-2">
-                        {comp.meHome ? (
-                          <Home className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                        {hasOthers ? (
-                          <>
-                            <span className="flex -space-x-1.5">
-                              {comp.others.slice(0, 4).map((p) => {
-                                const colors = personColor(p.id);
-                                return (
-                                  <span
-                                    key={p.id}
-                                    title={p.displayName}
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-background text-[9px] font-bold"
-                                    style={{
-                                      background: colors.soft,
-                                      color: colors.ink,
-                                    }}
-                                  >
-                                    {p.displayName.charAt(0)}
-                                  </span>
-                                );
-                              })}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {t("hoy.meals.sharedBase")}
-                            </span>
-                          </>
-                        ) : comp.meHome ? (
-                          <span className="text-[11px] text-muted-foreground">
-                            {t("hoy.meals.atHome")}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground">
-                            {t("hoy.meals.away")}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  {kidMeals.map((k) => (
-                    <div key={`${k.name}-${k.dish}`} className="mt-2">
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        {t("hoy.meals.forChild", { name: k.name })}{" "}
-                        <span className="text-foreground">{k.dish}</span>
-                        {offListNote(k.off, t) ? ` · ${offListNote(k.off, t)}` : ""}
-                      </p>
-                      <DishRecipe dish={k.dish} month={month} />
-                    </div>
-                  ))}
-                  {/* Sin receta si el plato ya se cambió a mano: ya se sabe qué
-                      se va a comer, así que enseñarla solo gastaría una
-                      llamada a la IA sin aportar nada. En un hogar compartido
-                      esto solo se aplica a quien de verdad lo cambió
-                      (`hideRecipe`), no al resto de miembros. */}
-                  {idea && !hideRecipe ? <DishRecipe dish={idea} month={month} /> : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Picoteo de hoy: solo lo apuntado. El efecto sobre el plan lo cuenta
-          `DayBalanceCard`, una vez y para el día entero. */}
-      <SnackCard
+      <MacroSection
         showNumbers={showNumbers}
-        snacks={snacks}
-        removingId={removingSnack}
-        onRemove={(id) => void removeSnack(id)}
+        doneMacros={doneMacros}
+        dayTarget={dayTarget}
+        planShortOfTarget={planShortOfTarget}
+        guide={guide}
+        habits={habits}
+        profile={profile}
+        energy={energy}
+        generating={generating}
+        loading={todayQ.isLoading}
+        requestGuide={() => void requestGuide()}
       />
 
-      {/* Deporte de hoy: mismo formato que el picoteo. */}
-      <ExerciseCard
+      <MealStrip
+        habits={habits}
+        todayMeals={todayMeals}
+        mealMacros={guide?.mealMacros}
         showNumbers={showNumbers}
-        exercise={exercise}
-        removingId={removingExercise}
-        onRemove={(id) => void removeExercise(id)}
+        date={today0}
+        month={month}
+        plan={planQ.data?.plan ?? null}
+        household={householdQ.data}
+        sharedSlots={sharedSlots}
+        homePlanner={homePlanner}
+        noPlanYet={noPlanYet}
+        loadFailed={todayQ.isError}
+        onRetry={() => todayQ.refetch()}
+        isAdjusting={mealSwap.isAdjusting}
+        onEdit={setSwapIndex}
+        onAte={(i) => setMealStatus(i, "plan")}
+        onClear={clearMealStatus}
       />
 
-      {/* Añadir picoteo: justo encima de "Registrar deporte", como en móvil. */}
-      <button
-        type="button"
-        onClick={() => setSnackOpen(true)}
-        className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3.5 text-sm font-semibold text-foreground transition-transform active:scale-[0.99]"
-      >
-        <Cookie className="h-4 w-4" aria-hidden />
-        {t("hoy.addSnack")}
-      </button>
-
-      {/* Registrar deporte: mismo formato que "Añadir picoteo", pegado encima
-          de la tira de la semana, como en la app móvil. */}
-      <button
-        type="button"
-        onClick={() => setActivityOpen(true)}
-        className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3.5 text-sm font-semibold text-foreground transition-transform active:scale-[0.99]"
-      >
-        <Activity className="h-4 w-4" aria-hidden />
-        {t("hoy.addExercise")}
-      </button>
-
-      {/* Balance del día: la suma de los tres orígenes y lo que ha movido en
-          los próximos días. Va DEBAJO de los dos botones que la alimentan, así
-          que se lee como el resumen de todo lo de arriba. */}
-      <DayBalanceCard
+      <DayBalanceSection
         showNumbers={showNumbers}
-        onlyRoutineExercise={onlyRoutineExercise(exercise)}
-        balance={balance}
-        record={adjustmentRecord}
-        settling={daySettle.pending || daySettle.running}
-        failed={daySettle.failed}
+        extras={extras}
+        onAddSnack={() => setSnackOpen(true)}
+        onAddExercise={() => setActivityOpen(true)}
         onShowAdjustment={() => setBalanceInfoOpen(true)}
       />
 
-      <section className="animate-rise mt-6">
-        <WeekPager
-          today={today0}
-          appStartedOn={appStartedOn}
-          selected={openDay}
-          onSelect={onSelectDay}
-          visibleWeek={visibleWeek}
-          onVisibleWeekChange={setVisibleWeek}
-          logsFor={(d) => logByDate.get(d)}
-        />
-        <motion.div layout transition={{ duration: 0.35, ease: EASE }}>
-          <AnimatePresence mode="popLayout" initial={false}>
-            {openDay ? (
-              <DayPanel
-                key={openDay}
-                date={openDay}
-                direction={dayDir}
-                plan={planByMonth.get(openDay.slice(0, 7)) ?? null}
-                log={logByDate.get(openDay)}
-                profile={profile ?? null}
-                householdChildren={householdQ.data?.children}
-                household={
-                  sharedSlots
-                    ? {
-                        sharedSlots,
-                        memberCount: (householdQ.data?.members ?? []).filter((m) => m.user_id)
-                          .length,
-                      }
-                    : undefined
-                }
-                mySlots={mySlots}
-                homePlanner={homePlanner}
-              />
-            ) : null}
-          </AnimatePresence>
-        </motion.div>
-        <p className="mt-2.5 px-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-          {openDay && openDay < todayISO() ? t("hoy.week.hintPast") : t("hoy.week.hintFuture")}
-        </p>
-      </section>
+      <WeekSection
+        today={today0}
+        profile={profile}
+        household={householdQ.data}
+        sharedSlots={sharedSlots}
+        mySlots={mySlots}
+        homePlanner={homePlanner}
+      />
 
       <section className="mt-6 px-0.5">
         <p className="font-title text-sm leading-[1.45] tracking-[-0.01em] text-pretty text-muted-foreground">
@@ -1352,7 +376,7 @@ function Hoy() {
         open={snackOpen}
         onOpenChange={setSnackOpen}
         today={today0}
-        onSaved={afterSnackChange}
+        onSaved={afterDayChange}
       />
 
       <ExerciseSheet
@@ -1362,7 +386,7 @@ function Hoy() {
         open={activityOpen}
         onOpenChange={setActivityOpen}
         today={today0}
-        onSaved={afterExerciseChange}
+        onSaved={afterDayChange}
       />
 
       <NightlyReviewSheet
@@ -1378,168 +402,5 @@ function Hoy() {
 
       <BottomNav />
     </main>
-  );
-}
-
-// ── Contenido del día abierto en la tira: pasado (corrección) o futuro/hoy
-// (menú), con un deslizamiento simple al cambiar de día (ticket 04 de
-// hoy-semanas-editables). `key={date}` en el llamador fuerza el
-// entrar/salir de `AnimatePresence`; `direction` decide desde qué lado entra
-// (mismo criterio que la etiqueta de `WeekPager`: día posterior entra desde
-// la derecha, anterior desde la izquierda).
-function DayPanel({
-  date,
-  direction,
-  plan,
-  log,
-  profile,
-  householdChildren,
-  household,
-  mySlots,
-  homePlanner,
-}: {
-  date: string;
-  direction: number;
-  plan: MonthlyPlan | null;
-  log: DailyLog | undefined;
-  profile: Profile | null;
-  householdChildren?: { id: string; name: string }[];
-  household?: DayDetailHousehold;
-  mySlots: readonly MealSlot[];
-  /** Para saber si un plato compartido fijado lo cambió esta persona o el
-   *  resto del hogar (ver `dishChangeIsMine`). */
-  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
-}) {
-  const { i18n } = useTranslation();
-  const isPast = date < todayISO();
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: direction * 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -direction * 12 }}
-      transition={{ duration: 0.2, ease: EASE }}
-    >
-      {isPast ? (
-        <div className="mt-3 rounded-2xl bg-surface p-4">
-          <p className="mb-3 text-xs font-semibold text-foreground">
-            {capitalizeFirst(
-              new Date(`${date}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              }),
-            )}
-          </p>
-          <DayDetailBody
-            date={date}
-            plan={plan}
-            log={log}
-            profile={profile}
-            householdChildren={householdChildren}
-            household={household}
-          />
-        </div>
-      ) : (
-        <DayMenu date={date} plan={plan} selectedSlots={mySlots} homePlanner={homePlanner} />
-      )}
-    </motion.div>
-  );
-}
-
-function DayMenu({
-  date,
-  plan,
-  selectedSlots,
-  homePlanner,
-}: {
-  date: string;
-  plan: MonthlyPlan | null;
-  selectedSlots: readonly MealSlot[];
-  homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
-}) {
-  const { t, i18n } = useTranslation();
-  // Mismas comidas que ve el día en su tarjeta (con los platos cambiados a mano
-  // para ese día), no la lista entera de desayunos de la semana.
-  const meals = mealsForDate(plan, date, selectedSlots);
-  // Día crudo del plan, para saber qué slots están fijados a mano (`pinned`) y
-  // no ofrecerles receta: ya se sabe qué se va a comer, así que enseñarla solo
-  // gastaría una llamada a la IA sin aportar nada — salvo que el cambio lo
-  // haya hecho otra persona del hogar (`isPinnedByViewer`).
-  const day = planForDate(plan, date)?.day ?? null;
-  const weekday = weekdayIndex(date);
-  const homeCtx: HouseholdPinContext | null = homePlanner ? { ...homePlanner, weekday } : null;
-  const label = capitalizeFirst(
-    new Date(`${date}T00:00:00`).toLocaleDateString(dateLocale(i18n.language), {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    }),
-  );
-
-  return (
-    <div className="surface-card animate-sheet-up mt-3 p-4">
-      <div className="flex items-center gap-2">
-        <ChevronDown className="h-4 w-4 text-primary-ink" />
-        <h3 className="text-sm font-semibold">{label}</h3>
-      </div>
-      {meals.length ? (
-        <div className="mt-3 space-y-2">
-          {meals.map((m) => (
-            <Field
-              key={m.slot}
-              label={t(`moments.${m.moment}`, { defaultValue: m.moment })}
-              value={m.idea}
-              note={offListNote(m.off, t)}
-              recipeMonth={date.slice(0, 7)}
-              pinned={isPinnedByViewer(day, m.slot, homeCtx)}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-muted-foreground">{t("hoy.week.noMenu")}</p>
-      )}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  note,
-  recipeMonth,
-  pinned,
-}: {
-  label: string;
-  value: string;
-  note?: string | null;
-  /** Si se pasa, el valor es un plato y se ofrece "Ver receta" para ese mes
-   *  (salvo que `pinned` sea true). */
-  recipeMonth?: string;
-  /** Este plato se eligió a mano (`setPlanMeal`): no se ofrece receta. */
-  pinned?: boolean;
-}) {
-  const bgStyle = recipeMonth ? foodBgStyle(value) : {};
-  return (
-    <div className="rounded-xl bg-secondary/60 p-3" style={bgStyle}>
-      <div className="flex items-start gap-2.5">
-        {recipeMonth ? <DishCategoryIcon dish={value} size={16} className="mt-0.5" /> : null}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-num text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              {label}
-            </span>
-            {recipeMonth ? <FoodCategoryBadge dish={value} /> : null}
-          </div>
-          <p className="mt-0.5 text-sm text-foreground">{value}</p>
-          {note ? (
-            <span className="mt-1.5 inline-block rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-medium text-foreground">
-              {note}
-            </span>
-          ) : null}
-          {recipeMonth && !pinned ? <DishRecipe dish={value} month={recipeMonth} /> : null}
-        </div>
-      </div>
-    </div>
   );
 }
