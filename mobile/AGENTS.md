@@ -70,6 +70,13 @@ propósito. Cualquier cambio de configuración nativa (permisos, capacidades, ic
 en `app.json` o en un config plugin: lo que se edite dentro de `ios/` se pierde en el siguiente
 prebuild.
 
+**El icono del widget tampoco se versiona.** `@bacons/apple-targets` escribe en cada prebuild
+`targets/widget/Assets.xcassets/AppIcon.appiconset/` a partir del `icon` de
+[targets/widget/expo-target.config.js](targets/widget/expo-target.config.js) (hoy, el icono de la
+app): es un derivado que cae fuera de `ios/`, así que tiene su propia línea en `.gitignore`.
+Versionado, se quedaba con el icono viejo cada vez que cambiaba `assets/icon.png` y todo prebuild
+dejaba 15 PNG modificados. Para cambiar el icono del widget se cambia `icon`, no los PNG.
+
 CocoaPods hace falta para compilar. Instálalo con `brew install cocoapods`, no con el
 `gem install` que intenta Expo por su cuenta: ese usa el Ruby del sistema y se queda pidiendo
 permisos de administrador.

@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Icono del widget: @bacons/apple-targets lo regenera en cada prebuild a partir de
+# `icon` de targets/widget/expo-target.config.js (ver AGENTS.md)
+/targets/widget/Assets.xcassets/AppIcon.appiconset/
