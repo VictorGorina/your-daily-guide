@@ -1,37 +1,14 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import {
-  AlertCircle,
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Info,
-  Pencil,
-  Save,
-  Send,
-  SkipForward,
-  Sparkles,
-  X,
-} from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Alert } from "react-native";
 
-import { DictateButton } from "../../components/dictate-button";
-import { DictationField, DictationWave } from "../../components/dictation-field";
+import { ChatPanel } from "../../components/onboarding/chat-panel";
+import { IntroStep } from "../../components/onboarding/intro-step";
+import { SavedPanel } from "../../components/onboarding/saved-panel";
+import { StageIndex } from "../../components/onboarding/stage-index";
+import { SummaryPanel } from "../../components/onboarding/summary-panel";
 import { RegionStep } from "../../components/region-step";
 import { apiPost } from "../../lib/api";
 import { ageFromDOB } from "../../lib/age";
@@ -47,7 +24,6 @@ import {
   type FlatNode,
   formatDatePretty,
   GAP_TYPE,
-  gapHelpKey,
   gapLabelKey,
   hintKey,
   KEY_FIELDS,
@@ -63,9 +39,8 @@ import {
   type Question,
   questionKey,
   SCREENS,
-  screenSubtitleKey,
-  screenTitleKey,
 } from "../../lib/onboarding-script";
+import { useOnboardingDraft } from "../../lib/use-onboarding-draft";
 import { useCurrencySymbol } from "../../lib/use-money";
 import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
@@ -87,35 +62,15 @@ import { resolveDeviceTimeZone } from "../../lib/zoned-date";
  *
  * El guion (preguntas, chips, follow-ups, validaciones) vive en
  * `lib/onboarding-script.ts` y su texto en el catálogo (`onboarding.*`).
+ *
+ * La pantalla lleva el recorrido (navegación, validación y guardado); el
+ * progreso guardado vive en `useOnboardingDraft` y lo que se pinta, en
+ * `components/onboarding/`.
  */
 
 type Draft = OnboardingDraft;
 
-// v2: el recorte de preguntas (issue 06) desplaza las claves posicionales `si-qi`,
-// así que un borrador guardado con el guion anterior restauraría respuestas en la
-// pregunta equivocada. Subir la versión descarta esos borradores a medias.
-// v3: la pregunta de ver cifras (ticket 01 de `precision-nutricional`) entra en
-// "Hacia dónde vamos" y desplaza las de detrás.
-// v4: "Hacia dónde vamos" pasa al peso objetivo (como la web) y la pregunta de
-// sugerencias de comportamiento sale de "Cómo te acompaño": cambian las claves de
-// las dos pantallas.
-const DRAFT_STORAGE_KEY = "peppers-onboarding-progress-v4";
-
 type Panel = "chat" | "index" | "resumen" | "saved";
-
-// Colores de icono (RN no entiende currentColor): el tema móvil es monocolor
-// naranja, ver tailwind.config.js.
-// Contraste AA (ticket 33): el naranja como icono es el tostado (primary-ink)
-// y lo que va SOBRE el naranja, oscuro; sobre verde u oscuro sigue claro.
-const C = {
-  primary: "#a84a17",
-  onPrimary: "#3e3d39",
-  onDark: "#fbfaf7",
-  fg: "#3e3d39",
-  muted: "#6b6256",
-  success: "#4cae64",
-  danger: "#b8433b",
-};
 
 export default function Onboarding() {
   const router = useRouter();
@@ -127,11 +82,21 @@ export default function Onboarding() {
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const [regionDone, setRegionDone] = useState(false);
-  const [introDismissed, setIntroDismissed] = useState(false);
 
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [skipped, setSkipped] = useState<Record<string, true>>({});
-  const [curKey, setCurKey] = useState("0-0");
+  const {
+    answers,
+    setAnswers,
+    skipped,
+    setSkipped,
+    curKey,
+    setCurKey,
+    dob,
+    setDob,
+    introDismissed,
+    setIntroDismissed,
+    hydrated,
+    clearDraft,
+  } = useOnboardingDraft();
   const [view, setView] = useState<Panel>("chat");
   const [stageEnd, setStageEnd] = useState(false);
 
@@ -144,10 +109,6 @@ export default function Onboarding() {
   const [gapValues, setGapValues] = useState<Record<string, string>>({});
   const [gapMissing, setGapMissing] = useState<GapKey[]>([]);
   const [reviewDraft, setReviewDraft] = useState<Draft | null>(null);
-  const [dob, setDob] = useState<string | null>(null);
-  const [hydrated, setHydrated] = useState(false);
-
-  const scrollRef = useRef<ScrollView | null>(null);
 
   const flat = useMemo(() => buildFlat(answers), [answers]);
   const curIndex = flat.findIndex((n) => n.key === curKey);
@@ -155,49 +116,7 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (curIndex < 0 && flat.length) setCurKey(flat[0]!.key);
-  }, [curIndex, flat]);
-
-  // Hidratación del progreso guardado ("Guardar y salir"): se lee una vez al
-  // montar. Bloqueamos el render hasta tenerlo para no parpadear el chat vacío.
-  useEffect(() => {
-    let alive = true;
-    AsyncStorage.getItem(DRAFT_STORAGE_KEY)
-      .then((raw) => {
-        if (!alive || !raw) return;
-        const saved = JSON.parse(raw) as {
-          answers?: Record<string, string>;
-          skipped?: Record<string, true>;
-          curKey?: string;
-          dob?: string | null;
-          introDismissed?: boolean;
-        };
-        if (saved.answers) setAnswers(saved.answers);
-        if (saved.skipped) setSkipped(saved.skipped);
-        if (saved.curKey) setCurKey(saved.curKey);
-        if (saved.dob) setDob(saved.dob);
-        if (saved.introDismissed) setIntroDismissed(true);
-      })
-      .catch(() => {
-        /* progreso corrupto: se empieza de cero */
-      })
-      .finally(() => {
-        if (alive) setHydrated(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Persistencia del progreso: se borra al completar el onboarding con éxito.
-  useEffect(() => {
-    if (!hydrated) return;
-    AsyncStorage.setItem(
-      DRAFT_STORAGE_KEY,
-      JSON.stringify({ answers, skipped, curKey, dob, introDismissed }),
-    ).catch(() => {
-      /* almacenamiento bloqueado: no es crítico */
-    });
-  }, [answers, skipped, curKey, dob, introDismissed, hydrated]);
+  }, [curIndex, flat, setCurKey]);
 
   // --- Derivados ---------------------------------------------------------------
 
@@ -460,7 +379,7 @@ export default function Onboarding() {
       await qc.refetchQueries({ queryKey: ["profile"] });
       qc.removeQueries({ queryKey: ["today"] });
       qc.removeQueries({ queryKey: ["logs"] });
-      AsyncStorage.removeItem(DRAFT_STORAGE_KEY).catch(() => {});
+      clearDraft();
 
       // El plan no se genera aquí: un mes se genera una vez y tras la
       // conversación con el coach (`MonthIntakeChat` en Plan), también el
@@ -539,599 +458,84 @@ export default function Onboarding() {
   }
 
   if (!introDismissed) {
-    return (
-      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-        <View className="flex-1 items-center justify-center px-8">
-          <Sparkles size={40} color={C.primary} />
-          <Text className="mt-6 text-center font-heading text-2xl text-foreground">
-            {t("onboarding.intro.title")}
-          </Text>
-          <Text className="mt-4 max-w-[300px] text-center text-sm leading-relaxed text-muted-foreground">
-            {t("onboarding.intro.body", { count: total })}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setIntroDismissed(true)}
-            className="mt-8 flex-row items-center gap-2 rounded-full bg-primary px-8 py-3.5 active:opacity-90"
-          >
-            <Text className="text-sm font-sans-semibold text-primary-foreground">
-              {t("onboarding.intro.start")}
-            </Text>
-            <ArrowRight size={16} color={C.onPrimary} />
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
+    return <IntroStep total={total} onStart={() => setIntroDismissed(true)} />;
   }
 
-  // --- Overlay: índice ---
   if (view === "index") {
     return (
-      <Shell>
-        <OverlayHeader
-          eyebrow={t("onboarding.index.eyebrow")}
-          title={t("onboarding.index.title")}
-          closeLabel={t("onboarding.chat.close")}
-          onClose={closeToChat}
-        />
-        <Text className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
-          {t("onboarding.index.body")}
-        </Text>
-        <ScrollView className="mt-4 flex-1" contentContainerClassName="gap-2 pb-2">
-          {SCREENS.map((s, si) => {
-            const nodes = flat.filter((n) => n.si === si);
-            const doneN = nodes.filter((n) => answers[n.key] !== undefined).length;
-            const complete = doneN === nodes.length;
-            const isCur = si === cur.si;
-            const first = nodes[0];
-            return (
-              <Pressable
-                accessibilityRole="button"
-                key={s.id}
-                onPress={() => first && goTo(first.key)}
-                className="flex-row items-center gap-3.5 rounded-2xl bg-surface p-4 active:opacity-90"
-              >
-                <View
-                  className={`h-9 w-9 items-center justify-center rounded-full ${
-                    complete ? "bg-success" : isCur ? "bg-primary" : "bg-secondary"
-                  }`}
-                >
-                  {complete ? (
-                    <Check size={16} color={C.onDark} />
-                  ) : (
-                    <Text
-                      className={`font-mono text-xs ${
-                        isCur ? "text-primary-foreground" : "text-muted-foreground"
-                      }`}
-                    >
-                      {si + 1}
-                    </Text>
-                  )}
-                </View>
-                <View className="flex-1">
-                  <Text
-                    className="text-[15px] font-sans-semibold text-foreground"
-                    numberOfLines={1}
-                  >
-                    {t(screenTitleKey(s))}
-                  </Text>
-                  <Text className="font-mono text-[10.5px] text-muted-foreground">
-                    {t(screenSubtitleKey(s)).toLowerCase()} · {doneN}/{nodes.length}
-                  </Text>
-                </View>
-                <ChevronRight size={16} color={C.muted} />
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void openResumen()}
-          className="mt-3 flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90"
-        >
-          <Text className="text-sm font-sans-semibold text-primary-foreground">
-            {t("onboarding.index.seeSummary")}
-          </Text>
-          <ArrowRight size={16} color={C.onPrimary} />
-        </Pressable>
-      </Shell>
+      <StageIndex
+        flat={flat}
+        answers={answers}
+        currentStage={cur.si}
+        onClose={closeToChat}
+        onGoTo={goTo}
+        onSummary={() => void openResumen()}
+      />
     );
   }
 
-  // --- Overlay: resumen ---
   if (view === "resumen") {
-    const pending = flat.filter((n) => skipped[n.key]);
-    const sections = SCREENS.map((s, si) => ({
-      id: s.id,
-      title: t(screenTitleKey(s)),
-      items: flat.filter((n) => n.si === si && answers[n.key] !== undefined),
-    })).filter((s) => s.items.length);
-    const emptyResumen = pending.length === 0 && sections.length === 0;
-    const canConfirm = allAnswered;
-
     return (
-      <Shell>
-        <OverlayHeader
-          eyebrow={t("onboarding.summary.eyebrow", { done: answeredCount, total })}
-          title={t("onboarding.summary.title")}
-          closeLabel={t("onboarding.chat.close")}
-          onClose={closeToChat}
-        />
-        <Text className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
-          {t("onboarding.summary.body")}
-        </Text>
-
-        <ScrollView className="mt-4 flex-1" contentContainerClassName="gap-5 pb-2">
-          {canConfirm ? (
-            <View className="gap-3 rounded-3xl bg-surface p-4">
-              <Text className="text-sm font-sans-medium text-foreground">
-                {t("onboarding.summary.keyData")}
-              </Text>
-              {KEY_FIELDS.map((key) => (
-                <View key={key}>
-                  <View className="flex-row items-center gap-1.5">
-                    <Text className="text-xs text-muted-foreground">{t(gapLabelKey(key))}</Text>
-                    {gapMissing.includes(key) ? (
-                      <View className="rounded-full bg-primary-soft px-2 py-0.5">
-                        <Text className="text-[10px] font-sans-medium text-primary-ink">
-                          {t("onboarding.summary.missing")}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <TextInput
-                    value={gapValues[key] ?? ""}
-                    onChangeText={(t) => setGapValues((v) => ({ ...v, [key]: t }))}
-                    keyboardType={GAP_TYPE[key] === "number" ? "decimal-pad" : "default"}
-                    placeholder={GAP_TYPE[key] === "time" ? "HH:MM" : ""}
-                    placeholderTextColor={C.muted}
-                    className="mt-1 h-12 rounded-2xl bg-muted px-4 text-sm text-foreground"
-                  />
-                  <Text className="mt-1 text-[11px] text-muted-foreground">
-                    {t(gapHelpKey(key))}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {pending.length ? (
-            <View className="gap-2.5 rounded-3xl bg-primary-soft p-4">
-              <Text className="text-[13px] font-sans-semibold text-foreground">
-                {t("onboarding.summary.pending", { count: pending.length })}
-              </Text>
-              {pending.map((n) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={n.key}
-                  onPress={() => goTo(n.key)}
-                  className="flex-row items-center gap-3 rounded-2xl bg-surface p-3.5 active:opacity-90"
-                >
-                  <Text className="flex-1 text-xs leading-relaxed text-muted-foreground">
-                    {qText(n)}
-                  </Text>
-                  <Text className="text-xs font-sans-semibold text-primary-ink">
-                    {t("onboarding.summary.answer")}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
-          {sections.map((s) => (
-            <View key={s.id} className="gap-2">
-              <Text className="px-1 font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-                {s.title}
-              </Text>
-              {s.items.map((n) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={n.key}
-                  onPress={() => goTo(n.key)}
-                  className="rounded-3xl bg-surface p-4 active:opacity-90"
-                >
-                  <Text className="text-xs leading-relaxed text-muted-foreground">{qText(n)}</Text>
-                  <View className="mt-1.5 flex-row items-start justify-between gap-3">
-                    <Text className="flex-1 text-sm text-foreground">{answers[n.key]}</Text>
-                    <Pencil size={14} color={C.muted} />
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          ))}
-
-          {emptyResumen ? (
-            <Text className="px-1 py-6 text-[13px] leading-relaxed text-muted-foreground">
-              {t("onboarding.summary.empty")}
-            </Text>
-          ) : null}
-        </ScrollView>
-
-        {error ? (
-          <View className="mb-2 flex-row items-start gap-1.5">
-            <AlertCircle size={14} color={C.danger} />
-            <Text className="flex-1 text-xs text-destructive">{error}</Text>
-          </View>
-        ) : null}
-        {!canConfirm && requiredPending.length ? (
-          <View className="mb-2 flex-row items-start gap-1.5">
-            <Info size={14} color={C.primary} />
-            <Text className="flex-1 text-xs text-muted-foreground">
-              {t("onboarding.summary.remaining", { count: requiredPending.length })}
-            </Text>
-          </View>
-        ) : null}
-
-        <Pressable
-          accessibilityRole="button"
-          disabled={saving}
-          onPress={() => (canConfirm ? void confirmAndSave() : closeToChat())}
-          className="flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-50"
-        >
-          <Text className="text-sm font-sans-semibold text-primary-foreground">
-            {t(
-              saving
-                ? "onboarding.summary.saving"
-                : canConfirm
-                  ? "onboarding.summary.confirm"
-                  : "onboarding.summary.backToChat",
-            )}
-          </Text>
-          {saving ? null : canConfirm ? (
-            <Check size={16} color={C.onPrimary} />
-          ) : (
-            <ArrowRight size={16} color={C.onPrimary} />
-          )}
-        </Pressable>
-      </Shell>
+      <SummaryPanel
+        flat={flat}
+        answers={answers}
+        skipped={skipped}
+        answeredCount={answeredCount}
+        total={total}
+        canConfirm={allAnswered}
+        requiredPendingCount={requiredPending.length}
+        gapMissing={gapMissing}
+        gapValues={gapValues}
+        onGapChange={(key, text) => setGapValues((v) => ({ ...v, [key]: text }))}
+        qText={qText}
+        error={error}
+        saving={saving}
+        onClose={closeToChat}
+        onGoTo={goTo}
+        onConfirm={() => void confirmAndSave()}
+      />
     );
   }
 
-  // --- Overlay: guardado ---
   if (view === "saved") {
     return (
-      <Shell>
-        <View className="flex-1 items-center justify-center gap-6">
-          <View className="h-24 w-24 items-center justify-center">
-            <View className="absolute h-24 w-24 rounded-full bg-primary/10" />
-            <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
-              <Check size={24} color={C.primary} />
-            </View>
-          </View>
-          <Text className="font-display text-2xl text-foreground">
-            {t("onboarding.saved.title")}
-          </Text>
-          <Text className="max-w-[300px] text-center text-sm leading-relaxed text-muted-foreground">
-            {t("onboarding.saved.body", { done: answeredCount, total })}
-          </Text>
-          <View className="w-full max-w-[320px] gap-2.5">
-            <Pressable
-              accessibilityRole="button"
-              onPress={closeToChat}
-              className="items-center rounded-full bg-primary py-4 active:opacity-90"
-            >
-              <Text className="text-sm font-sans-semibold text-primary-foreground">
-                {t("onboarding.saved.continue")}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => void openResumen()}
-              className="items-center rounded-full bg-surface py-4 active:opacity-90"
-            >
-              <Text className="text-sm font-sans-semibold text-muted-foreground">
-                {t("onboarding.saved.review")}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </Shell>
+      <SavedPanel
+        answeredCount={answeredCount}
+        total={total}
+        onContinue={closeToChat}
+        onReview={() => void openResumen()}
+      />
     );
   }
 
-  // --- Pantalla: chat ---
-  const stage = SCREENS[cur.si]!;
-  const screenNodes = flat.filter((n) => n.si === cur.si);
-  const posInScreen = screenNodes.findIndex((n) => n.key === cur.key);
-  const visibleTurns = screenNodes.slice(0, posInScreen + 1);
-  const currentQ = displayQ(cur);
-
-  const segments = SCREENS.map((_, si) => {
-    const nodes = flat.filter((n) => n.si === si);
-    const done2 = nodes.filter((n) => answers[n.key] !== undefined).length;
-    const pct = nodes.length ? done2 / nodes.length : 0;
-    return si === cur.si ? Math.max(pct, 0.08) : pct;
-  });
-
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View className="flex-1 px-5 pt-2">
-          <View className="flex-row items-center gap-2">
-            <Pressable
-              accessibilityRole="button"
-              onPress={back}
-              disabled={curIndex <= 0 && !stageEnd}
-              accessibilityLabel={t("onboarding.chat.back")}
-              className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80 disabled:opacity-40"
-            >
-              <ArrowLeft size={18} color={C.fg} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setView("index")}
-              className="h-11 flex-1 flex-row items-center justify-between rounded-full bg-surface px-4 active:opacity-90"
-            >
-              <View className="flex-1">
-                <Text className="font-mono text-[9.5px] uppercase tracking-[1px] text-muted-foreground">
-                  {t("onboarding.chat.stage", { n: cur.si + 1, total: SCREENS.length })}
-                </Text>
-                <Text
-                  className="text-[13.5px] font-sans-semibold text-foreground"
-                  numberOfLines={1}
-                >
-                  {t(screenTitleKey(stage))}
-                </Text>
-              </View>
-              <ChevronDown size={16} color={C.muted} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setView("saved")}
-              accessibilityLabel={t("onboarding.chat.saveAndExit")}
-              className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80"
-            >
-              <Save size={18} color={C.muted} />
-            </Pressable>
-          </View>
-
-          <View className="mt-3.5 flex-row gap-1.5">
-            {segments.map((w, i) => (
-              <View key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-                <View
-                  className="h-1.5 rounded-full bg-primary"
-                  style={{ width: `${Math.round(w * 100)}%` as `${number}%` }}
-                />
-              </View>
-            ))}
-          </View>
-          <View className="mt-2 flex-row items-baseline justify-between">
-            <Text className="font-mono text-[11px] text-muted-foreground">
-              {t("onboarding.chat.question", { n: Math.max(1, curIndex + 1), total })}
-            </Text>
-            <Text className="font-mono text-[11px] text-muted-foreground">
-              {t("onboarding.chat.left", { count: remaining })}
-            </Text>
-          </View>
-
-          <ScrollView
-            ref={scrollRef}
-            className="mt-5 flex-1"
-            contentContainerClassName="gap-3 pb-2"
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-            keyboardShouldPersistTaps="handled"
-          >
-            {visibleTurns.map((n) => (
-              <View key={n.key} className="gap-3">
-                <View className="items-start">
-                  <View className="max-w-[85%] rounded-3xl bg-surface px-4 py-3">
-                    <Text className="text-sm leading-relaxed text-foreground">{qText(n)}</Text>
-                  </View>
-                </View>
-                {answers[n.key] !== undefined ? (
-                  <View className="items-end">
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => goTo(n.key)}
-                      className="max-w-[85%] flex-row items-center gap-2 rounded-3xl bg-primary px-4 py-3 active:opacity-90"
-                    >
-                      <Text className="text-sm leading-relaxed text-primary-foreground">
-                        {answers[n.key]}
-                      </Text>
-                      <Pencil size={14} color={C.onPrimary} />
-                    </Pressable>
-                  </View>
-                ) : skipped[n.key] ? (
-                  <View className="items-end">
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => goTo(n.key)}
-                      className="flex-row items-center gap-2 rounded-full bg-secondary px-4 py-2.5 active:opacity-80"
-                    >
-                      <SkipForward size={14} color={C.muted} />
-                      <Text className="text-[13px] font-sans-medium text-muted-foreground">
-                        {t("onboarding.chat.skipped")}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-              </View>
-            ))}
-          </ScrollView>
-
-          {error ? (
-            <View className="mb-2 flex-row items-start gap-2 rounded-2xl bg-primary-soft px-3.5 py-2.5">
-              <Info size={14} color={C.primary} />
-              <Text className="flex-1 text-xs text-foreground">{error}</Text>
-            </View>
-          ) : null}
-
-          {stageEnd ? (
-            <View className="mb-2 gap-3.5 rounded-3xl bg-surface p-4">
-              <Text className="text-sm leading-relaxed text-muted-foreground">
-                {t("onboarding.chat.stageDone")}{" "}
-                <Text className="font-sans-medium text-foreground">
-                  {t(screenSubtitleKey(stage)).toLowerCase()}
-                </Text>
-                .{" "}
-                {isLastStage
-                  ? t("onboarding.chat.lastStage")
-                  : t("onboarding.chat.nextStage", {
-                      stage: t(screenSubtitleKey(SCREENS[cur.si + 1]!)).toLowerCase(),
-                    })}
-              </Text>
-              <View className="flex-row gap-2.5">
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={back}
-                  className="flex-row items-center justify-center gap-1.5 rounded-full bg-secondary px-4 py-3 active:opacity-80"
-                >
-                  <ArrowLeft size={15} color={C.muted} />
-                  <Text className="text-[13.5px] font-sans-semibold text-muted-foreground">
-                    {t("onboarding.chat.review")}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={advanceStage}
-                  className="flex-1 flex-row items-center justify-center gap-2 rounded-full bg-primary py-3 active:opacity-90"
-                >
-                  <Text className="text-[13.5px] font-sans-semibold text-primary-foreground">
-                    {t(isLastStage ? "onboarding.index.seeSummary" : "onboarding.chat.continue")}
-                  </Text>
-                  <ArrowRight size={16} color={C.onPrimary} />
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <View className="mb-2 gap-2.5">
-              {currentQ.chips?.length ? (
-                <View className="flex-row flex-wrap gap-2">
-                  {currentQ.chips.map((c) => {
-                    const active = selectedChips.has(c);
-                    return (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        key={c}
-                        onPress={() => toggleChip(c)}
-                        className={`min-h-[44px] flex-row items-center gap-1.5 rounded-full px-4 active:opacity-80 ${
-                          active ? "bg-foreground" : "bg-surface"
-                        }`}
-                      >
-                        {active ? <Check size={14} color={C.onDark} /> : null}
-                        <Text
-                          className={`text-[13.5px] ${
-                            active
-                              ? "font-sans-semibold text-background"
-                              : "font-sans-medium text-foreground"
-                          }`}
-                        >
-                          {chipLabel(currentQ, c)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : null}
-
-              <DictationField>
-                <View className="rounded-3xl bg-surface p-2">
-                  <View className="relative">
-                    <TextInput
-                      editable={!saving}
-                      value={value}
-                      onChangeText={setValue}
-                      multiline={!currentQ.dateInput}
-                      keyboardType={currentQ.dateInput ? "numbers-and-punctuation" : "default"}
-                      onSubmitEditing={currentQ.dateInput ? () => commit(value) : undefined}
-                      placeholder={
-                        saving
-                          ? t("onboarding.chat.placeholderSaving")
-                          : currentQ.dateInput
-                            ? t("onboarding.chat.datePlaceholder")
-                            : (qHint(currentQ) ?? t("onboarding.chat.placeholder"))
-                      }
-                      placeholderTextColor={C.muted}
-                      className="min-h-[44px] px-2 py-2 text-sm text-foreground"
-                      textAlignVertical="top"
-                    />
-                    <DictationWave />
-                  </View>
-                  <View className="flex-row items-center justify-between px-1">
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={skipCurrent}
-                      disabled={saving}
-                      className="flex-row items-center gap-1.5 rounded-full px-2.5 py-1.5 active:opacity-70"
-                    >
-                      <SkipForward size={14} color={C.muted} />
-                      <Text className="text-xs font-sans-medium text-muted-foreground">
-                        {t("onboarding.chat.skip")}
-                      </Text>
-                    </Pressable>
-                    <View className="flex-row items-center gap-2">
-                      {!currentQ.dateInput ? (
-                        <DictateButton
-                          onText={(t) => setValue((v) => (v.trim() ? `${v.trim()} ${t}` : t))}
-                        />
-                      ) : null}
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => commit(value)}
-                        disabled={saving || !value.trim()}
-                        accessibilityLabel={t("onboarding.chat.send")}
-                        className={`h-11 w-11 items-center justify-center rounded-full bg-primary ${
-                          saving || !value.trim() ? "opacity-40" : ""
-                        }`}
-                      >
-                        <Send size={16} color={C.onPrimary} />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              </DictationField>
-            </View>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
-}
-
-function Shell({ children }: { children: ReactNode }) {
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View className="flex-1 px-5 pt-2">{children}</View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
-}
-
-function OverlayHeader({
-  eyebrow,
-  title,
-  closeLabel,
-  onClose,
-}: {
-  eyebrow: string;
-  title: string;
-  closeLabel: string;
-  onClose: () => void;
-}) {
-  return (
-    <View className="flex-row items-center justify-between gap-3">
-      <View className="flex-1">
-        <Text className="font-mono text-[9.5px] uppercase tracking-[1px] text-muted-foreground">
-          {eyebrow}
-        </Text>
-        <Text className="mt-0.5 font-display text-[22px] text-foreground">{title}</Text>
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onClose}
-        accessibilityLabel={closeLabel}
-        className="h-11 w-11 items-center justify-center rounded-full bg-surface active:opacity-80"
-      >
-        <X size={18} color={C.fg} />
-      </Pressable>
-    </View>
+    <ChatPanel
+      flat={flat}
+      answers={answers}
+      skipped={skipped}
+      cur={cur}
+      curIndex={curIndex}
+      total={total}
+      remaining={remaining}
+      currentQ={displayQ(cur)}
+      stageEnd={stageEnd}
+      isLastStage={isLastStage}
+      qText={qText}
+      qHint={qHint}
+      chipLabel={chipLabel}
+      selectedChips={selectedChips}
+      value={value}
+      setValue={setValue}
+      error={error}
+      saving={saving}
+      onBack={back}
+      onOpenIndex={() => setView("index")}
+      onSaveAndExit={() => setView("saved")}
+      onGoTo={goTo}
+      onAdvanceStage={advanceStage}
+      onToggleChip={toggleChip}
+      onCommit={commit}
+      onSkip={skipCurrent}
+    />
   );
 }
