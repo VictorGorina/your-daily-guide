@@ -15,15 +15,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  AppState,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -55,12 +47,9 @@ import {
   impulsoFrom,
   fetchTodayLog,
   monthISO,
-  patchTodayHabits,
-  saveProfile,
   todayISO,
   updateTodayLog,
   weeklyTrendFrom,
-  type DailyGuide,
   type DailyLog,
   type MealStatus,
   type Profile,
@@ -68,10 +57,6 @@ import {
 import {
   addMacros,
   donePendingMeals,
-  guideMeals,
-  guideReuse,
-  mealsToRecalculate,
-  mergeGuide,
   showsNutritionNumbers,
   sumDoneMacros,
   ZERO_MACROS,
@@ -97,8 +82,6 @@ import {
   mealsForDate,
   offListNote,
   planForDate,
-  reconcileHabits,
-  sameHabits,
   suggestedDish,
   type HouseholdPinContext,
   type MealSlot,
@@ -109,9 +92,11 @@ import { cleanDayAdjustment, dayBalance } from "../../lib/day-balance";
 import { scheduleDaySettle, useDaySettle } from "../../lib/day-settle";
 import { cleanDayExercise, onlyRoutineExercise } from "../../lib/exercise";
 import { cleanDaySnacks, snackTotals } from "../../lib/snacks";
+import { useDayReconcile } from "../../lib/use-day-reconcile";
+import { useGuideAutoGeneration, useGuideTargetsSync } from "../../lib/use-guide-auto-generation";
 import { useMealSwap } from "../../lib/use-meal-swap";
+import { useTimezoneSync } from "../../lib/use-timezone-sync";
 import { addDaysISO, monthsOfWeek, weekDates, weekStartOf } from "../../lib/week-nav";
-import { resolveDeviceTimeZone } from "../../lib/zoned-date";
 
 // Misma curva que el resto de la app (docs/design-guidelines.md §7) y que
 // `week-pager.tsx`, para que el panel del día y la tira se muevan igual.
@@ -154,36 +139,10 @@ function tintBg(accent: string, pct: number): string {
   return `rgba(${r}, ${g}, ${b}, ${pct / 100})`;
 }
 
-// La guía del día se pide sola al abrir Hoy si falta o está incompleta. Dos
-// salvaguardas para que ese reintento automático no se convierta en spam:
-//   1. Si falla, no se avisa (`silent`): el aviso solo sale al pulsar "Generar"
-//      a mano. Antes cada fallo encolaba un `Alert`, y como iOS los muestra de
-//      uno en uno, un montaje repetido de Hoy (Fast Refresh, volver a la
-//      pestaña, el backend caído un rato) dejaba una cola de avisos idénticos
-//      imposible de cerrar.
-//   2. No se relanza sola más de una vez por minuto entre montajes (variable a
-//      nivel de módulo, no por montaje), para no martillear la IA.
-const AUTO_GUIDE_MIN_INTERVAL_MS = 60_000;
-const AUTO_GUIDE_BACKOFF_MS = 600_000;
-let lastAutoGuideAttempt = 0;
-let lastAutoGuideFailed = false;
-/** Por qué se pidió la guía la última vez (ver `guideNeed`). */
-let lastAutoGuideKey = "";
-// Platos que quedaron "calculando" (ticket 13 de `precision-nutricional`, D13):
-// se reintentan al abrir Hoy, al volver a la app y cada 2 minutos mientras está
-// abierta, como mucho 5 veces seguidas; después, en el siguiente arranque (el
-// contador vive en el módulo). Cada intento solo descompone lo que falta
-// (`macrosOnly` + `reuse`). Mismo criterio que la web.
-const CALC_RETRY_MS = 120_000;
-const CALC_MAX_ATTEMPTS = 5;
-let calcAttempts = 0;
-let lastCalcAttempt = 0;
-
 export default function Hoy() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
-  const [generating, setGenerating] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -396,17 +355,7 @@ export default function Hoy() {
     }
   }, [profileQ.isSuccess, profileQ.isFetching, profile, router]);
 
-  // Mantiene `profiles.timezone` al día (viajes, o perfiles anteriores a la
-  // feature) para que el push del servidor use la hora local. Solo escribe si
-  // cambia.
-  useEffect(() => {
-    if (!profile?.onboarding_completed) return;
-    const deviceTz = resolveDeviceTimeZone();
-    if (deviceTz && profile.timezone !== deviceTz) {
-      // Best-effort: si falla (migración aún sin aplicar) se reintenta luego.
-      saveProfile({ timezone: deviceTz }).catch(() => {});
-    }
-  }, [profile?.onboarding_completed, profile?.timezone]);
+  useTimezoneSync(profile);
 
   const save = useMutation({
     mutationFn: (patch: Partial<DailyLog>) => updateTodayLog(patch),
@@ -419,121 +368,11 @@ export default function Hoy() {
 
   const guide = today?.guide ?? null;
 
-  const requestGuide = async ({
-    silent = false,
-    macrosOnly = false,
-  }: { silent?: boolean; macrosOnly?: boolean } = {}) => {
-    setGenerating(true);
-    try {
-      const { dishMacros: _none, ...g } = await apiPost<DailyGuide & { dishMacros?: unknown }>(
-        "guide",
-        {
-          // Con lo que se comió de verdad en cada "comí distinto" (ticket 17).
-          meals: guideMeals(
-            todayMeals.map((m) => ({ moment: m.moment, idea: m.idea })),
-            today?.habits,
-          ),
-          // Lo que ya tiene cifra no se vuelve a descomponer.
-          reuse: guideReuse(today?.guide?.mealMacros, today?.habits),
-          macrosOnly,
-          today: today0,
-        },
-      );
-      // Solo cifras: el texto de la guía se queda como estaba.
-      const fresh: DailyGuide =
-        macrosOnly && today?.guide
-          ? { ...today.guide, macroEstimate: g.macroEstimate, mealMacros: g.mealMacros }
-          : g;
-      // Si la generación vuelve con el texto de respaldo y sin cifras, se
-      // conservan las que ya tuviera el día: regenerar nunca debe dejar la
-      // barra de macros peor de como estaba (ver `mergeGuide`).
-      await updateTodayLog({ guide: mergeGuide(today?.guide, fresh) });
-      lastAutoGuideFailed = false;
-      qc.invalidateQueries({ queryKey: ["today"] });
-    } catch {
-      if (silent) {
-        lastAutoGuideFailed = true;
-      } else {
-        lastAutoGuideFailed = false;
-        Alert.alert(t("hoy.errors.coachFailed"));
-      }
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Por qué habría que (re)generar la guía, como una cadena estable. El efecto
-  // depende del MOTIVO y no del id del registro: `today.id` no cambia en todo
-  // el día y esta pantalla no se desmonta nunca (queda bajo el Stack de
-  // expo-router), así que un cambio de plato no volvía a disparar nada y la
-  // barra de macros se quedaba igual hasta pulsar "Generar" a mano.
-  const guideNeed = (() => {
-    if (!today) return "";
-    const g = today.guide;
-    if (!g || !g.meals?.length || !g.tips?.length) return "sin-guia";
-    const dishes = todayMeals.filter((m) => m.idea);
-    if (!dishes.length) return "";
-    // Guía guardada de antes de que existiera la barra de macros (o el lookup
-    // no salió): sin esto se queda sin barras para siempre.
-    if (g.macroEstimate == null || !g.mealMacros?.length) return "sin-macros";
-    // El hogar puede espejar por detrás un cambio del planificador sobre una
-    // comida compartida: el plato de hoy cambia sin pasar por `use-meal-swap`.
-    const stale = dishes.filter((m) => {
-      const cached = g.mealMacros?.find((mm) => mm.moment === m.moment);
-      return !!cached?.idea && cached.idea !== m.idea;
-    });
-    if (stale.length) return `platos:${stale.map((m) => `${m.moment}=${m.idea}`).join("|")}`;
-    // Platos que siguen "calculando" (D13): se reintentan, con su propia pauta.
-    const pending = mealsToRecalculate(g.mealMacros).filter((mm) =>
-      dishes.some((m) => m.moment === mm.moment && m.idea === mm.idea),
-    );
-    return pending.length ? `por-calcular:${pending.map((m) => m.moment).join("|")}` : "";
-  })();
-
-  // Reloj del reintento de "calculando": cada 2 minutos mientras quede algo, y
-  // al volver a la app. Solo cambia un contador; decide el efecto de abajo.
-  const recalculating = guideNeed.startsWith("por-calcular");
-  const [calcTick, setCalcTick] = useState(0);
-  const calcForceRef = useRef(true); // al abrir Hoy se intenta ya
-  useEffect(() => {
-    if (!recalculating) {
-      calcAttempts = 0;
-      return;
-    }
-    const id = setInterval(() => setCalcTick((t) => t + 1), CALC_RETRY_MS);
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      calcForceRef.current = true;
-      setCalcTick((t) => t + 1);
-    });
-    return () => {
-      clearInterval(id);
-      sub.remove();
-    };
-  }, [recalculating]);
-
-  useEffect(() => {
-    if (!guideNeed || generating) return;
-    if (guideNeed.startsWith("por-calcular")) {
-      if (calcAttempts >= CALC_MAX_ATTEMPTS) return;
-      const due = Date.now() - lastCalcAttempt >= CALC_RETRY_MS;
-      if (!due && !calcForceRef.current) return;
-      calcForceRef.current = false;
-      calcAttempts += 1;
-      lastCalcAttempt = Date.now();
-      void requestGuide({ silent: true, macrosOnly: true });
-      return;
-    }
-    const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
-    // El tope de un intento por minuto es para no repetir EL MISMO intento (el
-    // bucle de alertas de 2026-09-01). Un motivo nuevo — cambió un plato de
-    // hoy — no tiene por qué esperar al minuto del intento anterior.
-    if (guideNeed === lastAutoGuideKey && Date.now() - lastAutoGuideAttempt < cooldown) return;
-    lastAutoGuideKey = guideNeed;
-    lastAutoGuideAttempt = Date.now();
-    void requestGuide({ silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guideNeed, generating, calcTick]);
+  const { generating, requestGuide } = useGuideAutoGeneration({
+    today,
+    todayMeals,
+    date: today0,
+  });
 
   useEffect(() => {
     if (nightlyAutoOpenedRef.current || !profile?.evening_time || !today) return;
@@ -561,39 +400,9 @@ export default function Hoy() {
   // El tamaño que suele elegir en "comí distinto" (ticket 17).
   const learnedSize = learnedPortionSize(portionSizeHistory(logsQ.data ?? []));
   const weeklyTrend = weeklyTrendFrom(logsQ.data ?? []);
-  // El registro del día se casa con las comidas que esta persona planifica de
-  // verdad: `daily_logs.habits` se escribe UNA vez, al crear el día, y lo crea
-  // quien lo toque primero (abrir el chat antes que Hoy lo dejaba vacío), así
-  // que sin esto una comida descartada en el onboarding seguía saliendo aquí.
-  // Mismo criterio que la web (src/routes/_authenticated/hoy.tsx).
-  const reconciled = reconcileHabits(today?.habits, todayMeals);
-  const habits = reconciled.habits;
-  // Las comidas TAL Y COMO están guardadas, que es contra lo que se reconcilió.
-  // React Query reusa el objeto si la fila vuelve igual, así que su identidad
-  // sirve de disparador: cambia solo cuando el registro cambia de verdad.
-  const storedHabits = today?.habits;
-  // El plan y el registro del día se invalidan juntos tras un cambio de plato,
-  // pero no vuelven a la vez.
-  const settled = !todayQ.isFetching && !planQ.isFetching;
-  useEffect(() => {
-    if (!today || !reconciled.changed || !settled) return;
-    // `habits` es una única columna JSON y este camino manda la lista entera
-    // derivada de la caché, así que se escribe solo si la fila sigue siendo la
-    // que se reconcilió: si entre medias la ha tocado otro camino
-    // (`patchTodayHabits` de un cambio de plato, el lote del picoteo, la web),
-    // se abandona en vez de pisarlo. Lo reconciliado se pinta igual, y el
-    // siguiente render lo reintenta ya con datos frescos. Mismo criterio que la
-    // web (src/routes/_authenticated/hoy.tsx).
-    void patchTodayHabits((stored) => (sameHabits(stored, storedHabits) ? reconciled.habits : null))
-      .then((next) => {
-        if (!next) return;
-        qc.invalidateQueries({ queryKey: ["today"] });
-        qc.invalidateQueries({ queryKey: ["logs"] });
-      })
-      // Sin aviso: es una reparación de fondo, no una acción de la persona.
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today?.id, storedHabits, reconciled.changed, settled]);
+  // El registro del día, casado con las comidas que esta persona planifica de
+  // verdad (y reparado en segundo plano si la fila guardada no coincide).
+  const habits = useDayReconcile(today, todayMeals, !todayQ.isFetching && !planQ.isFetching);
   const doneCount = habits.filter((h) => h.done).length;
   // La barra de macros suma solo lo ya marcado como comido ("comí esto" /
   // "comí distinto"), no el menú completo del día: así deshacer una comida
@@ -621,22 +430,7 @@ export default function Hoy() {
     !planQ.data?.plan?.targetsVersion &&
     guide.macroEstimate.kcal < dayTarget.kcal * 0.85;
 
-  // La copia del objetivo en la guía de hoy se mantiene al día: es la que usa
-  // el semáforo de este día cuando ya sea pasado. Se relee la fila antes de
-  // escribir para no pisar una regeneración recién guardada. Igual que la web.
-  useEffect(() => {
-    if (!today?.guide || !dayTarget || generating) return;
-    if (today.guide.targets?.kcal === dayTarget.kcal) return;
-    void fetchTodayLog()
-      .then((fresh) => {
-        if (!fresh?.guide || fresh.guide.targets?.kcal === dayTarget.kcal) return;
-        return updateTodayLog({ guide: { ...fresh.guide, targets: dayTarget } }).then(() =>
-          qc.invalidateQueries({ queryKey: ["today"] }),
-        );
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today?.id, today?.guide?.targets?.kcal, dayTarget?.kcal, generating]);
+  useGuideTargetsSync(today, dayTarget, generating);
   const quoteIndex = quoteIndexOfTheDay();
 
   // Picoteo, deporte y cambios de plato comparten UN solo asentamiento por
