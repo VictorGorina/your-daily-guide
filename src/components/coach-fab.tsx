@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { fetchProfile } from "@/lib/daily";
 
-// El panel del coach (SDK de IA, streamdown con mermaid y shiki, las herramientas)
+// El panel del coach (SDK de IA, streamdown, las herramientas)
 // pesa más que la pantalla que lo lleva: va en su propio chunk y se monta cuando
 // el navegador queda libre o al primer toque, no antes del primer pintado
 // (ticket 17, PERF-06). Montado ya no se desmonta: la conversación y una

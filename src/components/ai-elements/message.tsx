@@ -276,11 +276,18 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 // después de los plugins de rehype, así que vale también para el HTML crudo.
 const NO_IMAGES = ["img", "picture", "source"];
 
+// Sin altura máxima (ticket 41): streamdown limita por defecto las tablas a
+// 300 px y el código a 400 px, con scroll propio. Una tabla larga del coach se
+// lee entera en el hilo, no en una caja que desplaza dentro del chat.
+const NO_MAX_HEIGHT = 0;
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn("size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0", className)}
       disallowedElements={NO_IMAGES}
+      tableMaxHeight={NO_MAX_HEIGHT}
+      codeBlockMaxHeight={NO_MAX_HEIGHT}
       {...props}
     />
   ),
