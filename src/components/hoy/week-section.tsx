@@ -1,7 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { DayDetailBody, type DayDetailHousehold } from "@/components/day-detail-sheet";
@@ -29,7 +29,6 @@ import {
   type MealSlot,
   type MonthlyPlan,
 } from "@/lib/plan-shared";
-import { useLatest } from "@/lib/use-latest";
 import { monthsOfWeek, weekDates, weekStartOf } from "@/lib/week-nav";
 
 // Misma curva que el resto de la app (docs/design-guidelines.md §7) y que
@@ -111,14 +110,15 @@ export function WeekSection({
     setOpenDay(d);
   };
   // Plegar el panel del día si deja de pertenecer a la semana visible (p. ej.
-  // tras deslizar a otra semana con el día abierto). El día abierto se lee por
-  // ref: se mira al CAMBIAR de semana, no al abrir un día (uno tocado a mitad
-  // de deslizamiento se queda abierto hasta que la tira se asienta).
-  const latestOpenDay = useLatest(openDay);
+  // tras deslizar a otra semana con el día abierto). Evento y no dependencia:
+  // se mira al CAMBIAR de semana, no al abrir un día (uno tocado a mitad de
+  // deslizamiento se queda abierto hasta que la tira se asienta).
+  const foldIfOutside = useEffectEvent((week: string) => {
+    if (openDay && !weekDates(week).includes(openDay)) setOpenDay(null);
+  });
   useEffect(() => {
-    const open = latestOpenDay.current;
-    if (open && !weekDates(visibleWeek).includes(open)) setOpenDay(null);
-  }, [visibleWeek, latestOpenDay]);
+    foldIfOutside(visibleWeek);
+  }, [visibleWeek]);
 
   return (
     <section className="animate-rise mt-6">

@@ -75,6 +75,16 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Reglas de React Compiler que trae eslint-plugin-react-hooks 7. Estas
+      // cinco marcan código que hoy funciona (efectos de Hoy, Plan, onboarding
+      // y Chat); reescribirlo es otro trabajo. Aviso, no error: siguen a la
+      // vista en cada ejecución sin frenar el CI, como en mobile/eslint.config.js.
+      // El resto de `recommended` no marca nada y se queda en error.
+      "react-hooks/immutability": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/static-components": "warn",
       "no-restricted-imports": ["error", { paths: [serverOnlyPackage, vercelFunctionsPackage] }],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": [

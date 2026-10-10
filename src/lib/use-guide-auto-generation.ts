@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -8,7 +8,6 @@ import { fetchTodayLog, updateTodayLog, type DailyGuide, type DailyLog } from "@
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { guideMeals, guideReuse, mealsToRecalculate, mergeGuide } from "@/lib/macros";
 import type { mealsForDate } from "@/lib/plan-shared";
-import { useLatest } from "@/lib/use-latest";
 
 // La guía del día se pide sola al abrir Hoy si falta o está incompleta. Dos
 // salvaguardas para que ese reintento automático no se convierta en spam:
@@ -157,10 +156,10 @@ export function useGuideAutoGeneration({
     };
   }, [recalculating]);
 
-  // Por ref y no como dependencia: `requestGuide` se crea en cada render (lee
-  // el registro y el plan del momento), y lo que dispara el intento es el
-  // MOTIVO (`guideNeed`), que acabe una generación o el reloj de "calculando".
-  const request = useLatest(requestGuide);
+  // Evento y no dependencia: `requestGuide` se crea en cada render (lee el
+  // registro y el plan del momento), y lo que dispara el intento es el MOTIVO
+  // (`guideNeed`), que acabe una generación o el reloj de "calculando".
+  const autoRequest = useEffectEvent(requestGuide);
   useEffect(() => {
     if (!guideNeed || generating) return;
     if (guideNeed.startsWith("por-calcular")) {
@@ -170,7 +169,7 @@ export function useGuideAutoGeneration({
       calcForceRef.current = false;
       calcAttempts += 1;
       lastCalcAttempt = Date.now();
-      void request.current({ silent: true, macrosOnly: true });
+      void autoRequest({ silent: true, macrosOnly: true });
       return;
     }
     const cooldown = lastAutoGuideFailed ? AUTO_GUIDE_BACKOFF_MS : AUTO_GUIDE_MIN_INTERVAL_MS;
@@ -181,8 +180,8 @@ export function useGuideAutoGeneration({
     if (guideNeed === lastAutoGuideKey && Date.now() - lastAutoGuideAttempt < cooldown) return;
     lastAutoGuideKey = guideNeed;
     lastAutoGuideAttempt = Date.now();
-    void request.current({ silent: true });
-  }, [guideNeed, generating, calcTick, request]);
+    void autoRequest({ silent: true });
+  }, [guideNeed, generating, calcTick]);
 
   return { generating, requestGuide };
 }
@@ -203,16 +202,12 @@ export function useGuideTargetsSync(
   const dayId = today?.id;
   const storedKcal = today?.guide?.targets?.kcal;
   const targetKcal = dayTarget?.kcal;
-  // Por ref: `dayTarget` es un objeto nuevo en cada render; lo que dispara la
+  // Evento: `dayTarget` es un objeto nuevo en cada render; lo que dispara la
   // copia es que cambie su cifra de kcal (o la guardada, o que acabe una
   // generación), no su identidad ni que llegue la guía.
-  const latest = useLatest({ hasGuide: !!today?.guide, dayTarget });
-
-  useEffect(() => {
-    if (targetKcal == null || generating) return;
-    if (storedKcal === targetKcal) return;
-    const { hasGuide, dayTarget: target } = latest.current;
-    if (!hasGuide || !target) return;
+  const copyTarget = useEffectEvent(() => {
+    const target = dayTarget;
+    if (!today?.guide || !target) return;
     // Se relee la fila justo antes: la guía es una sola columna JSON y la caché
     // puede ir por detrás de una regeneración recién guardada.
     void fetchTodayLog()
@@ -223,5 +218,10 @@ export function useGuideTargetsSync(
         );
       })
       .catch((error) => console.warn("hoy: guardar el objetivo del día en la guía", error));
-  }, [dayId, storedKcal, targetKcal, generating, latest, qc]);
+  });
+  useEffect(() => {
+    if (targetKcal == null || generating) return;
+    if (storedKcal === targetKcal) return;
+    copyTarget();
+  }, [dayId, storedKcal, targetKcal, generating]);
 }

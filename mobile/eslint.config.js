@@ -15,10 +15,10 @@ module.exports = defineConfig([
   },
   {
     rules: {
-      // Reglas de React Compiler que trae eslint-plugin-react-hooks 7 (la web va
-      // con la 5, que no las tiene). Marcan efectos de Hoy, Plan y Chat que hoy
-      // funcionan; reescribirlos es otro trabajo. Aviso, no error: siguen a la
-      // vista en cada ejecución sin frenar el job.
+      // Reglas de React Compiler que trae eslint-plugin-react-hooks 7. Marcan
+      // efectos de Hoy, Plan y Chat que hoy funcionan; reescribirlos es otro
+      // trabajo. Aviso, no error: siguen a la vista en cada ejecución sin frenar
+      // el job. La web hace lo mismo en su eslint.config.js.
       "react-hooks/globals": "warn",
       "react-hooks/refs": "warn",
       "react-hooks/set-state-in-effect": "warn",

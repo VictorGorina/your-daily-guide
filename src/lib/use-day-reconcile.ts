@@ -1,9 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 
 import { patchTodayHabits, type DailyLog } from "@/lib/daily";
 import { reconcileHabits, sameHabits, type mealsForDate } from "@/lib/plan-shared";
-import { useLatest } from "@/lib/use-latest";
 
 /**
  * El registro del día se casa con las comidas que esta persona planifica de
@@ -30,21 +29,11 @@ export function useDayReconcile(
   // sirve de disparador: cambia solo cuando el registro cambia de verdad.
   const storedHabits = today?.habits;
   const dayId = today?.id;
-  // Por ref y no como dependencia: `reconciled.habits` es una lista nueva en
-  // cada render, y como dependencia relanzaría la escritura sin que nada
-  // hubiera cambiado.
-  const latest = useLatest(reconciled.habits);
-
-  useEffect(() => {
-    // Solo se guarda si de verdad cambia algo (si no, se escribiría en bucle),
-    // y solo el día de hoy: un día pasado es un hecho, no una preferencia.
-    if (!dayId || !reconciled.changed) return;
-    // Y solo con las dos consultas asentadas: la reconciliación compara
-    // `confirmedIdea` contra el plato que el plan tiene AHORA, así que con una
-    // a medio refrescar daría por caducada una confirmación que sí vale (y la
-    // borraría).
-    if (!settled) return;
-    const habits = latest.current;
+  // Evento y no dependencia: `reconciled.habits` es una lista nueva en cada
+  // render, y como dependencia relanzaría la escritura sin que nada hubiera
+  // cambiado.
+  const repair = useEffectEvent(() => {
+    const habits = reconciled.habits;
     // `habits` es una única columna JSON y este camino manda la lista entera
     // derivada de la caché, así que se escribe solo si la fila sigue siendo la
     // que se reconcilió: si entre medias la ha tocado otro camino
@@ -60,7 +49,18 @@ export function useDayReconcile(
       // Sin aviso: es una reparación de fondo, no una acción de la persona, y
       // lo reconciliado ya se está pintando aunque el guardado falle.
       .catch((error) => console.warn("hoy: guardar la reconciliación de comidas", error));
-  }, [dayId, storedHabits, reconciled.changed, settled, latest, qc]);
+  });
+  useEffect(() => {
+    // Solo se guarda si de verdad cambia algo (si no, se escribiría en bucle),
+    // y solo el día de hoy: un día pasado es un hecho, no una preferencia.
+    if (!dayId || !reconciled.changed) return;
+    // Y solo con las dos consultas asentadas: la reconciliación compara
+    // `confirmedIdea` contra el plato que el plan tiene AHORA, así que con una
+    // a medio refrescar daría por caducada una confirmación que sí vale (y la
+    // borraría).
+    if (!settled) return;
+    repair();
+  }, [dayId, storedHabits, reconciled.changed, settled]);
 
   return reconciled.habits;
 }
