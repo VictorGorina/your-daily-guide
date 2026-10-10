@@ -90,7 +90,11 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
           environments: {
             client: { define: { "process.env.NODE_ENV": JSON.stringify("development") } },
           },
-          esbuild: { keepNames: true },
+          // Conserva el `name` de funciones y clases en el build de desarrollo, para
+          // que las trazas y los nombres de componentes se lean. En Vite 8 ya no es
+          // una opción de esbuild (la ignora: transforma oxc), sino de la salida de
+          // rolldown.
+          build: { rolldownOptions: { output: { keepNames: true } } },
         }
       : {}),
     css: { transformer: "lightningcss" as const },
