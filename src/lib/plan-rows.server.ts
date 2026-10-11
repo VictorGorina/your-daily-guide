@@ -1,4 +1,3 @@
-import type { DbClient } from "@/integrations/supabase/db-client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 
 import { logEvent } from "@/lib/log.server";
@@ -56,15 +55,19 @@ export const PLAN_CAS_EXHAUSTED_MESSAGE =
  * Sin fila no hay nada que actualizar: devuelve `{ patch: null, latest: null }`,
  * igual que un `update` sin coincidencias de antes.
  *
- * `client` es el de sesión o `supabaseAdmin`: quien llama decide, como antes.
+ * Lee y escribe SIEMPRE con `supabaseAdmin` (ticket 39): `plan` y `shopping`
+ * dejan de poder escribirse con la sesión de la persona. Se salta RLS, de modo
+ * que la frontera es `userId`: el del JWT ya verificado (`context.userId`), o
+ * el de otra persona solo tras comprobar en código que comparten hogar
+ * (`resolveShoppingRow`, `syncSharedMeals`). Todo filtra por `user_id`.
  */
 export async function updatePlanRowCas<Row extends PlanRowCas = PlanRowCas>(
-  client: DbClient,
   userId: string,
   month: string,
   columns: string,
   rebuild: (latest: Row) => PlanRowPatch | null,
 ): Promise<{ patch: PlanRowPatch | null; latest: Row | null; attempts: number }> {
+  const { supabaseAdmin: client } = await import("@/integrations/supabase/client.server");
   const select = /\bupdated_at\b/.test(columns) ? columns : `${columns}, updated_at`;
   for (let attempt = 1; attempt <= PLAN_CAS_ATTEMPTS; attempt++) {
     if (attempt > 1) await retryPause();
@@ -80,6 +83,12 @@ export async function updatePlanRowCas<Row extends PlanRowCas = PlanRowCas>(
 
     const patch = rebuild(latest);
     if (!patch) return { patch: null, latest, attempts: attempt };
+    // Con `supabaseAdmin` nada impide mover la fila a otra persona o a otro mes: aquí sí.
+    if ("user_id" in patch || "month" in patch || "id" in patch) {
+      throw new Error(
+        "updatePlanRowCas: el patch no puede cambiar de quién ni de qué mes es la fila",
+      );
+    }
 
     const { data: written, error } = await client
       .from("monthly_plans")

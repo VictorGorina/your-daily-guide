@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
-import { createFakeSupabase, type FakeOp, type FakeTables } from "@/test/fake-supabase";
+import { setFakeAdmin } from "@/test/admin";
+import {
+  createFakeSupabase as createFake,
+  type FakeOp,
+  type FakeOptions,
+  type FakeTables,
+} from "@/test/fake-supabase";
 
 import {
   CAS_RETRY_PAUSE_MS,
@@ -8,6 +14,13 @@ import {
   type PlanRowCas,
   updatePlanRowCas,
 } from "./plan-rows.server";
+
+/** El doble, puesto además como `supabaseAdmin`: es el único cliente que usan. */
+function createFakeSupabase(tables?: FakeTables, opts?: FakeOptions) {
+  const fake = createFake(tables, opts);
+  setFakeAdmin(fake.client);
+  return fake;
+}
 
 const MONTH = "2026-09";
 
@@ -50,7 +63,7 @@ describe("updatePlanRowCas", () => {
 
   it("sin nadie en medio, escribe a la primera y con la guarda de versión", async () => {
     const fake = createFakeSupabase(seed());
-    const out = await updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish);
+    const out = await updatePlanRowCas("u1", MONTH, "plan", addDish);
 
     expect(out.attempts).toBe(1);
     expect(fake.tables.monthly_plans![0]!.plan).toEqual({ dishes: ["IA", "nuevo"] });
@@ -67,9 +80,9 @@ describe("updatePlanRowCas", () => {
 
   it("si alguien escribe entretanto, relee y reconstruye sobre la versión nueva", async () => {
     const tables = seed();
-    const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 1) });
+    createFakeSupabase(tables, { failOn: concurrentWriter(tables, 1) });
     const seen: unknown[] = [];
-    const out = await updatePlanRowCas(fake.client, "u1", MONTH, "plan, updated_at", (latest) => {
+    const out = await updatePlanRowCas("u1", MONTH, "plan, updated_at", (latest) => {
       seen.push(latest.plan);
       return addDish(latest);
     });
@@ -83,8 +96,8 @@ describe("updatePlanRowCas", () => {
 
   it("con cuatro choques seguidos, al quinto intento escribe", async () => {
     const tables = seed();
-    const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 4) });
-    const out = await updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish);
+    createFakeSupabase(tables, { failOn: concurrentWriter(tables, 4) });
+    const out = await updatePlanRowCas("u1", MONTH, "plan", addDish);
 
     expect(out.attempts).toBe(5);
     expect(tables.monthly_plans![0]!.plan).toEqual({
@@ -94,9 +107,9 @@ describe("updatePlanRowCas", () => {
 
   it("espera un poco antes de reintentar, para no chocar otra vez en el mismo instante", async () => {
     const tables = seed();
-    const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 1) });
+    createFakeSupabase(tables, { failOn: concurrentWriter(tables, 1) });
     const start = performance.now();
-    await updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish);
+    await updatePlanRowCas("u1", MONTH, "plan", addDish);
 
     expect(performance.now() - start).toBeGreaterThanOrEqual(CAS_RETRY_PAUSE_MS.min - 1);
   });
@@ -105,7 +118,7 @@ describe("updatePlanRowCas", () => {
     const tables = seed();
     const fake = createFakeSupabase(tables, { failOn: concurrentWriter(tables, 5) });
 
-    await expect(updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish)).rejects.toThrow(
+    await expect(updatePlanRowCas("u1", MONTH, "plan", addDish)).rejects.toThrow(
       PLAN_CAS_EXHAUSTED_MESSAGE,
     );
     expect(fake.calls.filter((c) => c.op === "update")).toHaveLength(5);
@@ -118,15 +131,15 @@ describe("updatePlanRowCas", () => {
 
   it("si `rebuild` no tiene nada que escribir, no escribe", async () => {
     const fake = createFakeSupabase(seed());
-    const out = await updatePlanRowCas(fake.client, "u1", MONTH, "plan", () => null);
+    const out = await updatePlanRowCas("u1", MONTH, "plan", () => null);
     expect(out).toMatchObject({ patch: null, attempts: 1 });
     expect(fake.calls.some((c) => c.op === "update")).toBe(false);
   });
 
   it("sin fila del mes no escribe ni llama a `rebuild`", async () => {
-    const fake = createFakeSupabase(seed());
+    createFakeSupabase(seed());
     let called = false;
-    const out = await updatePlanRowCas(fake.client, "u1", "2026-10", "plan", () => {
+    const out = await updatePlanRowCas("u1", "2026-10", "plan", () => {
       called = true;
       return { plan: {} };
     });
@@ -138,9 +151,28 @@ describe("updatePlanRowCas", () => {
     const fake = createFakeSupabase(seed(), {
       failOn: (op) => (op.op === "update" ? { message: "boom" } : null),
     });
-    await expect(updatePlanRowCas(fake.client, "u1", MONTH, "plan", addDish)).rejects.toMatchObject(
-      { message: "boom" },
-    );
+    await expect(updatePlanRowCas("u1", MONTH, "plan", addDish)).rejects.toMatchObject({
+      message: "boom",
+    });
     expect(fake.calls.filter((c) => c.op === "update")).toHaveLength(1);
+  });
+
+  // Ticket 39: se escribe con `supabaseAdmin`, que se salta RLS.
+  it("lee y escribe solo la fila de esa persona", async () => {
+    const fake = createFakeSupabase(seed());
+    await updatePlanRowCas("u1", MONTH, "plan", addDish);
+    for (const call of fake.calls) {
+      expect(call.filters).toContainEqual({ kind: "eq", column: "user_id", value: "u1" });
+    }
+  });
+
+  it("un patch que cambie de quién o de qué mes es la fila no se escribe", async () => {
+    const fake = createFakeSupabase(seed());
+    for (const patch of [{ user_id: "u2" }, { month: "2026-10" }, { id: "x" }]) {
+      await expect(updatePlanRowCas("u1", MONTH, "plan", () => patch)).rejects.toThrow(
+        "no puede cambiar",
+      );
+    }
+    expect(fake.calls.some((c) => c.op === "update")).toBe(false);
   });
 });

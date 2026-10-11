@@ -36,10 +36,12 @@ export function ownPlanRow(supabase: DbClient, userId: string, month: string, co
  * cantidades.
  *
  *  - Sin hogar, o si quien llama ES el planificador → su propia fila
- *    (`isMine: true`), lectura y escritura con el cliente de sesión.
+ *    (`isMine: true`), que se lee con el cliente de sesión.
  *  - Miembro no planificador → la fila del planificador (`isMine: false`); RLS
- *    solo deja LEER esa fila (policy de issue 05), así que las lecturas y
- *    escrituras van con `supabaseAdmin` y limitadas a columnas de estado.
+ *    solo deja LEER esa fila (policy de issue 05), así que se lee con
+ *    `supabaseAdmin`.
+ *  Las escrituras van en los dos casos con `supabaseAdmin` (ticket 39,
+ *  `updateShoppingState`) y limitadas a columnas de estado.
  *
  * La membresía queda verificada por `householdPlannerId`: solo devuelve un id
  * no nulo cuando quien llama es miembro del mismo hogar. Es una sola consulta,
@@ -91,31 +93,19 @@ export async function readShoppingRow<T>(
  * `latest: null` si el mes no tiene fila.
  */
 export async function updateShoppingState<Row extends Record<string, unknown>>(
-  supabase: DbClient,
   target: { targetUserId: string; isMine: boolean },
   month: string,
   columns: string,
   rebuild: (latest: Row) => Record<string, unknown> | null,
 ): Promise<{ latest: Row | null; patch: Record<string, unknown> | null }> {
-  // La fila de otra persona se lee y escribe con `supabaseAdmin` (RLS solo le
-  // deja leerla): ver `resolveShoppingRow`.
-  const client = target.isMine
-    ? supabase
-    : (await import("@/integrations/supabase/client.server")).supabaseAdmin;
-  const { latest, patch } = await updatePlanRowCas(
-    client,
-    target.targetUserId,
-    month,
-    columns,
-    (row) => {
-      const next = rebuild(row as unknown as Row);
-      // Barandilla, no comentario: cuando la fila es de otra persona esto
-      // escribe con `supabaseAdmin`, que se salta RLS. Se comprueba aquí en vez
-      // de confiar en que cada sitio que llama respete la lista.
-      if (next) assertShoppingStateColumns(next);
-      return next;
-    },
-  );
+  const { latest, patch } = await updatePlanRowCas(target.targetUserId, month, columns, (row) => {
+    const next = rebuild(row as unknown as Row);
+    // Barandilla, no comentario: esto escribe con `supabaseAdmin`, que se
+    // salta RLS, y la fila puede ser de otra persona. Se comprueba aquí en vez
+    // de confiar en que cada sitio que llama respete la lista.
+    if (next) assertShoppingStateColumns(next);
+    return next;
+  });
   return { latest: latest as Row | null, patch };
 }
 

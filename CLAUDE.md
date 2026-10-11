@@ -194,7 +194,10 @@ se escribe con `.eq("updated_at", leído)`; si no cambia ninguna fila, se relee 
 (el plan, hasta 5 con una pausa aleatoria de 20-80 ms; el día, hasta 3). Helpers: `updatePlanRowCas` (`plan-rows.server.ts`), `updateShoppingState` (estado de
 compra, con la lista blanca de columnas), `updateDailyLogCas` (`daily-rows.server.ts`, el mismo
 contrato para cualquier columna de la fila del día; con `create: true` crea la fila, como picoteo y
-deporte; `patchDailyHabits` es su atajo para `habits`) y `patchTodayHabits` en el cliente. El trabajo caro no se repite: solo se vuelve a aplicar su
+deporte; `patchDailyHabits` es su atajo para `habits`) y `patchTodayHabits` en el cliente. Los
+helpers de servidor leen y escriben con `supabaseAdmin` (ticket 39; no reciben cliente): se
+saltan RLS, así que su `userId` es siempre el del JWT (`context.userId`) y la ventana de fechas
+para crear un día (`DAILY_INSERT_WINDOW`) va en código. El trabajo caro no se repite: solo se vuelve a aplicar su
 resultado. En la pantalla, el estado de la compra va con `useShoppingMutation` (optimista con esas
 mismas funciones y en serie por mes, copia en `mobile/lib/`). `generateMonthlyPlan` usa `insert`:
 la restricción única es la guarda contra dos generaciones a la vez.

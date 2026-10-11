@@ -63,8 +63,6 @@ import type { SettleDayDeps, SettleDayResult } from "./day-settle.functions";
  * Ruta espejo en `src/routes/api/v1/day/settle.ts`.
  */
 
-type Client = DbClient;
-
 export type DishChange = {
   label: string;
   slot: string;
@@ -136,7 +134,6 @@ function dayColumns(row: DayRow, patch: DayPatch): DailyLogPatch | null {
  * abrir Hoy, nunca esta función, así que sin fila no hay nada que asentar.
  */
 async function patchDay(
-  supabase: Client,
   userId: string,
   date: string,
   update: (row: DayRow) => DayPatch,
@@ -144,7 +141,6 @@ async function patchDay(
   // Lo que se leyó y se aplicó en el último intento (el que escribió).
   const last: { row?: DayRow; patch: DayPatch } = { patch: {} };
   await updateDailyLogCas(
-    supabase,
     userId,
     date,
     DAY_COLUMNS,
@@ -180,7 +176,7 @@ export async function settleDayHandler(
   const month = today.slice(0, 7);
 
   const recordOutcome = async (outcome: DayOutcome) => {
-    await patchDay(supabase, userId, today, (row) => ({
+    await patchDay(userId, today, (row) => ({
       record: { adjustment: row.record?.adjustment ?? null, lastOutcome: outcome },
     })).catch((err) =>
       logEvent("warn", "settle_outcome_failed", { userId, date: today, error: errorText(err) }),
@@ -195,7 +191,7 @@ export async function settleDayHandler(
   //    Sin nada de eso no se escribe: el parche vacío es solo una lectura.
   const byLabel = new Map(changes.map((c) => [c.label, c]));
   let expired: PendingReservation[] = [];
-  const row = await patchDay(supabase, userId, today, (current) => {
+  const row = await patchDay(userId, today, (current) => {
     expired = staleReservations(current.pending);
     const released: DayPatch = expired.length
       ? {
@@ -306,7 +302,7 @@ export async function settleDayHandler(
   //    resultado, la siguiente la encuentra caducada y la devuelve.
   let reservation: DayReservation = EMPTY_RESERVATION;
   const pendingId = crypto.randomUUID();
-  const reserved = await patchDay(supabase, userId, today, (current) => {
+  const reserved = await patchDay(userId, today, (current) => {
     const reserve = reserveDay(current);
     reservation = reserve.reservation;
     if (!reservation.total && !reservation.protein) return reserve.patch;
@@ -320,7 +316,7 @@ export async function settleDayHandler(
   const withoutMine = (current: DayRow) => current.pending.filter((p) => p.id !== pendingId);
 
   const release = async () => {
-    await patchDay(supabase, userId, today, (current) => {
+    await patchDay(userId, today, (current) => {
       // Ya devuelta por otro asentamiento (caducada): devolverla otra vez
       // restaría el picoteo y el deporte dos veces.
       if (!current.pending.some((p) => p.id === pendingId)) return {};
@@ -382,7 +378,7 @@ export async function settleDayHandler(
     // reintenta más tarde.
     if (!futureChanges.length) throw new Error("El reajuste no ha cambiado ningún plato");
 
-    await patchDay(supabase, userId, today, (current) => ({
+    await patchDay(userId, today, (current) => ({
       pending: withoutMine(current),
       record: {
         adjustment: mergeDayAdjustment(current.record?.adjustment, {

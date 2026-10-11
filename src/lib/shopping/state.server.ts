@@ -20,18 +20,12 @@ export async function toggleShoppingOwnedHandler({
   // reintento no la deshace.
   let shopping: ShoppingList = [];
   try {
-    await updateShoppingState<{ shopping?: unknown }>(
-      context.supabase,
-      target,
-      data.month,
-      "shopping",
-      (row) => {
-        const current = cleanShopping(row.shopping);
-        if (!current.length) return null;
-        shopping = withOwnedMark(current, data.itemName, data.trip, data.source);
-        return { shopping };
-      },
-    );
+    await updateShoppingState<{ shopping?: unknown }>(target, data.month, "shopping", (row) => {
+      const current = cleanShopping(row.shopping);
+      if (!current.length) return null;
+      shopping = withOwnedMark(current, data.itemName, data.trip, data.source);
+      return { shopping };
+    });
   } catch (error) {
     console.error("toggleShoppingOwned", error);
     throw new UserFacingError("No hemos podido guardar el cambio");

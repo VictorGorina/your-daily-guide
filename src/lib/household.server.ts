@@ -404,7 +404,6 @@ export async function syncSharedMeals(opts: {
     // comidas propias pueden cambiar a la vez y no se deben pisar.
     try {
       const { patch } = await updatePlanRowCas(
-        supabaseAdmin,
         target.userId!,
         opts.month,
         "plan, confirmed_at",

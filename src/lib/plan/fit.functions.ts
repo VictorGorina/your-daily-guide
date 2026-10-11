@@ -108,7 +108,7 @@ export const fitMonthlyPlan = createServerFn({ method: "POST" })
     let fit = null as PlanFitMark | null;
     let existing = null as PlanFitMark | null;
     try {
-      await updatePlanRowCas(supabase, context.userId, data.month, "plan", (row) => {
+      await updatePlanRowCas(context.userId, data.month, "plan", (row) => {
         const latest = cleanPlan(row.plan);
         existing = latest?.fit ?? null;
         if (!latest || latest.fit) return null;

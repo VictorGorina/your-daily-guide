@@ -326,31 +326,25 @@ export const reflowMonthlyPlan = createServerFn({ method: "POST" })
     const validChildIds = home.children.map((c) => c.id);
     let final = null as { plan: MonthlyPlan; shopping: ShoppingList } | null;
     try {
-      await updatePlanRowCas(
-        context.supabase,
-        context.userId,
-        data.month,
-        "plan, shopping",
-        (row) => {
-          const latest = cleanPlan(row.plan);
-          if (!latest) return null;
-          final = mergeRegeneratedPlan(
-            { plan: latest, shopping: cleanShopping(row.shopping) },
-            fresh,
-            data.today,
-            validChildIds,
-            { coverage, cadence },
-          );
-          return {
-            plan: final.plan,
-            shopping: final.shopping,
-            // La compra cambió → el mes deja de estar "cerrado del todo".
-            // `confirmed_trips` se conserva (los tramos ya hechos siguen
-            // marcados); `setTripConfirmed` recalcula el agregado la próxima vez.
-            confirmed_at: null,
-          };
-        },
-      );
+      await updatePlanRowCas(context.userId, data.month, "plan, shopping", (row) => {
+        const latest = cleanPlan(row.plan);
+        if (!latest) return null;
+        final = mergeRegeneratedPlan(
+          { plan: latest, shopping: cleanShopping(row.shopping) },
+          fresh,
+          data.today,
+          validChildIds,
+          { coverage, cadence },
+        );
+        return {
+          plan: final.plan,
+          shopping: final.shopping,
+          // La compra cambió → el mes deja de estar "cerrado del todo".
+          // `confirmed_trips` se conserva (los tramos ya hechos siguen
+          // marcados); `setTripConfirmed` recalcula el agregado la próxima vez.
+          confirmed_at: null,
+        };
+      });
     } catch (error) {
       console.error("reflowMonthlyPlan", error);
       throw new UserFacingError("No hemos podido actualizar el plan con los cambios");

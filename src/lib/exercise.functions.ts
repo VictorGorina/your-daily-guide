@@ -52,13 +52,11 @@ type Client = DbClient;
  * existe. `update` recibe `null` si no había deporte.
  */
 async function patchExercise(
-  supabase: Client,
   userId: string,
   date: string,
   update: (current: DayExercise | null) => DayExercise,
 ): Promise<DayExercise> {
   const { patch } = await updateDailyLogCas(
-    supabase,
     userId,
     date,
     "exercise",
@@ -105,7 +103,7 @@ export const logExercise = createServerFn({ method: "POST" })
       data.today,
     );
     let entry: ExerciseEntry | null = null;
-    const exercise = await patchExercise(supabase, context.userId, data.today, (current) => {
+    const exercise = await patchExercise(context.userId, data.today, (current) => {
       // Dentro de la escritura (que se reintenta si se cruza otra): las sesiones
       // de rutina de HOY se cuentan sobre la fila que se va a escribir.
       const split = splitRoutineSession({
@@ -182,7 +180,7 @@ export const removeExercise = createServerFn({ method: "POST" })
     return { today: clampClientToday(input?.today), id };
   })
   .handler(async ({ data, context }): Promise<{ exercise: DayExercise }> => {
-    const exercise = await patchExercise(context.supabase, context.userId, data.today, (current) =>
+    const exercise = await patchExercise(context.userId, data.today, (current) =>
       withoutExercise(current, data.id),
     );
     return { exercise };

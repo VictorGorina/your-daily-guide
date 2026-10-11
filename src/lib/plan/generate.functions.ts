@@ -110,7 +110,10 @@ export const generateMonthlyPlan = createServerFn({ method: "POST" })
       // ~100 s de IA, y dos generaciones a la vez (doble toque, web y móvil) la
       // pasaban las dos; la segunda pisaba el plan que la persona ya veía. La
       // restricción única (user_id, month) hace de guarda en la base de datos.
-      const { error } = await context.supabase.from("monthly_plans").insert({
+      // Con `supabaseAdmin` (ticket 39): `plan` y `shopping` no se escriben con
+      // la sesión de la persona. `user_id` es el del JWT.
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error } = await supabaseAdmin.from("monthly_plans").insert({
         user_id: context.userId,
         month: data.month,
         plan,

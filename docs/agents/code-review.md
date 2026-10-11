@@ -90,6 +90,12 @@ Definidos en las server functions de `src/lib/plan/` y `src/lib/shopping/` (barr
       atajo `patchDailyHabits`) o `patchTodayHabits`, con el cambio expresado como función pura de la
       versión más reciente. Leer, esperar a la IA y escribir lo leído deshace lo que otro
       escribió entretanto (ticket 21 de la auditoría).
+- [ ] **El servidor escribe esas dos filas con `supabaseAdmin`, por sus helpers.** Los
+      helpers CAS no reciben cliente (ticket 39): usan la clave de servicio y filtran por
+      `user_id`. El `userId` que se les pasa es `context.userId` (el del JWT), o el de otra
+      persona solo tras comprobar en código que comparten hogar. Un `.update()`/`.insert()` de
+      servidor con `context.supabase` sobre `monthly_plans` o `daily_logs` dejará de funcionar
+      cuando se aplique el `REVOKE` del ticket.
 
 - [ ] **El día de hoy no se toca nunca.** `setPlanMeal` cambia un plato de hoy en adelante
       tal cual lo pide la persona (sin IA). `adjustMonthlyPlan` recoloca solo días futuros.

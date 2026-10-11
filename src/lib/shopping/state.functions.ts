@@ -58,21 +58,15 @@ export const recadenceMonthlyPlan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> => {
     let plan = null as MonthlyPlan | null;
     let shopping: ShoppingList = [];
-    const write = await updatePlanRowCas(
-      context.supabase,
-      context.userId,
-      data.month,
-      "plan, shopping",
-      (row) => {
-        const current = cleanPlan(row.plan);
-        if (!current) throw new ValidationError("Todavía no hay plan de este mes");
-        const prevShopping = cleanShopping(row.shopping);
-        const next = recadencePlan(current, prevShopping, data.cadence, data.month, data.today);
-        plan = next.plan;
-        shopping = next.shopping;
-        return next.rewrite ? { plan, shopping } : { plan };
-      },
-    ).catch((error: unknown) => {
+    const write = await updatePlanRowCas(context.userId, data.month, "plan, shopping", (row) => {
+      const current = cleanPlan(row.plan);
+      if (!current) throw new ValidationError("Todavía no hay plan de este mes");
+      const prevShopping = cleanShopping(row.shopping);
+      const next = recadencePlan(current, prevShopping, data.cadence, data.month, data.today);
+      plan = next.plan;
+      shopping = next.shopping;
+      return next.rewrite ? { plan, shopping } : { plan };
+    }).catch((error: unknown) => {
       if (error instanceof ValidationError) throw error;
       console.error("recadenceMonthlyPlan", error);
       throw new UserFacingError("No hemos podido cambiar la frecuencia de la compra");
@@ -134,7 +128,6 @@ export const setTripActual = createServerFn({ method: "POST" })
     const target = await resolveShoppingRow(context.supabase, context.userId);
     let next: TripActuals = {};
     const { latest } = await updateShoppingState<{ trip_actuals?: unknown }>(
-      context.supabase,
       target,
       data.month,
       "trip_actuals",
@@ -179,7 +172,6 @@ export const setPantryExtra = createServerFn({ method: "POST" })
     const target = await resolveShoppingRow(context.supabase, context.userId);
     let next: PantryExtra[] = [];
     const { latest } = await updateShoppingState<{ pantry_extras?: unknown }>(
-      context.supabase,
       target,
       data.month,
       "pantry_extras",
@@ -428,22 +420,16 @@ export const scanTripReceipt = createServerFn({ method: "POST" })
       pantry_extras?: unknown;
       trip_actuals?: unknown;
       trip_receipts?: unknown;
-    }>(
-      context.supabase,
-      target,
-      data.month,
-      "pantry_extras, trip_actuals, trip_receipts",
-      (row) => {
-        nextActuals = { ...cleanTripActuals(row.trip_actuals), [data.trip]: receipt.total };
-        nextReceipts = { ...cleanTripReceipts(row.trip_receipts), [data.trip]: receiptSummary };
-        nextPantry = cleanPantryExtras([...cleanPantryExtras(row.pantry_extras), ...fromReceipt]);
-        return {
-          trip_actuals: nextActuals,
-          trip_receipts: nextReceipts,
-          pantry_extras: nextPantry,
-        };
-      },
-    ).catch((error: unknown) => {
+    }>(target, data.month, "pantry_extras, trip_actuals, trip_receipts", (row) => {
+      nextActuals = { ...cleanTripActuals(row.trip_actuals), [data.trip]: receipt.total };
+      nextReceipts = { ...cleanTripReceipts(row.trip_receipts), [data.trip]: receiptSummary };
+      nextPantry = cleanPantryExtras([...cleanPantryExtras(row.pantry_extras), ...fromReceipt]);
+      return {
+        trip_actuals: nextActuals,
+        trip_receipts: nextReceipts,
+        pantry_extras: nextPantry,
+      };
+    }).catch((error: unknown) => {
       console.error("scanTripReceipt save", error);
       throw new UserFacingError(
         "Hemos leído el tiquet pero no hemos podido guardarlo. Inténtalo otra vez.",
@@ -487,7 +473,7 @@ export const setTripConfirmed = createServerFn({ method: "POST" })
       plan?: unknown;
       shopping?: unknown;
       confirmed_trips?: unknown;
-    }>(context.supabase, target, data.month, "plan, shopping, confirmed_trips", (row) => {
+    }>(target, data.month, "plan, shopping, confirmed_trips", (row) => {
       const shopping = cleanShopping(row.shopping);
       if (!shopping.length) return null;
       const confirmed = withTripConfirmed(

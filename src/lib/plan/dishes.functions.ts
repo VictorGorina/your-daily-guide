@@ -241,7 +241,7 @@ export const setPlanMeal = createServerFn({ method: "POST" })
       let previousIdea = "";
       let previousPinned = false;
       try {
-        await updatePlanRowCas(context.supabase, context.userId, month, "plan", (r) => {
+        await updatePlanRowCas(context.userId, month, "plan", (r) => {
           const latest = cleanPlan(r.plan);
           const cell = latest && planSlotIndex(latest, data.date);
           const written =
@@ -372,7 +372,7 @@ export const setChildMeal = createServerFn({ method: "POST" })
       const meal = { childId: child.id, slot: data.slot, dish, off };
       let next = current;
       try {
-        await updatePlanRowCas(context.supabase, context.userId, month, "plan", (r) => {
+        await updatePlanRowCas(context.userId, month, "plan", (r) => {
           const latest = cleanPlan(r.plan);
           const written = latest && withChildMeal(latest, data.date, meal);
           if (!written) throw new ValidationError("Ese día todavía no tiene menú en el plan");
@@ -566,7 +566,7 @@ export const fillChildMeals = createServerFn({ method: "POST" })
       let filled = 0;
       const filledChildIds = new Set<string>();
       try {
-        await updatePlanRowCas(context.supabase, context.userId, month, "plan", (r) => {
+        await updatePlanRowCas(context.userId, month, "plan", (r) => {
           const latest = cleanPlan(r.plan);
           if (!latest) return null;
           next = latest;

@@ -48,7 +48,6 @@ export async function propagateLogToFamilyHandler({
     .map((m) => m.userId!);
   if (!others.length) return { propagated: 0 };
 
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { patchDailyHabits } = await import("@/lib/daily-rows.server");
   const label = data.habitLabel.toLowerCase();
   let propagated = 0;
@@ -57,24 +56,19 @@ export async function propagateLogToFamilyHandler({
     // Sobre la versión más reciente del día de ese miembro (ticket 21): lo
     // que él mismo esté cambiando a la vez no se pisa.
     try {
-      const next = await patchDailyHabits<PropagatedHabit>(
-        supabaseAdmin,
-        uid,
-        data.date,
-        (habits) => {
-          const idx = habits.findIndex((h) => h.label.toLowerCase() === label);
-          if (idx < 0) return null;
-          const updated = [...habits];
-          updated[idx] = {
-            ...updated[idx],
-            status: data.status,
-            done: data.status === "plan" || data.status === "distinto",
-            ...(data.status === "distinto" && data.actual ? { actual: data.actual } : {}),
-            ...(data.status !== "distinto" ? { actual: undefined } : {}),
-          };
-          return updated;
-        },
-      );
+      const next = await patchDailyHabits<PropagatedHabit>(uid, data.date, (habits) => {
+        const idx = habits.findIndex((h) => h.label.toLowerCase() === label);
+        if (idx < 0) return null;
+        const updated = [...habits];
+        updated[idx] = {
+          ...updated[idx],
+          status: data.status,
+          done: data.status === "plan" || data.status === "distinto",
+          ...(data.status === "distinto" && data.actual ? { actual: data.actual } : {}),
+          ...(data.status !== "distinto" ? { actual: undefined } : {}),
+        };
+        return updated;
+      });
       if (next) propagated++;
     } catch (error) {
       console.error("propagateLogToFamily", error);

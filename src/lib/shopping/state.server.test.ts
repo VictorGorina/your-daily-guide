@@ -69,7 +69,8 @@ describe("toggleShoppingOwned (ticket 21)", () => {
   it("dos marcas a la vez en la propia lista: se conservan las dos", async () => {
     const tables = seed();
     const fake = createFakeSupabase(tables, { failOn: concurrentMark(tables) });
-    setFakeAdmin(createFakeSupabase().client); // la propia fila no pasa por aquí
+    // La propia fila también se escribe con la clave de servicio (ticket 39).
+    setFakeAdmin(fake.client);
 
     const out = await mark("ana", fake.client);
 

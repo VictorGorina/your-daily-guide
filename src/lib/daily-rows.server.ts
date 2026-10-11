@@ -1,14 +1,41 @@
-import type { DbClient } from "@/integrations/supabase/db-client";
 import type { Json, TablesUpdate } from "@/integrations/supabase/types";
 
+import { addDaysISO } from "@/lib/dates";
 import { logEvent } from "@/lib/log.server";
-import { UserFacingError } from "@/lib/validation-error";
+import { UserFacingError, ValidationError } from "@/lib/validation-error";
 
 export type DailyLogCas = { updated_at: string } & Record<string, unknown>;
 /** Lo que se escribe en la fila del día: solo columnas que existen en `daily_logs`. */
 export type DailyLogPatch = TablesUpdate<"daily_logs">;
 
 export const DAILY_CAS_ATTEMPTS = 3;
+
+/**
+ * Qué días se pueden CREAR: de hace 45 días a mañana (en UTC). Es la ventana de
+ * la policy "insert recent own log", que `supabaseAdmin` se salta: aquí va en
+ * código. Hoy quien crea pasa una fecha de `clampClientToday`, muy dentro.
+ */
+export const DAILY_INSERT_WINDOW = { past: 45, future: 1 } as const;
+
+/** Con `supabaseAdmin` nada impide mover la fila a otra persona o a otro día: aquí sí. */
+function assertOwnRowPatch(patch: DailyLogPatch) {
+  if ("user_id" in patch || "log_date" in patch || "id" in patch) {
+    throw new Error(
+      "updateDailyLogCas: el patch no puede cambiar de quién ni de qué día es la fila",
+    );
+  }
+}
+
+function assertInsertWindow(date: string) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    date < addDaysISO(today, -DAILY_INSERT_WINDOW.past) ||
+    date > addDaysISO(today, DAILY_INSERT_WINDOW.future)
+  ) {
+    throw new ValidationError("Ese día queda fuera de lo que se puede registrar.");
+  }
+}
 
 type CasResult<Row> = {
   /** Lo escrito (o insertado), o `null` si no se escribió nada. */
@@ -35,13 +62,16 @@ type CasOptions = {
  *
  * Sin fila no se escribe (`{ patch: null, latest: null }`): la crea el cliente
  * al abrir Hoy. Con `create: true`, `rebuild` recibe `null` y lo que devuelva
- * se inserta como fila nueva (la policy "insert recent own log" lo permite para
- * hoy); si el cliente la creó a la vez (23505), se relee y se actualiza.
+ * se inserta como fila nueva (solo dentro de `DAILY_INSERT_WINDOW`); si el
+ * cliente la creó a la vez (23505), se relee y se actualiza.
  *
- * `client` es el de sesión o `supabaseAdmin`: quien llama decide.
+ * Lee y escribe SIEMPRE con `supabaseAdmin` (ticket 39): estas columnas dejan
+ * de poder escribirse con la sesión de la persona, y así ningún sitio que
+ * llame puede equivocarse de cliente. Se salta RLS, de modo que la frontera es
+ * `userId`: tiene que ser el del JWT ya verificado (`context.userId`), nunca
+ * un dato del cliente. Todo filtra por `user_id`.
  */
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
-  client: DbClient,
   userId: string,
   date: string,
   columns: string,
@@ -49,7 +79,6 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
   options: CasOptions & { create?: false },
 ): Promise<CasResult<Row>>;
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
-  client: DbClient,
   userId: string,
   date: string,
   columns: string,
@@ -57,13 +86,13 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
   options: CasOptions & { create: true },
 ): Promise<CasResult<Row>>;
 export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
-  client: DbClient,
   userId: string,
   date: string,
   columns: string,
   rebuild: (latest: Row | null) => DailyLogPatch | null,
   options: CasOptions & { create?: boolean },
 ): Promise<CasResult<Row>> {
+  const { supabaseAdmin: client } = await import("@/integrations/supabase/client.server");
   const select = /\bupdated_at\b/.test(columns) ? columns : `${columns}, updated_at`;
   for (let attempt = 1; attempt <= DAILY_CAS_ATTEMPTS; attempt++) {
     const { data, error: readError } = await client
@@ -78,11 +107,13 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
 
     const patch = rebuild(latest);
     if (!patch) return { patch: null, latest, attempts: attempt };
+    assertOwnRowPatch(patch);
 
     if (!latest) {
+      assertInsertWindow(date);
       const { error } = await client
         .from("daily_logs")
-        .insert({ user_id: userId, log_date: date, ...patch });
+        .insert({ ...patch, user_id: userId, log_date: date });
       if (!error) return { patch, latest: null, attempts: attempt };
       // 23505: el cliente creó la fila a la vez. Se relee y se actualiza.
       if ((error as { code?: string }).code !== "23505") throw error;
@@ -110,18 +141,14 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
  * aplicar `update` sobre lo nuevo. Por eso `update` tiene que ser pura.
  *
  * `null` si el día no existe (lo crea siempre el cliente al abrir Hoy, nunca
- * esto) o si `update` devuelve `null` (nada que escribir).
- *
- * `client` es el de sesión o `supabaseAdmin`: quien llama decide.
+ * esto) o si `update` devuelve `null` (nada que escribir). `userId`, el del JWT.
  */
 export async function patchDailyHabits<Habit extends Json>(
-  client: DbClient,
   userId: string,
   date: string,
   update: (current: Habit[]) => Habit[] | null,
 ): Promise<Habit[] | null> {
   const { patch } = await updateDailyLogCas(
-    client,
     userId,
     date,
     "habits",

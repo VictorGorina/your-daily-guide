@@ -384,7 +384,7 @@ export async function reflowMeals(opts: {
   // la tarjeta "Balance de hoy" enseña como movido sea solo lo que movió esto.
   let final = current;
   let before = current;
-  await updatePlanRowCas(supabase, userId, month, "plan", (row) => {
+  await updatePlanRowCas(userId, month, "plan", (row) => {
     const latest = cleanPlan(row.plan);
     if (!latest) throw new ValidationError("Todavía no hay plan de este mes");
     const merged: MonthlyPlan = {
