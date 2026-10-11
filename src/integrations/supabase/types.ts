@@ -397,6 +397,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      jobs: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          error: string | null;
+          id: string;
+          input: Json;
+          kind: string;
+          locked_at: string | null;
+          progress: Json | null;
+          result: Json | null;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          error?: string | null;
+          id?: string;
+          input: Json;
+          kind: string;
+          locked_at?: string | null;
+          progress?: Json | null;
+          result?: Json | null;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          error?: string | null;
+          id?: string;
+          input?: Json;
+          kind?: string;
+          locked_at?: string | null;
+          progress?: Json | null;
+          result?: Json | null;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       join_attempts: {
         Row: {
           attempts: number;
@@ -757,6 +802,29 @@ export type Database = {
       claim_household_slot: {
         Args: { _invite_code: string; _member_id: string };
         Returns: string;
+      };
+      claim_job: {
+        Args: { _max_attempts?: number; _stale_seconds?: number };
+        Returns: {
+          attempts: number;
+          created_at: string;
+          error: string | null;
+          id: string;
+          input: Json;
+          kind: string;
+          locked_at: string | null;
+          progress: Json | null;
+          result: Json | null;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       consume_rate_limit: {
         Args: {

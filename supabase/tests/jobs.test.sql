@@ -1,7 +1,7 @@
--- Ticket 40: cola de trabajos largos. Test de pgTAP de la migración PENDIENTE
--- `supabase/pending/20261011130000_jobs.sql`; lo lanza
--- `scripts/check-pending-migrations.sh` (job `db` del CI). El día que la
--- migración pase a `migrations/`, este archivo pasa a `supabase/tests/`.
+-- Ticket 40: cola de trabajos largos (20261011130000_jobs.sql). Quién lee y
+-- quién escribe `jobs`, un trabajo activo por persona y tipo, y `claim_job()`:
+-- solo reintenta intentos muertos, hasta tres. Test de pgTAP; lo lanza
+-- `supabase test db`.
 
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
