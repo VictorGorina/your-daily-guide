@@ -159,6 +159,12 @@ jobs:
       - name: Tests de la base de datos (pgTAP)
         run: supabase test db
 
+      # Las migraciones de supabase/pending/ aún no se aplican en producción:
+      # aquí se aplican, pasan su pgTAP y se deshacen, para que no se pudran.
+      - name: Migraciones pendientes (se aplican, se prueban y se deshacen)
+        if: ${{ !cancelled() }}
+        run: bash scripts/check-pending-migrations.sh
+
       # El seed sirve para entrar de verdad: GoTrue acepta la contraseña y
       # PostgREST devuelve, con esa sesión, el plan del mes y su casa.
       - name: La persona del seed entra y lee su plan
