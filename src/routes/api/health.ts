@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { waitUntilVia } from "@/lib/after-response.server";
+import { chatHistoryMax } from "@/lib/chat-context";
 import { cronSecretMatches } from "@/lib/cron-secret.server";
 import { jobsEnabled } from "@/lib/jobs";
 
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/api/health")({
         };
         if (await cronSecretMatches(request.headers.get("x-cron-secret"))) {
           const has = (...names: string[]) => names.every((n) => Boolean(process.env[n]));
+          const historyMax = chatHistoryMax(process.env.CHAT_HISTORY_MAX);
           body.env = {
             supabase: has("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"),
             serviceRole: has("SUPABASE_SERVICE_ROLE_KEY"),
@@ -58,6 +60,8 @@ export const Route = createFileRoute("/api/health")({
             // no hay forma de saber desde fuera si el despliegue los ha leído.
             aiGlobalCap: has("AI_GLOBAL_DAILY_USD"),
             chatBodyEnforce: process.env.CHAT_BODY_ENFORCE === "1",
+            // Mensajes del historial que llegan al modelo (ticket 32); `null`, sin límite.
+            chatHistoryMax: historyMax === Infinity ? null : historyMax,
             sentry: has("SENTRY_DSN", "VITE_SENTRY_DSN"),
             turnstile: has("TURNSTILE_SECRET_KEY", "VITE_TURNSTILE_SITE_KEY"),
             turnstileEnforce: process.env.TURNSTILE_ENFORCE === "1",
