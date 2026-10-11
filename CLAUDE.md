@@ -395,6 +395,20 @@ deduplica por instancia el plato que ya se está descomponiendo. La reserva de `
 lleva su marca en `daily_logs.adjustment.pending`: si la petición muere, el siguiente
 asentamiento la devuelve pasados 5 min (`RESERVATION_TTL_MS`, ligado al `maxDuration`).
 
+**Cola de trabajos largos (`jobs`)** (ticket 40 de la auditoría; detalle en la sección del mismo
+nombre de AGENTS.md). Generar el plan, ajustarlo al objetivo y recalcularlo pueden salir de la
+petición: con `async: true` en el cuerpo **y** `JOBS_ENABLED` definida, la server function deja
+una fila en `jobs`, responde `{ jobId }` y el trabajo lo hace el trabajador (`enqueueOrRun` en
+`plan/enqueue.server.ts`; `POST /api/jobs/run`, que llaman quien encola tras responder y `pg_cron`
+cada minuto). Sin las dos cosas, o si encolar falla, la función trabaja en línea como siempre:
+una build del móvil ya instalada no manda `async` y sigue recibiendo el resultado. El trabajador
+no tiene sesión: corre con `supabaseAdmin` y el `user_id` de la fila, así que **toda lectura bajo
+los tres `*-run.server.ts` filtra por `userId`**. Solo se reintenta un intento MUERTO (cerrojo
+caducado), nunca uno que acabó con error. `jobs.result` no lleva el plan: la pantalla espera con
+`settleJob` (`job-wait.ts`, copia idéntica en `mobile/lib/`), que lee la fila propia por RLS, y
+relee el plan al terminar. Un trabajo nuevo se añade en `JOB_KINDS`, `planJobRunners` y el
+`CHECK` de la tabla.
+
 **Límites: alcance de la IA y contenido de la persona** (detalle y porqué en la sección del mismo
 nombre de AGENTS.md; spec en `.scratch/limites-ia-y-contenido/`). Dos límites, cada uno con dos
 redes:

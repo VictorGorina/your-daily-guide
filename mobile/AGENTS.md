@@ -25,6 +25,12 @@ código compartido por ahora — cuando duela duplicar, se monta `packages/share
   (`apiPost("day/guide")`: `/api/v1/` lo pone `api.ts`); `src/lib/mobile-api-paths.test.ts`
   comprueba que cada una existe.
 
+- **Trabajos largos** (generar, ajustar y recalcular el plan): se piden con `async: true` y la
+  respuesta puede ser el resultado o `{ jobId }`. Se resuelve siempre con `settleJob`
+  ([lib/job-wait.ts](lib/job-wait.ts), idéntico al de la web), que lee la fila de `jobs` con
+  `readJob` ([lib/jobs-read.ts](lib/jobs-read.ts)). Ver «Cola de trabajos largos» en el AGENTS.md
+  de la raíz.
+
 ## Sesión y enlaces
 
 - **La sesión va cifrada** ([lib/secure-session-storage.ts](lib/secure-session-storage.ts)): la

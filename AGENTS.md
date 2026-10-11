@@ -610,6 +610,65 @@ un cambio suele romper sin querer:
 - **Medida**: `bun run eval:recipes` (exactitud contra el golden set) y `bun run eval:plan-lite`
   (el plan contra el objetivo). Gastan llamadas y no van en CI.
 
+## Cola de trabajos largos (`jobs`)
+
+Ticket 40 de la auditoría (ARQ-03). Toda la app es una función de Vercel de 300 s y generar el
+plan tarda ~100 s con el cliente esperando con la conexión abierta. Con la cola, la petición deja
+un trabajo y responde; la pantalla lee su fila hasta que termina, y se puede salir y volver.
+
+**Cuándo se encola.** Las tres server functions largas (`generateMonthlyPlan`,
+`reflowMonthlyPlan`, `fitMonthlyPlan`) pasan por `enqueueOrRun`
+([src/lib/plan/enqueue.server.ts](src/lib/plan/enqueue.server.ts)). Van a la cola solo si la
+petición trae `async: true` **y** `JOBS_ENABLED` está definida (`jobsEnabled`); responden
+entonces `{ jobId }`. En cualquier otro caso hacen el trabajo en la propia petición y devuelven
+lo de siempre:
+
+| Caso                                                 | Qué pasa                          |
+| ---------------------------------------------------- | --------------------------------- |
+| Sin `async: true` (una build del móvil ya instalada) | En línea                          |
+| Sin `JOBS_ENABLED` (el interruptor, y el rollback)   | En línea                          |
+| Encolar falla (`job_enqueue_failed`)                 | En línea                          |
+| Ya hay uno activo de ese tipo que pide LO MISMO      | `{ jobId }` del que hay           |
+| Ya hay uno activo de ese tipo que pide OTRA cosa     | En línea (su `jobId` no serviría) |
+
+«Lo mismo» lo decide `sameJobTarget` (mes, alcance, cadencia; `today` no cuenta). Solo hay un
+trabajo activo por persona y tipo: lo garantiza el índice único parcial `jobs_one_active_idx`, y
+`enqueueJob` es un `insert` a ciegas que con el `23505` devuelve el activo. `precheck` (hoy, «este
+mes ya tiene plan») corre antes de encolar para que la persona reciba el 400 al momento. La cuota
+y el tope de gasto se siguen consumiendo DENTRO del trabajo, no al encolar: un 429 llega como
+trabajo fallido con su texto.
+
+**El trabajador.** `POST /api/jobs/run` (secreto del cron, como `/api/cron/dispatch`) ejecuta UN
+trabajo por llamada: `runNextJob(jobStore, planJobRunners)`. Lo llaman quien encola, en la misma
+función y después de responder (`afterResponse`), y `pg_cron` cada minuto si hay algo en cola
+(`jobs-run`; `jobs-prune` borra a diario lo terminado hace más de 7 días). `claim_job()` reclama
+el más antiguo con `FOR UPDATE SKIP LOCKED` y solo la puede ejecutar `service_role`.
+
+- **Sin sesión.** Los runners ([job-runners.server.ts](src/lib/plan/job-runners.server.ts))
+  llaman a los mismos cuerpos (`*-run.server.ts`) con `supabaseAdmin` y el `user_id` de la fila,
+  que puso el servidor al encolar con el del JWT. RLS no hace de red: una lectura nueva bajo esos
+  cuerpos tiene que filtrar por `userId`.
+- **Reintentos.** Solo se releva un intento MUERTO (la función se cortó: cerrojo de más de 5 min),
+  hasta tres; al cuarto, `failed` con `attempts_exhausted`. Uno que terminó con error se queda en
+  `failed`: cada intento son ~100 s de IA. `finish` cierra solo el intento que reclamó
+  (`attempts`), para que uno dado por muerto que acaba tarde no pise a su relevo.
+- **Generar dos veces.** Un intento que murió después de guardar deja el mes con plan; el relevo
+  choca con «ya tiene su plan» y `generateOrExisting` lo da por hecho en vez de fallar.
+- **Errores.** `jobs.error` lleva el texto si está escrito para la persona (`jobErrorText`, misma
+  tabla que `publicError`) y el genérico si no. `jobs.result` no lleva ni el plan ni la compra.
+
+**La pantalla** (web y móvil). `settleJob` ([src/lib/job-wait.ts](src/lib/job-wait.ts), copia
+idéntica en `mobile/lib/`) devuelve el resultado tal cual si la respuesta lo trae, y si trae
+`{ jobId }` sondea la fila cada 3 s con `readJob` (`jobs-read.ts` de cada app: directo a Supabase,
+`authenticated` solo tiene `SELECT` de su fila) hasta `done` o `failed` (`JobFailedError`, con el
+mensaje vacío si no hay texto para la persona). Al terminar se invalida el plan. Plan retoma un
+`plan_generate` activo al abrirse (`fetchActiveJob`); el ajuste se retoma solo, porque la misma
+llamada devuelve el trabajo que siga activo; y `plan-recalc` borra su «pendiente» guardado en
+cuanto el servidor acepta el trabajo, para no pedir otro al reabrir.
+
+**Encenderla.** `JOBS_ENABLED=1` en Vercel; `/api/health` con el secreto del cron dice `jobs:
+true`. Para apagarla se quita: lo que esté en cola lo sigue ejecutando el trabajador.
+
 ## Push notifications
 
 Web Push real (VAPID) vía [`@pushforge/builder`](https://github.com/draphy/pushforge) — usa solo
