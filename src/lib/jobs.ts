@@ -114,6 +114,21 @@ export function parseJobInput<K extends JobKind>(kind: K, input: unknown): JobIn
   return { month, today } as JobInputs[K];
 }
 
+/**
+ * ¿Piden lo mismo dos entradas del mismo tipo? Solo hay un trabajo activo por
+ * persona y tipo, pero no todos valen por otro: rehacer el plan con la familia
+ * (`full`) no es el recálculo de la despensa (`meals`), ni noviembre es
+ * diciembre. `today` no cuenta: es cuándo se pidió, no qué.
+ */
+export function sameJobTarget(kind: JobKind, a: unknown, b: unknown): boolean {
+  const target = (input: unknown) => {
+    const parsed = parseJobInput(kind, input);
+    return parsed ? JSON.stringify({ ...parsed, today: null }) : null;
+  };
+  const left = target(a);
+  return left !== null && left === target(b);
+}
+
 /** La fila de `jobs`, como la ve la pantalla. `null` si no es un trabajo conocido. */
 export function jobView(row: {
   id: string;

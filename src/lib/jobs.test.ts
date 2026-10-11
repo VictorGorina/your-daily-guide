@@ -11,6 +11,7 @@ import {
   jobsEnabled,
   jobView,
   parseJobInput,
+  sameJobTarget,
 } from "./jobs";
 
 describe("jobsEnabled", () => {
@@ -117,5 +118,25 @@ describe("isJobActive", () => {
       false,
       false,
     ]);
+  });
+});
+
+describe("sameJobTarget", () => {
+  const meals = { month: "2026-10", today: "2026-10-11", scope: "meals" };
+
+  it("la misma petición otro día es la misma", () => {
+    expect(sameJobTarget("plan_reflow", meals, { ...meals, today: "2026-10-12" })).toBe(true);
+  });
+
+  it("otro alcance, otro mes u otra cadencia no lo son", () => {
+    expect(sameJobTarget("plan_reflow", meals, { ...meals, scope: "full" })).toBe(false);
+    expect(sameJobTarget("plan_reflow", meals, { ...meals, month: "2026-11" })).toBe(false);
+    const nov = { month: "2026-11", today: "2026-10-28", cadence: "semanal" };
+    expect(sameJobTarget("plan_generate", nov, { ...nov, cadence: "mensual" })).toBe(false);
+  });
+
+  it("una entrada que no se puede leer no vale por ninguna", () => {
+    expect(sameJobTarget("plan_fit", null, null)).toBe(false);
+    expect(sameJobTarget("plan_fit", { month: "x" }, { month: "x" })).toBe(false);
   });
 });
