@@ -28,6 +28,7 @@ import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiCspReportRouteImport } from './routes/api/csp-report'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
+import { Route as ApiJobsRunRouteImport } from './routes/api/jobs/run'
 import { Route as ApiPushSubscribeRouteImport } from './routes/api/push/subscribe'
 import { Route as ApiPushUnsubscribeRouteImport } from './routes/api/push/unsubscribe'
 import { Route as ApiV1GuideRouteImport } from './routes/api/v1/guide'
@@ -161,6 +162,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
 const ApiCronDispatchRoute = ApiCronDispatchRouteImport.update({
   id: '/api/cron/dispatch',
   path: '/api/cron/dispatch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiJobsRunRoute = ApiJobsRunRouteImport.update({
+  id: '/api/jobs/run',
+  path: '/api/jobs/run',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPushSubscribeRoute = ApiPushSubscribeRouteImport.update({
@@ -381,6 +387,7 @@ export interface FileRoutesByFullPath {
   '/api/csp-report': typeof ApiCspReportRoute
   '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
+  '/api/jobs/run': typeof ApiJobsRunRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
   '/api/v1/guide': typeof ApiV1GuideRoute
@@ -440,6 +447,7 @@ export interface FileRoutesByTo {
   '/api/csp-report': typeof ApiCspReportRoute
   '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
+  '/api/jobs/run': typeof ApiJobsRunRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
   '/api/v1/guide': typeof ApiV1GuideRoute
@@ -501,6 +509,7 @@ export interface FileRoutesById {
   '/api/csp-report': typeof ApiCspReportRoute
   '/api/health': typeof ApiHealthRoute
   '/api/cron/dispatch': typeof ApiCronDispatchRoute
+  '/api/jobs/run': typeof ApiJobsRunRoute
   '/api/push/subscribe': typeof ApiPushSubscribeRoute
   '/api/push/unsubscribe': typeof ApiPushUnsubscribeRoute
   '/api/v1/guide': typeof ApiV1GuideRoute
@@ -562,6 +571,7 @@ export interface FileRouteTypes {
     | '/api/csp-report'
     | '/api/health'
     | '/api/cron/dispatch'
+    | '/api/jobs/run'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
     | '/api/v1/guide'
@@ -621,6 +631,7 @@ export interface FileRouteTypes {
     | '/api/csp-report'
     | '/api/health'
     | '/api/cron/dispatch'
+    | '/api/jobs/run'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
     | '/api/v1/guide'
@@ -681,6 +692,7 @@ export interface FileRouteTypes {
     | '/api/csp-report'
     | '/api/health'
     | '/api/cron/dispatch'
+    | '/api/jobs/run'
     | '/api/push/subscribe'
     | '/api/push/unsubscribe'
     | '/api/v1/guide'
@@ -734,6 +746,7 @@ export interface RootRouteChildren {
   ApiCspReportRoute: typeof ApiCspReportRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute
+  ApiJobsRunRoute: typeof ApiJobsRunRoute
   ApiPushSubscribeRoute: typeof ApiPushSubscribeRoute
   ApiPushUnsubscribeRoute: typeof ApiPushUnsubscribeRoute
   ApiV1GuideRoute: typeof ApiV1GuideRoute
@@ -908,6 +921,13 @@ declare module '@tanstack/react-router' {
       path: '/api/cron/dispatch'
       fullPath: '/api/cron/dispatch'
       preLoaderRoute: typeof ApiCronDispatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/jobs/run': {
+      id: '/api/jobs/run'
+      path: '/api/jobs/run'
+      fullPath: '/api/jobs/run'
+      preLoaderRoute: typeof ApiJobsRunRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/push/subscribe': {
@@ -1224,6 +1244,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCspReportRoute: ApiCspReportRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
+  ApiJobsRunRoute: ApiJobsRunRoute,
   ApiPushSubscribeRoute: ApiPushSubscribeRoute,
   ApiPushUnsubscribeRoute: ApiPushUnsubscribeRoute,
   ApiV1GuideRoute: ApiV1GuideRoute,

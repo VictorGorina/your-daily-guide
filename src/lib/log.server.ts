@@ -97,6 +97,9 @@
  * - `job_done` (info) / `job_failed` (info o error): un trabajo de la cola
  *   (`jobs`, ticket 40) terminó. `job_failed` en `error` es un fallo nuestro;
  *   en `info`, un final previsto (cuota agotada, "ya tiene plan").
+ * - `job_worker_failed` (error): `POST /api/jobs/run` no pudo reclamar o
+ *   cerrar un trabajo (la base de datos). El trabajo sigue con su cerrojo y
+ *   `claim_job()` lo releva cuando caduque.
  * - `job_enqueue_failed` (error): no se pudo dejar el trabajo en la cola y la
  *   petición hizo el trabajo en línea, como sin `JOBS_ENABLED`.
  * - `signup_weak_password_mismatch` (error): `generateLink` rechazó por débil
