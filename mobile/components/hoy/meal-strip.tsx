@@ -273,7 +273,6 @@ export function MealStrip({
                         letterSpacing: -0.3,
                         color: isSkip ? "#6b6256" : wasIdea ? "#a84a17" : "#3e3d39",
                       }}
-                      numberOfLines={2}
                     >
                       {dish}
                     </Text>
@@ -281,7 +280,6 @@ export function MealStrip({
                       <Text
                         className="mt-0.5 font-body text-[11.5px] text-muted-foreground"
                         style={{ textDecorationLine: "line-through" }}
-                        numberOfLines={2}
                       >
                         {wasIdea}
                       </Text>
