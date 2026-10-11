@@ -10,7 +10,9 @@ código compartido por ahora — cuando duela duplicar, se monta `packages/share
 
 - **CRUD normal** (perfil, registros del día, hogar): directo con `supabase` desde
   [lib/supabase.ts](lib/supabase.ts), igual que hace la web desde el navegador. Las políticas RLS
-  son las que protegen los datos.
+  son las que protegen los datos. Excepción: `daily_logs.guide` no se escribe desde el cliente
+  (ticket 39 de la auditoría); la guía se guarda con `saveGuide` (`lib/daily.ts`), que llama a
+  `day/guide`.
 - **Operaciones de IA y las que necesitan clave de servicio**: por HTTP con
   [lib/api.ts](lib/api.ts) contra `/api/v1/*`, adjuntando el token de Supabase como Bearer.
   La API devuelve `{"error": mensaje}` con un texto que se enseña siempre tal cual (tabla de
@@ -19,7 +21,9 @@ código compartido por ahora — cuando duela duplicar, se monta `packages/share
   nueva que llame al modelo va ahí**, o el móvil la aborta antes de tiempo) con un `ApiError`
   408; ante un 401 renueva la sesión una vez y repite (si vuelve a dar 401, cierra sesión en este
   dispositivo); y un 429 trae `retryAfter` en segundos, sin reintento automático. Cada petición
-  lleva `X-Client-Version` (`version+buildNumber` de `app.json`).
+  lleva `X-Client-Version` (`version+buildNumber` de `app.json`). La ruta se pasa SIN prefijo
+  (`apiPost("day/guide")`: `/api/v1/` lo pone `api.ts`); `src/lib/mobile-api-paths.test.ts`
+  comprueba que cada una existe.
 
 ## Sesión y enlaces
 

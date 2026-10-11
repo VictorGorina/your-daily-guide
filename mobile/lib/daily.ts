@@ -1,3 +1,4 @@
+import { apiPost } from "./api";
 import { BLOCKED_NAME_MESSAGE, isCleanFood } from "./content-guard";
 import { fetchHousehold, householdSharedSlots } from "./household";
 import {
@@ -352,6 +353,24 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
 export async function updateTodayLog(patch: Partial<DailyLog>) {
   const { error } = await supabase.from("daily_logs").update(patch).eq("log_date", todayISO());
   if (error) throw error;
+}
+
+/**
+ * Guarda la guía de un día (hoy, si no se dice otro) por el servidor: `guide`
+ * ya no se escribe desde el cliente (ticket 39). `habits` va en la misma
+ * escritura cuando las comidas cambian a la vez que la guía.
+ */
+export async function saveGuide(
+  guide: DailyGuide,
+  opts: { date?: string; habits?: MealHabit[] } = {},
+) {
+  const today = todayISO();
+  await apiPost<{ saved: boolean }>("day/guide", {
+    date: opts.date ?? today,
+    today,
+    guide,
+    ...(opts.habits ? { habits: opts.habits } : {}),
+  });
 }
 
 /** El registro de hoy si existe, sin crearlo (a diferencia de `ensureTodayLog`). */

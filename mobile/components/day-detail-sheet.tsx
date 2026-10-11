@@ -8,6 +8,7 @@ import { apiPost } from "../lib/api";
 import {
   MEAL_STATUSES,
   todayISO,
+  saveGuide,
   updateLogByDate,
   type DailyLog,
   type MealMacroEstimate,
@@ -163,7 +164,7 @@ export function DayDetailBody({
             ? (mealMacros.find((f) => f.moment === m.moment && f.idea === m.idea) ?? m)
             : m,
         );
-        await updateLogByDate(date, { guide: mergeGuide(guide, { ...guide, mealMacros: merged }) });
+        await saveGuide(mergeGuide(guide, { ...guide, mealMacros: merged }), { date });
         refreshLogs();
       })
       .catch(() => {});

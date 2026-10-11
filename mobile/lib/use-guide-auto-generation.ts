@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Alert, AppState } from "react-native";
 
 import { apiPost } from "./api";
-import { fetchTodayLog, updateTodayLog, type DailyGuide, type DailyLog } from "./daily";
+import { fetchTodayLog, saveGuide, type DailyGuide, type DailyLog } from "./daily";
 import { guideMeals, guideReuse, mealsToRecalculate, mergeGuide } from "./macros";
 import type { mealsForDate } from "./plan-shared";
 
@@ -109,7 +109,7 @@ export function useGuideAutoGeneration({
       // Si la generación vuelve con el texto de respaldo y sin cifras, se
       // conservan las que ya tuviera el día: regenerar nunca debe dejar la
       // barra de macros peor de como estaba (ver `mergeGuide`).
-      await updateTodayLog({ guide: mergeGuide(today?.guide, fresh) });
+      await saveGuide(mergeGuide(today?.guide, fresh));
       lastAutoGuideFailed = false;
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
@@ -202,7 +202,7 @@ export function useGuideTargetsSync(
     void fetchTodayLog()
       .then((fresh) => {
         if (!fresh?.guide || fresh.guide.targets?.kcal === dayTarget.kcal) return;
-        return updateTodayLog({ guide: { ...fresh.guide, targets: dayTarget } }).then(() =>
+        return saveGuide({ ...fresh.guide, targets: dayTarget }).then(() =>
           qc.invalidateQueries({ queryKey: ["today"] }),
         );
       })
