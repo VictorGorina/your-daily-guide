@@ -20,6 +20,8 @@ import {
 import { afterResponse } from "@/lib/after-response.server";
 import { supabaseFromRequest, unauthorized } from "@/lib/api-auth.server";
 import { type ActionToolName, CHAT_LIMITS, type ChatBody, cleanChatBody } from "@/lib/chat-body";
+import { chatHistoryMax, compactGuide, trimHistory } from "@/lib/chat-context";
+import { showsNutritionNumbers } from "@/lib/macros";
 import { chatPreflight, lastUserMessage } from "@/lib/chat-preflight";
 import { offTopicMessage } from "@/lib/coach-scope";
 import { ACK_PREFIXES, loggedAckKind } from "@/lib/day-log-ack";
@@ -328,6 +330,19 @@ export const Route = createFileRoute("/api/chat")({
         // propiedad y sepa cuándo un cambio no es de esta persona.
         const home = await householdContext(supabase, userId);
 
+        // La guía va reducida a comidas y calorías, y sin cifras para quien
+        // eligió no verlas; del historial, solo los últimos mensajes si
+        // `CHAT_HISTORY_MAX` lo dice (ticket 32).
+        const guide = compactGuide(body.guide, showsNutritionNumbers(profile));
+        const history = trimHistory(messages, chatHistoryMax(process.env.CHAT_HISTORY_MAX));
+        if (history.length < messages.length) {
+          logEvent("info", "chat_history_trimmed", {
+            userId,
+            messages: messages.length,
+            kept: history.length,
+          });
+        }
+
         const system =
           coachSystemPrompt(profile, home.householdId ? home.text : null) +
           `\nHoy es ${today} (${weekdayName(today)}). Mañana es ${tomorrow} (${weekdayName(tomorrow)}).` +
@@ -344,8 +359,8 @@ export const Route = createFileRoute("/api/chat")({
           (body.proximos?.length
             ? `\nMenú de los próximos días: ${asPromptData(JSON.stringify(body.proximos), CHAT_LIMITS.guideBytes)}`
             : "") +
-          (body.guide
-            ? `\nGuía de hoy ya enviada: ${asPromptData(JSON.stringify(body.guide), CHAT_LIMITS.guideBytes)}`
+          (guide
+            ? `\nGuía de hoy ya enviada: ${asPromptData(JSON.stringify(guide), CHAT_LIMITS.guideBytes)}`
             : "") +
           (body.log
             ? `\nLo que ha pasado hoy de verdad (peso, hábitos, notas): ${asPromptData(JSON.stringify(body.log), CHAT_LIMITS.logBytes)}`
@@ -371,7 +386,7 @@ export const Route = createFileRoute("/api/chat")({
         const result = streamText({
           model: ai(COACH_MODEL),
           system,
-          messages: await convertToModelMessages(messages),
+          messages: await convertToModelMessages(history),
           ...(withTools ? { tools: actionTools } : {}),
         });
         // Si el cliente corta (cierra el chat a mitad), el modelo sigue hasta

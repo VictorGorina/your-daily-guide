@@ -77,6 +77,9 @@
  * - `chat_body_rejected` (warn): el cuerpo de `/api/chat` no pasó
  *   `cleanChatBody` (`reason`). Con `CHAT_BODY_ENFORCE` sin poner solo se
  *   registra; uno legítimo significa que un tope de `CHAT_LIMITS` es corto.
+ * - `chat_history_trimmed` (info): el coach recibió solo los últimos mensajes
+ *   de la conversación (`messages` → `kept`) por `CHAT_HISTORY_MAX`. Muchos
+ *   al día significa que el tope es corto para cómo se usa el chat.
  * - `captcha_missing` (warn): un alta o un restablecimiento llegó sin token de
  *   Turnstile (`operation`) y se dejó pasar: una app que aún no lo manda. Con
  *   `TURNSTILE_ENFORCE=1` deja de pasar.
