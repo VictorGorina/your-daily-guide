@@ -7,7 +7,8 @@ import { asCadence, type PlanFitMark, type ShoppingCadence } from "@/lib/plan-sh
  * Generar el plan tarda ~100 s dentro de una función de 300 s y el cliente
  * esperaba con la conexión abierta. Con la cola, la petición deja una fila en
  * `jobs` y responde `{ jobId }`; un trabajador (`POST /api/jobs/run`) la
- * reclama y la ejecuta, y la pantalla lee su fila hasta que termina.
+ * reclama y la ejecuta, y la pantalla lee su fila hasta que termina
+ * (`job-wait.ts`).
  *
  * - Es OPT-IN por petición (`async: true`): las builds del móvil ya instaladas
  *   esperan el resultado en la respuesta y siguen recibiéndolo.
@@ -18,7 +19,6 @@ import { asCadence, type PlanFitMark, type ShoppingCadence } from "@/lib/plan-sh
 
 export const JOB_KINDS = ["plan_generate", "plan_reflow", "plan_fit"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
-export type JobStatus = "queued" | "running" | "done" | "failed";
 
 /** Lo que cada trabajo recibe: lo que su server function ya validó al encolar. */
 export type JobInputs = {
@@ -52,31 +52,13 @@ export type JobRow = {
   attempts: number;
 };
 
-/** Lo que la pantalla necesita de un trabajo. */
-export type JobView<K extends JobKind = JobKind> = {
-  id: string;
-  kind: K;
-  status: JobStatus;
-  result: JobResults[K] | null;
-  /** Solo con `failed`: texto que se puede enseñar. */
-  error: string | null;
-};
-
 export const isJobKind = (value: unknown): value is JobKind => JOB_KINDS.includes(value as JobKind);
-
-const STATUSES: readonly JobStatus[] = ["queued", "running", "done", "failed"];
-
-/** ¿Sigue pendiente? (en cola o en marcha) */
-export const isJobActive = (status: string): boolean => status === "queued" || status === "running";
 
 /** `JOBS_ENABLED` definida y distinta de "0"/"false". */
 export function jobsEnabled(env: Record<string, string | undefined> = process.env): boolean {
   const raw = (env.JOBS_ENABLED ?? "").trim().toLowerCase();
   return raw !== "" && raw !== "0" && raw !== "false";
 }
-
-/** Lo que `claim_job()` escribe cuando un trabajo agota sus intentos muertos. */
-export const JOB_EXHAUSTED = "attempts_exhausted";
 
 /**
  * El texto que se guarda en `jobs.error`: el del error si está escrito para la
@@ -127,28 +109,4 @@ export function sameJobTarget(kind: JobKind, a: unknown, b: unknown): boolean {
   };
   const left = target(a);
   return left !== null && left === target(b);
-}
-
-/** La fila de `jobs`, como la ve la pantalla. `null` si no es un trabajo conocido. */
-export function jobView(row: {
-  id: string;
-  kind: string;
-  status: string;
-  result: unknown;
-  error: string | null;
-}): JobView | null {
-  if (!isJobKind(row.kind) || !STATUSES.includes(row.status as JobStatus)) return null;
-  const status = row.status as JobStatus;
-  return {
-    id: row.id,
-    kind: row.kind,
-    status,
-    result: status === "done" ? ((row.result ?? null) as JobView["result"]) : null,
-    error:
-      status !== "failed"
-        ? null
-        : !row.error || row.error === JOB_EXHAUSTED
-          ? GENERIC_ERROR_MESSAGE
-          : row.error,
-  };
 }

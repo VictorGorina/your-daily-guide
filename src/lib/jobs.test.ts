@@ -4,15 +4,7 @@ import { GENERIC_ERROR_MESSAGE } from "@/lib/public-error";
 import { RateLimitError } from "@/lib/rate-limit-error";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
 
-import {
-  isJobActive,
-  JOB_EXHAUSTED,
-  jobErrorText,
-  jobsEnabled,
-  jobView,
-  parseJobInput,
-  sameJobTarget,
-} from "./jobs";
+import { jobErrorText, jobsEnabled, parseJobInput, sameJobTarget } from "./jobs";
 
 describe("jobsEnabled", () => {
   it("sin la variable, o con 0/false, la cola está apagada", () => {
@@ -75,49 +67,6 @@ describe("parseJobInput", () => {
     expect(parseJobInput("plan_fit", { month: "2026-10", today: "hoy" })).toBeNull();
     expect(parseJobInput("plan_fit", null)).toBeNull();
     expect(parseJobInput("plan_fit", "2026-10")).toBeNull();
-  });
-});
-
-describe("jobView", () => {
-  const row = { id: "j1", kind: "plan_generate", status: "queued", result: null, error: null };
-  it("en cola o en marcha: sin resultado ni error", () => {
-    expect(jobView(row)).toEqual({
-      id: "j1",
-      kind: "plan_generate",
-      status: "queued",
-      result: null,
-      error: null,
-    });
-    expect(jobView({ ...row, status: "running", result: { firstPlan: true } })?.result).toBeNull();
-  });
-  it("terminado: su resultado", () => {
-    expect(jobView({ ...row, status: "done", result: { firstPlan: true } })?.result).toEqual({
-      firstPlan: true,
-    });
-  });
-  it("fallido: su texto, o el genérico si agotó los intentos o no hay texto", () => {
-    expect(jobView({ ...row, status: "failed", error: "Octubre ya tiene su plan." })?.error).toBe(
-      "Octubre ya tiene su plan.",
-    );
-    expect(jobView({ ...row, status: "failed", error: JOB_EXHAUSTED })?.error).toBe(
-      GENERIC_ERROR_MESSAGE,
-    );
-    expect(jobView({ ...row, status: "failed", error: null })?.error).toBe(GENERIC_ERROR_MESSAGE);
-  });
-  it("un tipo o un estado que no se conoce no se enseña", () => {
-    expect(jobView({ ...row, kind: "otro" })).toBeNull();
-    expect(jobView({ ...row, status: "raro" })).toBeNull();
-  });
-});
-
-describe("isJobActive", () => {
-  it("en cola y en marcha cuentan como pendientes", () => {
-    expect(["queued", "running", "done", "failed"].map(isJobActive)).toEqual([
-      true,
-      true,
-      false,
-      false,
-    ]);
   });
 });
 
