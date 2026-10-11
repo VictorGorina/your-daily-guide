@@ -42,6 +42,14 @@ import { FAB_CLASS } from "@/components/coach-fab";
 import { DictateButton } from "@/components/dictate-button";
 import { DictationField, DictationWave } from "@/components/dictation-field";
 import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   addMessage,
   ensureTodayLog,
   fetchMonthlyPlan,
@@ -244,6 +252,8 @@ export default function CoachPanel({
   const busy = status === "submitted" || status === "streaming";
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Al abrir, el foco lo pone `onOpenAutoFocus`; esto lo devuelve al campo
+  // cuando el coach acaba de contestar.
   useEffect(() => {
     if (open && !busy) textareaRef.current?.focus();
   }, [open, busy]);
@@ -276,145 +286,140 @@ export default function CoachPanel({
   return (
     <>
       {sensitiveDialog}
-      {lastAction ? (
-        // El aviso vive SIEMPRE en el DOM (solo cambia su visibilidad con
-        // `open`) para que cerrar/abrir el coach a medio recalcular no
-        // desmonte y remonte esta chapa: si lo hiciera, la propia
-        // `animate-toast-in` de ActionRow se reproduciría otra vez por encima
-        // de la misma acción que ya se había visto animarse dentro del chat,
-        // dando el efecto de animación superpuesta/duplicada. La key por id
-        // sigue forzando el remount (y por tanto la animación de entrada)
-        // cuando SÍ llega una acción nueva.
-        <div
-          className={`fixed bottom-[calc(11.25rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 max-w-[16rem] ${
-            open ? "invisible" : "visible"
-          }`}
-        >
-          <ActionRow key={lastAction.id} action={lastAction} />
-        </div>
-      ) : null}
-
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={t("chat.fab.open")}
-        className={`${FAB_CLASS} ${
-          flash === "done"
-            ? "bg-primary text-primary-foreground scale-105"
-            : flash === "error"
-              ? "bg-destructive text-destructive-foreground"
-              : "bg-primary text-primary-foreground hover:scale-105"
-        }`}
-      >
-        {!open && !working && !flash ? (
-          <span className="animate-fab-ring pointer-events-none absolute inset-0 rounded-full bg-primary/40" />
+      {/* Sobre el `Sheet` de Radix (A11Y-04): foco atrapado, Escape y fuera cierran, y
+        al cerrar el foco vuelve al botón, que es su `SheetTrigger` (también cuando el
+        panel se montó ya abierto y quien se tocó fue el marcador de coach-fab.tsx). */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        {lastAction ? (
+          // El aviso vive SIEMPRE en el DOM (solo cambia su visibilidad con
+          // `open`) para que cerrar/abrir el coach a medio recalcular no
+          // desmonte y remonte esta chapa: si lo hiciera, la propia
+          // `animate-toast-in` de ActionRow se reproduciría otra vez por encima
+          // de la misma acción que ya se había visto animarse dentro del chat,
+          // dando el efecto de animación superpuesta/duplicada. La key por id
+          // sigue forzando el remount (y por tanto la animación de entrada)
+          // cuando SÍ llega una acción nueva.
+          <div
+            className={`fixed bottom-[calc(11.25rem+max(1rem,env(safe-area-inset-bottom)))] right-4 z-50 max-w-[16rem] ${
+              open ? "invisible" : "visible"
+            }`}
+          >
+            <ActionRow key={lastAction.id} action={lastAction} />
+          </div>
         ) : null}
-        {working || busy ? (
-          <Loader2 className="h-6 w-6 animate-spin" />
-        ) : flash === "done" ? (
-          <Check className="animate-pop h-6 w-6" />
-        ) : flash === "error" ? (
-          <AlertCircle className="animate-pop h-6 w-6" />
-        ) : (
-          <MessageCircle className="h-6 w-6" />
-        )}
-      </button>
 
-      {open ? (
-        <div className="animate-fade-in fixed inset-0 z-50 flex flex-col justify-end bg-foreground/30 backdrop-blur-sm">
+        <SheetTrigger asChild>
           <button
             type="button"
-            aria-label={t("common.close")}
-            onClick={() => setOpen(false)}
-            className="flex-1"
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="coach-fab-title"
-            className="animate-sheet-up mx-auto flex h-[78dvh] w-full max-w-lg flex-col rounded-t-3xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4"
+            aria-label={t("chat.fab.open")}
+            className={`${FAB_CLASS} ${
+              flash === "done"
+                ? "bg-primary text-primary-foreground scale-105"
+                : flash === "error"
+                  ? "bg-destructive text-destructive-foreground"
+                  : "bg-primary text-primary-foreground hover:scale-105"
+            }`}
           >
-            <div className="flex items-center justify-between pb-2">
-              <div>
-                <h2
-                  id="coach-fab-title"
-                  className="font-title text-lg font-semibold tracking-[-0.02em]"
-                >
-                  {t("chat.fab.title")}
-                </h2>
-                <p className="text-xs text-muted-foreground">{t("chat.fab.subtitle")}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label={t("chat.fab.close")}
-                className="grid h-9 w-9 place-items-center rounded-full bg-secondary text-muted-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            {!open && !working && !flash ? (
+              <span className="animate-fab-ring pointer-events-none absolute inset-0 rounded-full bg-primary/40" />
+            ) : null}
+            {working || busy ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : flash === "done" ? (
+              <Check className="animate-pop h-6 w-6" />
+            ) : flash === "error" ? (
+              <AlertCircle className="animate-pop h-6 w-6" />
+            ) : (
+              <MessageCircle className="h-6 w-6" />
+            )}
+          </button>
+        </SheetTrigger>
+
+        <SheetContent
+          side="bottom"
+          hideClose
+          onOpenAutoFocus={(event) => {
+            // A escribir, no a la «X» (lo primero enfocable del panel).
+            event.preventDefault();
+            textareaRef.current?.focus();
+          }}
+          className="mx-auto flex h-[78dvh] w-full max-w-lg flex-col gap-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4"
+        >
+          <div className="flex items-center justify-between pb-2">
+            <div>
+              <SheetTitle className="font-title tracking-[-0.02em]">
+                {t("chat.fab.title")}
+              </SheetTitle>
+              <SheetDescription className="text-xs">{t("chat.fab.subtitle")}</SheetDescription>
             </div>
-
-            <Conversation className="min-h-0 flex-1">
-              <ConversationContent className="gap-4 px-0">
-                {messages.length === 0 ? (
-                  <ConversationEmptyState
-                    title={t("chat.fab.emptyTitle")}
-                    description={t("chat.fab.emptyDesc")}
-                  />
-                ) : (
-                  messages.map((m) => {
-                    const text = m.parts
-                      .map((p) => (p.type === "text" ? p.text : ""))
-                      .join("")
-                      .trim();
-                    if (!text) return null;
-                    return (
-                      <Message key={m.id} from={m.role}>
-                        <MessageContent
-                          className={
-                            m.role === "assistant"
-                              ? "bg-transparent p-0 text-foreground"
-                              : "bg-primary text-primary-foreground"
-                          }
-                        >
-                          <MessageResponse>{text}</MessageResponse>
-                        </MessageContent>
-                      </Message>
-                    );
-                  })
-                )}
-                {actions.length ? (
-                  <div className="space-y-2">
-                    {actions.map((a) => (
-                      <ActionRow key={a.id} action={a} />
-                    ))}
-                  </div>
-                ) : null}
-                {busy && !working ? <Shimmer>{t("chat.thinking")}</Shimmer> : null}
-
-                {error ? <p className="text-sm text-destructive">{t("chat.fab.error")}</p> : null}
-              </ConversationContent>
-              <ConversationScrollButton />
-            </Conversation>
-
-            <DictationField>
-              <PromptInput onSubmit={handleSubmit} className="mt-3">
-                <PromptInputTextarea
-                  ref={textareaRef}
-                  placeholder={t("chat.fab.placeholder")}
-                  aria-label={t("chat.messageLabel")}
-                />
-                {/* Solo sobre el texto: los botones de debajo siguen a la vista. */}
-                <DictationWave className="bottom-12 rounded-none" />
-                <PromptInputFooter className="justify-between">
-                  <DictateButton onText={appendDictation} />
-                  <PromptInputSubmit status={status} disabled={busy} />
-                </PromptInputFooter>
-              </PromptInput>
-            </DictationField>
+            <SheetClose
+              aria-label={t("chat.fab.close")}
+              className="grid h-9 w-9 place-items-center rounded-full bg-secondary text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+            </SheetClose>
           </div>
-        </div>
-      ) : null}
+
+          <Conversation className="min-h-0 flex-1">
+            <ConversationContent className="gap-4 px-0">
+              {messages.length === 0 ? (
+                <ConversationEmptyState
+                  title={t("chat.fab.emptyTitle")}
+                  description={t("chat.fab.emptyDesc")}
+                />
+              ) : (
+                messages.map((m) => {
+                  const text = m.parts
+                    .map((p) => (p.type === "text" ? p.text : ""))
+                    .join("")
+                    .trim();
+                  if (!text) return null;
+                  return (
+                    <Message key={m.id} from={m.role}>
+                      <MessageContent
+                        className={
+                          m.role === "assistant"
+                            ? "bg-transparent p-0 text-foreground"
+                            : "bg-primary text-primary-foreground"
+                        }
+                      >
+                        <MessageResponse>{text}</MessageResponse>
+                      </MessageContent>
+                    </Message>
+                  );
+                })
+              )}
+              {actions.length ? (
+                <div className="space-y-2">
+                  {actions.map((a) => (
+                    <ActionRow key={a.id} action={a} />
+                  ))}
+                </div>
+              ) : null}
+              {busy && !working ? <Shimmer>{t("chat.thinking")}</Shimmer> : null}
+
+              {error ? <p className="text-sm text-destructive">{t("chat.fab.error")}</p> : null}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+
+          <DictationField>
+            <PromptInput onSubmit={handleSubmit} className="mt-3">
+              <PromptInputTextarea
+                ref={textareaRef}
+                placeholder={t("chat.fab.placeholder")}
+                aria-label={t("chat.messageLabel")}
+              />
+              {/* Solo sobre el texto: los botones de debajo siguen a la vista. */}
+              <DictationWave className="bottom-12 rounded-none" />
+              <PromptInputFooter className="justify-between">
+                <DictateButton onText={appendDictation} />
+                <PromptInputSubmit status={status} disabled={busy} />
+              </PromptInputFooter>
+            </PromptInput>
+          </DictationField>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
