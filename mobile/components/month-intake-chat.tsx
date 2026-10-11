@@ -319,9 +319,7 @@ function Chips<T extends string>({
             {active ? <Check size={14} color="#fbfaf7" /> : null}
             <Text
               className={`text-[13.5px] ${
-                active
-                  ? "font-sans-semibold text-primary-foreground"
-                  : "font-sans-medium text-foreground"
+                active ? "font-sans-semibold text-background" : "font-sans-medium text-foreground"
               }`}
             >
               {option.label}
