@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  CLIENT_DAY_COLUMNS,
   cleanGuide,
   cleanHabits,
+  clientDayPatch,
+  type DailyLogClientPatch,
   toChatMessage,
   toDailyLog,
   toDailyLogHistory,
@@ -208,5 +211,44 @@ describe("toChatMessage", () => {
   it("un role que no es de ninguno de los dos no se pinta", () => {
     expect(toChatMessage({ ...message, role: "system" })).toBeNull();
     expect(toChatMessage(null)).toBeNull();
+  });
+});
+
+// Ticket 39: lo que el cliente escribe en `daily_logs` con su sesión.
+describe("clientDayPatch", () => {
+  it("deja pasar las columnas del cliente tal cual", () => {
+    const patch = { habits: [], weight_kg: 78.5, notes: null, mood: "bien", evening_done: true };
+    expect(clientDayPatch(patch)).toEqual(patch);
+    expect(clientDayPatch({ weight_kg: null })).toEqual({ weight_kg: null });
+    expect(clientDayPatch({})).toEqual({});
+  });
+
+  it("quita lo que solo escribe el servidor, aunque llegue en una variable", () => {
+    const sneaky = {
+      habits: [],
+      guide: { intro: "x" },
+      snacks: {},
+      exercise: {},
+      adjustment: {},
+      user_id: "otra",
+      log_date: "2026-01-01",
+    };
+    expect(clientDayPatch(sneaky as DailyLogClientPatch)).toEqual({ habits: [] });
+  });
+
+  it("el tipo no admite esas columnas, y la lista es la de la migración", () => {
+    // @ts-expect-error `guide` solo la escribe el servidor (`saveGuide`).
+    const withGuide: DailyLogClientPatch = { guide: null };
+    // @ts-expect-error `snacks` solo la escribe el servidor.
+    const withSnacks: DailyLogClientPatch = { snacks: null };
+    expect([withGuide, withSnacks]).toHaveLength(2);
+    // Si esta lista cambia, cambia también el `GRANT UPDATE (…)` del ticket 39.
+    expect([...CLIENT_DAY_COLUMNS]).toEqual([
+      "habits",
+      "weight_kg",
+      "notes",
+      "mood",
+      "evening_done",
+    ]);
   });
 });

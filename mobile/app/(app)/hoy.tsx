@@ -27,7 +27,7 @@ import {
   todayISO,
   updateTodayLog,
   weeklyTrendFrom,
-  type DailyLog,
+  type DailyLogClientPatch,
   type MealStatus,
 } from "../../lib/daily";
 import { addMacros, showsNutritionNumbers, sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
@@ -129,7 +129,7 @@ export default function Hoy() {
   useTimezoneSync(profile);
 
   const save = useMutation({
-    mutationFn: (patch: Partial<DailyLog>) => updateTodayLog(patch),
+    mutationFn: (patch: DailyLogClientPatch) => updateTodayLog(patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["today"] });
       qc.invalidateQueries({ queryKey: ["logs"] });

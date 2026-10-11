@@ -112,6 +112,24 @@ export function cleanGuide(raw: unknown): DailyGuide | null {
   return o as DailyGuide;
 }
 
+/**
+ * Las columnas de `daily_logs` que escribe el cliente con su sesión. El resto
+ * (`guide`, `snacks`, `exercise`, `adjustment`) solo las escribe el servidor
+ * (ticket 39 de la auditoría): la base de datos rechazará lo demás.
+ */
+export const CLIENT_DAY_COLUMNS = ["habits", "weight_kg", "notes", "mood", "evening_done"] as const;
+export type DailyLogClientPatch = Partial<Pick<DailyLog, (typeof CLIENT_DAY_COLUMNS)[number]>>;
+
+/**
+ * Deja en el patch solo esas columnas. El tipo ya lo impide al escribir el
+ * objeto; esto cubre el que llega por una variable con más claves.
+ */
+export function clientDayPatch(patch: DailyLogClientPatch): DailyLogClientPatch {
+  const out: Record<string, unknown> = {};
+  for (const key of CLIENT_DAY_COLUMNS) if (key in patch) out[key] = patch[key];
+  return out as DailyLogClientPatch;
+}
+
 /** Lo que `fetchLogs` pide de cada día. `null` si la fila no trae fecha. */
 export function toDailyLogHistory(raw: unknown): DailyLogHistory | null {
   if (!isBag(raw) || !text(raw.log_date)) return null;

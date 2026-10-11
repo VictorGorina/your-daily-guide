@@ -14,6 +14,7 @@ import {
   saveGuide,
   updateLogByDate,
   type DailyLog,
+  type DailyLogClientPatch,
   type MealStatus,
   type Profile,
 } from "@/lib/daily";
@@ -222,7 +223,7 @@ export function DayDetailBody({
   const habits = log?.habits?.length ? log.habits : isBackfill ? planHabits : [];
 
   const correct = useMutation({
-    mutationFn: (patch: Partial<DailyLog>) => updateLogByDate(date, patch),
+    mutationFn: (patch: DailyLogClientPatch) => updateLogByDate(date, patch),
     onSuccess: refreshLogs,
     onError: () => toast.error(t("dayDetail.saveFailed")),
   });

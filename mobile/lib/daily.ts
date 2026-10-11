@@ -7,7 +7,14 @@ import {
   mealsForDate,
   withOverflowWeek,
 } from "./plan-shared";
-import { toChatMessage, toDailyLog, toDailyLogHistory, toDailyLogs } from "./day-row";
+import {
+  clientDayPatch,
+  type DailyLogClientPatch,
+  toChatMessage,
+  toDailyLog,
+  toDailyLogHistory,
+  toDailyLogs,
+} from "./day-row";
 import { currentUserId, supabase } from "./supabase";
 import type {
   MealHabit,
@@ -174,6 +181,8 @@ export type { MealHabit, MealStatus } from "./plan-shared";
 
 /** Estados de una comida, en el orden en que se ofrecen; su texto, en `mealStatus.<estado>`. */
 export const MEAL_STATUSES: readonly MealStatus[] = ["plan", "distinto", "salteo"];
+
+export type { DailyLogClientPatch } from "./day-row";
 
 export type DailyLog = {
   id: string;
@@ -350,8 +359,11 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
   return created;
 }
 
-export async function updateTodayLog(patch: Partial<DailyLog>) {
-  const { error } = await supabase.from("daily_logs").update(patch).eq("log_date", todayISO());
+export async function updateTodayLog(patch: DailyLogClientPatch) {
+  const { error } = await supabase
+    .from("daily_logs")
+    .update(clientDayPatch(patch))
+    .eq("log_date", todayISO());
   if (error) throw error;
 }
 
@@ -863,11 +875,12 @@ export function goalProgress(profile: Profile | null): GoalProgress {
  * personal; nunca reescribe la compra ya confirmada de ese mes. El día de hoy
  * se corrige desde la pestaña Hoy, no aquí.
  */
-export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
+export async function updateLogByDate(date: string, patch: DailyLogClientPatch) {
+  const clean = clientDayPatch(patch);
   if (date >= todayISO()) throw new Error("Solo se pueden corregir días pasados");
   const { data, error } = await supabase
     .from("daily_logs")
-    .update(patch)
+    .update(clean)
     .eq("log_date", date)
     .select("id");
   if (error) throw error;
@@ -880,7 +893,7 @@ export async function updateLogByDate(date: string, patch: Partial<DailyLog>) {
   if (!userId) throw new Error("Sin sesión");
   const { error: insertError } = await supabase
     .from("daily_logs")
-    .insert({ user_id: userId, log_date: date, habits: [], ...patch });
+    .insert({ user_id: userId, log_date: date, habits: [], ...clean });
   if (insertError) {
     throw new Error("Este día es demasiado antiguo para rellenarlo");
   }
