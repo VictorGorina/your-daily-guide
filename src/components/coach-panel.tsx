@@ -314,10 +314,10 @@ export default function CoachPanel({
             aria-label={t("chat.fab.open")}
             className={`${FAB_CLASS} ${
               flash === "done"
-                ? "bg-primary text-primary-foreground scale-105"
+                ? "bg-secondary text-primary-ink scale-105"
                 : flash === "error"
                   ? "bg-destructive text-destructive-foreground"
-                  : "bg-primary text-primary-foreground hover:scale-105"
+                  : "bg-secondary text-primary-ink hover:scale-105"
             }`}
           >
             {!open && !working && !flash ? (

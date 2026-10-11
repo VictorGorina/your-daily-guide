@@ -337,7 +337,7 @@ export default function Hoy() {
         onPress={() => router.navigate("/chat")}
         className="absolute bottom-32 right-5 h-14 w-14 items-center justify-center rounded-full active:opacity-90"
         style={{
-          backgroundColor: "#ff8a3d",
+          backgroundColor: "#eae6dd",
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 6 },
           shadowOpacity: 0.35,
@@ -416,5 +416,5 @@ export default function Hoy() {
 }
 
 function ChatBubbleIcon() {
-  return <MessageCircle size={22} color="#3e3d39" />;
+  return <MessageCircle size={22} color="#a84a17" />;
 }

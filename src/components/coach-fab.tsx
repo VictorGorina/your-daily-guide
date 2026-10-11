@@ -49,7 +49,7 @@ export function CoachFab() {
         setMounted(true);
       }}
       aria-label={t("chat.fab.open")}
-      className={`${FAB_CLASS} bg-primary text-primary-foreground hover:scale-105`}
+      className={`${FAB_CLASS} bg-secondary text-primary-ink hover:scale-105`}
     >
       {openOnMount ? (
         <Loader2 className="h-6 w-6 animate-spin" />
