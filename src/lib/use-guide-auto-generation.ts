@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { fetchTodayLog, updateTodayLog, type DailyGuide, type DailyLog } from "@/lib/daily";
+import { fetchTodayLog, saveGuide, type DailyGuide, type DailyLog } from "@/lib/daily";
 import { generateDailyGuide } from "@/lib/guide.functions";
 import { guideMeals, guideReuse, mealsToRecalculate, mergeGuide } from "@/lib/macros";
 import type { mealsForDate } from "@/lib/plan-shared";
@@ -116,7 +116,7 @@ export function useGuideAutoGeneration({
       // Si la generación vuelve con el texto de respaldo y sin cifras, se
       // conservan las que ya tuviera el día: regenerar nunca debe dejar la
       // barra de macros peor de como estaba (ver `mergeGuide`).
-      await updateTodayLog({ guide: mergeGuide(today?.guide, fresh) });
+      await saveGuide(mergeGuide(today?.guide, fresh));
       lastAutoGuideFailed = false;
       qc.invalidateQueries({ queryKey: ["today"] });
     } catch {
@@ -213,7 +213,7 @@ export function useGuideTargetsSync(
     void fetchTodayLog()
       .then((fresh) => {
         if (!fresh?.guide || fresh.guide.targets?.kcal === target.kcal) return;
-        return updateTodayLog({ guide: { ...fresh.guide, targets: target } }).then(() =>
+        return saveGuide({ ...fresh.guide, targets: target }).then(() =>
           qc.invalidateQueries({ queryKey: ["today"] }),
         );
       })

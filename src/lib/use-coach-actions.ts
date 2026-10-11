@@ -8,6 +8,7 @@ import {
   monthISO,
   saveProfile,
   todayISO,
+  saveGuide,
   updateTodayLog,
   type DailyGuide,
   type DailyLog,
@@ -144,7 +145,7 @@ export function useCoachActions(
       if (toolName === "regenerar_guia") {
         const { dishMacros: _none, ...fresh } = await makeGuide({ data: undefined } as never);
         // Sin platos no trae cifras: nunca deja el día con menos de las que tenía.
-        await updateTodayLog({ guide: mergeGuide(getLog()?.guide, fresh) });
+        await saveGuide(mergeGuide(getLog()?.guide, fresh));
         return "Guía de hoy regenerada";
       }
       if (toolName === "cambiar_plato") {
@@ -213,7 +214,7 @@ export function useCoachActions(
                   h.label === label ? { ...h, wasIdea: h.wasIdea ?? previousIdea } : h,
                 )
               : habits;
-          await updateTodayLog({ guide, habits: nextHabits });
+          await saveGuide(guide, { habits: nextHabits });
 
           if (previousIdea && previousIdea !== dish) {
             const habit = habits.find((h) => h.label === label);

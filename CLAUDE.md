@@ -197,7 +197,9 @@ contrato para cualquier columna de la fila del día; con `create: true` crea la 
 deporte; `patchDailyHabits` es su atajo para `habits`) y `patchTodayHabits` en el cliente. Los
 helpers de servidor leen y escriben con `supabaseAdmin` (ticket 39; no reciben cliente): se
 saltan RLS, así que su `userId` es siempre el del JWT (`context.userId`) y la ventana de fechas
-para crear un día (`DAILY_INSERT_WINDOW`) va en código. El trabajo caro no se repite: solo se vuelve a aplicar su
+para crear un día (`DAILY_INSERT_WINDOW`) va en código. `daily_logs.guide` ya no la escribe la
+web: va por `saveDayGuide` (`saveGuide` en `daily.ts`), que la valida con las reglas de
+`day-row.ts`. El trabajo caro no se repite: solo se vuelve a aplicar su
 resultado. En la pantalla, el estado de la compra va con `useShoppingMutation` (optimista con esas
 mismas funciones y en serie por mes, copia en `mobile/lib/`). `generateMonthlyPlan` usa `insert`:
 la restricción única es la guarda contra dos generaciones a la vez.

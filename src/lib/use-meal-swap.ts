@@ -8,7 +8,7 @@ import {
   fetchTodayLog,
   patchTodayHabits,
   todayISO,
-  updateTodayLog,
+  saveGuide,
   type DailyGuide,
   type DailyLog,
 } from "@/lib/daily";
@@ -102,7 +102,7 @@ async function resolveDishDeltas(dishes: PendingDish[]): Promise<ResolvedDishes>
     // la persona haya cambiado un plato.
     macroEstimate: currentGuide?.macroEstimate ?? freshGuide.macroEstimate ?? null,
   };
-  await updateTodayLog({ guide });
+  await saveGuide(guide);
 
   // Las cifras del plan recién calculadas se congelan en la comida, igual que
   // si se hubieran capturado al cambiarla.

@@ -19,6 +19,7 @@ import {
   withOverflowWeek,
 } from "@/lib/plan-shared";
 import { addDaysISO, dateInMonth, daysInMonth } from "@/lib/dates";
+import { saveDayGuide } from "@/lib/day-guide.functions";
 import { toChatMessage, toDailyLog, toDailyLogHistory, toDailyLogs } from "@/lib/day-row";
 
 export type Profile = {
@@ -491,6 +492,26 @@ export async function ensureTodayLog(habits: string[]): Promise<DailyLog> {
 export async function updateTodayLog(patch: Partial<DailyLog>) {
   const { error } = await supabase.from("daily_logs").update(patch).eq("log_date", todayISO());
   if (error) throw error;
+}
+
+/**
+ * Guarda la guía de un día (hoy, si no se dice otro) por el servidor: `guide`
+ * ya no se escribe desde el cliente (ticket 39). `habits` va en la misma
+ * escritura cuando las comidas cambian a la vez que la guía.
+ */
+export async function saveGuide(
+  guide: DailyGuide,
+  opts: { date?: string; habits?: MealHabit[] } = {},
+) {
+  const today = todayISO();
+  await saveDayGuide({
+    data: {
+      date: opts.date ?? today,
+      today,
+      guide,
+      ...(opts.habits ? { habits: opts.habits } : {}),
+    },
+  });
 }
 
 /** El registro de hoy si existe, sin crearlo (a diferencia de `ensureTodayLog`). */
