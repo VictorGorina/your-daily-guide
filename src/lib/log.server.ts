@@ -94,6 +94,11 @@
  *   seguir tras responder (`where`: `chat`), así que el gasto de un chat
  *   cortado a medias puede escaparse del tope. Ver `after-response.server.ts`
  *   y `waitUntil` en `/api/health`: el despliegue ha dejado de pasar el puente.
+ * - `job_done` (info) / `job_failed` (info o error): un trabajo de la cola
+ *   (`jobs`, ticket 40) terminó. `job_failed` en `error` es un fallo nuestro;
+ *   en `info`, un final previsto (cuota agotada, "ya tiene plan").
+ * - `job_enqueue_failed` (error): no se pudo dejar el trabajo en la cola y la
+ *   petición hizo el trabajo en línea, como sin `JOBS_ENABLED`.
  * - `signup_weak_password_mismatch` (error): `generateLink` rechazó por débil
  *   una contraseña que `passwordProblem` aceptó: el panel de Supabase Auth y
  *   `PASSWORD_RULES` se han desalineado, y el alta no manda el correo.
