@@ -6,17 +6,23 @@ import { useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BottomNav } from "../../components/bottom-nav";
-import { RegionFields } from "../../components/region-fields";
-import { apiPost } from "../../lib/api";
-import { fetchAllLogs, fetchProfile, saveProfile, todayISO, type Profile } from "../../lib/daily";
-import { buildHistoryCsv, historyFileName } from "../../lib/history-export";
-import { clearLocalUserData } from "../../lib/local-user-data";
-import { showsNutritionNumbers } from "../../lib/macros";
-import { currencyForCountry, DEFAULT_COUNTRY } from "../../lib/regions";
-import { supabase } from "../../lib/supabase";
-import { useLocale } from "../../lib/use-locale";
-import { resolveDeviceTimeZone } from "../../lib/zoned-date";
+import { BottomNav } from "../../../components/bottom-nav";
+import { RegionFields } from "../../../components/region-fields";
+import { apiPost } from "../../../lib/api";
+import {
+  fetchAllLogs,
+  fetchProfile,
+  saveProfile,
+  todayISO,
+  type Profile,
+} from "../../../lib/daily";
+import { buildHistoryCsv, historyFileName } from "../../../lib/history-export";
+import { clearLocalUserData } from "../../../lib/local-user-data";
+import { showsNutritionNumbers } from "../../../lib/macros";
+import { currencyForCountry, DEFAULT_COUNTRY } from "../../../lib/regions";
+import { supabase } from "../../../lib/supabase";
+import { useLocale } from "../../../lib/use-locale";
+import { resolveDeviceTimeZone } from "../../../lib/zoned-date";
 
 // Nota de portado (ver AGENTS.md de mobile/): respecto a la pantalla web se
 // omiten dos secciones que aún no aplican en nativo:

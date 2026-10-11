@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   CalendarRange,
   ChevronLeft,
@@ -10,28 +10,28 @@ import {
   Sparkles,
   Users,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BottomNav } from "../../components/bottom-nav";
-import { DayDetailSheet } from "../../components/day-detail-sheet";
-import { GoalWeightSummary } from "../../components/goal-weight-summary";
-import { MonthIntakeChat } from "../../components/month-intake-chat";
-import { MonthSpendSummary } from "../../components/month-spend-summary";
-import { IngredientsTab } from "../../components/plan/ingredients-tab";
-import { PlanMonthCalendar } from "../../components/plan/month-calendar";
-import { ShoppingMode } from "../../components/plan/shopping-mode";
-import { PlanFitNote } from "../../components/plan-fit-note";
-import { apiPost } from "../../lib/api";
+import { BottomNav } from "../../../components/bottom-nav";
+import { DayDetailSheet } from "../../../components/day-detail-sheet";
+import { GoalWeightSummary } from "../../../components/goal-weight-summary";
+import { MonthIntakeChat } from "../../../components/month-intake-chat";
+import { MonthSpendSummary } from "../../../components/month-spend-summary";
+import { IngredientsTab } from "../../../components/plan/ingredients-tab";
+import { PlanMonthCalendar } from "../../../components/plan/month-calendar";
+import { ShoppingMode } from "../../../components/plan/shopping-mode";
+import { PlanFitNote } from "../../../components/plan-fit-note";
+import { apiPost } from "../../../lib/api";
 import {
   fitPlanOnce,
   planDishesToWarm,
   useRecipeWarmProgress,
   warmPlanRecipes,
   type WarmResult,
-} from "../../lib/recipe-warm";
+} from "../../../lib/recipe-warm";
 import {
   fetchLogs,
   fetchLogsForMonth,
@@ -40,9 +40,9 @@ import {
   fetchPlannerShopping,
   fetchProfile,
   todayISO,
-} from "../../lib/daily";
-import { fetchHousehold, householdSharedSlots } from "../../lib/household";
-import { dateLocale } from "../../lib/i18n";
+} from "../../../lib/daily";
+import { fetchHousehold, householdSharedSlots } from "../../../lib/household";
+import { dateLocale } from "../../../lib/i18n";
 import {
   addMonths,
   cadenceOf,
@@ -67,14 +67,14 @@ import {
   type ShoppingCadence,
   type ShoppingList,
   type TripReceipts,
-} from "../../lib/plan-shared";
-import { useShoppingMutations } from "../../lib/use-shopping-mutations";
+} from "../../../lib/plan-shared";
+import { useShoppingMutations } from "../../../lib/use-shopping-mutations";
 import {
   flushPlanRecalc,
   onPlanRecalcDone,
   schedulePlanRecalc,
   wirePlanRecalcFlush,
-} from "../../lib/plan-recalc";
+} from "../../../lib/plan-recalc";
 
 type GenerateResult = { plan: MonthlyPlan; shopping: ShoppingList; firstPlan?: boolean };
 
@@ -308,9 +308,12 @@ export default function Plan() {
       qc.invalidateQueries({ queryKey: ["planner-shopping", done] });
     });
   }, [qc]);
-  useEffect(() => {
-    if (!isSoloPlanner) void flushPlanRecalc(month);
-  }, [month, isSoloPlanner]);
+  // Al foco y no al montar: la pestaña ya no se desmonta al salir (ticket 40).
+  useFocusEffect(
+    useCallback(() => {
+      if (!isSoloPlanner) void flushPlanRecalc(month);
+    }, [month, isSoloPlanner]),
+  );
 
   // Todos los platos del plan, calculados al generarlo o cambiarlo (ticket 06,
   // D13): ninguno llega a Hoy "Calculando…". Solo lo que falte en la caché; si

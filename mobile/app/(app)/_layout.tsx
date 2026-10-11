@@ -8,7 +8,7 @@ import { useAuth } from "../../lib/auth-context";
  * Guardia de las pantallas autenticadas. Todo lo que cuelga de `(app)/`
  * requiere sesión: sin ella, de vuelta a la entrada. Así el resto de pantallas
  * (Fase 3) no repiten la comprobación cada una. El paréntesis en el nombre es
- * un grupo de expo-router: no aparece en la URL, `(app)/hoy` sigue siendo
+ * un grupo de expo-router: no aparece en la URL, `(app)/(tabs)/hoy` sigue siendo
  * `/hoy`.
  */
 /** Un error de render en una pantalla con sesión, en vez de pantalla en blanco (ticket 27). */

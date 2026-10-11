@@ -39,6 +39,22 @@ código compartido por ahora — cuando duela duplicar, se monta `packages/share
   `accessibilityLabel`; si es un chip o una pestaña, `accessibilityState`; y menos de 44 pt de lado
   se compensa con `hitSlop`.
 
+## Navegación: pestañas dentro de un `Stack`
+
+`app/(app)/_layout.tsx` es un `Stack` (guardia de sesión) y dentro va el grupo
+`app/(app)/(tabs)/` con las cuatro pestañas (`hoy`, `plan`, `hogar`, `ajustes`) en un `Tabs` de
+expo-router. `chat`, `perfil` y `onboarding` cuelgan del `Stack`: entran por encima y se vuelve
+con el gesto de atrás. Los paréntesis no salen en la URL (`/hoy` sigue siendo `/hoy`).
+
+- **Una pestaña no se desmonta al salir de ella.** Lo que tenga que repetirse al volver va con
+  `useFocusEffect` / `useIsFocused`, no en un efecto de montaje (ejemplos: `flushPlanRecalc` en
+  Plan, el repaso nocturno de Hoy, que además no puede abrirse con otra pestaña delante). Al
+  enfocar una pestaña, el layout vuelve a pedir las consultas caducadas.
+- El `Tabs` no pinta barra (`tabBar` vacío): `BottomNav` la sigue poniendo cada pantalla, porque
+  el modo compra de Plan va a pantalla completa sin ella.
+- Tras mover o crear archivos de ruta con `git stash` / `git checkout`, **reinicia Metro**: puede
+  servir el bundle cacheado sin avisar (en el log, «Bundled … (1 module)»).
+
 ## Versiones que no se pueden tocar a la ligera
 
 **NativeWind v4 exige Tailwind v3, no v4.** La v4 quitó la API de configuración en la que se apoya
@@ -101,7 +117,7 @@ perfiles de `eas.json`): `SENTRY_DISABLE_AUTO_UPLOAD=true LANG=en_US.UTF-8 LC_AL
 npx expo run:ios`. Sin `EXPO_PUBLIC_SENTRY_DSN`, la app no inicia Sentry (`lib/sentry.ts`).
 
 **`expo-image-picker` / `expo-image-manipulator`** (escaneo del tiquet de la compra en
-`app/(app)/plan.tsx`, `ShopModeView`) están en `package.json` y en `plugins` de `app.json`, pero
+`app/(app)/(tabs)/plan.tsx`, `ShopModeView`) están en `package.json` y en `plugins` de `app.json`, pero
 **necesitan un prebuild + build nativo** para funcionar: hasta entonces el botón "Escanear tiquet"
 avisa ("estará disponible en la próxima versión") en vez de fallar, porque la carga del módulo va
 en un `import()` dinámico envuelto en try/catch. La web ya lleva la función completa (usa

@@ -1,21 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { MessageCircle } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AdjustmentInfoSheet } from "../../components/adjustment-info-sheet";
-import { BottomNav } from "../../components/bottom-nav";
-import { ExerciseSheet } from "../../components/exercise-sheet";
-import { DayBalanceSection } from "../../components/hoy/day-balance-section";
-import { HoyHeader, MacroSection } from "../../components/hoy/day-summary";
-import { MealStrip } from "../../components/hoy/meal-strip";
-import { WeekSection } from "../../components/hoy/week-section";
-import { MealSwapSheet } from "../../components/meal-swap-sheet";
-import { NightlyReviewSheet } from "../../components/nightly-review-sheet";
-import { SnackSheet } from "../../components/snack-sheet";
+import { AdjustmentInfoSheet } from "../../../components/adjustment-info-sheet";
+import { BottomNav } from "../../../components/bottom-nav";
+import { ExerciseSheet } from "../../../components/exercise-sheet";
+import { DayBalanceSection } from "../../../components/hoy/day-balance-section";
+import { HoyHeader, MacroSection } from "../../../components/hoy/day-summary";
+import { MealStrip } from "../../../components/hoy/meal-strip";
+import { WeekSection } from "../../../components/hoy/week-section";
+import { MealSwapSheet } from "../../../components/meal-swap-sheet";
+import { NightlyReviewSheet } from "../../../components/nightly-review-sheet";
+import { SnackSheet } from "../../../components/snack-sheet";
 import {
   ensureTodayLog,
   fetchLogs,
@@ -29,25 +29,28 @@ import {
   weeklyTrendFrom,
   type DailyLogClientPatch,
   type MealStatus,
-} from "../../lib/daily";
-import { addMacros, showsNutritionNumbers, sumDoneMacros, ZERO_MACROS } from "../../lib/macros";
-import { energyTargets, targetsAsMacros } from "../../lib/energy";
-import { learnedPortionSize, portionSizeHistory } from "../../lib/portion";
-import { fetchHousehold, householdSharedSlots } from "../../lib/household";
+} from "../../../lib/daily";
+import { addMacros, showsNutritionNumbers, sumDoneMacros, ZERO_MACROS } from "../../../lib/macros";
+import { energyTargets, targetsAsMacros } from "../../../lib/energy";
+import { learnedPortionSize, portionSizeHistory } from "../../../lib/portion";
+import { fetchHousehold, householdSharedSlots } from "../../../lib/household";
 import {
   dishChangeIsMine,
   effectiveMealSlots,
   mealsForDate,
   type MonthlyPlan,
-} from "../../lib/plan-shared";
-import { quoteIndexOfTheDay } from "../../lib/quotes";
-import { snackTotals } from "../../lib/snacks";
-import { MOMENT_TO_MEAL_KEY } from "../../lib/today-meals";
-import { useDayExtras } from "../../lib/use-day-extras";
-import { useDayReconcile } from "../../lib/use-day-reconcile";
-import { useGuideAutoGeneration, useGuideTargetsSync } from "../../lib/use-guide-auto-generation";
-import { useMealSwap } from "../../lib/use-meal-swap";
-import { useTimezoneSync } from "../../lib/use-timezone-sync";
+} from "../../../lib/plan-shared";
+import { quoteIndexOfTheDay } from "../../../lib/quotes";
+import { snackTotals } from "../../../lib/snacks";
+import { MOMENT_TO_MEAL_KEY } from "../../../lib/today-meals";
+import { useDayExtras } from "../../../lib/use-day-extras";
+import { useDayReconcile } from "../../../lib/use-day-reconcile";
+import {
+  useGuideAutoGeneration,
+  useGuideTargetsSync,
+} from "../../../lib/use-guide-auto-generation";
+import { useMealSwap } from "../../../lib/use-meal-swap";
+import { useTimezoneSync } from "../../../lib/use-timezone-sync";
 
 export default function Hoy() {
   const router = useRouter();
@@ -60,6 +63,7 @@ export default function Hoy() {
   const [snackOpen, setSnackOpen] = useState(false);
   const [nightlyOpen, setNightlyOpen] = useState(false);
   const nightlyAutoOpenedRef = useRef(false);
+  const focused = useIsFocused();
 
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const logsQ = useQuery({ queryKey: ["logs"], queryFn: fetchLogs });
@@ -145,7 +149,10 @@ export default function Hoy() {
     date: today0,
   });
 
+  // Solo con Hoy delante: la pestaña sigue montada debajo de las demás (ticket
+  // 40) y el repaso no puede abrirse encima de otra. Al volver se mira otra vez.
   useEffect(() => {
+    if (!focused) return;
     if (nightlyAutoOpenedRef.current || !profile?.evening_time || !today) return;
     const [h, m] = profile.evening_time.split(":").map(Number);
     if (Number.isNaN(h) || Number.isNaN(m)) return;
@@ -155,7 +162,7 @@ export default function Hoy() {
       nightlyAutoOpenedRef.current = true;
       setNightlyOpen(true);
     }
-  }, [profile?.evening_time, today]);
+  }, [focused, profile?.evening_time, today]);
 
   const finishNightlyReview = () => {
     save.mutate({ evening_done: true });

@@ -76,7 +76,7 @@ const CATEGORY_ICON: Partial<Record<FoodCategory, typeof Carrot>> = {
 
 /**
  * Icono Lucide por categoría de comida — la misma familia que los iconos de la
- * subpestaña Ingredientes (`CategoryIcon` en app/(app)/plan.tsx) y que la web
+ * subpestaña Ingredientes (`CategoryIcon` en app/(app)/(tabs)/plan.tsx) y que la web
  * (src/components/food-category-bg.tsx). Sustituye a `DishImage` en las filas
  * de comida de Hoy: un glifo de sistema se lee mejor a 40px y no depende de
  * tener un SVG propio para cada plato. `otro` no dibuja nada (guideline §6:

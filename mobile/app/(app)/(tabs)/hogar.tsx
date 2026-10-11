@@ -5,17 +5,17 @@ import { useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BottomNav } from "../../components/bottom-nav";
-import { ChildSheet } from "../../components/child-sheet";
-import { JoinOrCreateHousehold } from "../../components/hogar/join-or-create";
-import { HouseholdRebuildCard } from "../../components/hogar/rebuild-card";
-import { HouseholdRosterCard } from "../../components/hogar/roster-card";
-import { HouseholdScheduleSection } from "../../components/hogar/schedule-section";
-import { fetchMonthlyPlan, monthISO, todayISO } from "../../lib/daily";
-import { fetchHousehold, type HouseholdChild } from "../../lib/household";
-import { EMPTY_SCHEDULE, eatsTableFood } from "../../lib/household-shared";
-import { childPureeGaps, type MonthlyPlan } from "../../lib/plan-shared";
-import { useHouseholdMutations } from "../../lib/use-household-mutations";
+import { BottomNav } from "../../../components/bottom-nav";
+import { ChildSheet } from "../../../components/child-sheet";
+import { JoinOrCreateHousehold } from "../../../components/hogar/join-or-create";
+import { HouseholdRebuildCard } from "../../../components/hogar/rebuild-card";
+import { HouseholdRosterCard } from "../../../components/hogar/roster-card";
+import { HouseholdScheduleSection } from "../../../components/hogar/schedule-section";
+import { fetchMonthlyPlan, monthISO, todayISO } from "../../../lib/daily";
+import { fetchHousehold, type HouseholdChild } from "../../../lib/household";
+import { EMPTY_SCHEDULE, eatsTableFood } from "../../../lib/household-shared";
+import { childPureeGaps, type MonthlyPlan } from "../../../lib/plan-shared";
+import { useHouseholdMutations } from "../../../lib/use-household-mutations";
 
 export default function Hogar() {
   const { t } = useTranslation();
