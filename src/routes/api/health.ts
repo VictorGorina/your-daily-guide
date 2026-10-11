@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { waitUntilVia } from "@/lib/after-response.server";
 import { cronSecretMatches } from "@/lib/cron-secret.server";
+import { jobsEnabled } from "@/lib/jobs";
 
 // Comprobación de vida para un monitor externo. No toca la base de datos ni la
 // IA: responde aunque Supabase u OpenRouter estén caídos, y no gasta nada. Con
@@ -60,6 +61,8 @@ export const Route = createFileRoute("/api/health")({
             sentry: has("SENTRY_DSN", "VITE_SENTRY_DSN"),
             turnstile: has("TURNSTILE_SECRET_KEY", "VITE_TURNSTILE_SITE_KEY"),
             turnstileEnforce: process.env.TURNSTILE_ENFORCE === "1",
+            // La cola de trabajos largos (ticket 40): sin `JOBS_ENABLED` nadie encola.
+            jobs: jobsEnabled(),
           };
           body.email = await emailConfig();
           // `route`: la petición que recibe la ruta (chat). `current`: la de

@@ -2,6 +2,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ValidationError } from "@/lib/validation-error";
 import { clampClientToday } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
+import { enqueueOrRun } from "./enqueue.server";
 import { runFitMonthlyPlan } from "./fit-run.server";
 
 /**
@@ -22,9 +23,17 @@ import { runFitMonthlyPlan } from "./fit-run.server";
  */
 export const fitMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { month: string; today?: string }) => {
+  .validator((input: { month: string; today?: string; async?: boolean }) => {
     if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
     const today = clampClientToday(input?.today);
-    return { month: input.month, today };
+    return { month: input.month, today, async: input?.async === true };
   })
-  .handler(({ data, context }) => runFitMonthlyPlan(context, data));
+  .handler(({ data: { async: queued, ...data }, context }) =>
+    enqueueOrRun({
+      queued,
+      userId: context.userId,
+      kind: "plan_fit",
+      input: data,
+      run: () => runFitMonthlyPlan(context, data),
+    }),
+  );

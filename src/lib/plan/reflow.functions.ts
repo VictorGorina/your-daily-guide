@@ -16,6 +16,7 @@ import { clampClientToday } from "@/lib/zoned-date";
 import { requireAiKey } from "@/lib/ai-provider.server";
 import { createServerFn } from "@tanstack/react-start";
 import { reflowMeals } from "./reflow.server";
+import { enqueueOrRun } from "./enqueue.server";
 import { runReflowMonthlyPlan } from "./reflow-run.server";
 
 export const adjustMonthlyPlan = createServerFn({ method: "POST" })
@@ -232,10 +233,20 @@ export type { ReflowResult } from "./reflow-run.server";
  */
 export const reflowMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { month: string; today?: string; scope?: "meals" | "full" }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
-    const today = clampClientToday(input?.today);
-    const scope: "meals" | "full" = input?.scope === "full" ? "full" : "meals";
-    return { month: input.month, today, scope };
-  })
-  .handler(({ data, context }) => runReflowMonthlyPlan(context, data));
+  .validator(
+    (input: { month: string; today?: string; scope?: "meals" | "full"; async?: boolean }) => {
+      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
+      const today = clampClientToday(input?.today);
+      const scope: "meals" | "full" = input?.scope === "full" ? "full" : "meals";
+      return { month: input.month, today, scope, async: input?.async === true };
+    },
+  )
+  .handler(({ data: { async: queued, ...data }, context }) =>
+    enqueueOrRun({
+      queued,
+      userId: context.userId,
+      kind: "plan_reflow",
+      input: data,
+      run: () => runReflowMonthlyPlan(context, data),
+    }),
+  );

@@ -20,6 +20,16 @@ function alreadyPlanned(month: string): ValidationError {
   );
 }
 
+/** Lanza si el mes ya tiene plan en la fila propia de la persona. */
+export async function assertMonthNotPlanned(
+  supabase: DbClient,
+  userId: string,
+  month: string,
+): Promise<void> {
+  const { data: existing } = await ownPlanRow(supabase, userId, month, "id");
+  if (existing) throw alreadyPlanned(month);
+}
+
 /**
  * El trabajo de `generateMonthlyPlan`, fuera del `.handler()` (ticket 40 de la
  * auditoría): así lo puede ejecutar también quien no es una petición de la
@@ -37,10 +47,7 @@ export async function runGenerateMonthlyPlan(
   // hogar, la despensa— lo recoloca `reflowMonthlyPlan` sin pasar por aquí, y
   // lo que la persona tenga que contar del mes se pregunta ANTES de generar
   // (`MonthIntakeChat`). Va antes de la cuota: un rechazo no la gasta.
-  const { data: existing } = await ownPlanRow(ctx.supabase, ctx.userId, data.month, "id");
-  if (existing) {
-    throw alreadyPlanned(data.month);
-  }
+  await assertMonthNotPlanned(ctx.supabase, ctx.userId, data.month);
 
   // ¿Es el primer plan de la persona? Entonces el cliente pide además la
   // bienvenida del coach (`welcomeBriefing`). Se mira aquí y no por

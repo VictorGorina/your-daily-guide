@@ -51,9 +51,12 @@ import {
   tripTiming,
   shoppingTotal,
   type PantryExtra,
+  type PlanFitMark,
   type ShoppingCadence,
   type TripReceipts,
 } from "@/lib/plan-shared";
+import { settleJob } from "@/lib/job-wait";
+import { fetchActiveJob, readJob } from "@/lib/jobs-read";
 import {
   fitPlanOnce,
   planDishesToWarm,
@@ -201,9 +204,18 @@ function PlanPage() {
   // mensaje de bienvenida del coach, que antes pedía el onboarding.
   const [intakeOpen, setIntakeOpen] = useState(false);
   const briefFn = useServerFn(welcomeBriefing);
+  //
+  // Con la cola de trabajos largos (ticket 40) el servidor responde `{ jobId }`
+  // y el plan se genera aparte: se espera leyendo su fila (`settleJob`), y si
+  // la persona sale y vuelve, `{ resume }` retoma el que dejó en marcha.
   const generate = useMutation({
-    mutationFn: (nextCadence?: ShoppingCadence) =>
-      make({ data: { month, cadence: nextCadence ?? "mensual", today } }),
+    mutationFn: async (how?: ShoppingCadence | { resume: string }) =>
+      settleJob<{ firstPlan: boolean }, { firstPlan: boolean }>(
+        typeof how === "object"
+          ? { jobId: how.resume }
+          : await make({ data: { month, cadence: how ?? "mensual", today, async: true } }),
+        readJob,
+      ),
     onSuccess: (res) => {
       setIntakeOpen(false);
       qc.invalidateQueries({ queryKey: ["plan", month] });
@@ -213,7 +225,11 @@ function PlanPage() {
           .catch(() => undefined);
       }
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : t("plan.errors.create")),
+    // Un trabajo que falla sin texto para la persona llega con el mensaje vacío.
+    onError: (e) =>
+      toast.error(e instanceof Error && e.message ? e.message : t("plan.errors.create")),
+    // Termine como termine, ese trabajo ya no está activo: que no se retome.
+    onSettled: () => qc.setQueryData(["job", "plan_generate"], null),
   });
 
   // Cambiar la cadencia no llama a la IA: la lista canónica guarda el desglose
@@ -352,7 +368,14 @@ function PlanPage() {
     ).then(async (complete) => {
       if (!alive || !complete || plan.fit || !plan.targetsVersion) return;
       setFitting(true);
-      const res = await fitPlanOnce(month, () => fitFn({ data: { month, today } }));
+      // Por la cola si está encendida: al volver a abrir Plan, la misma
+      // llamada devuelve el trabajo que siga activo y se espera a ese.
+      const res = await fitPlanOnce(month, async () =>
+        settleJob<{ fit: PlanFitMark | null }, { fit: PlanFitMark | null }>(
+          await fitFn({ data: { month, today, async: true } }),
+          readJob,
+        ),
+      );
       if (alive) setFitting(false);
       if (res?.fit) qc.invalidateQueries({ queryKey: ["plan", month] });
     });
@@ -382,6 +405,25 @@ function PlanPage() {
   const nextIsLocked = !canNext && planMonthStatus(addMonths(month, 1), today) === "next-locked";
   // Pantalla completa "crea tu plan": solo para meses donde se puede generar.
   const showCreateTakeover = !plan && actionable;
+
+  // Salir y volver (ticket 40): si este mes no tiene plan pero hay un trabajo
+  // de generarlo en cola o en marcha, la pantalla lo retoma en vez de ofrecer
+  // "Crear plan" otra vez.
+  const activeGenerateQ = useQuery({
+    queryKey: ["job", "plan_generate"],
+    queryFn: () => fetchActiveJob("plan_generate"),
+    enabled: showCreateTakeover && !planQ.isLoading,
+    staleTime: 0,
+  });
+  const resumedJob = useRef<string | null>(null);
+  const { mutate: startGenerate, isPending: generatePending } = generate;
+  useEffect(() => {
+    const job = activeGenerateQ.data;
+    if (!job || generatePending || resumedJob.current === job.id) return;
+    if ((job.input as { month?: unknown } | null)?.month !== month) return;
+    resumedJob.current = job.id;
+    startGenerate({ resume: job.id });
+  }, [activeGenerateQ.data, generatePending, month, startGenerate]);
   const readOnlyMonth = monthStatus === "past";
 
   // Datos que alimentan el modo compra según sobre qué lista se entró (issue 06).

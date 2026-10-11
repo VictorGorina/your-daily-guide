@@ -10,30 +10,45 @@ import {
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
 import { clampClientToday } from "@/lib/zoned-date";
 import { createServerFn } from "@tanstack/react-start";
-import { runGenerateMonthlyPlan } from "./generate-run.server";
+import { enqueueOrRun } from "./enqueue.server";
+import { assertMonthNotPlanned, runGenerateMonthlyPlan } from "./generate-run.server";
 
 export const generateMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { month: string; cadence?: ShoppingCadence; today?: string }) => {
-    if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
-    // No se planifica el pasado (no se puede cumplir y gasta tokens) ni más allá
-    // del mes que viene, y este último solo en su última semana — mismo umbral
-    // con el que la pantalla Plan lo desbloquea (ver `isNextMonthUnlocked`).
-    // `today` lo manda el cliente en su zona horaria; el fallback es Madrid.
-    const today = clampClientToday(input?.today);
-    const currentMonth = today.slice(0, 7);
-    if (input.month < currentMonth) throw new ValidationError("No se planifican meses pasados");
-    const nm = nextMonthISO(today);
-    if (input.month > nm) throw new ValidationError("Solo puedes preparar hasta el mes que viene");
-    if (input.month === nm && !isNextMonthUnlocked(today)) {
-      throw new ValidationError(
-        "Aún no toca preparar el mes que viene; podrás la última semana del mes",
-      );
-    }
-    const cadence: ShoppingCadence = asCadence(input?.cadence) ?? "mensual";
-    return { month: input.month, cadence, today };
-  })
-  .handler(({ data, context }) => runGenerateMonthlyPlan(context, data));
+  .validator(
+    (input: { month: string; cadence?: ShoppingCadence; today?: string; async?: boolean }) => {
+      if (!/^\d{4}-\d{2}$/.test(input?.month ?? "")) throw new ValidationError("Mes no válido");
+      // No se planifica el pasado (no se puede cumplir y gasta tokens) ni más allá
+      // del mes que viene, y este último solo en su última semana — mismo umbral
+      // con el que la pantalla Plan lo desbloquea (ver `isNextMonthUnlocked`).
+      // `today` lo manda el cliente en su zona horaria; el fallback es Madrid.
+      const today = clampClientToday(input?.today);
+      const currentMonth = today.slice(0, 7);
+      if (input.month < currentMonth) throw new ValidationError("No se planifican meses pasados");
+      const nm = nextMonthISO(today);
+      if (input.month > nm)
+        throw new ValidationError("Solo puedes preparar hasta el mes que viene");
+      if (input.month === nm && !isNextMonthUnlocked(today)) {
+        throw new ValidationError(
+          "Aún no toca preparar el mes que viene; podrás la última semana del mes",
+        );
+      }
+      const cadence: ShoppingCadence = asCadence(input?.cadence) ?? "mensual";
+      return { month: input.month, cadence, today, async: input?.async === true };
+    },
+  )
+  // Con `async: true` y la cola encendida responde `{ jobId }` y el plan lo
+  // genera el trabajador (`enqueueOrRun`); si no, lo de siempre.
+  .handler(({ data: { async: queued, ...data }, context }) =>
+    enqueueOrRun({
+      queued,
+      userId: context.userId,
+      kind: "plan_generate",
+      input: data,
+      precheck: () => assertMonthNotPlanned(context.supabase, context.userId, data.month),
+      run: () => runGenerateMonthlyPlan(context, data),
+    }),
+  );
 
 /**
  * Guarda lo que la persona contó antes de generar el plan de un mes, en la

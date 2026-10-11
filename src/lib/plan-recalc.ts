@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isQueuedJob, type QueuedJob, settleJob } from "@/lib/job-wait";
+import { readJob } from "@/lib/jobs-read";
 
 /**
  * Recálculo del plan del mes cuando cambia algo que lo invalida (issue 05):
@@ -79,14 +81,19 @@ async function postReflow(p: Pending): Promise<ReflowOutcome> {
   const res = await fetch("/api/v1/plan/reflow", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ month: p.month, today: p.today, scope: p.scope }),
+    body: JSON.stringify({ month: p.month, today: p.today, scope: p.scope, async: true }),
   });
   if (!res.ok) throw new Error(`plan/reflow ${res.status}`);
+  const answer = (await res.json().catch(() => null)) as ReflowOutcome | QueuedJob;
+  // Por la cola (ticket 40) el recálculo ya es cosa del servidor: se quita el
+  // "pendiente" guardado, o al reabrir la pestaña se pediría otro. Salvo que
+  // haya entrado uno nuevo del mismo mes mientras tanto, que usa esa clave.
+  if (isQueuedJob(answer) && pending?.month !== p.month) clearPersisted(p.month);
   // Un recálculo "full" (entró o salió alguien de la mesa, cambió una ración)
   // rehace también las CANTIDADES de la compra. Eso hay que decirlo: se deja
   // una marca que sobrevive a navegar de Hogar a Plan, que es justo el camino
   // que hace la persona. Un `skipped` (no planificador, mes pasado) no cuenta.
-  const result = (await res.json().catch(() => null)) as ReflowOutcome;
+  const result = await settleJob<ReflowOutcome, ReflowOutcome>(answer, readJob);
   if (result && !result.skipped && result.scope === "full") markPlanUpdated(p.month);
   return result;
 }
