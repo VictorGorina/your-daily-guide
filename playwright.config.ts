@@ -72,6 +72,9 @@ export default defineConfig({
         OPENROUTER_API_KEY: "e2e",
         OPENROUTER_BASE_URL: `http://127.0.0.1:${MOCK_PORT}/api/v1`,
         PUBLIC_URL: `http://127.0.0.1:${APP_PORT}`,
+        // La cola de trabajos largos encendida (ticket 40): `e2e/jobs.spec.ts`.
+        // Aquí no hay cron: el trabajador lo arranca quien encola.
+        JOBS_ENABLED: "1",
         // Nada de esto en el smoke: ni CAPTCHA, ni Sentry, ni inglés.
         VITE_TURNSTILE_SITE_KEY: "",
         VITE_SENTRY_DSN: "",

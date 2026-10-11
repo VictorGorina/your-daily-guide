@@ -255,6 +255,14 @@ comida, ve que suma sus kcal en la barra del día, recarga y sigue marcada; abre
 peque, Vera). No es una batería: comprueba lo que ninguna otra suite ve junto: que el build
 arranca, que la sesión llega al servidor y que las políticas RLS dejan leer y escribir lo propio.
 
+Y un segundo, corto ([e2e/jobs.spec.ts](../../e2e/jobs.spec.ts)): la cola de trabajos largos
+(ticket 40) contra el Postgres de verdad. Ana pide el ajuste de su plan con `async: true`, recibe
+`{ jobId }`, el trabajador lo ejecuta y ella lee su fila de `jobs` por RLS; sin `async`, el
+resultado llega en la respuesta. Usa el trabajo que no llama a la IA (su plan no lleva
+`targetsVersion`). La app arranca con `JOBS_ENABLED=1`; aquí no hay `pg_cron` que llame al
+trabajador, lo arranca quien encola. **No cubre** generar un plan por la cola con la IA lenta
+(salir y volver): el OpenRouter de mentira aún no sabe contestar a la generación del plan.
+
 Las piezas ([playwright.config.ts](../../playwright.config.ts)):
 
 - **La app** es el build de siempre con el preset `node-server` de Nitro (`NITRO_PRESET`), que
