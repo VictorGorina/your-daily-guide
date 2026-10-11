@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
 import { apiPost } from "./api";
+import { isQueuedJob, type QueuedJob, settleJob } from "./job-wait";
+import { readJob } from "./jobs-read";
 
 /**
  * Recálculo del plan del mes. Copia de `src/lib/plan-recalc.ts` de la web (este
@@ -87,11 +89,17 @@ async function run(): Promise<void> {
 export type ReflowOutcome = { skipped?: string; scope?: string; synced?: number } | null;
 
 async function postReflow(p: Pending): Promise<ReflowOutcome> {
-  const result = await apiPost<ReflowOutcome>("plan/reflow", {
+  const answer = await apiPost<ReflowOutcome | QueuedJob>("plan/reflow", {
     month: p.month,
     today: p.today,
     scope: p.scope,
+    async: true,
   });
+  // Por la cola (ticket 40) el recálculo ya es cosa del servidor: se quita el
+  // "pendiente" guardado, o al reabrir la app se pediría otro. Salvo que haya
+  // entrado uno nuevo del mismo mes mientras tanto, que usa esa clave.
+  if (isQueuedJob(answer) && pending?.month !== p.month) clearPersisted(p.month);
+  const result = await settleJob<ReflowOutcome, ReflowOutcome>(answer, readJob);
   // Un recálculo "full" (entró o salió alguien de la mesa, cambió una ración)
   // rehace también las CANTIDADES de la compra. Eso hay que decirlo: se deja
   // una marca que sobrevive a navegar de Familia a Plan, que es justo el

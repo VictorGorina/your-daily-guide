@@ -5,19 +5,26 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, jest, mock } fro
 // (`localStorage` + `fetch`) y la móvil (`AsyncStorage` + `apiPost`).
 
 type Body = { month: string; today: string; scope: string };
-type Call = { body: Body; resolve: () => void; reject: () => void };
+type Call = { body: Body; resolve: () => void; reject: () => void; queue: () => void };
 
 // Cada llamada a `plan/reflow` se queda esperando hasta que el test la suelta.
 let calls: Call[] = [];
-function reflow(body: Body): Promise<{ scope: string }> {
+function reflow(body: Body): Promise<{ scope: string } | { jobId: string }> {
   return new Promise((resolve, reject) => {
     calls.push({
       body,
       resolve: () => resolve({ scope: body.scope }),
       reject: () => reject(new Error("plan/reflow 500")),
+      // El servidor lo deja en la cola de trabajos largos (ticket 40).
+      queue: () => resolve({ jobId: "j1" }),
     });
   });
 }
+
+// La fila del trabajo `j1`, que las dos copias leen con su `readJob`.
+let jobRow: { id: string; kind: string; status: string; result: unknown; error: null } | null =
+  null;
+const readJob = async () => jobRow;
 
 const store = new Map<string, string>();
 (globalThis as { localStorage?: unknown }).localStorage = {
@@ -31,7 +38,10 @@ mock.module("@/integrations/supabase/client", () => ({
     auth: { getSession: async () => ({ data: { session: { access_token: "t" } } }) },
   },
 }));
-// Paquetes del móvil: en CI no hay mobile/node_modules, así que van sustituidos.
+mock.module("@/lib/jobs-read", () => ({ readJob }));
+// Paquetes del móvil: en CI no hay mobile/node_modules, así que van sustituidos
+// (también `jobs-read`, que arrastra el cliente de Supabase del móvil).
+mock.module("../../mobile/lib/jobs-read", () => ({ readJob }));
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: async (k: string) => store.get(k) ?? null,
@@ -71,6 +81,7 @@ describe.each([
   beforeEach(() => {
     jest.useFakeTimers();
     calls = [];
+    jobRow = null;
     store.clear();
   });
 
@@ -176,6 +187,31 @@ describe.each([
     calls[0].resolve();
     await drain();
     expect(calls).toHaveLength(1);
+  });
+
+  it("por la cola: suelta el pendiente al aceptarlo el servidor y avisa cuando el trabajo acaba", async () => {
+    const done: string[] = [];
+    const off = lib.onPlanRecalcDone((m) => void done.push(m));
+    jobRow = { id: "j1", kind: "plan_reflow", status: "running", result: null, error: null };
+
+    lib.schedulePlanRecalc(month, today, "meals");
+    jest.advanceTimersByTime(6000);
+    await drain();
+    expect((calls[0].body as Body & { async?: boolean }).async).toBe(true);
+
+    calls[0].queue();
+    await drain();
+    // El trabajo sigue en marcha, pero ya es del servidor: si la app se cierra
+    // ahora, al abrirse no hay que pedir otro.
+    expect(store.has(key)).toBe(false);
+    expect(done).toEqual([]);
+
+    jobRow = { ...jobRow, status: "done", result: { scope: "meals" } };
+    jest.advanceTimersByTime(3000);
+    await drain();
+    expect(done).toEqual([month]);
+    expect(calls).toHaveLength(1);
+    off();
   });
 
   it("sin nada en cola, al terminar se borra el pendiente guardado", async () => {

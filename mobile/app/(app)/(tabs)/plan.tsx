@@ -25,6 +25,8 @@ import { PlanMonthCalendar } from "../../../components/plan/month-calendar";
 import { ShoppingMode } from "../../../components/plan/shopping-mode";
 import { PlanFitNote } from "../../../components/plan-fit-note";
 import { apiPost } from "../../../lib/api";
+import { type QueuedJob, settleJob } from "../../../lib/job-wait";
+import { fetchActiveJob, readJob } from "../../../lib/jobs-read";
 import {
   fitPlanOnce,
   planDishesToWarm,
@@ -177,13 +179,22 @@ export default function Plan() {
   const scrollRef = useRef<ScrollView>(null);
   const scrollToEnd = () =>
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  // Con la cola de trabajos largos (ticket 40) el servidor responde `{ jobId }`
+  // y el plan se genera aparte: se espera leyendo su fila (`settleJob`), y si
+  // la persona sale y vuelve, `{ resume }` retoma el que dejó en marcha.
   const generate = useMutation({
-    mutationFn: (nextCadence?: ShoppingCadence) =>
-      apiPost<GenerateResult>("plan/generate", {
-        month,
-        cadence: nextCadence ?? "mensual",
-        today,
-      }),
+    mutationFn: async (how?: ShoppingCadence | { resume: string }) =>
+      settleJob<{ firstPlan?: boolean }, { firstPlan?: boolean }>(
+        typeof how === "object"
+          ? { jobId: how.resume }
+          : await apiPost<GenerateResult | QueuedJob>("plan/generate", {
+              month,
+              cadence: how ?? "mensual",
+              today,
+              async: true,
+            }),
+        readJob,
+      ),
     onSuccess: (res) => {
       setIntakeOpen(false);
       qc.invalidateQueries({ queryKey: ["plan", month] });
@@ -193,7 +204,11 @@ export default function Plan() {
           .catch(() => undefined);
       }
     },
-    onError: (e) => Alert.alert(e instanceof Error ? e.message : t("plan.errors.create")),
+    // Un trabajo que falla sin texto para la persona llega con el mensaje vacío.
+    onError: (e) =>
+      Alert.alert(e instanceof Error && e.message ? e.message : t("plan.errors.create")),
+    // Termine como termine, ese trabajo ya no está activo: que no se retome.
+    onSettled: () => qc.setQueryData(["job", "plan_generate"], null),
   });
 
   // Cambiar la cadencia no llama a la IA: la lista canónica guarda el desglose
@@ -333,8 +348,14 @@ export default function Plan() {
     ).then(async (complete) => {
       if (!alive || !complete || plan.fit || !plan.targetsVersion) return;
       setFitting(true);
-      const res = await fitPlanOnce(month, () =>
-        apiPost<{ fit: PlanFitMark | null }>("plan/fit", { month, today }),
+      // Por la cola si está encendida: al volver a abrir Plan, la misma
+      // llamada devuelve el trabajo que siga activo y se espera a ese.
+      type Fit = { fit: PlanFitMark | null };
+      const res = await fitPlanOnce(month, async () =>
+        settleJob<Fit, Fit>(
+          await apiPost<Fit | QueuedJob>("plan/fit", { month, today, async: true }),
+          readJob,
+        ),
       );
       if (alive) setFitting(false);
       if (res?.fit) qc.invalidateQueries({ queryKey: ["plan", month] });
@@ -353,6 +374,26 @@ export default function Plan() {
   const canNext = month < bounds.latest;
   const nextIsLocked = !canNext && planMonthStatus(addMonths(month, 1), today) === "next-locked";
   const showCreateTakeover = !plan && actionable;
+
+  // Salir y volver (ticket 40): si este mes no tiene plan pero hay un trabajo
+  // de generarlo en cola o en marcha, la pantalla lo retoma en vez de ofrecer
+  // "Crear plan" otra vez. La pestaña no se desmonta: la consulta caduca al
+  // momento y el layout la vuelve a pedir al enfocar.
+  const activeGenerateQ = useQuery({
+    queryKey: ["job", "plan_generate"],
+    queryFn: () => fetchActiveJob("plan_generate"),
+    enabled: showCreateTakeover && !planQ.isLoading,
+    staleTime: 0,
+  });
+  const resumedJob = useRef<string | null>(null);
+  const { mutate: startGenerate, isPending: generatePending } = generate;
+  useEffect(() => {
+    const job = activeGenerateQ.data;
+    if (!job || generatePending || resumedJob.current === job.id) return;
+    if ((job.input as { month?: unknown } | null)?.month !== month) return;
+    resumedJob.current = job.id;
+    startGenerate({ resume: job.id });
+  }, [activeGenerateQ.data, generatePending, month, startGenerate]);
 
   const budget = Number(profileQ.data?.budget_month_eur ?? 0);
   // Si el plan empieza a media de mes, el presupuesto que aplica es la parte
