@@ -107,9 +107,6 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
         "react/jsx-dev-runtime",
         "@tanstack/react-query",
         "@tanstack/query-core",
-        // ai-sdk pide zod v3, el proyecto usa v4: sin dedupe se rompía la
-        // inicialización del módulo en /chat (dos instancias de zod a la vez).
-        "zod",
       ],
     },
     optimizeDeps: {
