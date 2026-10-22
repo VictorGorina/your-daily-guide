@@ -77,6 +77,8 @@
  * - `chat_body_rejected` (warn): el cuerpo de `/api/chat` no pasó
  *   `cleanChatBody` (`reason`). Con `CHAT_BODY_ENFORCE` sin poner solo se
  *   registra; uno legítimo significa que un tope de `CHAT_LIMITS` es corto.
+ *   Va también a Sentry: Vercel (Hobby) solo guarda una hora de logs, y
+ *   antes de poner `CHAT_BODY_ENFORCE=1` hay que mirar semanas de rechazos.
  * - `chat_history_trimmed` (info): el coach recibió solo los últimos mensajes
  *   de la conversación (`messages` → `kept`) por `CHAT_HISTORY_MAX`. Muchos
  *   al día significa que el tope es corto para cómo se usa el chat.
@@ -130,7 +132,11 @@ export function errorText(error: unknown): string {
  * Además del log, van a Sentry (ticket 35): todo `error` y estos `warn`, que
  * suelen avisar de algo que se repite (el catálogo de arriba dice cuándo).
  */
-const SENTRY_WARN_EVENTS = new Set(["plan_cas_exhausted", "daily_cas_exhausted"]);
+const SENTRY_WARN_EVENTS = new Set([
+  "plan_cas_exhausted",
+  "daily_cas_exhausted",
+  "chat_body_rejected",
+]);
 
 export function logEvent(
   level: LogLevel,
