@@ -72,8 +72,16 @@ La paleta de [tailwind.config.js](tailwind.config.js) es el tema "niebla" de la 
 (`:root` en `src/styles.css`, en hex) copiado a mano, porque React Native no lee las variables CSS
 de la web. Si allí cambia un color, hay que copiarlo aquí: son dos copias.
 
-`.npmrc` fija `legacy-peer-deps` porque el árbol de Expo 57 choca consigo mismo (expo-router
-arrastra react-dom 19.2.8 y expo fija react 19.2.3); sin eso npm no instala nada.
+No hay `.npmrc` ni `legacy-peer-deps` (ticket 41 de la auditoría). El soporte web de expo-router
+pide como peers obligatorios `react-dom` (radix, vaul) y `react-native-gesture-handler`
+(drawer-layout): van declarados en `package.json` con la versión que fija Expo 57
+(`npx expo install react-dom react-native-gesture-handler`), `react-dom` igual que `react`. Si
+npm vuelve a decir `ERESOLVE overriding peer dependency`, se resuelve declarando el peer, no
+volviendo a `legacy-peer-deps`.
+
+`react-native-get-random-values` va en la 2 a propósito (cifrado de la sesión, ticket 38) aunque
+Expo 57 sugiera la ~1.11: está en `expo.install.exclude`, así que `npx expo install --check` no
+la marca.
 
 **Los `overrides` de `package.json`** (ticket 41 de la auditoría) fuerzan versiones corregidas en
 herramientas de prebuild y de build; ninguna llega al bundle de la app. El tope de cada una no es

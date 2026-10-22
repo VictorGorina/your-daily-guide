@@ -112,7 +112,8 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      # `npm ci` respeta el legacy-peer-deps de mobile/.npmrc (ver su comentario).
+      # Sin legacy-peer-deps (ticket 41): los peers del soporte web de expo-router
+      # (react-dom, react-native-gesture-handler) van declarados en mobile/package.json.
       - name: Instalar dependencias
         run: npm ci
 
