@@ -91,10 +91,13 @@
  *   se repita, el alta y el restablecimiento van sin CAPTCHA.
  * - `chat_profile_read_failed` (warn): `/api/chat` no pudo leer el perfil y usó
  *   el que mandó el cliente.
- * - `csp_violation` (warn): el navegador informó de algo que la CSP en modo
- *   Report-Only habría bloqueado (`directive`, `blocked`, `page`; sin query).
- *   Uno por directiva + `blocked` y minuto en cada instancia (ticket 16). Un
- *   origen legítimo se añade a `buildCsp`; una extensión del navegador, no.
+ * - `csp_violation` (warn, o info si lo bloqueado es de una extensión del
+ *   navegador): el navegador informó de algo que la CSP en modo Report-Only
+ *   habría bloqueado (`directive`, `blocked`, `page`; sin query). Uno por
+ *   directiva + `blocked` y minuto en cada instancia (ticket 16). Un origen
+ *   legítimo se añade a `buildCsp`; una extensión del navegador, no. El `warn`
+ *   va también a Sentry: la semana sin violaciones que pide aplicar la CSP
+ *   (ticket 37) no cabe en la hora de logs de Vercel (Hobby).
  * - `wait_until_unavailable` (warn): en Vercel no había ningún `waitUntil` para
  *   seguir tras responder (`where`: `chat`), así que el gasto de un chat
  *   cortado a medias puede escaparse del tope. Ver `after-response.server.ts`
@@ -136,6 +139,7 @@ const SENTRY_WARN_EVENTS = new Set([
   "plan_cas_exhausted",
   "daily_cas_exhausted",
   "chat_body_rejected",
+  "csp_violation",
 ]);
 
 export function logEvent(

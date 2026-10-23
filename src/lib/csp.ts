@@ -141,6 +141,22 @@ export function parseCspReport(raw: unknown): CspViolation[] {
   return out;
 }
 
+const EXTENSION_SCHEMES = [
+  "chrome-extension:",
+  "moz-extension:",
+  "safari-extension:",
+  "safari-web-extension:",
+];
+
+/**
+ * Lo bloqueado lo pidió una extensión del navegador: no se arregla en
+ * `buildCsp`, así que se registra como `info` y no gasta cuota de Sentry.
+ */
+export function isExtensionViolation(report: CspViolation): boolean {
+  const blocked = report.blocked?.toLowerCase() ?? "";
+  return EXTENSION_SCHEMES.some((scheme) => blocked.startsWith(scheme));
+}
+
 const THROTTLE_WINDOW_MS = 60_000;
 
 /**

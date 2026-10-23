@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { CspReportThrottle, parseCspReport } from "@/lib/csp";
+import { CspReportThrottle, isExtensionViolation, parseCspReport } from "@/lib/csp";
 import { logEvent } from "@/lib/log.server";
 
 // Informes de la CSP en modo Report-Only (ticket 16). Sin sesión: el navegador
@@ -26,7 +26,8 @@ export const Route = createFileRoute("/api/csp-report")({
         }
         const now = Date.now();
         for (const report of parseCspReport(raw)) {
-          if (throttle.shouldLog(report, now)) logEvent("warn", "csp_violation", report);
+          if (!throttle.shouldLog(report, now)) continue;
+          logEvent(isExtensionViolation(report) ? "info" : "warn", "csp_violation", report);
         }
         return new Response(null, { status: 204 });
       },

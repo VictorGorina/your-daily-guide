@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildCsp,
   CspReportThrottle,
+  isExtensionViolation,
   parseCspReport,
   PERMISSIONS_POLICY,
   withoutQuery,
@@ -161,6 +162,27 @@ describe("parseCspReport", () => {
   test("como mucho 20 informes por lote", () => {
     const one = { type: "csp-violation", body: { effectiveDirective: "img-src", blockedURL: "a" } };
     expect(parseCspReport(Array.from({ length: 50 }, () => one))).toHaveLength(20);
+  });
+});
+
+describe("isExtensionViolation", () => {
+  test("las extensiones de Chrome, Firefox y Safari no son nuestras", () => {
+    for (const blocked of [
+      "chrome-extension://abcdef/inject.js",
+      "moz-extension://1234/content.js",
+      "safari-web-extension://x/y.js",
+      "Safari-Extension://x",
+    ]) {
+      expect(isExtensionViolation({ directive: "script-src", blocked })).toBe(true);
+    }
+  });
+
+  test("un origen web, una palabra clave o nada sí cuentan", () => {
+    expect(isExtensionViolation({ directive: "img-src", blocked: "https://a.example/x.png" })).toBe(
+      false,
+    );
+    expect(isExtensionViolation({ directive: "script-src", blocked: "inline" })).toBe(false);
+    expect(isExtensionViolation({ directive: "script-src" })).toBe(false);
   });
 });
 
