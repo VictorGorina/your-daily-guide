@@ -91,13 +91,15 @@ describe("authErrorText", () => {
 });
 
 describe("passwordProblem", () => {
-  it("pide la misma contraseña que Supabase Auth: 6 caracteres, con letras y números", () => {
-    expect(passwordProblem("abc12")).toBe("short");
-    expect(passwordProblem("abcdefgh")).toBe("letters-digits");
-    expect(passwordProblem("12345678")).toBe("letters-digits");
-    expect(passwordProblem("abc123")).toBeNull();
-    expect(passwordProblem("Ñandú 2026")).toBeNull();
+  it("pide la misma contraseña que Supabase Auth: 12 caracteres, con letras y números", () => {
+    // La de 6 que valía antes del ticket 37 ya no basta para una cuenta nueva.
+    expect(passwordProblem("abc123")).toBe("short");
+    expect(passwordProblem("abcde123456")).toBe("short");
+    expect(passwordProblem("abcdef123456")).toBeNull();
+    expect(passwordProblem("abcdefghijkl")).toBe("letters-digits");
+    expect(passwordProblem("123456789012")).toBe("letters-digits");
+    expect(passwordProblem("Ñandú del 2026")).toBeNull();
     // GoTrue solo cuenta letras ASCII: «ñ» y «ú» no bastan.
-    expect(passwordProblem("ññúú2026")).toBe("letters-digits");
+    expect(passwordProblem("ññúúññúú2026")).toBe("letters-digits");
   });
 });

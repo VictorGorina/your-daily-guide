@@ -73,7 +73,7 @@ export const requestSignupConfirmation = createServerFn({ method: "POST" })
       const password = typeof input?.password === "string" ? input.password : "";
       if (passwordProblem(password)) {
         throw new ValidationError(
-          "La contraseña necesita al menos 6 caracteres, con letras y números",
+          "La contraseña necesita al menos 12 caracteres, con letras y números",
         );
       }
       const platform: AuthPlatform = input?.platform === "mobile" ? "mobile" : "web";
