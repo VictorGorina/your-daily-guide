@@ -2,6 +2,7 @@ import { Redirect, Stack, type ErrorBoundaryProps } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { ErrorFallback } from "../../components/error-fallback";
+import { HealthConsentGate } from "../../components/health-consent";
 import { useAuth } from "../../lib/auth-context";
 
 /**
@@ -29,5 +30,11 @@ export default function AppLayout() {
 
   if (!session) return <Redirect href="/auth" />;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // La hoja del consentimiento de salud para las cuentas de antes (ticket 30).
+  return (
+    <>
+      <Stack screenOptions={{ headerShown: false }} />
+      <HealthConsentGate />
+    </>
+  );
 }

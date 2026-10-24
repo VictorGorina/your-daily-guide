@@ -1,12 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { AlertCircle, ChevronRight, Download, Info, Pencil, Users } from "lucide-react-native";
+import {
+  AlertCircle,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  Info,
+  Pencil,
+  ShieldCheck,
+  Users,
+} from "lucide-react-native";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../../components/bottom-nav";
+import { HealthConsentSheet, openPrivacyPolicy } from "../../../components/health-consent";
 import { RegionFields } from "../../../components/region-fields";
 import { apiPost } from "../../../lib/api";
 import {
@@ -16,6 +26,7 @@ import {
   todayISO,
   type Profile,
 } from "../../../lib/daily";
+import { hasHealthConsent, healthWithdrawalPatch } from "../../../lib/health-consent";
 import { buildHistoryCsv, historyFileName } from "../../../lib/history-export";
 import { clearLocalUserData } from "../../../lib/local-user-data";
 import { showsNutritionNumbers } from "../../../lib/macros";
@@ -147,6 +158,25 @@ export default function Ajustes() {
     } finally {
       setExporting(false);
     }
+  };
+
+  // Privacidad (ticket 30): encender pide el consentimiento con su texto;
+  // apagarlo borra los datos de salud.
+  const healthConsent = hasHealthConsent(profile);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const toggleHealth = (on: boolean) => {
+    if (on) {
+      setConsentOpen(true);
+      return;
+    }
+    Alert.alert(t("healthConsent.settings.offTitle"), t("healthConsent.settings.offBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("healthConsent.settings.offConfirm"),
+        style: "destructive",
+        onPress: () => save.mutate(healthWithdrawalPatch()),
+      },
+    ]);
   };
 
   const [deleting, setDeleting] = useState(false);
@@ -417,6 +447,50 @@ export default function Ajustes() {
             />
           </View>
         </View>
+
+        {/* Privacidad */}
+        <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
+          {t("healthConsent.settings.section")}
+        </Text>
+        <View className="mt-2 overflow-hidden rounded-3xl bg-surface">
+          <View className="flex-row items-center gap-3 border-b border-border px-4 py-4">
+            <ShieldCheck size={16} color="#6dbe7b" />
+            <View className="min-w-0 flex-1">
+              <Text className="text-sm font-sans-medium text-foreground">
+                {t("healthConsent.settings.toggle")}
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                {healthConsent ? t("healthConsent.settings.on") : t("healthConsent.settings.off")}
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel={t("healthConsent.settings.toggle")}
+              value={healthConsent}
+              disabled={!profile || save.isPending}
+              onValueChange={toggleHealth}
+              trackColor={{ false: "#eae6dd", true: "#3e3d39" }}
+              ios_backgroundColor="#eae6dd"
+              thumbColor="#fbfaf7"
+            />
+          </View>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => void openPrivacyPolicy()}
+            className="flex-row items-center gap-3 px-4 py-4 active:opacity-70"
+          >
+            <ExternalLink size={16} color="#6dbe7b" />
+            <View className="min-w-0 flex-1">
+              <Text className="text-sm font-sans-medium text-foreground">
+                {t("healthConsent.settings.policy")}
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                {t("healthConsent.settings.policyDesc")}
+              </Text>
+            </View>
+            <ChevronRight size={16} color="#6b6256" />
+          </Pressable>
+        </View>
+        <HealthConsentSheet open={consentOpen} onOpenChange={setConsentOpen} />
 
         {/* Datos y cuenta */}
         <Text className="mt-6 px-1 text-[11px] font-sans-semibold uppercase tracking-wide text-muted-foreground">
