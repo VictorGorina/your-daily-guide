@@ -868,8 +868,7 @@ Sin `profiles.health_consent_at` no se preguntan, no se guardan y no llegan a la
 hace sin ellos (ticket 30 de la auditoría). Las piezas, y lo que suele romperse:
 
 - **La frontera es la base de datos.** `saveProfile` escribe del cliente directo a Supabase, así
-  que la guarda es un trigger (`profiles_require_health_consent`, en `supabase/pending/` hasta que
-  esté desplegada la web que pide el consentimiento): sin consentimiento, un campo de
+  que la guarda es un trigger (`profiles_require_health_consent`): sin consentimiento, un campo de
   salud no puede **cambiar** a un valor (vaciarlo siempre se puede, y las cuentas de antes no
   rompen otras escrituras), y retirarlo los borra. Ojo con el `upsert`: `INSERT … ON CONFLICT`
   dispara primero el trigger de INSERT con la fila **propuesta**, sin el consentimiento guardado;

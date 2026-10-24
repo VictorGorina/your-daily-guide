@@ -1,8 +1,6 @@
--- Ticket 30, segunda parte: test de pgTAP de la migración PENDIENTE
--- `supabase/pending/20261024170100_health_consent_guard.sql`. Lo lanza
--- `scripts/check-pending-migrations.sh` (job `db` del CI): aplica la migración,
--- corre este archivo en la misma transacción y lo deshace todo. El día que la
--- migración pase a `migrations/`, este archivo pasa a `supabase/tests/` tal cual.
+-- Ticket 30, segunda parte (20261024170100_health_consent_guard.sql): sin
+-- consentimiento no se guarda ningún dato de salud del perfil, y retirarlo los
+-- borra. Test de pgTAP; lo lanza `supabase test db`.
 
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
