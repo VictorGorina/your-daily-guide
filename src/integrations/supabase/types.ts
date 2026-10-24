@@ -41,6 +41,7 @@ export type Database = {
           calls: number;
           cost_usd: number;
           day: string;
+          month_only_usd: number;
           updated_at: string;
           user_id: string;
         };
@@ -48,6 +49,7 @@ export type Database = {
           calls?: number;
           cost_usd?: number;
           day: string;
+          month_only_usd?: number;
           updated_at?: string;
           user_id: string;
         };
@@ -55,6 +57,7 @@ export type Database = {
           calls?: number;
           cost_usd?: number;
           day?: string;
+          month_only_usd?: number;
           updated_at?: string;
           user_id?: string;
         };
@@ -902,7 +905,7 @@ export type Database = {
       };
       join_household: { Args: { _invite_code: string }; Returns: string };
       record_ai_spend: {
-        Args: { _cost_usd: number; _user_id: string };
+        Args: { _cost_usd: number; _month_only?: boolean; _user_id: string };
         Returns: undefined;
       };
       set_household_planner: {
