@@ -58,6 +58,8 @@ export function askPlanFit(opts: {
         userId: opts.userId,
         model: PLAN_MODEL,
         deadline: opts.deadline,
+        // Una ronda por plan: solo la mide el tope mensual (`SpendCapScope`).
+        capScope: "month",
         system: coachSystemPrompt(opts.profile, opts.homeText),
         prompt:
           "El sistema ajusta la cantidad de cada plato al objetivo de su comida, pero solo hasta " +

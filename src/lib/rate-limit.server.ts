@@ -127,7 +127,7 @@ async function spendCapDecision(userId: string): Promise<SpendCapDecision | null
   try {
     const { data, error } = await supabaseAdmin
       .from("ai_spend")
-      .select("day, cost_usd")
+      .select("day, cost_usd, month_only_usd")
       .eq("user_id", userId)
       .gte("day", utcMonthStartISO(now));
     if (error) throw error;
@@ -225,16 +225,22 @@ export async function enforceAiSpendCap(
 }
 
 /**
- * Suma el coste real de una llamada al día UTC de la persona. Nunca lanza: si
- * la escritura falla, la respuesta de la IA ya está pagada y hecha, y romperla
- * no arreglaría nada; queda en el log (y esa llamada fuera del tope).
+ * Suma el coste real de una llamada al día UTC de la persona; con `capScope:
+ * "month"`, también a la parte que no cuenta para el tope diario. Nunca lanza:
+ * si la escritura falla, la respuesta de la IA ya está pagada y hecha, y
+ * romperla no arreglaría nada; queda en el log (y esa llamada fuera del tope).
  */
-export async function recordAiSpend(userId: string, costUsd: number): Promise<void> {
+export async function recordAiSpend(
+  userId: string,
+  costUsd: number,
+  capScope: SpendCapScope = "day",
+): Promise<void> {
   if (!(costUsd > 0)) return;
   try {
     const { error } = await supabaseAdmin.rpc("record_ai_spend", {
       _user_id: userId,
       _cost_usd: costUsd,
+      _month_only: capScope === "month",
     });
     if (error) throw error;
   } catch (error) {

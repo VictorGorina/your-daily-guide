@@ -101,9 +101,9 @@ export function createAiProvider(
   apiKey: string,
   userId: string | null,
   /**
-   * `capScope: "month"` deja pasar el tope DIARIO (el mensual no). Solo para la
-   * descomposición de platos: ver `SpendCapScope` y "Tope de gasto en IA" en
-   * CLAUDE.md. La llamada sigue sumando al gasto.
+   * `capScope: "month"`: el tope DIARIO ni corta estas llamadas ni cuenta su
+   * coste (el mensual sí). Solo para los platos y para generar y ajustar el
+   * plan del mes: ver `SpendCapScope` y "Tope de gasto en IA" en CLAUDE.md.
    */
   opts: { capScope?: SpendCapScope } = {},
 ) {
@@ -141,7 +141,7 @@ function aiSpendMiddleware(
       await enforceAiSpendCap(userId, undefined, capScope);
       try {
         const result = await doGenerate();
-        await recordAiSpend(userId, callCostUsd(result, modelId));
+        await recordAiSpend(userId, callCostUsd(result, modelId), capScope);
         return result;
       } catch (error) {
         // Cortada por nuestro `abortSignal` (los timeouts de la cadena de
@@ -149,7 +149,7 @@ function aiSpendMiddleware(
         // que ya no nos dice cuánto. Se apunta una estimación para que no se
         // escape del tope.
         if (params.abortSignal?.aborted) {
-          await recordAiSpend(userId, abortedCallCostUsd(modelId));
+          await recordAiSpend(userId, abortedCallCostUsd(modelId), capScope);
         }
         throw error;
       }
@@ -162,8 +162,8 @@ function aiSpendMiddleware(
         ...rest,
         stream: onFinishPart(
           stream,
-          (part) => recordAiSpend(userId, callCostUsd(part, modelId)),
-          () => recordAiSpend(userId, abortedCallCostUsd(modelId)),
+          (part) => recordAiSpend(userId, callCostUsd(part, modelId), capScope),
+          () => recordAiSpend(userId, abortedCallCostUsd(modelId), capScope),
         ),
       };
     },

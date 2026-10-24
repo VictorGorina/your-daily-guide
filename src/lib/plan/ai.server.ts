@@ -1,4 +1,5 @@
 import { COACH_MODEL, createAiProvider } from "@/lib/ai-provider.server";
+import type { SpendCapScope } from "@/lib/ai-spend";
 import { type Deadline, hasTimeFor, stepTimeout } from "@/lib/deadline";
 import { logEvent } from "@/lib/log.server";
 import {
@@ -25,11 +26,13 @@ export async function askForJson<T>(
      * queda y, si no queda lo bastante, no se hace otro. Sin él, sin límite.
      */
     deadline?: Deadline;
+    /** `month` solo para generar y ajustar el plan del mes (ver `SpendCapScope`). */
+    capScope?: SpendCapScope;
   },
   extract: (parsed: unknown) => T | null,
   attempts = 3,
 ): Promise<T> {
-  const ai = createAiProvider(opts.key, opts.userId);
+  const ai = createAiProvider(opts.key, opts.userId, { capScope: opts.capScope });
   let lastError: unknown = null;
 
   for (let i = 0; i < attempts; i++) {
@@ -92,6 +95,7 @@ export async function enforceBudget(
   sym = "€",
   model = COACH_MODEL,
   deadline?: Deadline,
+  capScope: SpendCapScope = "day",
 ): Promise<ShoppingList> {
   if (!(target > 0) || shoppingTotal(shopping) <= target * 1.02) return shopping;
 
@@ -100,7 +104,7 @@ export async function enforceBudget(
   const timeoutMs = stepTimeout(Infinity, deadline);
   try {
     if (deadline && !hasTimeFor(timeoutMs)) throw new Error("sin tiempo para el recorte con IA");
-    const ai = createAiProvider(key, userId);
+    const ai = createAiProvider(key, userId, { capScope });
     const { text } = await generateText({
       model: ai(model),
       ...(Number.isFinite(timeoutMs) ? { abortSignal: AbortSignal.timeout(timeoutMs) } : {}),

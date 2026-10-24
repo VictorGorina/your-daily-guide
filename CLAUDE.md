@@ -373,11 +373,15 @@ escapa ninguna llamada: reintentos y helpers sin bucket (`offShoppingList`) incl
 Mismo `RateLimitError` (su `scope` `day`/`month` cambia el mensaje) y mismo "dejar pasar" si falla
 la base de datos, con `spend_cap_failopen` / `spend_record_failed` en el log. Ojo con `streamText`: un error del middleware no llega a `result.text`
 (rechaza con un genérico), solo a `onError` — por eso `askForJson` lo captura ahí y no reintenta.
-Lógica pura y testeada en [src/lib/ai-spend.ts](src/lib/ai-spend.ts). **Excepción deliberada:**
-la descomposición de platos va con `createAiProvider(key, userId, { capScope: "month" })` y
-`generateDailyGuide` entra con `enforceUserRateLimit(…, "guide", "month")`: el tope DIARIO no las
-corta (el mensual sí), porque dejar un plato sin calcular rompe D13 y cuesta céntimos. Siguen
-sumando al gasto y a las cuotas por hora; el texto de la guía sí respeta el tope diario.
+Lógica pura y testeada en [src/lib/ai-spend.ts](src/lib/ai-spend.ts). **Excepción deliberada
+(`capScope: "month"`):** la descomposición de platos (D13: un plato sin calcular rompe la
+promesa), y generar el plan del mes y su ronda de ajuste (pasan una vez por plan; antes, generar
+—1,34 USD— dejaba sin coach el resto del día; decisión del usuario, 2026-10-23). El tope DIARIO
+ni las corta ni cuenta su coste: `record_ai_spend(…, _month_only)` lo apunta también en
+`ai_spend.month_only_usd` y el día mide `cost_usd - month_only_usd`. Sí suman al mensual, al
+disyuntor global y a las cuotas por hora. "Rehacer plan con la familia" NO va así (se puede
+repetir). `generateDailyGuide` entra con `enforceUserRateLimit(…, "guide", "month")` para sus
+platos; el texto de la guía sí respeta el tope diario.
 **Disyuntor global** (ticket 14): con `AI_GLOBAL_DAILY_USD` definida, `enforceGlobalSpend` pausa
 la IA para todos cuando la suma del día (`ai_spend_total_today`) la alcanza, sin excepción para
 los platos; sin la variable está apagado. **Lo que no pasa por aquí:** `eval:recipes` y
