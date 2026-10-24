@@ -38,6 +38,7 @@ import { currencyForCountry, DEFAULT_COUNTRY } from "@/lib/regions";
 import { applyTheme, THEMES } from "@/lib/theme";
 import { useLocale } from "@/lib/use-locale";
 import { resolveDeviceTimeZone } from "@/lib/zoned-date";
+import { NAME_MAX_LENGTH } from "@/lib/content-guard";
 
 function FieldNote({ error, help }: { error?: string; help: string }) {
   if (error)
@@ -271,6 +272,7 @@ function Ajustes() {
         <FieldInput
           label={t("ajustes.basics.name")}
           defaultValue={profile?.display_name ?? ""}
+          maxLength={NAME_MAX_LENGTH}
           placeholder="—"
           onBlur={(e) => save.mutate({ display_name: e.target.value || null })}
         />

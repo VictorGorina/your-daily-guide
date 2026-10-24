@@ -6,6 +6,7 @@ import { COACH_MODEL, createAiProvider, requireAiKey } from "@/lib/ai-provider.s
 import { DAILY_ACTIVITIES, type DailyActivity } from "@/lib/nutrition/energy";
 import { formatTraining, parseTraining } from "@/lib/nutrition/exercise-energy";
 import { UserFacingError } from "@/lib/validation-error";
+import { NAME_MAX_LENGTH } from "@/lib/content-guard";
 
 export type OnboardingDraft = {
   display_name: string | null;
@@ -82,6 +83,8 @@ const str = (v: unknown) => {
   const s = typeof v === "string" ? v.trim() : "";
   return s && s.toLowerCase() !== "null" ? s : null;
 };
+const clipName = (s: string | null) =>
+  s === null ? null : Array.from(s).slice(0, NAME_MAX_LENGTH).join("");
 const time = (v: unknown) => {
   const s = typeof v === "string" ? v.trim() : "";
   return /^\d{2}:\d{2}$/.test(s) ? s : null;
@@ -158,7 +161,9 @@ export const parseOnboarding = createServerFn({ method: "POST" })
       throw new UserFacingError("No hemos podido interpretar tus respuestas. Inténtalo de nuevo.");
     }
     return {
-      display_name: str(p.display_name),
+      // El modelo lo saca de texto libre: se corta al `CHECK` de la base de
+      // datos por caracteres, no por unidades UTF-16, para no partir un emoji.
+      display_name: clipName(str(p.display_name)),
       age: num(p.age),
       date_of_birth: date(p.date_of_birth),
       sex: str(p.sex),

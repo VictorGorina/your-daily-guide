@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { OpenSlot } from "@/lib/household";
 import { personColor } from "@/lib/household-shared";
 import type { useHouseholdMutations } from "@/lib/use-household-mutations";
+import { NAME_MAX_LENGTH } from "@/lib/content-guard";
 
 type Mutations = ReturnType<typeof useHouseholdMutations>;
 
@@ -126,6 +127,7 @@ export function JoinOrCreateHousehold({
         <input
           className={input}
           value={name}
+          maxLength={NAME_MAX_LENGTH}
           onChange={(e) => setName(e.target.value)}
           placeholder={t("hogar.create.nameLabel")}
           aria-label={t("hogar.create.nameLabel")}

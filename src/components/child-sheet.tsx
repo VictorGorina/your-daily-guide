@@ -19,6 +19,7 @@ import {
   type Appetite,
   type FeedingStage,
 } from "@/lib/household-shared";
+import { NAME_MAX_LENGTH } from "@/lib/content-guard";
 
 const field = "text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground";
 const control =
@@ -162,6 +163,7 @@ export function ChildSheet({
               <input
                 className={control}
                 value={draft.name}
+                maxLength={NAME_MAX_LENGTH}
                 onChange={(e) => patch({ name: e.target.value })}
                 placeholder={t("childSheet.name")}
               />
