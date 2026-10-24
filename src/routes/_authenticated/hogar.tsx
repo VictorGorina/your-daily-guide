@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Copy, LogOut, Pencil, ShieldCheck } from "lucide-react";
+import { Check, Copy, LogOut, Pencil, RefreshCw, ShieldCheck } from "lucide-react";
 import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -14,6 +14,8 @@ import { HouseholdScheduleSection } from "@/components/hogar/schedule-section";
 import { fetchMonthlyPlan, monthISO, todayISO } from "@/lib/daily";
 import { EMPTY_SCHEDULE, eatsTableFood } from "@/lib/household-shared";
 import { fetchHousehold, type HouseholdChild } from "@/lib/household";
+import { inviteCodeExpiresAt, isInviteCodeExpired } from "@/lib/household-invite";
+import { dateLocale } from "@/lib/i18n";
 import { childPureeGaps } from "@/lib/plan-shared";
 import { useHouseholdMutations } from "@/lib/use-household-mutations";
 import { NAME_MAX_LENGTH } from "@/lib/content-guard";
@@ -40,7 +42,7 @@ export const Route = createFileRoute("/_authenticated/hogar")({
 });
 
 function Hogar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
   // La mesa o los horarios cambiaron en esta visita: el plan del mes aún no
@@ -84,6 +86,7 @@ function Hogar() {
     renameMember,
     setMemberPortion,
     renameHousehold,
+    rotateCode,
     leave,
     persistSchedule,
     rebuild,
@@ -96,6 +99,14 @@ function Hogar() {
   });
 
   const household = state.data?.household;
+  // A los 30 días el código deja de valer para unirse (ticket 37): se dice
+  // hasta cuándo vale, o desde cuándo no, y quien gestiona la mesa lo cambia.
+  const codeExpires = inviteCodeExpiresAt(household?.invite_code_created_at);
+  const codeExpired = isInviteCodeExpired(household?.invite_code_created_at, new Date());
+  const codeDate = codeExpires?.toLocaleDateString(dateLocale(i18n.language), {
+    day: "numeric",
+    month: "long",
+  });
   const members = state.data?.members ?? [];
   const children = state.data?.children ?? [];
   // Los bebés que aún no comen de la mesa (la tarjeta los pinta en su grupo).
@@ -187,6 +198,27 @@ function Hogar() {
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
               {t("hogar.code.hint")}
             </p>
+            {codeDate ? (
+              <p
+                className={`mt-1.5 text-xs leading-relaxed ${
+                  codeExpired ? "font-medium text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {t(codeExpired ? "hogar.code.expired" : "hogar.code.validUntil", {
+                  date: codeDate,
+                })}
+              </p>
+            ) : null}
+            {canManageRoster ? (
+              <button
+                onClick={() => rotateCode.mutate(household.id)}
+                disabled={rotateCode.isPending}
+                className="mt-3 inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2.5 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${rotateCode.isPending ? "animate-spin" : ""}`} />
+                {t("hogar.code.rotate")}
+              </button>
+            ) : null}
           </section>
 
           <HouseholdRosterCard
