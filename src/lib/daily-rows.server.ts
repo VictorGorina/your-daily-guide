@@ -1,7 +1,9 @@
-import type { Json, TablesUpdate } from "@/integrations/supabase/types";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 
 import { addDaysISO } from "@/lib/dates";
+import { cleanHabits } from "@/lib/day-row";
 import { logEvent } from "@/lib/log.server";
+import type { MealHabit } from "@/lib/plan-shared";
 import { UserFacingError, ValidationError } from "@/lib/validation-error";
 
 export type DailyLogCas = { updated_at: string } & Record<string, unknown>;
@@ -142,21 +144,26 @@ export async function updateDailyLogCas<Row extends DailyLogCas = DailyLogCas>(
  *
  * `null` si el día no existe (lo crea siempre el cliente al abrir Hoy, nunca
  * esto) o si `update` devuelve `null` (nada que escribir). `userId`, el del JWT.
+ *
+ * `update` recibe las comidas ya limpias (`cleanHabits`, ticket 36): una
+ * entrada sin `label` no llega, y al escribir se va, igual que Hoy ya no la
+ * pinta.
  */
-export async function patchDailyHabits<Habit extends Json>(
+export async function patchDailyHabits(
   userId: string,
   date: string,
-  update: (current: Habit[]) => Habit[] | null,
-): Promise<Habit[] | null> {
+  update: (current: MealHabit[]) => MealHabit[] | null,
+): Promise<MealHabit[] | null> {
   const { patch } = await updateDailyLogCas(
     userId,
     date,
     "habits",
     (row) => {
-      const next = update((Array.isArray(row.habits) ? row.habits : []) as Habit[]);
+      const next = update(cleanHabits(row.habits));
       return next ? { habits: next } : null;
     },
     { exhaustedMessage: "No hemos podido guardar el cambio de comida. Inténtalo de nuevo." },
   );
-  return patch ? (patch.habits as Habit[]) : null;
+  // Lo que se escribió ya estaba limpio: volver a pasarlo es gratis y sin `as`.
+  return patch ? cleanHabits(patch.habits) : null;
 }

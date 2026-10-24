@@ -138,6 +138,26 @@ describe("settleDayHandler — un solo asentamiento del día", () => {
     expect(record.adjustment.kcal).toBe(450);
   });
 
+  it("con comidas rotas en el día, se asienta igual sobre las que valen (ticket 36, punto 6)", async () => {
+    const broken = [
+      null,
+      "Comida",
+      { done: true },
+      changed("Comida", 450),
+    ] as unknown as MealHabit[];
+    const fake = setup({ habits: broken });
+    const { reflow, calls } = fakeReflow();
+
+    const result = await run(fake, { reflow });
+
+    expect(calls).toHaveLength(1);
+    expect(result.outcome).toBe("adjusted");
+    expect(result.kcal).toBe(450);
+    // Lo escrito es lo que Hoy pinta: sin las entradas que no tenían comida.
+    expect(habitsOf(fake)).toHaveLength(1);
+    expect(habitsOf(fake)[0]!.swapCompensated).toBe(true);
+  });
+
   it("si la recolocación falla, devuelve la reserva y relanza", async () => {
     const fake = setup();
     const { reflow } = fakeReflow(new Error("modelo caído"));

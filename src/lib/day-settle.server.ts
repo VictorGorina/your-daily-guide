@@ -21,6 +21,7 @@ import {
   staleReservations,
 } from "@/lib/day-reservation";
 import { requestDeadline } from "@/lib/deadline";
+import { cleanHabits } from "@/lib/day-row";
 import { cleanDayExercise, type DayExercise } from "@/lib/exercise";
 import { errorText, logEvent } from "@/lib/log.server";
 import { compensationNeed } from "@/lib/nutrition/compensation";
@@ -95,7 +96,7 @@ const DAY_COLUMNS = "habits, snacks, exercise, adjustment, updated_at";
 
 function toDayRow(row: Record<string, unknown>): DayRow {
   return {
-    habits: (Array.isArray(row.habits) ? row.habits : []) as MealHabit[],
+    habits: cleanHabits(row.habits),
     snacks: cleanDaySnacks(row.snacks),
     exercise: cleanDayExercise(row.exercise),
     record: cleanDayAdjustment(row.adjustment),

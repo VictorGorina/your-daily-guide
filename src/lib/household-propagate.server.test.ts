@@ -70,6 +70,23 @@ describe("propagateLogToFamily (ticket 21)", () => {
     ]);
   });
 
+  it("una comida rota en el día de Bea no impide corregirle la buena (ticket 36, punto 6)", async () => {
+    const tables = seed();
+    tables.daily_logs![0]!.habits = [null, { done: true }, { label: "Comida", done: false }];
+    const fake = createFakeSupabase(tables);
+    setFakeAdmin(fake.client);
+
+    const out = await propagateLogToFamilyHandler({
+      data: { date: DATE, habitLabel: "Comida", status: "plan", today: "2026-09-26" },
+      context: { supabase: fake.client, userId: "ana" },
+    });
+
+    expect(out).toEqual({ propagated: 1 });
+    expect(tables.daily_logs![0]!.habits).toEqual([
+      { label: "Comida", done: true, status: "plan" },
+    ]);
+  });
+
   it("un día que el otro miembro no abrió no se crea", async () => {
     const tables = seed();
     tables.daily_logs = [];

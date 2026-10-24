@@ -5,8 +5,6 @@ import { ValidationError } from "@/lib/validation-error";
 import { zonedTodayISO } from "@/lib/zoned-date";
 import { weekdayIndex } from "@/lib/dates";
 
-type PropagatedHabit = { label: string; done: boolean; status?: string; actual?: string };
-
 /** Cuerpo de `propagateLogToFamily`, aparte para poder probarlo (ticket 21). */
 export async function propagateLogToFamilyHandler({
   data,
@@ -56,7 +54,7 @@ export async function propagateLogToFamilyHandler({
     // Sobre la versión más reciente del día de ese miembro (ticket 21): lo
     // que él mismo esté cambiando a la vez no se pisa.
     try {
-      const next = await patchDailyHabits<PropagatedHabit>(uid, data.date, (habits) => {
+      const next = await patchDailyHabits(uid, data.date, (habits) => {
         const idx = habits.findIndex((h) => h.label.toLowerCase() === label);
         if (idx < 0) return null;
         const updated = [...habits];

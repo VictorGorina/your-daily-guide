@@ -9,6 +9,7 @@ import {
 } from "@/test/fake-supabase";
 
 import { patchDailyHabits, updateDailyLogCas } from "./daily-rows.server";
+import type { MealHabit } from "./plan-shared";
 
 /** El doble, puesto además como `supabaseAdmin`: es el único cliente que usan. */
 function createFakeSupabase(tables?: FakeTables, opts?: FakeOptions) {
@@ -17,7 +18,7 @@ function createFakeSupabase(tables?: FakeTables, opts?: FakeOptions) {
   return fake;
 }
 
-type Habit = { label: string; done: boolean };
+type Habit = MealHabit;
 const DATE = "2026-09-21";
 // Un día que se CREA tiene que caer en la ventana de inserción: hoy, no una fecha fija.
 const NEW_DAY = new Date().toISOString().slice(0, 10);
@@ -57,10 +58,27 @@ const markLunch = (habits: Habit[]) =>
   habits.map((h) => (h.label === "Comida" ? { ...h, done: true } : h));
 
 describe("patchDailyHabits", () => {
+  it("una comida rota en la fila no rompe el cambio: llega limpia y se escribe limpia (ticket 36)", async () => {
+    const tables = seed();
+    tables.daily_logs![0]!.habits = [
+      null,
+      { done: true },
+      { label: "Comida", done: false },
+      { label: "Cena", done: "sí" },
+    ];
+    createFakeSupabase(tables);
+    const out = await patchDailyHabits("bea", DATE, markLunch);
+    expect(out).toEqual([
+      { label: "Comida", done: true },
+      { label: "Cena", done: false },
+    ]);
+    expect(tables.daily_logs![0]!.habits).toEqual(out);
+  });
+
   it("si otra escritura se cruza, se aplica sobre lo nuevo y se conservan las dos", async () => {
     const tables = seed();
     const fake = createFakeSupabase(tables, { failOn: concurrentDinner(tables, 1) });
-    const out = await patchDailyHabits<Habit>("bea", DATE, markLunch);
+    const out = await patchDailyHabits("bea", DATE, markLunch);
     expect(out).toEqual([
       { label: "Comida", done: true },
       { label: "Cena", done: true },
@@ -72,15 +90,15 @@ describe("patchDailyHabits", () => {
   it("con tres choques seguidos, lanza", async () => {
     const tables = seed();
     createFakeSupabase(tables, { failOn: concurrentDinner(tables, 3) });
-    await expect(patchDailyHabits<Habit>("bea", DATE, markLunch)).rejects.toThrow(
+    await expect(patchDailyHabits("bea", DATE, markLunch)).rejects.toThrow(
       "No hemos podido guardar el cambio de comida",
     );
   });
 
   it("sin día, o sin nada que escribir, no escribe", async () => {
     const fake = createFakeSupabase(seed());
-    expect(await patchDailyHabits<Habit>("bea", "2026-09-20", markLunch)).toBeNull();
-    expect(await patchDailyHabits<Habit>("bea", DATE, () => null)).toBeNull();
+    expect(await patchDailyHabits("bea", "2026-09-20", markLunch)).toBeNull();
+    expect(await patchDailyHabits("bea", DATE, () => null)).toBeNull();
     expect(fake.calls.some((c) => c.op === "update")).toBe(false);
   });
 });
