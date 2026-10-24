@@ -12,6 +12,7 @@ import {
   type FeedingStage,
 } from "../lib/household-shared";
 import { Sheet } from "./ui/sheet";
+import { NAME_MAX_LENGTH } from "../lib/content-guard";
 
 const INPUT = "h-12 w-full rounded-2xl bg-muted px-4 text-sm text-foreground";
 const FIELD = "text-[11px] font-sans-semibold uppercase tracking-[0.06em] text-muted-foreground";
@@ -140,6 +141,7 @@ export function ChildSheet({
             <TextInput
               className={INPUT}
               value={draft.name}
+              maxLength={NAME_MAX_LENGTH}
               onChangeText={(v) => patch({ name: v })}
               placeholder={t("childSheet.name")}
               placeholderTextColor="#a69d8f"

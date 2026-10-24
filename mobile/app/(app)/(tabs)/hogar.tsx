@@ -16,6 +16,7 @@ import { fetchHousehold, type HouseholdChild } from "../../../lib/household";
 import { EMPTY_SCHEDULE, eatsTableFood } from "../../../lib/household-shared";
 import { childPureeGaps, type MonthlyPlan } from "../../../lib/plan-shared";
 import { useHouseholdMutations } from "../../../lib/use-household-mutations";
+import { NAME_MAX_LENGTH } from "../../../lib/content-guard";
 
 export default function Hogar() {
   const { t } = useTranslation();
@@ -128,6 +129,7 @@ export default function Hogar() {
                     autoFocus
                     className="mt-0.5 rounded-xl bg-muted px-2 py-1 font-heading text-2xl text-foreground"
                     defaultValue={household.name}
+                    maxLength={NAME_MAX_LENGTH}
                     placeholderTextColor="#a69d8f"
                     onEndEditing={(e) => {
                       renameHousehold(household.id, e.nativeEvent.text);

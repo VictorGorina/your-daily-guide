@@ -20,6 +20,7 @@ import {
 } from "../../lib/profile-fields";
 import { useCurrencySymbol } from "../../lib/use-money";
 import type { Translate } from "../../lib/week-nav";
+import { NAME_MAX_LENGTH } from "../../lib/content-guard";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -236,6 +237,7 @@ export default function Perfil() {
                           <TextInput
                             autoFocus
                             value={draft}
+                            maxLength={field.key === "display_name" ? NAME_MAX_LENGTH : undefined}
                             onChangeText={setDraft}
                             onSubmitEditing={() => commit(field)}
                             keyboardType={

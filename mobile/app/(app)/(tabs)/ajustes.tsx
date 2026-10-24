@@ -23,6 +23,7 @@ import { currencyForCountry, DEFAULT_COUNTRY } from "../../../lib/regions";
 import { supabase } from "../../../lib/supabase";
 import { useLocale } from "../../../lib/use-locale";
 import { resolveDeviceTimeZone } from "../../../lib/zoned-date";
+import { NAME_MAX_LENGTH } from "../../../lib/content-guard";
 
 // Nota de portado (ver AGENTS.md de mobile/): respecto a la pantalla web se
 // omiten dos secciones que aún no aplican en nativo:
@@ -243,6 +244,7 @@ export default function Ajustes() {
           <TextInput
             key={`name-${seed}`}
             defaultValue={profile?.display_name ?? ""}
+            maxLength={NAME_MAX_LENGTH}
             placeholder={t("ajustes.basics.name")}
             placeholderTextColor="#a69d8f"
             onEndEditing={(e) => save.mutate({ display_name: e.nativeEvent.text || null })}
