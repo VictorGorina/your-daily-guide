@@ -370,6 +370,7 @@ export type Database = {
           goal_type: string | null;
           id: string;
           invite_code: string;
+          invite_code_created_at: string;
           name: string;
           shared_slots: Json;
           updated_at: string;
@@ -382,6 +383,7 @@ export type Database = {
           goal_type?: string | null;
           id?: string;
           invite_code: string;
+          invite_code_created_at?: string;
           name?: string;
           shared_slots?: Json;
           updated_at?: string;
@@ -394,6 +396,7 @@ export type Database = {
           goal_type?: string | null;
           id?: string;
           invite_code?: string;
+          invite_code_created_at?: string;
           name?: string;
           shared_slots?: Json;
           updated_at?: string;
@@ -848,6 +851,7 @@ export type Database = {
           retry_after_seconds: number;
         }[];
       };
+      create_household: { Args: { _name: string }; Returns: string };
       due_push_profiles: {
         Args: { _window_minutes?: number };
         Returns: {
@@ -911,10 +915,12 @@ export type Database = {
         Returns: boolean;
       };
       join_household: { Args: { _invite_code: string }; Returns: string };
+      new_invite_code: { Args: never; Returns: string };
       record_ai_spend: {
         Args: { _cost_usd: number; _month_only?: boolean; _user_id: string };
         Returns: undefined;
       };
+      rotate_invite_code: { Args: { _household_id: string }; Returns: string };
       set_household_planner: {
         Args: { _household_id: string; _member_id: string };
         Returns: undefined;
