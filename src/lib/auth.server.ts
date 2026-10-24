@@ -192,6 +192,27 @@ export async function requestSignupConfirmationHandler(
       const emails = await import("@/lib/email.server");
       const sendEmail = deps.sendEmail ?? emails.sendEmail;
 
+      // Pre-secuestro (ticket 37, SEC-S-08): si alguien creó antes una cuenta
+      // con este correo y no la confirmó, `generateLink` puede conservar SU
+      // contraseña, y confirmar el enlace le daría la cuenta. Así la contraseña
+      // es siempre la de quien pide el enlace, que va a este correo. Si no se
+      // puede cambiar, no se manda: llevaría la contraseña de otro.
+      const { data: state } = await supabaseAdmin.rpc("auth_user_state", { _email: email });
+      const existing = (Array.isArray(state) ? state[0] : null) as {
+        id?: unknown;
+        confirmed?: unknown;
+      } | null;
+      if (typeof existing?.id === "string" && existing.confirmed === false) {
+        const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+          password,
+        });
+        if (pwError) {
+          const { logEvent, errorText } = await import("@/lib/log.server");
+          logEvent("error", "signup_password_reset_failed", { error: errorText(pwError) });
+          return ok;
+        }
+      }
+
       const { data: link, error } = await supabaseAdmin.auth.admin.generateLink({
         type: "signup",
         email,

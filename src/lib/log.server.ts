@@ -113,6 +113,10 @@
  * - `signup_weak_password_mismatch` (error): `generateLink` rechazó por débil
  *   una contraseña que `passwordProblem` aceptó: el panel de Supabase Auth y
  *   `PASSWORD_RULES` se han desalineado, y el alta no manda el correo.
+ * - `signup_password_reset_failed` (error): había una cuenta sin confirmar con
+ *   ese correo y no se le pudo poner la contraseña de quien pide el alta, así
+ *   que no se mandó el enlace (ticket 37, pre-secuestro). La persona espera un
+ *   correo que no llega: si se repite, mirar `auth.admin.updateUserById`.
  */
 import { redactFields } from "@/lib/log-redact";
 import { captureServerEvent } from "@/lib/sentry.server";

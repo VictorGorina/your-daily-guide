@@ -13,16 +13,34 @@ type LinkResult = {
   error: { code?: string } | null;
 };
 
-/** `supabaseAdmin` con la cuota siempre libre y el `generateLink` que se pida. */
-function adminWith(generateLink: (args: { email: string; type: string }) => LinkResult) {
+/** Contraseñas puestas con `updateUserById` en la última llamada a `adminWith`. */
+let pwUpdates: { id: string; password?: string }[] = [];
+
+/**
+ * `supabaseAdmin` con la cuota siempre libre y el `generateLink` que se pida.
+ * `users` es lo que devuelve `auth_user_state` (la cuenta que ya tiene ese
+ * correo, si la hay); `updateError`, si poner la contraseña falla.
+ */
+function adminWith(
+  generateLink: (args: { email: string; type: string }) => LinkResult,
+  opts: { users?: { id: string; confirmed: boolean }[]; updateError?: { message: string } } = {},
+) {
   const linkCalls: { email: string; type: string }[] = [];
+  pwUpdates = [];
   setFakeAdmin({
-    rpc: async () => ({ data: [{ allowed: true }], error: null }),
+    rpc: async (name: string) =>
+      name === "auth_user_state"
+        ? { data: opts.users ?? [], error: null }
+        : { data: [{ allowed: true }], error: null },
     auth: {
       admin: {
         generateLink: async (args: { email: string; type: string }) => {
           linkCalls.push(args);
           return generateLink(args);
+        },
+        updateUserById: async (id: string, attrs: { password?: string }) => {
+          pwUpdates.push({ id, password: attrs.password });
+          return { data: null, error: opts.updateError ?? null };
         },
       },
     },
@@ -121,6 +139,40 @@ describe("requestSignupConfirmationHandler", () => {
     expect(box.sent).toHaveLength(1);
     expect(box.sent[0]!.to).toBe("existe@example.com");
     expect(box.sent[0]!.html).not.toContain("auth.example/confirm");
+  });
+
+  // Ticket 37, SEC-S-08: alguien creó antes la cuenta con este correo y una
+  // contraseña suya, sin confirmarla.
+  it("una cuenta sin confirmar toma la contraseña de quien pide el enlace", async () => {
+    const calls = adminWith(() => link("https://auth.example/confirm?t=2"), {
+      users: [{ id: "u-previa", confirmed: false }],
+    });
+    const box = mailbox();
+    await requestSignupConfirmationHandler(signup("victima@example.com"), box);
+    expect(pwUpdates).toEqual([{ id: "u-previa", password: "secreta123" }]);
+    expect(calls).toHaveLength(1);
+    expect(box.sent).toHaveLength(1);
+  });
+
+  it("si no se puede cambiar esa contraseña, no se manda el enlace (y responde ok)", async () => {
+    const calls = adminWith(() => link("https://auth.example/confirm?t=3"), {
+      users: [{ id: "u-previa", confirmed: false }],
+      updateError: { message: "fallo" },
+    });
+    const box = mailbox();
+    expect(await requestSignupConfirmationHandler(signup("victima@example.com"), box)).toEqual({
+      ok: true,
+    });
+    expect(calls).toHaveLength(0);
+    expect(box.sent).toHaveLength(0);
+  });
+
+  it("a una cuenta ya confirmada nunca se le toca la contraseña", async () => {
+    adminWith(() => ({ data: null, error: { code: "email_exists" } }), {
+      users: [{ id: "u-dueña", confirmed: true }],
+    });
+    await requestSignupConfirmationHandler(signup("existe@example.com"), mailbox());
+    expect(pwUpdates).toEqual([]);
   });
 });
 
