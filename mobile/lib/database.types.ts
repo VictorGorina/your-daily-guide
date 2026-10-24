@@ -573,6 +573,8 @@ export type Database = {
           goal_amount: number | null;
           goal_target_date: string | null;
           goal_type: string | null;
+          health_consent_at: string | null;
+          health_consent_version: string | null;
           height_cm: number | null;
           id: string;
           kitchen_equipment: string | null;
@@ -641,6 +643,8 @@ export type Database = {
           goal_amount?: number | null;
           goal_target_date?: string | null;
           goal_type?: string | null;
+          health_consent_at?: string | null;
+          health_consent_version?: string | null;
           height_cm?: number | null;
           id: string;
           kitchen_equipment?: string | null;
@@ -709,6 +713,8 @@ export type Database = {
           goal_amount?: number | null;
           goal_target_date?: string | null;
           goal_type?: string | null;
+          health_consent_at?: string | null;
+          health_consent_version?: string | null;
           height_cm?: number | null;
           id?: string;
           kitchen_equipment?: string | null;

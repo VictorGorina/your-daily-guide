@@ -1,6 +1,9 @@
 -- Ticket 30 de la auditoría (RGPD, plazos aprobados en P5): borrado periódico
--- de lo que no hace falta guardar para siempre. Aplicar a mano en el SQL Editor.
--- Rollback: supabase/rollbacks/20261001130000_retention.sql.
+-- de lo que no hace falta guardar para siempre. Escrita el 2026-10-01 y apartada
+-- en supabase/pending/ hasta publicar la política de privacidad que anuncia
+-- estos plazos (src/routes/privacidad.tsx, versión 2026-10).
+-- Rollback: supabase/rollbacks/20261024170200_retention.sql.
+-- Tests: supabase/tests/retention.test.sql.
 --
 -- Se conservan mientras exista la cuenta `daily_logs` y `monthly_plans`: son el
 -- historial que la persona ve. Al borrar la cuenta, todo cae en cascada (y
