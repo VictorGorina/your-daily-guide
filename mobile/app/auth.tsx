@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { openPrivacyPolicy } from "../components/health-consent";
 import { apiPostPublic } from "../lib/api";
 import { authErrorText, isEmailNotConfirmed, passwordProblem } from "../lib/auth-errors";
 import { useAuth } from "../lib/auth-context";
@@ -568,6 +569,16 @@ export default function Auth() {
           <Text className="mt-3 text-center text-[11px] font-body leading-[1.45] text-muted-foreground">
             {disclaimer}
           </Text>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => void openPrivacyPolicy()}
+            hitSlop={8}
+            className="mt-2 self-center active:opacity-70"
+          >
+            <Text className="text-[11px] font-body-medium text-muted-foreground underline">
+              {t("auth.privacy")}
+            </Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

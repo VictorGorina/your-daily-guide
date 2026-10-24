@@ -9,6 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ageFromDOB } from "../../lib/age";
 import { fetchProfile, saveProfile, type Profile } from "../../lib/daily";
 import { energyExplanation, energyTargets } from "../../lib/energy";
+import { hasHealthConsent, isHealthField } from "../../lib/health-consent";
 import { dateLocale } from "../../lib/i18n";
 import { portionExplanation, portionFactors } from "../../lib/portion";
 import { showsNutritionNumbers } from "../../lib/macros";
@@ -96,6 +97,10 @@ export default function Perfil() {
   // Ticket 07: de dónde sale su cifra, a la vista (solo si quiere ver cifras).
   const showNumbers = showsNutritionNumbers(profile);
   const energy = energyTargets(profile);
+  // Sin consentimiento, los datos de salud ni se ven ni se editan (ticket 30).
+  const healthConsent = hasHealthConsent(profile);
+  const visibleFields = (fields: Field[]) =>
+    healthConsent ? fields : fields.filter((field) => !isHealthField(String(field.key)));
 
   const { t, i18n } = useTranslation();
   const numberLocale = dateLocale(i18n.language);
@@ -161,6 +166,11 @@ export default function Perfil() {
 
         <Text className="mt-3 font-heading text-3xl text-foreground">{t("perfil.title")}</Text>
         <Text className="mt-1 text-sm text-muted-foreground">{t("perfil.intro")}</Text>
+        {profile && !healthConsent ? (
+          <Text className="mt-2 text-xs text-muted-foreground">
+            {t("healthConsent.answersNote")}
+          </Text>
+        ) : null}
 
         {showNumbers && energy ? (
           <View className="mt-5 rounded-3xl bg-surface p-4">
@@ -185,7 +195,7 @@ export default function Perfil() {
               {t(`perfil.sections.${sectionIndex}`)}
             </Text>
             <View className="mt-2">
-              {section.fields.map((field, idx) => {
+              {visibleFields(section.fields).map((field, idx) => {
                 const isEditing = editing === String(field.key);
                 const shown = display(field, profile, t, fieldUnit(field, currency));
                 return (
