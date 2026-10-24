@@ -9,6 +9,7 @@ import {
   type SpendCapScope,
 } from "@/lib/ai-spend";
 import { errorText, logEvent } from "@/lib/log.server";
+import { normalizeEmailForQuota } from "@/lib/quota-subject";
 import { RateLimitError } from "@/lib/rate-limit-error";
 
 /**
@@ -60,6 +61,10 @@ const RATE_LIMITS = {
   // en memoria en `auth.functions.ts`.
   "password-reset": { limit: 5, windowSeconds: HOUR, action: "pedir el enlace" },
   "signup-confirm": { limit: 5, windowSeconds: HOUR, action: "pedir el correo de confirmación" },
+  // Las dos de arriba juntas, por IP (ticket 29): muchos correos distintos desde
+  // el mismo sitio. Con holgura para una red compartida (oficina, la de datos
+  // del móvil), que sale toda por pocas IP.
+  "auth-email-ip": { limit: 20, windowSeconds: HOUR, action: "pedir el correo" },
 } as const;
 
 /**
@@ -307,33 +312,41 @@ async function hmacSha256Hex(secret: string, value: string): Promise<string> {
 }
 
 /**
- * Clave de cuota de un correo. Con sal (`RATE_LIMIT_SALT`, ticket 30,
- * SEC-DB-16): un SHA-256 a secas se revierte probando correos, uno con sal no
+ * Clave de cuota de un correo o una IP. Con sal (`RATE_LIMIT_SALT`, ticket 30,
+ * SEC-DB-16): un SHA-256 a secas se revierte probando valores, uno con sal no
  * sin la sal. Sin la variable cae al hash de siempre y, en producción, deja
  * `env_missing`; las filas viejas caducan solas.
  */
-async function emailSubject(email: string): Promise<string> {
-  const normalized = email.trim().toLowerCase();
+async function hashedSubject(kind: "email" | "ip", value: string): Promise<string> {
   const salt = process.env.RATE_LIMIT_SALT;
-  if (salt) return `email:${await hmacSha256Hex(salt, normalized)}`;
+  if (salt) return `${kind}:${await hmacSha256Hex(salt, value)}`;
   if (process.env.VERCEL_ENV === "production") {
     logEvent("error", "env_missing", { variable: "RATE_LIMIT_SALT", fallback: "sha256" });
   }
-  return `email:${await sha256Hex(normalized)}`;
+  return `${kind}:${await sha256Hex(value)}`;
 }
 
+const FREE: Consumed = { allowed: true, retryAfterSeconds: 0 };
+
 /**
- * Cuota de algo que se pide sin sesión, contada por correo. Devuelve si pasa en
- * vez de lanzar: quien la usa (recuperar contraseña) responde siempre lo mismo
- * exista o no la cuenta, y un error distinto rompería esa promesa.
+ * Cuota de algo que se pide sin sesión: por buzón (`normalizeEmailForQuota`,
+ * así los alias `+N` cuentan como uno) y, si se sabe, por IP (`auth-email-ip`,
+ * compartida entre el alta y el restablecimiento). Devuelve si pasa en vez de
+ * lanzar: quien la usa (recuperar contraseña) responde siempre lo mismo exista
+ * o no la cuenta, y un error distinto rompería esa promesa.
  *
- * El correo se guarda hasheado (con sal), así que la tabla no acumula
+ * Correo e IP se guardan hasheados (con sal), así que la tabla no acumula
  * direcciones en claro ni dice quién tiene cuenta.
  */
 export async function checkEmailRateLimit(
   email: string,
   bucket: RateLimitBucket,
+  ip: string | null = null,
 ): Promise<boolean> {
-  const { allowed } = await consume(await emailSubject(email), bucket);
-  return allowed;
+  const [byEmail, byIp] = await Promise.all([
+    hashedSubject("email", normalizeEmailForQuota(email)).then((s) => consume(s, bucket)),
+    ip ? hashedSubject("ip", ip).then((s) => consume(s, "auth-email-ip")) : FREE,
+  ]);
+  if (!byIp.allowed) logEvent("warn", "auth_ip_quota_reached", { bucket });
+  return byEmail.allowed && byIp.allowed;
 }

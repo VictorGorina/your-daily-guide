@@ -23,15 +23,20 @@ let pwUpdates: { id: string; password?: string }[] = [];
  */
 function adminWith(
   generateLink: (args: { email: string; type: string }) => LinkResult,
-  opts: { users?: { id: string; confirmed: boolean }[]; updateError?: { message: string } } = {},
+  opts: {
+    users?: { id: string; confirmed: boolean }[];
+    updateError?: { message: string };
+    /** Si la cuota deja pasar esta llamada a `consume_rate_limit` (por defecto, sí). */
+    quota?: (args: { _bucket?: string }) => boolean;
+  } = {},
 ) {
   const linkCalls: { email: string; type: string }[] = [];
   pwUpdates = [];
   setFakeAdmin({
-    rpc: async (name: string) =>
+    rpc: async (name: string, args: { _bucket?: string } = {}) =>
       name === "auth_user_state"
         ? { data: opts.users ?? [], error: null }
-        : { data: [{ allowed: true }], error: null },
+        : { data: [{ allowed: opts.quota?.(args) ?? true }], error: null },
     auth: {
       admin: {
         generateLink: async (args: { email: string; type: string }) => {
@@ -110,6 +115,22 @@ describe("requestPasswordResetHandler", () => {
     );
     expect(result).toEqual({ ok: true });
     quiet.mockRestore();
+  });
+
+  it("con la IP agotada responde ok y no pide enlace (ticket 29)", async () => {
+    const calls = adminWith(() => link("https://auth.example/recover?t=4"), {
+      quota: (args) => args._bucket !== "auth-email-ip",
+    });
+    const box = mailbox();
+    const quiet = spyOn(console, "warn").mockImplementation(() => {});
+    const result = await requestPasswordResetHandler(
+      { email: "ip@example.com", platform: "web" },
+      { ...box, ip: "203.0.113.7" },
+    );
+    quiet.mockRestore();
+    expect(result).toEqual({ ok: true });
+    expect(calls).toEqual([]);
+    expect(box.sent).toEqual([]);
   });
 });
 
