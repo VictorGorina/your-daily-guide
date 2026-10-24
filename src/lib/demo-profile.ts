@@ -20,6 +20,9 @@ export function randomDemoProfile(): Partial<Profile> {
     height_cm: height,
     current_weight_kg: weight,
     start_weight_kg: weight,
+    // Sin datos de salud (ticket 30): un perfil nuevo no los guarda sin
+    // consentimiento, y la guarda de la base de datos lo rechazaría. Quien prueba
+    // la app puede activarlos en Ajustes › Privacidad.
     medical_conditions: null,
     medications: null,
     activity_level: pick(["ligero", "activo", "muy activo"]),
@@ -35,12 +38,11 @@ export function randomDemoProfile(): Partial<Profile> {
       "Chocolate negro por la noche",
       "El pan con el desayuno",
     ]),
-    food_relationship: "Come bien de lunes a jueves y se relaja el fin de semana.",
+    food_relationship: null,
     goal_type: goal,
     goal_amount: goal === "perder" ? between(3, 8) : null,
     goal_target_date: null,
-    past_struggles:
-      "Ha empezado dietas muy estrictas y las ha dejado a las dos semanas. Probó a contar calorías con una app y acabó obsesionado con las cifras.",
+    past_struggles: null,
     restrictions: pick([null, "Intolerancia leve a la lactosa"]),
     meal_schedule:
       "Desayuna en casa, come de tupper en el trabajo de lunes a viernes, cena en casa salvo un día que pide fuera y los fines de semana cocina en casa.",
@@ -56,11 +58,10 @@ export function randomDemoProfile(): Partial<Profile> {
     country: "ES",
     currency: "EUR",
     pregnancy_status: null,
-    menstrual_cycle:
-      sex === "mujer" ? pick([null, "Los días antes de la regla me apetece picar más"]) : null,
-    ed_history: "no",
-    alcohol: pick(["nunca", "ocasional", "frecuente"]),
-    allergy_severity: pick([null, "La del marisco es grave, el resto las llevo bien"]),
+    menstrual_cycle: null,
+    ed_history: null,
+    alcohol: null,
+    allergy_severity: null,
     disliked_foods: pick(["El cilantro y el hígado", "El pescado azul", null]),
     cuisine_preference: pick([
       "Mediterránea, casera de siempre",
@@ -72,8 +73,8 @@ export function randomDemoProfile(): Partial<Profile> {
     kitchen_equipment: pick(["Horno y air fryer", "Horno, olla lenta y microondas"]),
     cooking_skill: pick(["básico", "cómodo", "avanzado"]),
     strength_training_experience: goal === "ganar" ? pick(["menos de 1 año", "1-3 años"]) : null,
-    supplements: pick([null, "Proteína en polvo"]),
-    smoking: pick(["no", "no", "ocasionalmente"]),
+    supplements: null,
+    smoking: null,
     onboarding_completed: true,
     // Alta ~40 días atrás para que el navegador de meses de Plan tenga historial
     // que enseñar (y un mes anterior navegable) en las demos.

@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  fetchProfile,
   monthISO,
   saveProfile,
   todayISO,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/plan.functions";
 import { mealsForDate, type MealSlot, type MonthlyPlan } from "@/lib/plan-shared";
 import {
+  healthGatedPatch,
   PROFILE_FIELD_LABELS,
   profilePatchFromTool,
   profileToolResult,
@@ -44,6 +46,7 @@ import {
   splitProfilePatch,
   type SensitiveChange,
 } from "@/lib/profile-fields";
+import { hasHealthConsent } from "@/lib/health-consent";
 
 const norm = (s: string) => s.toLowerCase().trim();
 
@@ -370,7 +373,10 @@ export function useCoachActions(
         return `Nueva fecha objetivo guardada: ${targetDate}`;
       }
       if (toolName === "actualizar_perfil") {
-        const { patch, invalid } = profilePatchFromTool(input);
+        const { patch: requested, invalid } = profilePatchFromTool(input);
+        // Sin consentimiento, los datos de salud no se guardan (ticket 30).
+        const current = qc.getQueryData<Profile | null>(["profile"]) ?? (await fetchProfile());
+        const { patch, blocked } = healthGatedPatch(requested, hasHealthConsent(current));
         // Lo sensible (embarazo, medicación, TCA, alergias…) no se guarda sin
         // que la persona lo confirme; lo demás, como siempre (ticket 31).
         const { sensitive, normal } = splitProfilePatch(patch);
@@ -388,6 +394,7 @@ export function useCoachActions(
           profileLabels(toSave),
           confirmed ? [] : profileLabels(sensitive),
           invalid,
+          profileLabels(blocked),
         );
         return Object.keys(toSave).length ? output : notApplied(output);
       }

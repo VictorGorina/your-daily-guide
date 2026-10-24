@@ -24,6 +24,9 @@ export function useOnboardingDraft() {
   const [curKey, setCurKey] = useState("0-0");
   const [dob, setDob] = useState<string | null>(null);
   const [introDismissed, setIntroDismissed] = useState(false);
+  // «Seguir sin datos de salud» (ticket 30). Aceptar no va aquí: se guarda en el
+  // perfil en el momento, con su fecha.
+  const [healthDeclined, setHealthDeclined] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   // Hidratación del progreso guardado: se lee una vez al montar. Quien pinta
@@ -39,12 +42,14 @@ export function useOnboardingDraft() {
           curKey?: string;
           dob?: string | null;
           introDismissed?: boolean;
+          healthDeclined?: boolean;
         };
         if (saved.answers) setAnswers(saved.answers);
         if (saved.skipped) setSkipped(saved.skipped);
         if (saved.curKey) setCurKey(saved.curKey);
         if (saved.dob) setDob(saved.dob);
         if (saved.introDismissed) setIntroDismissed(true);
+        if (saved.healthDeclined) setHealthDeclined(true);
       })
       .catch(() => {
         /* progreso corrupto: se empieza de cero */
@@ -62,11 +67,11 @@ export function useOnboardingDraft() {
     if (!hydrated) return;
     AsyncStorage.setItem(
       DRAFT_STORAGE_KEY,
-      JSON.stringify({ answers, skipped, curKey, dob, introDismissed }),
+      JSON.stringify({ answers, skipped, curKey, dob, introDismissed, healthDeclined }),
     ).catch(() => {
       /* almacenamiento bloqueado: no es crítico */
     });
-  }, [answers, skipped, curKey, dob, introDismissed, hydrated]);
+  }, [answers, skipped, curKey, dob, introDismissed, healthDeclined, hydrated]);
 
   const clearDraft = useCallback(() => {
     AsyncStorage.removeItem(DRAFT_STORAGE_KEY).catch(() => {});
@@ -83,6 +88,8 @@ export function useOnboardingDraft() {
     setDob,
     introDismissed,
     setIntroDismissed,
+    healthDeclined,
+    setHealthDeclined,
     hydrated,
     clearDraft,
   };

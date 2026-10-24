@@ -1,4 +1,5 @@
 import type { Profile } from "./daily";
+import { isHealthField } from "./health-consent";
 import type { Translate } from "./week-nav";
 
 /**
@@ -397,14 +398,45 @@ export function sensitiveChanges(
 }
 
 /**
+ * Sin consentimiento para los datos de salud (ticket 30), `actualizar_perfil`
+ * no los guarda: la base de datos los rechazaría. Lo que se queda fuera va a
+ * `blocked`, para decírselo al modelo.
+ */
+export function healthGatedPatch(
+  patch: Partial<Profile>,
+  consent: boolean,
+): { patch: Partial<Profile>; blocked: Partial<Profile> } {
+  if (consent) return { patch, blocked: {} };
+  const kept: Record<string, unknown> = {};
+  const blocked: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (isHealthField(key)) blocked[key] = value;
+    else kept[key] = value;
+  }
+  return { patch: kept as Partial<Profile>, blocked: blocked as Partial<Profile> };
+}
+
+/**
  * Lo que vuelve al modelo tras `actualizar_perfil`: lo guardado, lo que la
  * persona eligió no guardar (que no insista: sin decírselo, volvía a
  * proponerlo) y lo que no se guardó por no ser válido (que no diga que está
  * guardado: en una prueba real lo afirmó).
  */
-export function profileToolResult(saved: string[], declined: string[], invalid: string[]): string {
+export function profileToolResult(
+  saved: string[],
+  declined: string[],
+  invalid: string[],
+  withoutConsent: string[] = [],
+): string {
   const parts: string[] = [];
   if (saved.length) parts.push(`Perfil actualizado: ${saved.join(", ")}.`);
+  if (withoutConsent.length) {
+    parts.push(
+      `No se ha guardado porque la persona no ha dado permiso para usar sus datos de salud: ` +
+        `${withoutConsent.join(", ")}. Si quiere que los tengas en cuenta, puede activarlo en ` +
+        "Ajustes › Privacidad; díselo una vez, sin insistir. No digas que está guardado.",
+    );
+  }
   if (declined.length) {
     parts.push(
       `La persona ha elegido no guardar esto en su perfil: ${declined.join(", ")}. ` +

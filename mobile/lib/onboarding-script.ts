@@ -35,6 +35,11 @@ export type Question = {
   optional?: true;
   /** La respuesta es una fecha (selector en la web, DD/MM/AAAA en el móvil). */
   dateInput?: true;
+  /**
+   * Pregunta por un dato de salud (`HEALTH_PROFILE_FIELDS`): sin consentimiento
+   * no sale, ni ella ni su follow-up (ticket 30).
+   */
+  health?: true;
   validate?: (text: string) => OnboardingError | null;
   /** Pregunta que se inserta justo detrás si `test` acepta la respuesta. */
   followUp?: { test: (answer: string) => boolean; question: Question };
@@ -183,13 +188,19 @@ export const parseDatePretty = (pretty: string): string | null => {
 // Las "hoja" (sin follow-up propio) van primero porque otras las referencian en
 // su `followUp`. Ver "Radiografía del onboarding" para el porqué de cada una.
 
-const ALLERGY_SEVERITY_Q: Question = { id: "allergySeverity", hint: true, optional: true };
+const ALLERGY_SEVERITY_Q: Question = {
+  id: "allergySeverity",
+  hint: true,
+  optional: true,
+  health: true,
+};
 
-const MENSTRUAL_CYCLE_Q: Question = { id: "cycle", hint: true, optional: true };
+const MENSTRUAL_CYCLE_Q: Question = { id: "cycle", hint: true, optional: true, health: true };
 
 export const PREGNANCY_Q: Question = {
   id: "pregnancy",
   hint: true,
+  health: true,
   chips: ["pregnant", "breastfeeding", "no", "undisclosed"],
   // Si no está embarazada ni en lactancia, encadenamos la pregunta del ciclo;
   // si lo está, no tiene sentido preguntarla ahora.
@@ -206,10 +217,15 @@ export const PREGNANCY_Q: Question = {
 const ED_HISTORY_Q: Question = {
   id: "edHistory",
   hint: true,
+  health: true,
   chips: ["now", "past", "no", "undisclosed"],
 };
 
-const ALCOHOL_Q: Question = { id: "alcohol", chips: ["never", "sometimes", "often"] };
+const ALCOHOL_Q: Question = {
+  id: "alcohol",
+  chips: ["never", "sometimes", "often"],
+  health: true,
+};
 
 const CUISINE_Q: Question = {
   id: "cuisine",
@@ -254,7 +270,7 @@ const TRAINING_EXPERIENCE_Q: Question = {
   chips: ["none", "under1", "from1to3", "over3"],
 };
 
-const SMOKING_Q: Question = { id: "smoking", chips: ["no", "sometimes", "yes"] };
+const SMOKING_Q: Question = { id: "smoking", chips: ["no", "sometimes", "yes"], health: true };
 
 /**
  * Solo se pregunta si la respuesta a LIVES_WITH_Q menciona a la pareja: así
@@ -339,7 +355,7 @@ export const SCREENS: Screen[] = [
       { id: "name", hint: true },
       BIRTHDATE_Q,
       BIO_Q,
-      { id: "medical", hint: true, optional: true },
+      { id: "medical", hint: true, optional: true, health: true },
       SMOKING_Q,
       {
         id: "allergies",
@@ -376,7 +392,7 @@ export const SCREENS: Screen[] = [
       { id: "foods", hint: true },
       CUISINE_Q,
       ALCOHOL_Q,
-      { id: "foodRelationship", hint: true, chips: ["calm", "anxious", "noTime"] },
+      { id: "foodRelationship", hint: true, chips: ["calm", "anxious", "noTime"], health: true },
       ED_HISTORY_Q,
     ],
   },
@@ -403,7 +419,7 @@ export const SCREENS: Screen[] = [
       NUMBERS_Q,
       { id: "deadline", hint: true },
       { id: "scope", chips: ["food", "habits", "energy"] },
-      { id: "struggles", hint: true },
+      { id: "struggles", hint: true, health: true },
       BUDGET_Q,
     ],
   },
@@ -454,10 +470,20 @@ export type FlatNode = {
   lastOfScreen: boolean;
 };
 
-export const buildFlat = (answers: Record<string, string>): FlatNode[] => {
+/**
+ * `health: false` (sin consentimiento para los datos de salud, ticket 30): las
+ * preguntas `health` no salen, ni sus follow-ups. Las claves de las demás no
+ * cambian (salen de la posición en `SCREENS`), así que un progreso guardado
+ * sigue valiendo con o sin ellas.
+ */
+export const buildFlat = (
+  answers: Record<string, string>,
+  { health = true }: { health?: boolean } = {},
+): FlatNode[] => {
   const out: FlatNode[] = [];
 
   const pushChain = (q: Question, key: string, si: number, isFollowUp: boolean) => {
+    if (q.health && !health) return;
     out.push({ q, key, si, isFollowUp, lastOfScreen: false });
     const ans = answers[key];
     if (q.followUp && ans !== undefined && ans.trim() !== "" && q.followUp.test(ans)) {
@@ -476,4 +502,18 @@ export const buildFlat = (answers: Record<string, string>): FlatNode[] => {
     node.lastOfScreen = !next || next.si !== node.si;
   });
   return out;
+};
+
+/**
+ * Las respuestas sin las de salud: lo que se queda en el progreso guardado al
+ * elegir «Seguir sin datos de salud» (alguien que ya había contestado alguna
+ * antes de que existiera el paso de consentimiento).
+ */
+export const withoutHealthAnswers = (answers: Record<string, string>): Record<string, string> => {
+  const healthKeys = new Set(
+    buildFlat(answers)
+      .filter((node) => node.q.health)
+      .map((node) => node.key),
+  );
+  return Object.fromEntries(Object.entries(answers).filter(([key]) => !healthKeys.has(key)));
 };
