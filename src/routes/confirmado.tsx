@@ -60,12 +60,24 @@ function ConfirmadoPage() {
     }
 
     let cancelled = false;
+    // Al confirmar se cierran las sesiones de la cuenta en otros dispositivos
+    // (ticket 37, SEC-S-08: si alguien la tenía abierta antes, la pierde). Se
+    // espera antes de salir, porque `location.replace` cortaría la petición,
+    // pero como mucho 3 s: si tarda, se entra igual.
+    let othersSignedOut: Promise<unknown> | null = null;
     const goApp = () => {
       if (cancelled) return;
       setStatus("confirmed");
-      setTimeout(() => {
+      othersSignedOut ??= supabase.auth
+        .signOut({ scope: "others" })
+        .catch((error) => console.warn("confirmado: cerrar las otras sesiones", error));
+      const leave = Promise.all([
+        new Promise((done) => setTimeout(done, 900)),
+        Promise.race([othersSignedOut, new Promise((done) => setTimeout(done, 3000))]),
+      ]);
+      void leave.then(() => {
         if (!cancelled) window.location.replace(next || "/hoy");
-      }, 900);
+      });
     };
 
     supabase.auth.getSession().then(({ data }) => {
