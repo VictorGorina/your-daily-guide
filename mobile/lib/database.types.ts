@@ -802,6 +802,13 @@ export type Database = {
     };
     Functions: {
       ai_spend_total_today: { Args: never; Returns: number };
+      auth_user_state: {
+        Args: { _email: string };
+        Returns: {
+          confirmed: boolean;
+          id: string;
+        }[];
+      };
       claim_household_slot: {
         Args: { _invite_code: string; _member_id: string };
         Returns: string;
