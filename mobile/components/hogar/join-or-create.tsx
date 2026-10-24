@@ -6,6 +6,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import type { OpenSlot } from "../../lib/household";
 import { personColor } from "../../lib/household-shared";
 import type { useHouseholdMutations } from "../../lib/use-household-mutations";
+import { NAME_MAX_LENGTH } from "../../lib/content-guard";
 
 type Mutations = ReturnType<typeof useHouseholdMutations>;
 
@@ -139,6 +140,7 @@ export function JoinOrCreateHousehold({
         <TextInput
           className={INPUT}
           value={name}
+          maxLength={NAME_MAX_LENGTH}
           onChangeText={setName}
           placeholder={t("hogar.create.nameLabel")}
           placeholderTextColor="#a69d8f"

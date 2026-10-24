@@ -7,6 +7,7 @@ import type { HouseholdChild, HouseholdMember } from "../../lib/household";
 import { eatsTableFood, personColor, type Appetite } from "../../lib/household-shared";
 import type { useHouseholdMutations } from "../../lib/use-household-mutations";
 import { ChildMealGapBanner } from "../child-meal-gap-banner";
+import { NAME_MAX_LENGTH } from "../../lib/content-guard";
 
 type Mutations = ReturnType<typeof useHouseholdMutations>;
 type RowActions = Pick<
@@ -157,6 +158,7 @@ function AdultRow({
           <TextInput
             className="flex-1 rounded-lg bg-muted px-2 py-1 text-sm text-foreground"
             defaultValue={m.display_name}
+            maxLength={NAME_MAX_LENGTH}
             placeholderTextColor="#a69d8f"
             onEndEditing={(e) => renameMember(m.id, e.nativeEvent.text)}
           />
@@ -331,6 +333,7 @@ function AddMemberForm({
           <TextInput
             className={INPUT}
             value={newAdult.name}
+            maxLength={NAME_MAX_LENGTH}
             onChangeText={(v) => setNewAdult((p) => ({ ...p, name: v }))}
             placeholder={t("hogar.add.name")}
             accessibilityLabel={t("hogar.add.adultNameLabel")}

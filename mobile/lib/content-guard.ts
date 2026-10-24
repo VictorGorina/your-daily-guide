@@ -161,6 +161,13 @@ export const isCleanFood = (text: string): boolean => blockedTermIn(text) === nu
 /** Copia de rechazo. Misma frase en las dos plataformas y en los dos caminos. */
 export const BLOCKED_FOOD_MESSAGE = "Eso no es comida. Escribe un plato de verdad.";
 export const BLOCKED_NAME_MESSAGE = "Ese nombre no vale. Escribe uno de verdad.";
+
+/**
+ * Largo máximo de un nombre (hogar, persona de la mesa, niño, perfil). La base
+ * de datos lo exige con un `CHECK` (ticket 37 de la auditoría, SEC-DB-13); los
+ * campos lo cortan antes para que nunca se vea ese error.
+ */
+export const NAME_MAX_LENGTH = 60;
 /**
  * Texto que no dice qué se comió ("algo rápido", "lo de siempre"): no se
  * inventa un plato ni un promedio, se le pide a la persona que concrete (ticket
