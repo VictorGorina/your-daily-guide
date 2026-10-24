@@ -46,8 +46,10 @@ permitido.
 
 Trucos útiles con el perfil demo:
 
-- Para un registro de un día pasado: `PATCH` de la fila `daily_logs` del demo con un
-  `log_date` anterior vía API REST.
+- Para un registro de un día pasado: `POST` de una fila `daily_logs` nueva del demo con un
+  `log_date` anterior (hasta 45 días atrás, la policy "insert recent own log") vía API REST.
+  Mover la fecha de una fila que ya existe (`PATCH` de `log_date`) ya no vale: lo impide el
+  trigger `daily_logs_date_immutable` (ticket 37).
 - Para confirmar que una migración llegó: sondea columnas por PostgREST con una columna
   falsa como control (real = 200, falsa = 400).
 - Los guardados `onBlur` necesitan un evento `focusout` (no `blur`) para disparar a través
