@@ -8,7 +8,8 @@ import type { DbClient } from "@/integrations/supabase/db-client";
  * `match`, `filter`), `order`/`limit`/`range`, `single`/`maybeSingle` (con el
  * `PGRST116` de verdad), `insert`, `update`, `upsert` (`onConflict`,
  * `ignoreDuplicates`), `delete` (las escrituras devuelven filas con `.select()`),
- * `rpc` con manejadores inyectables y `auth.admin.deleteUser`.
+ * `rpc` con manejadores inyectables, `auth.admin.deleteUser` y
+ * `auth.admin.getUserById` (anónima si su id está en `anonymousUsers`).
  *
  * No es Postgres: no hay tipos, ni RLS, ni joins embebidos (`rel(col)` devuelve
  * la fila entera). Lo que decide un test de RLS va contra la BD, no aquí.
@@ -29,11 +30,19 @@ export type FakeFilter =
 
 export type FakeOp = {
   table: string;
-  op: "select" | "insert" | "update" | "upsert" | "delete" | "rpc" | "auth.deleteUser";
+  op:
+    | "select"
+    | "insert"
+    | "update"
+    | "upsert"
+    | "delete"
+    | "rpc"
+    | "auth.deleteUser"
+    | "auth.getUserById";
   /** Columnas pedidas en `select` (vacío = todas). */
   columns: string[];
   filters: FakeFilter[];
-  /** Lo que se escribe (`insert`/`update`/`upsert`), los argumentos del `rpc` o el id borrado. */
+  /** Lo que se escribe (`insert`/`update`/`upsert`), los argumentos del `rpc` o el id pedido. */
   payload?: unknown;
 };
 
@@ -49,6 +58,8 @@ export type FakeOptions = {
    */
   failOn?: (op: FakeOp) => FakeError | boolean | null | undefined;
   rpc?: Record<string, RpcHandler>;
+  /** Ids de las cuentas anónimas para `auth.admin.getUserById` (el resto no lo son). */
+  anonymousUsers?: string[];
 };
 
 const NOT_FOUND: FakeError = {
@@ -436,6 +447,20 @@ export function createFakeSupabase(tables: FakeTables = {}, opts: FakeOptions = 
           const failure = failureOf(op);
           if (failure) return { data: null, error: failure };
           return { data: { user: null }, error: null };
+        },
+        getUserById: async (id: string): Promise<Result> => {
+          const op: FakeOp = {
+            table: "auth.users",
+            op: "auth.getUserById",
+            columns: [],
+            filters: [],
+            payload: id,
+          };
+          calls.push(op);
+          const failure = failureOf(op);
+          if (failure) return { data: { user: null }, error: failure };
+          const anonymous = opts.anonymousUsers?.includes(id) ?? false;
+          return { data: { user: { id, is_anonymous: anonymous } }, error: null };
         },
       },
     },

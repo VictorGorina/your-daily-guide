@@ -365,7 +365,10 @@ Vite, el build de producción no lo tiene.
 
 **Tope de gasto en IA (`ai_spend` + `record_ai_spend`):** complementa las cuotas por hora con un
 tope en dólares por persona, diario y mensual (`AI_SPEND_CAPS`, junto a `RATE_LIMITS`; días y
-meses en UTC). `createAiProvider(key, userId)` exige `userId` y envuelve cada modelo en un
+meses en UTC). Una cuenta anónima (el demo) tiene los suyos, `AI_SPEND_CAPS_ANON` (0,30 $/día,
+2 $/mes: da para un plan entero); se sabe si lo es preguntando a Auth por su id
+(`isAnonymousUser`, 10 min de caché), no por el JWT, para que valga también en el trabajador de
+`jobs`. `createAiProvider(key, userId)` exige `userId` y envuelve cada modelo en un
 middleware que mira el tope **antes de cada llamada** y suma después el `usage.cost` real de
 OpenRouter (pedido con `usage: { include: true }`; si no llega, se estima por tokens). Así no se
 escapa ninguna llamada: reintentos y helpers sin bucket (`offShoppingList`) incluidos.
