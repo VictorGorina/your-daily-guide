@@ -4,7 +4,7 @@ import { Check, ExternalLink, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { fetchProfile, saveProfile } from "../lib/daily";
 import {
@@ -235,16 +235,20 @@ export function HealthConsentGate() {
         /* no se cierra sin elegir */
       }}
     >
-      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-        <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-10 pt-8">
-          <HealthConsentPanel
-            mode="existing"
-            busy={busy}
-            onAccept={() => void run(healthConsentPatch())}
-            onDecline={decline}
-          />
-        </ScrollView>
-      </SafeAreaView>
+      {/* El Modal es otra raíz nativa: sin su propio proveedor, el SafeAreaView
+          no recibe los márgenes y el contenido se mete bajo la barra de estado. */}
+      <SafeAreaProvider>
+        <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+          <ScrollView contentContainerClassName="mx-auto w-full max-w-lg px-5 pb-10 pt-8">
+            <HealthConsentPanel
+              mode="existing"
+              busy={busy}
+              onAccept={() => void run(healthConsentPatch())}
+              onDecline={decline}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
