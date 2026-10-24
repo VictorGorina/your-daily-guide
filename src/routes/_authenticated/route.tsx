@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 
 import { CoachFab } from "@/components/coach-fab";
+import { HealthConsentGate } from "@/components/health-consent";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -25,6 +26,8 @@ export const Route = createFileRoute("/_authenticated")({
           Se oculta a sí misma (ver coach-fab.tsx) mientras el onboarding
           no esté completo, así que no aparece durante /onboarding. */}
       <CoachFab />
+      {/* La hoja del consentimiento de salud para las cuentas de antes (ticket 30). */}
+      <HealthConsentGate />
     </MotionConfig>
   ),
 });

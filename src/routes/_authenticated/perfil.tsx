@@ -10,6 +10,7 @@ import { DictateButton } from "@/components/dictate-button";
 import { DictationField, DictationWave } from "@/components/dictation-field";
 import { ageFromDOB } from "@/lib/age";
 import { fetchProfile, saveProfile, type Profile } from "@/lib/daily";
+import { hasHealthConsent, isHealthField } from "@/lib/health-consent";
 import { dateLocale } from "@/lib/i18n";
 import { showsNutritionNumbers } from "@/lib/macros";
 import { energyExplanation, energyTargets } from "@/lib/nutrition/energy";
@@ -119,6 +120,10 @@ function Perfil() {
   // Ticket 07: de dónde sale su cifra, a la vista (solo si quiere ver cifras).
   const showNumbers = showsNutritionNumbers(profile);
   const energy = energyTargets(profile);
+  // Sin consentimiento, los datos de salud ni se ven ni se editan (ticket 30).
+  const healthConsent = hasHealthConsent(profile);
+  const visibleFields = (fields: Field[]) =>
+    healthConsent ? fields : fields.filter((field) => !isHealthField(String(field.key)));
 
   const { t, i18n } = useTranslation();
   const numberLocale = dateLocale(i18n.language);
@@ -178,6 +183,9 @@ function Perfil() {
         {t("perfil.title")}
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">{t("perfil.intro")}</p>
+      {profile && !healthConsent ? (
+        <p className="mt-2 text-xs text-muted-foreground">{t("healthConsent.answersNote")}</p>
+      ) : null}
 
       {showNumbers && energy ? (
         <section className="surface-card mt-5 p-4">
@@ -198,7 +206,7 @@ function Perfil() {
         <section key={section.title} className="surface-card mt-5 p-4">
           <h2 className="px-1 text-sm font-semibold">{t(`perfil.sections.${sectionIndex}`)}</h2>
           <ul className="mt-2 divide-y divide-border">
-            {section.fields.map((field) => {
+            {visibleFields(section.fields).map((field) => {
               const isEditing = editing === String(field.key);
               const shown = display(field, profile, t, fieldUnit(field, currency));
               return (

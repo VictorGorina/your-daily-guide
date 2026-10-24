@@ -1,13 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertCircle, ChevronRight, Download, Info, Pencil, Users } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  Info,
+  Pencil,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import * as React from "react";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { HealthConsentSheet } from "@/components/health-consent";
 import { RegionFields } from "@/components/region-fields";
 import {
   AlertDialog,
@@ -24,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAccount } from "@/lib/account.functions";
 import { fetchAllLogs, fetchProfile, saveProfile, todayISO, type Profile } from "@/lib/daily";
+import { hasHealthConsent, healthWithdrawalPatch } from "@/lib/health-consent";
 import { buildHistoryCsv, historyFileName } from "@/lib/history-export";
 import { clearLocalUserData } from "@/lib/local-user-data";
 import { showsNutritionNumbers } from "@/lib/macros";
@@ -457,6 +468,15 @@ function Ajustes() {
       </section>
 
       <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {t("healthConsent.settings.section")}
+      </span>
+      <PrivacySection
+        consent={hasHealthConsent(profile)}
+        disabled={!profile || save.isPending}
+        onWithdraw={() => save.mutate(healthWithdrawalPatch())}
+      />
+
+      <span className="mt-6 block px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         {t("ajustes.sections.data")}
       </span>
 
@@ -520,5 +540,72 @@ function Ajustes() {
 
       <BottomNav />
     </main>
+  );
+}
+
+/**
+ * Ajustes › Privacidad (ticket 30): encender «Usar mis datos de salud» pide el
+ * consentimiento con su texto; apagarlo borra los datos de salud.
+ */
+function PrivacySection({
+  consent,
+  disabled,
+  onWithdraw,
+}: {
+  consent: boolean;
+  disabled: boolean;
+  onWithdraw: () => void;
+}) {
+  const { t } = useTranslation();
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [confirmOff, setConfirmOff] = useState(false);
+  const toggleId = useId();
+  return (
+    <div className="surface-card mt-2 divide-y divide-border overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-4 text-sm">
+        <ShieldCheck className="h-4 w-4 shrink-0 text-primary-ink" aria-hidden />
+        <label htmlFor={toggleId} className="min-w-0 flex-1">
+          <span className="block font-medium">{t("healthConsent.settings.toggle")}</span>
+          <span className="block text-xs text-muted-foreground">
+            {consent ? t("healthConsent.settings.on") : t("healthConsent.settings.off")}
+          </span>
+        </label>
+        <Switch
+          id={toggleId}
+          checked={consent}
+          disabled={disabled}
+          onCheckedChange={(on) => (on ? setConsentOpen(true) : setConfirmOff(true))}
+          className="data-[state=checked]:bg-foreground"
+        />
+      </div>
+      <Link to="/privacidad" target="_blank" className="flex items-center gap-3 px-4 py-4 text-sm">
+        <ExternalLink className="h-4 w-4 shrink-0 text-primary-ink" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">{t("healthConsent.settings.policy")}</span>
+          <span className="block text-xs text-muted-foreground">
+            {t("healthConsent.settings.policyDesc")}
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
+      <HealthConsentSheet open={consentOpen} onOpenChange={setConsentOpen} />
+      <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("healthConsent.settings.offTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("healthConsent.settings.offBody")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onWithdraw}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("healthConsent.settings.offConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }

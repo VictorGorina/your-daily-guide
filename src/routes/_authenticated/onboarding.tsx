@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { HealthConsentStep } from "@/components/health-consent";
 import { ChatPanel } from "@/components/onboarding/chat-panel";
 import { IntroStep } from "@/components/onboarding/intro-step";
 import { SavedPanel } from "@/components/onboarding/saved-panel";
@@ -12,8 +13,9 @@ import { StageIndex } from "@/components/onboarding/stage-index";
 import { SummaryPanel } from "@/components/onboarding/summary-panel";
 import { RegionStep } from "@/components/region-step";
 import { ageFromDOB } from "@/lib/age";
-import { fetchProfile, saveProfile, todayISO } from "@/lib/daily";
+import { fetchProfile, saveProfile, todayISO, type Profile } from "@/lib/daily";
 import { deriveGoalType } from "@/lib/goal";
+import { hasHealthConsent, withoutHealthData } from "@/lib/health-consent";
 import { parseOnboarding } from "@/lib/onboarding.functions";
 import {
   BIO_Q,
@@ -40,6 +42,7 @@ import {
   type Question,
   questionKey,
   SCREENS,
+  withoutHealthAnswers,
 } from "@/lib/onboarding-script";
 import { useOnboardingDraft } from "@/lib/use-onboarding-draft";
 import { useCurrencySymbol } from "@/lib/use-money";
@@ -84,6 +87,8 @@ function Onboarding() {
     setDob,
     introDismissed,
     setIntroDismissed,
+    healthDeclined,
+    setHealthDeclined,
     clearDraft,
   } = useOnboardingDraft();
   const [view, setView] = useState<View>("chat");
@@ -102,7 +107,11 @@ function Onboarding() {
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const flat = useMemo(() => buildFlat(answers), [answers]);
+  // Las preguntas de salud, solo con consentimiento (ticket 30). Se decide en
+  // el paso de después de la portada; sin decidir, no se pinta el chat.
+  const healthConsent = hasHealthConsent(profileQ.data);
+  const flatOpts = useMemo(() => ({ health: healthConsent }), [healthConsent]);
+  const flat = useMemo(() => buildFlat(answers, flatOpts), [answers, flatOpts]);
   const curIndex = flat.findIndex((n) => n.key === curKey);
   const cur = curIndex >= 0 ? flat[curIndex] : flat[0];
 
@@ -162,7 +171,7 @@ function Onboarding() {
   };
 
   const advanceFrom = (key: string, nextAnswers: Record<string, string>) => {
-    const nextFlat = buildFlat(nextAnswers);
+    const nextFlat = buildFlat(nextAnswers, flatOpts);
     const idx = nextFlat.findIndex((n) => n.key === key);
     const node = nextFlat[idx];
     setError(null);
@@ -263,7 +272,7 @@ function Onboarding() {
   // Lo que lee `parseOnboarding`. Las marcas "Coach"/"Persona" y el "nada que
   // destacar" son material del prompt, no interfaz: se quedan en español.
   const transcriptFromAnswers = (map: Record<string, string>) =>
-    buildFlat(map)
+    buildFlat(map, flatOpts)
       .map((n) => {
         if (map[n.key] !== undefined) return `Coach: ${qText(n)}\nPersona: ${map[n.key]}`;
         if (n.q.optional) return `Coach: ${qText(n)}\nPersona: Nada que destacar`;
@@ -309,7 +318,7 @@ function Onboarding() {
     const d = { ...draft, ...extra };
     // La clave en `answers` es posicional ("2-5"), así que se busca el nodo
     // por identidad del objeto Question en vez de asumir una posición fija.
-    const flatNow = buildFlat(answers);
+    const flatNow = buildFlat(answers, flatOpts);
     const mealsKey = flatNow.find((n) => n.q === MEALS_TO_PLAN_Q)?.key;
     const meal_slots = mealSlotsFromAnswer(mealsKey ? answers[mealsKey] : undefined);
     // Del chip al valor, sin pasar por la IA (mismo motivo que `meal_slots`).
@@ -319,7 +328,7 @@ function Onboarding() {
       : undefined;
     try {
       const existing = await fetchProfile();
-      await saveProfile({
+      const patch: Partial<Profile> = {
         app_started_on: existing?.app_started_on ?? todayISO(),
         meal_slots,
         ...(nutrition_numbers ? { nutrition_numbers } : {}),
@@ -374,7 +383,10 @@ function Onboarding() {
         supplements: d.supplements,
         smoking: d.smoking,
         onboarding_completed: true,
-      });
+      };
+      // Sin consentimiento, nada de salud: tampoco lo que la IA haya deducido
+      // de otras respuestas (ticket 30).
+      await saveProfile(hasHealthConsent(existing) ? patch : withoutHealthData(patch));
 
       await qc.invalidateQueries({ queryKey: ["profile"] });
       await qc.refetchQueries({ queryKey: ["profile"] });
@@ -462,7 +474,20 @@ function Onboarding() {
   }
 
   if (!introDismissed) {
-    return <IntroStep total={total} onStart={() => setIntroDismissed(true)} />;
+    // Cuántas preguntas son, con las de salud salvo que ya las haya rechazado.
+    const intro = buildFlat(answers, { health: !healthDeclined }).length;
+    return <IntroStep total={intro} onStart={() => setIntroDismissed(true)} />;
+  }
+
+  if (!healthConsent && !healthDeclined) {
+    return (
+      <HealthConsentStep
+        onDeclined={() => {
+          setAnswers((a) => withoutHealthAnswers(a));
+          setHealthDeclined(true);
+        }}
+      />
+    );
   }
 
   if (view === "index") {
