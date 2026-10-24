@@ -95,6 +95,11 @@ export default function Confirmado() {
           return;
         }
         setStatus("done");
+        // Al confirmar se cierran las sesiones de la cuenta en otros
+        // dispositivos (ticket 37, SEC-S-08). Navegar no corta la petición.
+        supabase.auth
+          .signOut({ scope: "others" })
+          .catch((error) => console.warn("confirmado: cerrar las otras sesiones", error));
         // Deja leer el "¡confirmada!" un momento antes de entrar.
         setTimeout(() => router.replace("/hoy"), 1200);
       })
