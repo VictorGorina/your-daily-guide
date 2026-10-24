@@ -5,7 +5,10 @@ fuera de `supabase/migrations/` para que `supabase db push` no los ejecute: esa 
 lo que encuentra en `migrations/` y no consta en el historial remoto.
 
 Para aplicar uno: se devuelve a `supabase/migrations/` con su mismo nombre y entonces sí,
-`supabase db push`.
+`supabase db push`. Si mientras esperaba se aplicó otra con fecha posterior (lo normal), `db push`
+lo rechaza (`DbPushMissingRemoteError`) y hace falta `--include-all`: antes, `supabase db push
+--dry-run --include-all` tiene que listar solo ese archivo, y hay que comprobar que las posteriores
+no tocan lo mismo (en producción se aplicará después de ellas; en local y en el CI, antes).
 
 | Archivo                                        | Espera a                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
