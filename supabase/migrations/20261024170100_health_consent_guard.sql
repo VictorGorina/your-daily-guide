@@ -1,7 +1,7 @@
 -- Ticket 30 de la auditoría (RGPD art. 9.2.a), segunda parte: sin
 -- consentimiento no se guarda ningún dato de salud del perfil, y retirarlo los
 -- borra. Rollback: supabase/rollbacks/20261024170100_health_consent_guard.sql.
--- Tests: supabase/pending/tests/20261024170100_health_consent_guard.test.sql.
+-- Tests: supabase/tests/health_consent_guard.test.sql.
 --
 -- `saveProfile` escribe directo del cliente a Supabase, así que esta es la
 -- única frontera. La lista de columnas es `HEALTH_PROFILE_FIELDS`
@@ -14,9 +14,8 @@
 -- persona (la zona horaria que Hoy guarda al abrirse) fallaría. Vaciar un campo
 -- siempre se puede.
 --
--- NO APLICAR antes de que esté desplegada la web que pide el consentimiento:
--- el onboarding de antes guarda datos de salud sin él y fallaría. Ver
--- supabase/pending/README.md.
+-- Se aplica después de desplegar la web que pide el consentimiento (`38e8a6c`):
+-- el onboarding de antes guardaba datos de salud sin él y habría fallado.
 
 CREATE OR REPLACE FUNCTION public.profiles_require_health_consent()
 RETURNS trigger
