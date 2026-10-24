@@ -431,6 +431,14 @@ redes:
 Ante la duda se **deja pasar**. `assertCleanName` avisa pero **no es frontera** (esas escrituras
 van del navegador directo a Supabase).
 
+**Datos de salud — solo con consentimiento** (ticket 30; sección del mismo nombre en AGENTS.md).
+Las once columnas de `HEALTH_PROFILE_FIELDS` (`health-consent.ts`, copia en `mobile/lib/`) no se
+preguntan, guardan ni mandan a la IA sin `profiles.health_consent_at`. La frontera es un trigger
+(`saveProfile` va directo a Supabase): solo mira los campos que CAMBIAN a un valor, y en el
+`upsert` el disparo de INSERT cede si la fila existe. Un campo de salud nuevo va a la lista y al
+trigger (un test lo comprueba). Cambiar el texto del consentimiento obliga a subir
+`HEALTH_CONSENT_VERSION`.
+
 **Dictado por voz — siempre sobre un campo** (sección del mismo nombre en AGENTS.md).
 `DictateButton` va dentro de un `DictationField` junto a su campo de texto, nunca suelto: lo
 dictado se ve y se corrige antes de enviarlo. `DictationWave` cubre el campo con el volumen real

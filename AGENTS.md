@@ -859,3 +859,33 @@ móvil): al salir o al entrar otra cuenta se borran; sin dueño apuntado, se los
 la sesión. El borrado vive en `local-user-data.ts` de cada app. **Una clave nueva de una persona se
 añade a `USER_KEY_PREFIXES`**, o sobrevivirá al cierre de sesión; las del dispositivo (idioma,
 tema) no van ahí.
+
+## Datos de salud: solo con consentimiento explícito
+
+Once columnas de `profiles` son datos de salud (RGPD art. 9): `HEALTH_PROFILE_FIELDS` en
+[src/lib/health-consent.ts](src/lib/health-consent.ts) (puro, copia idéntica en `mobile/lib/`).
+Sin `profiles.health_consent_at` no se preguntan, no se guardan y no llegan a la IA; el plan se
+hace sin ellos (ticket 30 de la auditoría). Las piezas, y lo que suele romperse:
+
+- **La frontera es la base de datos.** `saveProfile` escribe del cliente directo a Supabase, así
+  que la guarda es un trigger (`profiles_require_health_consent`, en `supabase/pending/` hasta que
+  esté desplegada la web que pide el consentimiento): sin consentimiento, un campo de
+  salud no puede **cambiar** a un valor (vaciarlo siempre se puede, y las cuentas de antes no
+  rompen otras escrituras), y retirarlo los borra. Ojo con el `upsert`: `INSERT … ON CONFLICT`
+  dispara primero el trigger de INSERT con la fila **propuesta**, sin el consentimiento guardado;
+  por eso ese disparo cede si la fila ya existe. La fecha la pone la base de datos
+  (`profiles_stamp_health_consent`), no el dispositivo. Un test de Bun comprueba que el trigger
+  nombra cada campo de la lista: un campo nuevo de salud va a los dos sitios.
+- **El onboarding** pide el consentimiento en un paso propio tras la portada, porque las
+  preguntas de salud (`health: true` en `onboarding-script.ts`) están repartidas por cuatro
+  etapas. `buildFlat(answers, { health })` las salta sin cambiar las claves de las demás. Aceptar
+  guarda el consentimiento en ese momento; «Seguir sin datos de salud» avisa de lo que el plan no
+  podrá tener en cuenta (embarazo, lactancia, TCA) y se recuerda en el borrador. Al guardar,
+  `withoutHealthData` quita también lo que la IA haya deducido de otras respuestas.
+- **Cuentas de antes:** `HealthConsentGate` (en el layout autenticado de las dos apps) pide el
+  consentimiento a quien guarda datos de salud sin él (`needsHealthConsent`) y no se cierra sin
+  elegir; «No acepto» los borra. Subir `HEALTH_CONSENT_VERSION` al cambiar el texto se lo vuelve
+  a pedir a todos los que tienen datos de salud.
+- **Después:** Ajustes › Privacidad lo enciende (con el mismo texto) o lo apaga (borra);
+  «Mis respuestas» no enseña esos campos sin consentimiento, y `actualizar_perfil` tampoco los
+  escribe (`healthGatedPatch`, que se lo dice al modelo). El perfil demo nace sin datos de salud.
