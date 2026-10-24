@@ -1331,7 +1331,14 @@
       "copiedToast": "Code copied",
       "share": "Share",
       "shareMessage": "Join my household on Peppers with the code {{code}}",
-      "hint": "Anyone who has it can join this family from their app."
+      "hint": "Anyone who has it can join this family from their app.",
+      "validUntil": "Valid until {{date}}.",
+      "expired": "Expired on {{date}}. Change it to invite someone.",
+      "rotate": "Change code",
+      "rotated": "New code. The old one no longer works.",
+      "rotateFailed": "We couldn't change the code",
+      "rotateConfirmTitle": "Change the code?",
+      "rotateConfirmText": "The current code will stop working for joining."
     },
     "roster": {
       "title": "Family",
