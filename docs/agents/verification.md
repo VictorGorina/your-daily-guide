@@ -75,7 +75,8 @@ bun run db:types              # después: regenera los tipos de las dos apps
 - Si alguien aplica algo a mano en el SQL Editor, hay que registrarlo después con
   `supabase migration repair --status applied <versión>`, o el siguiente `db push` lo repetirá.
 - Una migración que no debe aplicarse todavía vive en `supabase/pending/` (ver su README), no en
-  `migrations/`: `db push` ejecuta todo lo que encuentra ahí.
+  `migrations/`: `db push` ejecuta todo lo que encuentra ahí. Al devolverla a `migrations/` suele
+  quedar por detrás de la última aplicada y pide `--include-all` (el README dice qué comprobar).
 - `bun run db:types` (`scripts/db-types.sh`) lee el esquema de producción y escribe
   `src/integrations/supabase/types.ts` y su copia `mobile/lib/database.types.ts`, ya formateados.
   No se editan a mano: una tabla o columna nueva llega con su migración y con esta orden, en el

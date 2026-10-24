@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -57,16 +56,12 @@ describe("parches", () => {
 });
 
 describe("la guarda de la base de datos", () => {
-  // Pendiente hasta que se aplique; después, en migrations/.
-  const name = "20261024170100_health_consent_guard.sql";
-  const root = fileURLToPath(new URL("../..", import.meta.url));
-  const path = ["pending", "migrations"]
-    .map((dir) => join(root, "supabase", dir, name))
-    .find(existsSync);
+  const path = fileURLToPath(
+    new URL("../../supabase/migrations/20261024170100_health_consent_guard.sql", import.meta.url),
+  );
 
   test("nombra cada dato de salud al comprobarlo y al borrarlo", () => {
-    expect(path).toBeDefined();
-    const sql = readFileSync(path!, "utf8");
+    const sql = readFileSync(path, "utf8");
     for (const field of HEALTH_PROFILE_FIELDS) {
       expect(sql).toContain(`NEW.${field} := NULL`);
       expect(sql).toContain(`NEW.${field} IS NOT NULL`);

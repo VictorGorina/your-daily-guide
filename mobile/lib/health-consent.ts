@@ -5,8 +5,7 @@
  * en `mobile/lib/health-consent.ts` (drift check).
  *
  * La base de datos tiene la misma lista de columnas en su guarda
- * (`profiles_require_health_consent`, supabase/pending/ hasta que se aplique) y
- * un test comprueba que coinciden. La fecha del consentimiento la pone la base
+ * (`profiles_require_health_consent`) y un test comprueba que coinciden. La fecha del consentimiento la pone la base
  * de datos (`profiles_stamp_health_consent`), no el reloj del dispositivo.
  */
 
