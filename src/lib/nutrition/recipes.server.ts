@@ -25,10 +25,10 @@ import type { RecipeSlot } from "./validate-recipe";
 import { dishKey } from "./dish-key";
 import {
   canonicalIngredients,
+  cleanCanonicalIngredients,
   FOODS_VERSION,
   PIPELINE_VERSION,
   resolvedFromRecipe,
-  type CanonicalIngredient,
   type CanonicalRecipe,
   type ServingKind,
 } from "./recipe";
@@ -104,10 +104,9 @@ const numberOr = (v: unknown, fallback: number | null) => {
 };
 
 function recipeFromRow(row: Row): CanonicalRecipe | null {
-  const ingredients = (
-    Array.isArray(row.ingredients) ? row.ingredients : []
-  ) as CanonicalIngredient[];
-  if (!ingredients.length) return null;
+  // Una fila con un ingrediente roto no se usa: el plato se vuelve a calcular.
+  const ingredients = cleanCanonicalIngredients(row.ingredients);
+  if (!ingredients?.length) return null;
   const recipe: CanonicalRecipe = {
     dishKey: row.dish_key,
     dishLabel: row.dish_label,

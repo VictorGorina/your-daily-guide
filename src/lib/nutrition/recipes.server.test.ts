@@ -86,6 +86,26 @@ describe("getRecipes — caché global de recetas", () => {
     expect(out.get("Lentejas estofadas")?.recipe?.ingredients[0]?.foodKey).toBe("lentejas-secas");
   });
 
+  it("una fila guardada con un ingrediente roto no rompe la petición: se vuelve a calcular", async () => {
+    const broken = { ...cachedRow("cocido", "Cocido"), ingredients: [null] };
+    const fake = createFakeSupabase(
+      { dish_recipes: [broken, cachedRow("potaje", "Potaje")] },
+      { rpc: { increment_dish_recipe_hits: () => null } },
+    );
+    setFakeAdmin(fake.client);
+    const { decompose, asked } = fakeDecompose({
+      Cocido: calculated("Cocido", "garbanzos", 70),
+    });
+
+    const out = await getRecipes(["Cocido", "Potaje"], { userId: "u1", decompose });
+
+    expect(asked).toEqual([["Cocido"]]);
+    expect(out.get("Cocido")?.fromCache).toBe(false);
+    expect(out.get("Cocido")?.recipe?.ingredients[0]?.gramsRaw).toBe(70);
+    // El otro plato de la misma lectura sigue saliendo de la caché.
+    expect(out.get("Potaje")?.fromCache).toBe(true);
+  });
+
   it("apunta los usos por muestreo: uno de cada diez, sumando diez", async () => {
     const hits: unknown[] = [];
     const fake = createFakeSupabase(

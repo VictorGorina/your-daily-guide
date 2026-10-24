@@ -79,6 +79,42 @@ export function canonicalIngredients(
   }));
 }
 
+const INGREDIENT_STATES: readonly IngredientState[] = ["crudo", "listo"];
+const FALLBACKS: readonly NonNullable<CanonicalIngredient["fallback"]>[] = [
+  "category",
+  "closest",
+  "usda",
+  "generic",
+];
+
+/**
+ * `dish_recipes.ingredients` (jsonb) tal como llega de la base de datos (CAL-02,
+ * ticket 36). `null` si no es una lista o si algún ingrediente no tiene lo que
+ * hace falta para sumarlo (`foodKey`, `gramsRaw`, `state`, `confidence`): la
+ * receta no se usa a medias, porque sin ese ingrediente las kcal saldrían de
+ * menos; el plato se vuelve a calcular como si no estuviera guardado (D13).
+ * Lo que solo informa se arregla en vez de tirar la receta: sin `name` vale
+ * `foodKey`, y un `fallback` desconocido se quita. Las claves que no se
+ * conocen se conservan, como en `day-row.ts`.
+ */
+export function cleanCanonicalIngredients(raw: unknown): CanonicalIngredient[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: CanonicalIngredient[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const o = entry as Record<string, unknown>;
+    const { foodKey, gramsRaw, state, confidence } = o;
+    if (typeof foodKey !== "string" || !foodKey) return null;
+    if (typeof gramsRaw !== "number" || !Number.isFinite(gramsRaw) || gramsRaw < 0) return null;
+    if (!INGREDIENT_STATES.includes(state as IngredientState)) return null;
+    if (confidence !== "high" && confidence !== "low") return null;
+    const ing = { ...o, name: typeof o.name === "string" ? o.name : foodKey };
+    if ("fallback" in ing && !FALLBACKS.includes(ing.fallback as never)) delete ing.fallback;
+    out.push(ing as CanonicalIngredient);
+  }
+  return out;
+}
+
 /**
  * De una receta guardada a ingredientes que se pueden sumar, escalados por
  * `factor` (la ración personal, ticket 21). `null` si alguna fila ya no existe
