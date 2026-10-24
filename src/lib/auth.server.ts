@@ -1,5 +1,8 @@
+import { getRequest } from "@tanstack/react-start/server";
+
 import type { AuthPlatform } from "@/lib/auth.functions";
 import { errorText, logEvent } from "@/lib/log.server";
+import { clientIp } from "@/lib/quota-subject";
 import { assertHuman } from "@/lib/turnstile.server";
 
 /**
@@ -13,7 +16,18 @@ export type AuthEmailDeps = {
   minResponseMs?: number;
   /** Comprobación del CAPTCHA (`turnstile.server.ts`); los tests la cambian. */
   assertHuman?: typeof assertHuman;
+  /** IP para la cuota (`null`: sin IP); por defecto, la de la petición en curso. */
+  ip?: string | null;
 };
+
+/** IP de la petición en curso, o `null` fuera de una (tests, scripts). */
+function requestIp(): string | null {
+  try {
+    return clientIp(getRequest().headers);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Tiempo mínimo de cualquier respuesta de estas dos funciones (SEC-S-10). Solo
@@ -113,11 +127,12 @@ export async function requestPasswordResetHandler(
 
     if (throttled("password-reset", email)) return ok;
 
-    // Cuota compartida entre instancias, contada por correo (hasheado). Se
-    // responde `ok` igual que siempre: un error distinto delataría cuáles ya
+    // Cuota compartida entre instancias, contada por buzón y por IP (con sal).
+    // Se responde `ok` igual que siempre: un error distinto delataría cuáles ya
     // han pedido enlaces, que es justo lo que evita esta función.
     const { checkEmailRateLimit } = await import("@/lib/rate-limit.server");
-    if (!(await checkEmailRateLimit(email, "password-reset"))) return ok;
+    const ip = deps.ip === undefined ? requestIp() : deps.ip;
+    if (!(await checkEmailRateLimit(email, "password-reset", ip))) return ok;
 
     // El destino NO se acepta del cliente: se elige aquí a partir de `platform`.
     // Un `redirectTo` libre convertiría esto en un redirector abierto con un
@@ -176,7 +191,8 @@ export async function requestSignupConfirmationHandler(
     if (throttled("signup-confirm", email)) return ok;
 
     const { checkEmailRateLimit } = await import("@/lib/rate-limit.server");
-    if (!(await checkEmailRateLimit(email, "signup-confirm"))) return ok;
+    const ip = deps.ip === undefined ? requestIp() : deps.ip;
+    if (!(await checkEmailRateLimit(email, "signup-confirm", ip))) return ok;
 
     // El destino lo decide el servidor, nunca el cliente: un `redirectTo` libre
     // sería un redirector abierto con el token de confirmación en la URL. `next`

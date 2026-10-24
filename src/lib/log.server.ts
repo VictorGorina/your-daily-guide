@@ -117,6 +117,9 @@
  *   ese correo y no se le pudo poner la contraseña de quien pide el alta, así
  *   que no se mandó el enlace (ticket 37, pre-secuestro). La persona espera un
  *   correo que no llega: si se repite, mirar `auth.admin.updateUserById`.
+ * - `auth_ip_quota_reached` (warn): una IP pasó de 20 altas o restablecimientos
+ *   en una hora (`auth-email-ip`, ticket 29); se responde `ok` sin mandar nada.
+ *   Repetido, es alguien probando correos; suelto, una red compartida.
  */
 import { redactFields } from "@/lib/log-redact";
 import { captureServerEvent } from "@/lib/sentry.server";

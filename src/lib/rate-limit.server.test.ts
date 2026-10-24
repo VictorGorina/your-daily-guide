@@ -285,6 +285,59 @@ describe("checkEmailRateLimit", () => {
     expect(await checkEmailRateLimit("ana@example.com", "password-reset")).toBe(false);
   });
 
+  describe("alias e IP (ticket 29)", () => {
+    const quotaCalls = (fake: ReturnType<typeof fakeWith>) =>
+      fake.calls.map((c) => c.payload as { _subject: string; _bucket: string; _limit: number });
+
+    it("los alias del mismo buzón gastan la misma cuota", async () => {
+      const fake = fakeWith();
+      await checkEmailRateLimit("ana+1@gmail.com", "signup-confirm");
+      await checkEmailRateLimit("a.n.a+2@googlemail.com", "signup-confirm");
+      const [first, second] = quotaCalls(fake);
+      expect(second?._subject).toBe(first?._subject);
+    });
+
+    it("con IP cuenta también por IP, hasheada y en su propio bucket", async () => {
+      const fake = fakeWith();
+      await checkEmailRateLimit("ana@example.com", "password-reset", "203.0.113.7");
+      const calls = quotaCalls(fake);
+      expect(calls.map((c) => c._bucket).sort()).toEqual(["auth-email-ip", "password-reset"]);
+      const byIp = calls.find((c) => c._bucket === "auth-email-ip");
+      expect(byIp?._subject).toMatch(/^ip:[0-9a-f]{64}$/);
+      expect(byIp?._limit).toBe(20);
+      expect(JSON.stringify(fake.calls)).not.toContain("203.0.113.7");
+    });
+
+    it("la IP es la misma cuota para el alta y el restablecimiento", async () => {
+      const fake = fakeWith();
+      await checkEmailRateLimit("ana@example.com", "password-reset", "203.0.113.7");
+      await checkEmailRateLimit("luis@example.com", "signup-confirm", "203.0.113.7");
+      const byIp = quotaCalls(fake).filter((c) => c._bucket === "auth-email-ip");
+      expect(byIp).toHaveLength(2);
+      expect(byIp[1]?._subject).toBe(byIp[0]?._subject);
+    });
+
+    it("una IP agotada corta aunque el correo sea nuevo, y deja auth_ip_quota_reached", async () => {
+      fakeWith([], {
+        rpc: {
+          consume_rate_limit: (args) => [
+            { allowed: args._bucket !== "auth-email-ip", retry_after_seconds: 60 },
+          ],
+        },
+      });
+      expect(await checkEmailRateLimit("nuevo@example.com", "signup-confirm", "203.0.113.7")).toBe(
+        false,
+      );
+      expect(events()).toEqual(["auth_ip_quota_reached"]);
+    });
+
+    it("sin IP solo cuenta el correo", async () => {
+      const fake = fakeWith();
+      await checkEmailRateLimit("ana@example.com", "password-reset", null);
+      expect(quotaCalls(fake).map((c) => c._bucket)).toEqual(["password-reset"]);
+    });
+  });
+
   describe("con RATE_LIMIT_SALT (ticket 30, SEC-DB-16)", () => {
     const previous = process.env.RATE_LIMIT_SALT;
     afterEach(() => {
