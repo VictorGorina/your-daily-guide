@@ -87,6 +87,9 @@ const loggedEvents = (spy: ReturnType<typeof spyOn>) =>
     }
   });
 
+/** Una comida del día como la guarda Hoy (con su `label`). */
+const meal = (label: string, done: boolean): FakeRow => ({ label, done });
+
 const at = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
 
 describe("inWindow — 30 minutos hacia atrás", () => {
@@ -123,7 +126,7 @@ describe("dispatchPush — resumen de la mañana", () => {
         {
           user_id: "ana",
           log_date: "2026-09-15",
-          guide: { meals: [{ idea: "Tostada con tomate" }] },
+          guide: { meals: [{ moment: "Desayuno", idea: "Tostada con tomate" }] },
         },
       ],
     });
@@ -212,7 +215,7 @@ describe("dispatchPush — repaso de la noche", () => {
     });
 
   it("tono relajado con el día completo: no se envía (contactar menos), pero se marca", async () => {
-    const { fake, sent, run } = evening("relajado", [{ done: true }, { done: true }]);
+    const { fake, sent, run } = evening("relajado", [meal("Comida", true), meal("Cena", true)]);
     const summary = await run();
     expect(summary.skippedLowNeed).toBe(1);
     expect(sent).toEqual([]);
@@ -220,9 +223,36 @@ describe("dispatchPush — repaso de la noche", () => {
   });
 
   it("tono exigente: cuenta las comidas que faltan", async () => {
-    const { sent, run } = evening("exigente", [{ done: true }, { done: false }, { done: false }]);
+    const { sent, run } = evening("exigente", [
+      meal("Desayuno", true),
+      meal("Comida", false),
+      meal("Cena", false),
+    ]);
     await run();
     expect(sent[0]?.payload.body).toBe("Aún te quedan 2 comidas por registrar hoy.");
+  });
+
+  it("con las comidas rotas no se queda sin aviso: cuenta las que Hoy pinta (ticket 36, punto 6)", async () => {
+    const { sent, run } = evening("exigente", [
+      null,
+      { done: false },
+      meal("Cena", false),
+    ] as unknown as FakeRow[]);
+    const summary = await run();
+    expect(summary.errors).toBe(0);
+    expect(sent[0]?.payload.body).toBe("Aún te queda 1 comida por registrar hoy.");
+  });
+
+  it("si `habits` no es una lista, el aviso sale igual (antes lanzaba)", async () => {
+    const { fake, sent, run } = setup({
+      profiles: [profile("ana", { evening_time: "08:00", tone: "exigente" })],
+      push_subscriptions: [sub("ana")],
+      daily_logs: [{ user_id: "ana", log_date: "2026-09-15", habits: { Comida: false } }],
+    });
+    const summary = await run();
+    expect(summary.errors).toBe(0);
+    expect(sent[0]?.payload.body).toBe("Cierra el día repasándolo en menos de un minuto.");
+    expect(profileRow(fake.tables, "ana")?.evening_push_sent_on).toBe("2026-09-15");
   });
 });
 
@@ -275,7 +305,7 @@ describe("dispatchPush — cruce de medianoche y marca atómica (ticket 07)", ()
       profiles: [profile("ana", { evening_time: "23:50", tone: "exigente" })],
       push_subscriptions: [sub("ana")],
       daily_logs: [
-        { user_id: "ana", log_date: "2026-09-15", habits: [{ done: false }] },
+        { user_id: "ana", log_date: "2026-09-15", habits: [meal("Cena", false)] },
         { user_id: "ana", log_date: "2026-09-16", habits: [] },
       ],
     });
@@ -445,8 +475,16 @@ describe("dispatchPush — a escala (ticket 23)", () => {
         ],
         push_subscriptions: [sub("ana"), sub("bea"), sub("carla")],
         daily_logs: [
-          { user_id: "ana", log_date: "2026-09-14", guide: { meals: [{ idea: "Gachas" }] } },
-          { user_id: "ana", log_date: "2026-09-15", guide: { meals: [{ idea: "Otro día" }] } },
+          {
+            user_id: "ana",
+            log_date: "2026-09-14",
+            guide: { meals: [{ moment: "Desayuno", idea: "Gachas" }] },
+          },
+          {
+            user_id: "ana",
+            log_date: "2026-09-15",
+            guide: { meals: [{ moment: "Desayuno", idea: "Otro día" }] },
+          },
         ],
       },
       undefined,

@@ -1,6 +1,6 @@
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import type { DailyGuide } from "@/lib/daily";
 import { addDaysISO } from "@/lib/dates";
+import { cleanGuide, cleanHabits } from "@/lib/day-row";
 import { errorText, logEvent } from "@/lib/log.server";
 import { daysLeftInMonth, nextMonthISO, NEXT_MONTH_UNLOCK_DAYS } from "@/lib/plan-shared";
 import { sendPushNotification, type PushPayload } from "@/lib/web-push.server";
@@ -486,7 +486,9 @@ export async function dispatchPush(
         // Se reclama tanto si hay suscripciones como si no, para no reintentar en
         // bucle dentro del mismo día — igual para la noche debajo.
         if (!(await claim("morning_push_sent_on", p.id, day))) return;
-        const guide = logs.get(`${p.id}|${day}`)?.guide as DailyGuide | null | undefined;
+        // Las columnas jsonb, con los limpiadores de Hoy (ticket 36): el aviso
+        // nombra el mismo plato y cuenta las mismas comidas que ve la persona.
+        const guide = cleanGuide(logs.get(`${p.id}|${day}`)?.guide);
         const { title, body } = morningCopy(
           toneOf(p.tone),
           p.display_name,
@@ -498,7 +500,7 @@ export async function dispatchPush(
       await batch(eveningMatches, async ({ profile: p, day }) => {
         const tone = toneOf(p.tone);
         if (!(await claim("evening_push_sent_on", p.id, day))) return;
-        const habits = (logs.get(`${p.id}|${day}`)?.habits as { done: boolean }[] | null) ?? [];
+        const habits = cleanHabits(logs.get(`${p.id}|${day}`)?.habits);
         const pendingCount = Math.max(0, habits.length - habits.filter((h) => h.done).length);
         // Tono relajado + día ya completo: se prioriza contactar menos, no un
         // push de más que no aporta nada. Los otros tonos siempre reciben el
