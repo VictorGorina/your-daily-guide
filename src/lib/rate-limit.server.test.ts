@@ -60,10 +60,16 @@ function fakeWith(
   return fake;
 }
 
-const spent = (user_id: string, day: string, cost_usd: number | string) => ({
+const spent = (
+  user_id: string,
+  day: string,
+  cost_usd: number | string,
+  month_only_usd: number | string = 0,
+) => ({
   user_id,
   day,
   cost_usd,
+  month_only_usd,
 });
 
 describe("enforceAiSpendCap", () => {
@@ -206,6 +212,12 @@ describe("enforceUserRateLimit", () => {
     expect((error as RateLimitError).retryAfterSeconds).toBe(600);
   });
 
+  it("el día de generar el plan, lo que solo mide el mensual no deja sin coach", async () => {
+    // 1,34 USD el mismo día, 1,20 de ellos de generar el plan y sus platos.
+    fakeWith([spent("u1", "2026-09-26", 1.34, 1.2)]);
+    await expect(enforceUserRateLimit("u1", "chat")).resolves.toBeUndefined();
+  });
+
   it("con el tope de gasto pasado, manda el de gasto aunque la cuota horaria deje", async () => {
     fakeWith([spent("u1", "2026-09-26", 1)]);
     const error = await enforceUserRateLimit("u1", "chat").catch((e: unknown) => e);
@@ -227,7 +239,18 @@ describe("recordAiSpend", () => {
       expect.objectContaining({
         table: "record_ai_spend",
         op: "rpc",
-        payload: { _user_id: "u1", _cost_usd: 0.0014 },
+        payload: { _user_id: "u1", _cost_usd: 0.0014, _month_only: false },
+      }),
+    ]);
+  });
+
+  it("con capScope month lo apunta también como gasto de solo-mes", async () => {
+    const fake = fakeWith();
+    await recordAiSpend("u1", 0.2, "month");
+    expect(fake.calls).toEqual([
+      expect.objectContaining({
+        table: "record_ai_spend",
+        payload: { _user_id: "u1", _cost_usd: 0.2, _month_only: true },
       }),
     ]);
   });

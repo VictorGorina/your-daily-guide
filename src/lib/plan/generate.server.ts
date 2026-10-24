@@ -1,5 +1,6 @@
 import type { ProfilePart } from "@/integrations/supabase/db-client";
 import { coachSystemPrompt, currencySymbol, PLAN_MODEL } from "@/lib/ai-provider.server";
+import type { SpendCapScope } from "@/lib/ai-spend";
 import type { Deadline } from "@/lib/deadline";
 import {
   describeServings,
@@ -76,6 +77,12 @@ export async function generatePlanBody(opts: {
   >;
   /** Presupuesto de la petición (ticket 22, `deadline.ts`). */
   deadline?: Deadline;
+  /**
+   * `month` al generar el plan del mes: pasa una vez por plan y no debe dejar a
+   * la persona sin coach el resto del día. "Rehacer plan con la familia" va con
+   * el de siempre (`day`): se puede repetir. Ver `SpendCapScope`.
+   */
+  capScope?: SpendCapScope;
 }): Promise<{ plan: MonthlyPlan; shopping: ShoppingList }> {
   const { key, userId, month, cadence, coverage, home, profile, constraints } = opts;
 
@@ -224,6 +231,7 @@ export async function generatePlanBody(opts: {
       userId,
       model: PLAN_MODEL,
       deadline: opts.deadline,
+      capScope: opts.capScope,
       system: coachSystemPrompt(profile, home.text),
       prompt:
         `Crea el plan del mes ${month} y su lista de la compra. Devuelve solo JSON válido:\n` +
@@ -276,6 +284,7 @@ export async function generatePlanBody(opts: {
     sym,
     PLAN_MODEL,
     opts.deadline,
+    opts.capScope,
   );
   // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
   // una comida compartida, se vacía aquí — la fila de un no planificador

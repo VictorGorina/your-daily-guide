@@ -11,8 +11,16 @@
 
 export type AiSpendCaps = { dailyUsd: number; monthlyUsd: number };
 
-/** Fila de `ai_spend` tal como llega de PostgREST (`numeric` puede venir como texto). */
-export type AiSpendRow = { day: string; cost_usd: number | string };
+/**
+ * Fila de `ai_spend` tal como llega de PostgREST (`numeric` puede venir como
+ * texto). `month_only_usd` es la parte de `cost_usd` que gastaron llamadas con
+ * `capScope: "month"`: cuenta para el mes, no para el día.
+ */
+export type AiSpendRow = {
+  day: string;
+  cost_usd: number | string;
+  month_only_usd?: number | string | null;
+};
 
 export type SpendCapDecision = {
   daySpentUsd: number;
@@ -124,7 +132,11 @@ export function decideSpendCap(
     const cost = Number(row.cost_usd);
     if (!Number.isFinite(cost) || cost <= 0 || row.day.slice(0, 7) !== month) continue;
     monthSpentUsd += cost;
-    if (row.day === today) daySpentUsd += cost;
+    if (row.day === today) {
+      const monthOnly = Number(row.month_only_usd ?? 0);
+      daySpentUsd +=
+        cost - (Number.isFinite(monthOnly) ? Math.min(Math.max(monthOnly, 0), cost) : 0);
+    }
   }
 
   const spent = { daySpentUsd, monthSpentUsd };
@@ -150,11 +162,17 @@ export function decideSpendCap(
 }
 
 /**
- * Qué topes cortan una llamada. `day` (lo normal) = el diario y el mensual.
- * `month` = solo el mensual: lo usa la descomposición de platos (ticket 13 de
- * `precision-nutricional`, D13), porque dejar un plato sin calcular rompe la
- * promesa de que todo plato sale de su receta, cuesta céntimos, y sigue
- * sumando al gasto y contando en las cuotas por hora.
+ * Qué topes miden una llamada. `day` (lo normal) = el diario y el mensual.
+ * `month` = solo el mensual: ni la corta el tope diario ni su coste cuenta
+ * para él (`month_only_usd`); sí suma al mes, al disyuntor global y a las
+ * cuotas por hora. Solo para lo que no debe quedarse a medias:
+ * - la descomposición de platos (ticket 13 de `precision-nutricional`, D13):
+ *   un plato sin calcular rompe la promesa de que todo plato sale de su receta;
+ * - generar el plan del mes y su ronda de ajuste (decisión de la persona del
+ *   2026-10-23): pasan una vez por plan, y antes dejaban a la persona sin
+ *   coach el resto del día (generar costó 1,34 USD contra 0,75).
+ * "Rehacer plan con la familia" NO: se puede pulsar otra vez, así que el tope
+ * diario sigue frenándolo.
  */
 export type SpendCapScope = "day" | "month";
 

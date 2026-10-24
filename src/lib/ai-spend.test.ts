@@ -153,6 +153,42 @@ describe("decideSpendCap", () => {
     expect(decision.allowed).toBe(true);
   });
 
+  it("lo que solo mide el mensual (generar el plan, platos) no gasta el tope diario", () => {
+    // El día de generar el plan: 1,34 USD, de los que 1,20 fueron de solo-mes.
+    const decision = decideSpendCap(
+      [{ day: "2026-09-15", cost_usd: 1.34, month_only_usd: "1.20" }],
+      { dailyUsd: 0.75, monthlyUsd: 5 },
+      now,
+    );
+    expect(decision.allowed).toBe(true);
+    expect(decision.daySpentUsd).toBeCloseTo(0.14);
+    expect(decision.monthSpentUsd).toBeCloseTo(1.34);
+  });
+
+  it("pero sí cuenta para el mensual", () => {
+    const decision = decideSpendCap(
+      [{ day: "2026-09-15", cost_usd: 3, month_only_usd: 3 }],
+      caps,
+      now,
+    );
+    expect(decision).toMatchObject({ allowed: false, scope: "month", daySpentUsd: 0 });
+  });
+
+  it("una parte mensual rota o mayor que el total no deja el día en negativo", () => {
+    for (const month_only_usd of [9, -1, "abc", null]) {
+      const decision = decideSpendCap(
+        [
+          { day: "2026-09-15", cost_usd: 0.2, month_only_usd },
+          { day: "2026-09-15", cost_usd: 0.1 },
+        ],
+        caps,
+        now,
+      );
+      expect(decision.daySpentUsd).toBeGreaterThanOrEqual(0.1 - 1e-9);
+      expect(decision.daySpentUsd).toBeLessThanOrEqual(0.3 + 1e-9);
+    }
+  });
+
   it("corta al llegar al tope mensual y espera hasta el día 1 del mes que viene", () => {
     const decision = decideSpendCap(
       [

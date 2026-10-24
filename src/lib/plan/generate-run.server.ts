@@ -59,7 +59,9 @@ export async function runGenerateMonthlyPlan(
     .eq("user_id", ctx.userId);
 
   const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
-  await enforceUserRateLimit(ctx.userId, "plan-generate");
+  // Generar el mes no lo corta el tope DIARIO ni cuenta para él (el mensual
+  // sí): ver `SpendCapScope` en `ai-spend.ts`.
+  await enforceUserRateLimit(ctx.userId, "plan-generate", "month");
 
   const [{ data: profile }, constraints] = await Promise.all([
     ctx.supabase.from("profiles").select("*").eq("id", ctx.userId).maybeSingle(),
@@ -74,6 +76,7 @@ export async function runGenerateMonthlyPlan(
   const { plan, shopping } = await generatePlanBody({
     sharedTargets,
     deadline,
+    capScope: "month",
     key,
     userId: ctx.userId,
     month: data.month,

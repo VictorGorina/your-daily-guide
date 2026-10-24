@@ -41,7 +41,8 @@ export async function runFitMonthlyPlan(
   if (data.month < data.today.slice(0, 7) || !current.targetsVersion) return { fit: null };
 
   const { enforceUserRateLimit } = await import("@/lib/rate-limit.server");
-  await enforceUserRateLimit(ctx.userId, "plan-fit");
+  // Una ronda por plan: como generarlo, solo la mide el tope mensual.
+  await enforceUserRateLimit(ctx.userId, "plan-fit", "month");
 
   const [{ data: profile }, household, { fitPlanMeals }] = await Promise.all([
     ctx.supabase.from("profiles").select("*").eq("id", ctx.userId).maybeSingle(),
