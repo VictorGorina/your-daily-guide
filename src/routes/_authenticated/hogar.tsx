@@ -16,6 +16,7 @@ import { EMPTY_SCHEDULE, eatsTableFood } from "@/lib/household-shared";
 import { fetchHousehold, type HouseholdChild } from "@/lib/household";
 import { childPureeGaps } from "@/lib/plan-shared";
 import { useHouseholdMutations } from "@/lib/use-household-mutations";
+import { NAME_MAX_LENGTH } from "@/lib/content-guard";
 
 export const Route = createFileRoute("/_authenticated/hogar")({
   head: () => ({
@@ -133,6 +134,7 @@ function Hogar() {
                 <input
                   autoFocus
                   defaultValue={household.name}
+                  maxLength={NAME_MAX_LENGTH}
                   onBlur={(e) => {
                     renameHousehold(household.id, e.target.value);
                     setEditingName(false);

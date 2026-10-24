@@ -6,6 +6,7 @@ import { ChildMealGapBanner } from "@/components/child-meal-gap-banner";
 import type { HouseholdChild, HouseholdMember } from "@/lib/household";
 import { eatsTableFood, personColor, type Appetite } from "@/lib/household-shared";
 import type { useHouseholdMutations } from "@/lib/use-household-mutations";
+import { NAME_MAX_LENGTH } from "@/lib/content-guard";
 
 type Mutations = ReturnType<typeof useHouseholdMutations>;
 type RowActions = Pick<
@@ -150,6 +151,7 @@ function AdultRow({
           <input
             className="min-w-0 flex-1 rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none focus:ring-2 focus:ring-ring/40"
             defaultValue={m.display_name}
+            maxLength={NAME_MAX_LENGTH}
             onBlur={(e) => renameMember(m.id, e.target.value)}
           />
         ) : (
@@ -311,6 +313,7 @@ function AddMemberForm({
           <input
             className={`${input} mt-2`}
             value={newAdult.name}
+            maxLength={NAME_MAX_LENGTH}
             onChange={(e) => setNewAdult((p) => ({ ...p, name: e.target.value }))}
             placeholder={t("hogar.add.name")}
             aria-label={t("hogar.add.adultNameLabel")}

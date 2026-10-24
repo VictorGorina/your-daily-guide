@@ -22,6 +22,7 @@ import {
 } from "@/lib/profile-fields";
 import { useCurrencySymbol } from "@/lib/use-money";
 import type { Translate } from "@/lib/week-nav";
+import { NAME_MAX_LENGTH } from "@/lib/content-guard";
 
 const SECTIONS = PROFILE_SECTIONS;
 
@@ -246,6 +247,7 @@ function Perfil() {
                             field.kind === "time" ? "time" : field.kind === "date" ? "date" : "text"
                           }
                           inputMode={field.kind === "number" ? "decimal" : undefined}
+                          maxLength={field.key === "display_name" ? NAME_MAX_LENGTH : undefined}
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
                           onKeyDown={(e) => {
