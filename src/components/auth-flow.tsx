@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Bean, Beef, Carrot, Drumstick, Fish, Milk, Wheat } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -538,6 +538,12 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
         <p className="mt-3 text-center text-[11px] leading-[1.45] text-muted-foreground/80">
           {stage === "intro" ? t("auth.intro.disclaimer") : t("auth.landing.disclaimer")}
         </p>
+        <Link
+          to="/privacidad"
+          className="mx-auto mt-2 block w-fit text-[11px] font-medium text-muted-foreground underline underline-offset-4"
+        >
+          {t("auth.privacy")}
+        </Link>
       </form>
     </main>
   );
