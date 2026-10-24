@@ -916,6 +916,7 @@ export type Database = {
       };
       join_household: { Args: { _invite_code: string }; Returns: string };
       new_invite_code: { Args: never; Returns: string };
+      purge_inactive_anonymous_users: { Args: { _max?: number }; Returns: number };
       record_ai_spend: {
         Args: { _cost_usd: number; _month_only?: boolean; _user_id: string };
         Returns: undefined;
