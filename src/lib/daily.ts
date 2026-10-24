@@ -119,6 +119,13 @@ export type Profile = {
   /** Fecha de alta en la app (se fija al completar el onboarding). Suelo del
    * navegador de meses de la pantalla Plan; antes de esta fecha no hay nada. */
   app_started_on: string | null;
+  /**
+   * Consentimiento explícito para los datos de salud (ticket 30): se lee con
+   * `hasHealthConsent`/`needsHealthConsent` (`health-consent.ts`). La fecha la
+   * pone la base de datos. Opcionales por los perfiles parciales.
+   */
+  health_consent_at?: string | null;
+  health_consent_version?: string | null;
 };
 
 export type DailyGuide = {

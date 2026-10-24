@@ -5,6 +5,7 @@ import es from "@/locales/es.json";
 
 import i18n from "./i18n";
 import {
+  healthGatedPatch,
   PROFILE_FIELDS,
   PROFILE_SECTIONS,
   profilePatchFromTool,
@@ -248,5 +249,24 @@ describe("catálogo de «Mis respuestas»", () => {
     for (const field of PROFILE_FIELDS) {
       expect(enFields[String(field.key)].options?.length).toBe(field.options?.length);
     }
+  });
+});
+
+describe("actualizar_perfil sin consentimiento para los datos de salud (ticket 30)", () => {
+  test("no guarda ningún dato de salud y lo dice", () => {
+    const { patch, blocked } = healthGatedPatch(
+      { medications: "metformina", tone: "neutro", pregnancy_status: "embarazada" },
+      false,
+    );
+    expect(patch).toEqual({ tone: "neutro" });
+    expect(Object.keys(blocked)).toEqual(["medications", "pregnancy_status"]);
+    expect(profileToolResult(["Tono"], [], [], ["Medicación"])).toContain(
+      "no ha dado permiso para usar sus datos de salud: Medicación",
+    );
+  });
+
+  test("con consentimiento, todo pasa como siempre", () => {
+    const requested = { medications: "metformina", tone: "neutro" };
+    expect(healthGatedPatch(requested, true)).toEqual({ patch: requested, blocked: {} });
   });
 });

@@ -22,6 +22,7 @@ import {
   PREGNANCY_Q,
   type Question,
   SCREENS,
+  withoutHealthAnswers,
 } from "./onboarding-script";
 
 type Copy = { text?: string; hint?: string; hintTyped?: string; chips?: Record<string, string> };
@@ -228,6 +229,58 @@ describe("buildFlat", () => {
     expect(followUps({ "4-0": "75 kg" })).toEqual([]);
     expect(followUps({ "4-0": "80 kg, quiero ganar músculo" })).toEqual(["trainingExperience"]);
     expect(followUps({ "4-0": "80 kg, I want to build muscle" })).toEqual(["trainingExperience"]);
+  });
+});
+
+describe("sin consentimiento para los datos de salud (ticket 30)", () => {
+  it("las preguntas de salud son estas, ni una más ni una menos", () => {
+    expect(
+      allQuestions()
+        .filter((q) => q.health)
+        .map((q) => q.id),
+    ).toEqual([
+      "pregnancy",
+      "cycle",
+      "medical",
+      "smoking",
+      "allergySeverity",
+      "alcohol",
+      "foodRelationship",
+      "edHistory",
+      "struggles",
+    ]);
+  });
+
+  it("no salen, ni sus follow-ups, y las demás conservan su clave", () => {
+    const bio = keyOf(BIO_Q);
+    const answers = { [bio]: "mujer, 60 kg, 165 cm", [`${bio}>fu`]: "No", "0-5": "marisco" };
+    const withHealth = buildFlat(answers);
+    const without = buildFlat(answers, { health: false });
+    expect(without.some((n) => n.q.health)).toBe(false);
+    expect(without.map((n) => n.key)).toEqual(
+      withHealth.filter((n) => !n.q.health).map((n) => n.key),
+    );
+    expect(without.map((n) => n.q.id)).not.toContain("cycle");
+    expect(
+      buildFlat({}, { health: false })
+        .filter((n) => n.lastOfScreen)
+        .map((n) => n.q.id),
+    ).toEqual(["allergies", "mealsToPlan", "cuisine", "portions", "budget", "times"]);
+  });
+
+  it("al no aceptar, el progreso guardado pierde las respuestas de salud", () => {
+    const bio = keyOf(BIO_Q);
+    expect(
+      withoutHealthAnswers({
+        "0-0": "Ana",
+        [bio]: "mujer, 60 kg, 165 cm",
+        [`${bio}>fu`]: "Embarazada",
+        "0-3": "hipotiroidismo",
+        "0-5": "marisco",
+        "0-5>fu": "grave",
+        "4-4": "lo dejé por ansiedad",
+      }),
+    ).toEqual({ "0-0": "Ana", [bio]: "mujer, 60 kg, 165 cm", "0-5": "marisco" });
   });
 });
 

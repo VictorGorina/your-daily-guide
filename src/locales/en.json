@@ -133,7 +133,8 @@
       "bodyNoEmail": "It isn't for the account you're signed in with. Do you want to sign out and sign in with the link's account?",
       "switch": "Sign in with that account",
       "keep": "Stay in mine"
-    }
+    },
+    "privacy": "Privacy policy"
   },
   "errorScreen": {
     "title": "Something didn’t load",
@@ -1574,6 +1575,58 @@
       "Where we're heading",
       "How I support you"
     ]
+  },
+  "healthConsent": {
+    "title": "Your health data",
+    "intro": "Some questions are about your health, because they change what is safe to recommend to you. You will only see them if you give your permission.",
+    "introExisting": "Your profile already holds health data. To keep using it, Peppers now needs your explicit permission.",
+    "introSettings": "With your permission, Peppers takes your health into account when it prepares your plan and in what the coach tells you.",
+    "what": {
+      "label": "What data",
+      "text": "Medical conditions, medication and supplements, pregnancy or breastfeeding, menstrual cycle, your relationship with food and what you struggled with before, how severe your allergies are, alcohol and smoking."
+    },
+    "why": {
+      "label": "What for",
+      "text": "Only to adapt your plan and what the coach tells you. Never for advertising, and it is never sold."
+    },
+    "who": {
+      "label": "Who processes it",
+      "text": "Peppers and the providers that run it: the database (Supabase, in the European Union) and the AI that prepares your plan (OpenRouter, with models from Google and OpenAI, in the United States)."
+    },
+    "withdraw": {
+      "label": "How to withdraw it",
+      "text": "Whenever you want, in Settings › Privacy. When you withdraw it, it is deleted from your profile."
+    },
+    "policy": "Read the privacy policy",
+    "checkbox": "I agree that Peppers processes my health data to personalise my plan",
+    "accept": "Accept and continue",
+    "decline": "Continue without health data",
+    "declineExisting": "I do not agree",
+    "declineSettings": "Not now",
+    "saveError": "It could not be saved. Try again.",
+    "declineWarning": {
+      "title": "Without health data",
+      "body": "Your plan will not be able to take into account a pregnancy, breastfeeding or a difficult relationship with food. If that is your case, it is better to accept or to talk to a professional before you follow the plan.",
+      "back": "Back",
+      "confirm": "Continue without it"
+    },
+    "deleteWarning": {
+      "title": "Your health data will be deleted",
+      "body": "It is removed from your profile right now. This month's plan stays as it is; next month's will be made without it, and it will not be able to take into account a pregnancy, breastfeeding or a difficult relationship with food.",
+      "confirm": "Delete and continue"
+    },
+    "settings": {
+      "section": "Privacy",
+      "toggle": "Use my health data",
+      "on": "It is taken into account in your plan and by the coach. Turning it off deletes it.",
+      "off": "Your plan is made without health data.",
+      "offTitle": "Stop using your health data",
+      "offBody": "It is deleted from your profile right now. This month's plan stays as it is; next month's will be made without it.",
+      "offConfirm": "Delete",
+      "policy": "Privacy policy",
+      "policyDesc": "What data Peppers keeps, who processes it and your rights."
+    },
+    "answersNote": "Your health data is not used. You can turn it on in Settings › Privacy."
   },
   "profileFields": {
     "display_name": {

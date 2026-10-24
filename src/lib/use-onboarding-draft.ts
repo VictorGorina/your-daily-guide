@@ -23,6 +23,9 @@ export function useOnboardingDraft() {
   // de fecha: no dependemos de que la IA la extraiga bien del texto.
   const [dob, setDob] = useState<string | null>(null);
   const [introDismissed, setIntroDismissed] = useState(false);
+  // «Seguir sin datos de salud» (ticket 30). Aceptar no va aquí: se guarda en el
+  // perfil en el momento, con su fecha.
+  const [healthDeclined, setHealthDeclined] = useState(false);
   const hydrated = useRef(false);
 
   // Hidratación del progreso guardado: se lee una vez al montar.
@@ -38,12 +41,14 @@ export function useOnboardingDraft() {
         curKey?: string;
         dob?: string | null;
         introDismissed?: boolean;
+        healthDeclined?: boolean;
       };
       if (saved.answers) setAnswers(saved.answers);
       if (saved.skipped) setSkipped(saved.skipped);
       if (saved.curKey) setCurKey(saved.curKey);
       if (saved.dob) setDob(saved.dob);
       if (saved.introDismissed) setIntroDismissed(true);
+      if (saved.healthDeclined) setHealthDeclined(true);
     } catch {
       /* progreso corrupto: se ignora y se empieza de cero */
     }
@@ -56,12 +61,12 @@ export function useOnboardingDraft() {
     try {
       localStorage.setItem(
         DRAFT_STORAGE_KEY,
-        JSON.stringify({ answers, skipped, curKey, dob, introDismissed }),
+        JSON.stringify({ answers, skipped, curKey, dob, introDismissed, healthDeclined }),
       );
     } catch {
       /* almacenamiento lleno o bloqueado: no es crítico */
     }
-  }, [answers, skipped, curKey, dob, introDismissed]);
+  }, [answers, skipped, curKey, dob, introDismissed, healthDeclined]);
 
   const clearDraft = useCallback(() => {
     try {
@@ -82,6 +87,8 @@ export function useOnboardingDraft() {
     setDob,
     introDismissed,
     setIntroDismissed,
+    healthDeclined,
+    setHealthDeclined,
     clearDraft,
   };
 }

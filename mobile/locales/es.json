@@ -133,7 +133,8 @@
       "bodyNoEmail": "No es de la cuenta con la que has entrado. ¿Quieres cerrar tu sesión y entrar con la del enlace?",
       "switch": "Entrar con esa cuenta",
       "keep": "Seguir con la mía"
-    }
+    },
+    "privacy": "Política de privacidad"
   },
   "errorScreen": {
     "title": "Algo no ha cargado",
@@ -1579,6 +1580,58 @@
       "Hacia dónde vamos",
       "Cómo te acompaño"
     ]
+  },
+  "healthConsent": {
+    "title": "Tus datos de salud",
+    "intro": "Algunas preguntas son sobre tu salud, porque cambian lo que es seguro recomendarte. Solo las verás si das tu permiso.",
+    "introExisting": "Tu perfil ya guarda datos de salud. Para seguir usándolos, Peppers necesita ahora tu permiso explícito.",
+    "introSettings": "Con tu permiso, Peppers tiene en cuenta tu salud al preparar el plan y en lo que te dice el coach.",
+    "what": {
+      "label": "Qué datos",
+      "text": "Condiciones médicas, medicación y suplementos, embarazo o lactancia, ciclo menstrual, tu relación con la comida y lo que te ha costado antes, la gravedad de tus alergias, alcohol y tabaco."
+    },
+    "why": {
+      "label": "Para qué",
+      "text": "Solo para adaptar tu plan y lo que te dice el coach. Nunca para publicidad, y no se venden."
+    },
+    "who": {
+      "label": "Quién los trata",
+      "text": "Peppers y los proveedores que la hacen funcionar: la base de datos (Supabase, en la Unión Europea) y la IA que prepara tu plan (OpenRouter, con modelos de Google y OpenAI, en Estados Unidos)."
+    },
+    "withdraw": {
+      "label": "Cómo retirarlo",
+      "text": "Cuando quieras, en Ajustes › Privacidad. Al retirarlo, se borran de tu perfil."
+    },
+    "policy": "Lee la política de privacidad",
+    "checkbox": "Acepto que Peppers trate mis datos de salud para personalizar mi plan",
+    "accept": "Aceptar y seguir",
+    "decline": "Seguir sin datos de salud",
+    "declineExisting": "No acepto",
+    "declineSettings": "Ahora no",
+    "saveError": "No se ha podido guardar. Prueba otra vez.",
+    "declineWarning": {
+      "title": "Sin datos de salud",
+      "body": "Tu plan no podrá tener en cuenta un embarazo, la lactancia ni una relación difícil con la comida. Si es tu caso, mejor acepta o coméntalo con un profesional antes de seguir el plan.",
+      "back": "Volver",
+      "confirm": "Seguir sin ellos"
+    },
+    "deleteWarning": {
+      "title": "Se borrarán tus datos de salud",
+      "body": "Se quitan de tu perfil ahora mismo. El plan de este mes se queda como está; el del mes que viene ya se hará sin ellos, y no podrá tener en cuenta un embarazo, la lactancia ni una relación difícil con la comida.",
+      "confirm": "Borrar y seguir"
+    },
+    "settings": {
+      "section": "Privacidad",
+      "toggle": "Usar mis datos de salud",
+      "on": "Se tienen en cuenta en tu plan y en el coach. Al apagarlo, se borran.",
+      "off": "Tu plan se hace sin datos de salud.",
+      "offTitle": "Dejar de usar tus datos de salud",
+      "offBody": "Se borran de tu perfil ahora mismo. El plan de este mes se queda como está; el del mes que viene ya se hará sin ellos.",
+      "offConfirm": "Borrar",
+      "policy": "Política de privacidad",
+      "policyDesc": "Qué datos guarda Peppers, quién los trata y tus derechos."
+    },
+    "answersNote": "Tus datos de salud no se usan. Puedes activarlos en Ajustes › Privacidad."
   },
   "profileFields": {
     "display_name": {
