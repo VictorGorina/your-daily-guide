@@ -120,6 +120,9 @@
  * - `auth_ip_quota_reached` (warn): una IP pasó de 20 altas o restablecimientos
  *   en una hora (`auth-email-ip`, ticket 29); se responde `ok` sin mandar nada.
  *   Repetido, es alguien probando correos; suelto, una red compartida.
+ * - `anon_lookup_failed` (error): Auth no dijo si una cuenta es anónima y se le
+ *   aplicaron los topes de gasto normales (ticket 29); mientras se repita, el
+ *   perfil demo gasta como una cuenta.
  */
 import { redactFields } from "@/lib/log-redact";
 import { captureServerEvent } from "@/lib/sentry.server";

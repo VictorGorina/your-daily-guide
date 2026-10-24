@@ -90,6 +90,17 @@ const RATE_LIMITS = {
  */
 const AI_SPEND_CAPS: AiSpendCaps = { dailyUsd: 0.75, monthlyUsd: 5 };
 
+/**
+ * Topes de una cuenta anónima, el perfil demo (ticket 29): se crean sin límite
+ * desde el navegador, y con los de arriba cada una podía gastar 5 $ al mes.
+ * El mensual da para UN plan entero (generarlo, precalentar sus platos y la
+ * ronda de ajuste solo cuentan para el mensual) más unos días de coach: un
+ * mes de demo con plan costó hasta 2,09 $ (medido el 2026-10-24); por debajo
+ * de ~1,5 $ el precalentado se corta y los platos se quedan en «Calculando…»
+ * (D13). El diario frena el coach y la guía.
+ */
+const AI_SPEND_CAPS_ANON: AiSpendCaps = { dailyUsd: 0.3, monthlyUsd: 2 };
+
 export type RateLimitBucket = keyof typeof RATE_LIMITS;
 
 type Consumed = { allowed: boolean; retryAfterSeconds: number };
@@ -122,26 +133,74 @@ async function consume(subject: string, bucket: RateLimitBucket): Promise<Consum
 }
 
 /**
+ * Si la cuenta es anónima se pregunta a Auth por su id, no se lee del JWT: así
+ * sirve igual para el trabajador de `jobs`, que no tiene sesión, y para las
+ * ~30 llamadas que solo pasan `userId`. Se guarda 10 min por instancia: una
+ * cuenta anónima que pasa a tener correo sigue esos minutos con los topes de
+ * anónimo, nada más. Con tope de entradas, como `createSendThrottle` (ARQ-03).
+ */
+const ANON_CACHE_MS = 10 * 60_000;
+const ANON_CACHE_MAX = 5_000;
+const anonCache = new Map<string, { at: number; anonymous: boolean }>();
+
+/** Solo para los tests: la caché es estado del módulo. */
+export function resetAnonymousCache(): void {
+  anonCache.clear();
+}
+
+/**
+ * ¿Es anónima la cuenta? Si Auth no contesta, `false` (los topes normales) y
+ * queda en el log: el mismo «dejar pasar» que el resto de este módulo.
+ */
+async function isAnonymousUser(userId: string): Promise<boolean> {
+  const now = Date.now();
+  const hit = anonCache.get(userId);
+  if (hit && now - hit.at < ANON_CACHE_MS) return hit.anonymous;
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (error) throw error;
+    const anonymous = data.user?.is_anonymous === true;
+    // Se reinserta al final: el orden del mapa es el de la consulta, y lo que
+    // sale por el tope es lo más antiguo.
+    anonCache.delete(userId);
+    if (anonCache.size >= ANON_CACHE_MAX) {
+      const oldest = anonCache.keys().next().value;
+      if (oldest !== undefined) anonCache.delete(oldest);
+    }
+    anonCache.set(userId, { at: now, anonymous });
+    return anonymous;
+  } catch (error) {
+    logEvent("error", "anon_lookup_failed", { userId, error: errorText(error) });
+    return false;
+  }
+}
+
+/**
  * Cuánto lleva gastado la persona y si puede hacer otra llamada, contra la
- * tabla `ai_spend` (migración `ai_spend`). Igual que `consume`, si la lectura
- * falla se deja pasar y queda en el log: mientras falle no hay tope de gasto,
- * pero la app sigue teniendo coach.
+ * tabla `ai_spend` (migración `ai_spend`), con los topes de su tipo de cuenta.
+ * Igual que `consume`, si la lectura falla se deja pasar y queda en el log:
+ * mientras falle no hay tope de gasto, pero la app sigue teniendo coach.
  */
 async function spendCapDecision(userId: string): Promise<SpendCapDecision | null> {
   const now = new Date();
   try {
-    const { data, error } = await supabaseAdmin
-      .from("ai_spend")
-      .select("day, cost_usd, month_only_usd")
-      .eq("user_id", userId)
-      .gte("day", utcMonthStartISO(now));
+    const [{ data, error }, anonymous] = await Promise.all([
+      supabaseAdmin
+        .from("ai_spend")
+        .select("day, cost_usd, month_only_usd")
+        .eq("user_id", userId)
+        .gte("day", utcMonthStartISO(now)),
+      isAnonymousUser(userId),
+    ]);
     if (error) throw error;
-    const decision = decideSpendCap(data ?? [], AI_SPEND_CAPS, now);
+    const caps = anonymous ? AI_SPEND_CAPS_ANON : AI_SPEND_CAPS;
+    const decision = decideSpendCap(data ?? [], caps, now);
     if (!decision.allowed) {
       // Llegar aquí usando la app con normalidad es casi imposible (ver
       // AI_SPEND_CAPS): si se repite para una cuenta, merece un vistazo.
       logEvent("warn", "spend_cap_reached", {
         userId,
+        anonymous,
         scope: decision.scope,
         daySpentUsd: decision.daySpentUsd,
         monthSpentUsd: decision.monthSpentUsd,

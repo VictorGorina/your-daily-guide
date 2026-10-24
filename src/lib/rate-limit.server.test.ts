@@ -9,6 +9,7 @@ import {
   enforceAiSpendCap,
   enforceUserRateLimit,
   recordAiSpend,
+  resetAnonymousCache,
   resetGlobalSpendCache,
 } from "./rate-limit.server";
 
@@ -20,6 +21,7 @@ let consoleError: ReturnType<typeof spyOn>;
 let consoleWarn: ReturnType<typeof spyOn>;
 beforeEach(() => {
   setSystemTime(NOW);
+  resetAnonymousCache();
   logs = [];
   const capture = (line: unknown) => void logs.push(String(line));
   consoleError = spyOn(console, "error").mockImplementation(capture);
@@ -27,6 +29,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   setSystemTime();
+  // Que una cuenta anónima de aquí no lo siga siendo en otro archivo de tests.
+  resetAnonymousCache();
   consoleError.mockRestore();
   consoleWarn.mockRestore();
 });
@@ -49,6 +53,7 @@ function fakeWith(
     { ai_spend: spend },
     {
       failOn: opts.failOn,
+      anonymousUsers: opts.anonymousUsers,
       rpc: {
         consume_rate_limit: () => [opts.quota ?? { allowed: true, retry_after_seconds: 0 }],
         record_ai_spend: () => null,
@@ -81,7 +86,7 @@ describe("enforceAiSpendCap", () => {
   it("lee solo el gasto de esa persona y desde el día 1 del mes UTC", async () => {
     const fake = fakeWith();
     await enforceAiSpendCap("u1");
-    expect(fake.calls[0]).toMatchObject({
+    expect(fake.calls.find((c) => c.table === "ai_spend")).toMatchObject({
       table: "ai_spend",
       op: "select",
       filters: [
@@ -121,6 +126,50 @@ describe("enforceAiSpendCap", () => {
     fakeWith([spent("u1", "2026-09-26", 9)], { failOn: (op) => op.table === "ai_spend" });
     await expect(enforceAiSpendCap("u1")).resolves.toBeUndefined();
     expect(events()).toEqual(["spend_cap_failopen"]);
+  });
+});
+
+describe("topes de una cuenta anónima (ticket 29): 0,30 $/día y 2 $/mes", () => {
+  const anon = { anonymousUsers: ["demo"] };
+
+  it("lo que a una cuenta le cabe en el día, a una anónima no", async () => {
+    fakeWith([spent("u1", "2026-09-26", 0.35), spent("demo", "2026-09-26", 0.35)], anon);
+    await expect(enforceAiSpendCap("u1")).resolves.toBeUndefined();
+    const error = await enforceAiSpendCap("demo").catch((e: unknown) => e);
+    expect((error as RateLimitError).scope).toBe("day");
+    expect(logs.some((l) => l.includes('"anonymous":true'))).toBe(true);
+  });
+
+  it("generar su plan (solo mensual) le cabe aunque pase del diario", async () => {
+    fakeWith([spent("demo", "2026-09-26", 1.5, 1.4)], anon);
+    await expect(enforceAiSpendCap("demo", "generar el plan", "month")).resolves.toBeUndefined();
+    await expect(enforceUserRateLimit("demo", "chat")).resolves.toBeUndefined();
+  });
+
+  it("el mensual corta a los 2 $, también lo que solo mide el mes", async () => {
+    fakeWith([spent("demo", "2026-09-26", 0.1), spent("demo", "2026-09-05", 1.95)], anon);
+    const error = await enforceAiSpendCap("demo", "calcular un plato", "month").catch(
+      (e: unknown) => e,
+    );
+    expect((error as RateLimitError).scope).toBe("month");
+  });
+
+  it("pregunta a Auth una vez y lo recuerda en la instancia", async () => {
+    const fake = fakeWith([], anon);
+    await enforceAiSpendCap("demo");
+    await enforceUserRateLimit("demo", "chat");
+    expect(fake.calls.filter((c) => c.op === "auth.getUserById")).toHaveLength(1);
+  });
+
+  it("si Auth falla, topes normales y anon_lookup_failed (sin guardarlo)", async () => {
+    const fake = fakeWith([spent("demo", "2026-09-26", 0.35)], {
+      ...anon,
+      failOn: (op) => op.op === "auth.getUserById",
+    });
+    await expect(enforceAiSpendCap("demo")).resolves.toBeUndefined();
+    await expect(enforceAiSpendCap("demo")).resolves.toBeUndefined();
+    expect(events()).toEqual(["anon_lookup_failed", "anon_lookup_failed"]);
+    expect(fake.calls.filter((c) => c.op === "auth.getUserById")).toHaveLength(2);
   });
 });
 
