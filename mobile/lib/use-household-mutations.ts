@@ -12,6 +12,7 @@ import {
   openSlots,
   removeMember,
   renameHousehold as renameHouseholdRow,
+  rotateInviteCode,
   saveHomeSchedule,
   setPlanner,
   updateMember,
@@ -133,6 +134,16 @@ export function useHouseholdMutations({
   const renameHousehold = (id: string, value: string) =>
     void renameHouseholdRow(id, value).then(refresh);
 
+  // Un código nuevo invalida el anterior (ticket 37): quien lo tuviera ya no entra.
+  const rotateCode = useMutation({
+    mutationFn: (id: string) => rotateInviteCode(id),
+    onSuccess: () => {
+      Alert.alert(t("hogar.code.rotated"));
+      refresh();
+    },
+    onError: () => Alert.alert(t("hogar.code.rotateFailed")),
+  });
+
   const leave = useMutation({
     mutationFn: leaveHousehold,
     onSuccess: () => {
@@ -203,6 +214,7 @@ export function useHouseholdMutations({
     renameMember,
     setMemberPortion,
     renameHousehold,
+    rotateCode,
     leave,
     persistSchedule,
     rebuild,
