@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Copy, LogOut, Pencil, ShieldCheck } from "lucide-react-native";
+import { Copy, LogOut, Pencil, RefreshCw, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
@@ -13,13 +13,15 @@ import { HouseholdRosterCard } from "../../../components/hogar/roster-card";
 import { HouseholdScheduleSection } from "../../../components/hogar/schedule-section";
 import { fetchMonthlyPlan, monthISO, todayISO } from "../../../lib/daily";
 import { fetchHousehold, type HouseholdChild } from "../../../lib/household";
+import { inviteCodeExpiresAt, isInviteCodeExpired } from "../../../lib/household-invite";
+import { dateLocale } from "../../../lib/i18n";
 import { EMPTY_SCHEDULE, eatsTableFood } from "../../../lib/household-shared";
 import { childPureeGaps, type MonthlyPlan } from "../../../lib/plan-shared";
 import { useHouseholdMutations } from "../../../lib/use-household-mutations";
 import { NAME_MAX_LENGTH } from "../../../lib/content-guard";
 
 export default function Hogar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const state = useQuery({ queryKey: ["household"], queryFn: fetchHousehold });
 
   // La mesa o los horarios cambiaron en esta visita: el plan del mes aún no
@@ -62,6 +64,7 @@ export default function Hogar() {
     renameMember,
     setMemberPortion,
     renameHousehold,
+    rotateCode,
     leave,
     persistSchedule,
     rebuild,
@@ -79,6 +82,17 @@ export default function Hogar() {
       { text: t("hogar.leave.confirm"), style: "destructive", onPress: () => leave.mutate() },
     ]);
 
+  // Un código nuevo deja sin valor el que ya se haya compartido: se pregunta antes.
+  const confirmRotate = (householdId: string) =>
+    Alert.alert(t("hogar.code.rotateConfirmTitle"), t("hogar.code.rotateConfirmText"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("hogar.code.rotate"),
+        style: "destructive",
+        onPress: () => rotateCode.mutate(householdId),
+      },
+    ]);
+
   const shareCode = (inviteCode: string) =>
     void Share.share({
       message: t("hogar.code.shareMessage", { code: inviteCode }),
@@ -87,6 +101,13 @@ export default function Hogar() {
     });
 
   const household = state.data?.household;
+  // A los 30 días el código deja de valer para unirse (ticket 37).
+  const codeExpires = inviteCodeExpiresAt(household?.invite_code_created_at);
+  const codeExpired = isInviteCodeExpired(household?.invite_code_created_at, new Date());
+  const codeDate = codeExpires?.toLocaleDateString(dateLocale(i18n.language), {
+    day: "numeric",
+    month: "long",
+  });
   const members = state.data?.members ?? [];
   const children = state.data?.children ?? [];
   // Los bebés que aún no comen de la mesa (la tarjeta los pinta en su grupo).
@@ -184,6 +205,30 @@ export default function Hogar() {
               <Text className="text-xs leading-5 text-muted-foreground">
                 {t("hogar.code.hint")}
               </Text>
+              {codeDate ? (
+                <Text
+                  className={`text-xs leading-5 ${
+                    codeExpired ? "font-sans-medium text-destructive" : "text-muted-foreground"
+                  }`}
+                >
+                  {t(codeExpired ? "hogar.code.expired" : "hogar.code.validUntil", {
+                    date: codeDate,
+                  })}
+                </Text>
+              ) : null}
+              {canManageRoster ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={rotateCode.isPending}
+                  onPress={() => confirmRotate(household.id)}
+                  className="flex-row items-center gap-2 self-start rounded-full bg-surface px-4 py-2.5 active:opacity-80"
+                >
+                  <RefreshCw size={16} color="#6b6256" />
+                  <Text className="text-sm font-sans-medium text-foreground">
+                    {t("hogar.code.rotate")}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
             <HouseholdRosterCard

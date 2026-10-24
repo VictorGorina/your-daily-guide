@@ -33,6 +33,11 @@ export type Household = {
   id: string;
   name: string;
   invite_code: string;
+  /**
+   * Cuándo se generó el código: a los 30 días deja de valer para unirse
+   * (`household-invite.ts`). Lo pone el servidor (ticket 37).
+   */
+  invite_code_created_at?: string | null;
   /** `null` si quien lo creó ya borró su cuenta (el hogar sigue: ticket 36). */
   created_by: string | null;
   /** Comidas compartidas del hogar: mismo plato para todos. La fija el planificador. */
@@ -183,48 +188,25 @@ export function householdSharedSlots(state: HouseholdState | null | undefined): 
   );
 }
 
-const randomCode = () => {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from(
-    { length: 6 },
-    () => alphabet[Math.floor(Math.random() * alphabet.length)]!,
-  ).join("");
-};
-
+/**
+ * Crea el hogar con quien lo crea como primer miembro y planificador. El
+ * código de invitación lo genera el servidor, y todo va en una transacción:
+ * si falla la fila del miembro (ya estaba en otro hogar), no queda un hogar
+ * huérfano (ticket 37, `create_household`).
+ */
 export async function createHousehold(name: string): Promise<string> {
-  const userId = await currentUserId();
-  if (!userId) throw new Error("Sin sesión");
-
-  const { data, error } = await supabase
-    .from("households")
-    .insert({
-      name: name.trim() || "Mi casa",
-      invite_code: randomCode(),
-      created_by: userId,
-    })
-    .select("id")
-    .single();
+  const { data, error } = await supabase.rpc("create_household", { _name: name.trim() });
   if (error) throw error;
+  return data;
+}
 
-  const householdId = (data as { id: string }).id;
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", userId)
-    .maybeSingle();
-  const displayName =
-    ((profile as { display_name?: string | null } | null)?.display_name ?? "").trim() || "Yo";
-
-  // Quien crea el hogar es el primer miembro y el planificador de la casa.
-  const { error: memberError } = await supabase.from("household_members").insert({
-    household_id: householdId,
-    user_id: userId,
-    role: "adulto",
-    display_name: displayName,
-    is_planner: true,
+/** Un código nuevo, que vuelve a valer 30 días (quien creó el hogar o quien planifica). */
+export async function rotateInviteCode(householdId: string): Promise<string> {
+  const { data, error } = await supabase.rpc("rotate_invite_code", {
+    _household_id: householdId,
   });
-  if (memberError) throw memberError;
-  return householdId;
+  if (error) throw error;
+  return data;
 }
 
 /** Un hueco de la mesa que aún nadie ha reclamado, para la pantalla "¿quién eres?". */
