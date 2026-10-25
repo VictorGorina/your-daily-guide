@@ -1,6 +1,7 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Bean, Beef, Carrot, Drumstick, Fish, Milk, Wheat } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -93,9 +94,14 @@ function LocaleSwitch() {
  */
 export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: string }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { t } = useTranslation();
   // CAPTCHA (ticket 29): un token nuevo antes de cada llamada de Auth.
   const captcha = useTurnstile();
+  // Mientras `demo()` crea la cuenta anónima y guarda su perfil. Es un ref y no
+  // el estado `demoLoading` porque lo lee el listener de sesión, que se registra
+  // una vez y vería siempre el valor del primer render.
+  const creatingDemo = useRef(false);
 
   const [stage, setStage] = useState<Stage>(initialStage);
   const [mode, setMode] = useState<Mode>("in");
@@ -124,9 +130,11 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
     // El enlace de confirmación trae los tokens en el hash y supabase-js los
     // procesa de forma asíncrona: escuchamos también SIGNED_IN para que pulsar
     // "confirmar correo" acabe siempre dentro de la app aunque ese procesado
-    // todavía esté en curso al montar.
+    // todavía esté en curso al montar. El de la demo no: `signInAnonymously`
+    // lo emite antes de que exista el perfil, /hoy lo vería sin onboarding y
+    // rebotaría a /onboarding. A esa navega `demo()` cuando lo ha guardado.
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session && !goNext()) {
+      if (event === "SIGNED_IN" && session && !creatingDemo.current && !goNext()) {
         navigate({ to: "/hoy", replace: true });
       }
     });
@@ -248,8 +256,12 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
     }
   };
 
+  // Igual que el móvil (mobile/app/auth.tsx): no se sale de aquí hasta tener el
+  // perfil guardado. Si guardarlo falla, la persona se queda con el aviso y la
+  // sesión anónima; volver a pulsar reutiliza la sesión y solo reintenta el perfil.
   const demo = async () => {
     setDemoLoading(true);
+    creatingDemo.current = true;
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
@@ -259,11 +271,15 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
         if (error) throw error;
       }
       await saveProfile(randomDemoProfile());
+      // La raíz (`useLocale`) volvió a pedir el perfil al entrar la cuenta,
+      // todavía vacío, y con el `staleTime` Hoy usaría esa copia y rebotaría.
+      await qc.invalidateQueries({ queryKey: ["profile"] });
       toast.success(t("auth.demoOk"));
       navigate({ to: "/hoy", replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("auth.errDemo"));
     } finally {
+      creatingDemo.current = false;
       setDemoLoading(false);
     }
   };

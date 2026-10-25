@@ -196,12 +196,13 @@ hecho por dentro:
 - Lo que jsdom no trae y piden Radix o los componentes (`ResizeObserver`, `matchMedia`, captura
   de puntero) está en el setup; lo nuevo se añade ahí, no en cada test.
 
-| Archivo                                     | Qué fija                                                                                                                                    |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `components/meal-swap-sheet.vitest.tsx`     | "Comí otra cosa": el tamaño que se manda (o ninguno si el texto ya dice cuánto), el texto vago y las kcal a mano, sin cifras, "Me lo salté" |
-| `components/day-balance-card.vitest.tsx`    | "Balance de hoy": desglose por origen, "Ajustando…", platos movidos y "Ver", la nota cuando no se mueve nada, el fallo, sin cifras          |
-| `components/plan-month-calendar.vitest.tsx` | la celda que abre cada día (la fila la marca el día del mes; 29-31 aparte), las comidas planificadas, día pasado, antes del alta            |
-| `components/child-sheet.vitest.tsx`         | alta, edición y baja de un peque contra el doble: qué fila queda, la ración por etapa, qué se invalida y que un fallo no cierra la hoja     |
+| Archivo                                     | Qué fija                                                                                                                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `components/meal-swap-sheet.vitest.tsx`     | "Comí otra cosa": el tamaño que se manda (o ninguno si el texto ya dice cuánto), el texto vago y las kcal a mano, sin cifras, "Me lo salté"                                                                        |
+| `components/day-balance-card.vitest.tsx`    | "Balance de hoy": desglose por origen, "Ajustando…", platos movidos y "Ver", la nota cuando no se mueve nada, el fallo, sin cifras                                                                                 |
+| `components/plan-month-calendar.vitest.tsx` | la celda que abre cada día (la fila la marca el día del mes; 29-31 aparte), las comidas planificadas, día pasado, antes del alta                                                                                   |
+| `components/child-sheet.vitest.tsx`         | alta, edición y baja de un peque contra el doble: qué fila queda, la ración por etapa, qué se invalida y que un fallo no cierra la hoja                                                                            |
+| `components/auth-flow.vitest.tsx`           | "Probar sin cuenta" no navega con el SIGNED_IN de la cuenta anónima, solo con el perfil guardado y `["profile"]` invalidado; el fallo y el reintento; el SIGNED_IN del enlace de confirmación sigue llevando a Hoy |
 
 Todavía no hay tests de las pantallas enteras (`hoy.tsx`, `plan.tsx`, `hogar.tsx`): llegan con
 el ticket 28, que las parte en piezas que se puedan montar solas.
