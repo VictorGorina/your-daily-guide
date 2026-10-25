@@ -123,6 +123,7 @@
     "errSamePassword": "La contraseña nueva tiene que ser distinta de la actual.",
     "demoOk": "Perfil de prueba creado",
     "oneMoment": "Un momento, ya casi está.",
+    "captchaHint": "Marca la casilla para confirmar que eres una persona.",
     "enteringApp": "Entrando en Peppers…",
     "linkErrorTitle": "Este enlace ya no funciona",
     "linkErrorBody": "Puede haber caducado o haberse usado ya. Pide uno nuevo desde la pantalla de entrar.",

@@ -203,6 +203,7 @@ hecho por dentro:
 | `components/plan-month-calendar.vitest.tsx` | la celda que abre cada día (la fila la marca el día del mes; 29-31 aparte), las comidas planificadas, día pasado, antes del alta                                                                                   |
 | `components/child-sheet.vitest.tsx`         | alta, edición y baja de un peque contra el doble: qué fila queda, la ración por etapa, qué se invalida y que un fallo no cierra la hoja                                                                            |
 | `components/auth-flow.vitest.tsx`           | "Probar sin cuenta" no navega con el SIGNED_IN de la cuenta anónima, solo con el perfil guardado y `["profile"]` invalidado; el fallo y el reintento; el SIGNED_IN del enlace de confirmación sigue llevando a Hoy |
+| `components/turnstile-widget.vitest.tsx`    | cuánto espera `getToken` con un Turnstile de mentira: error, navegador no soportado y reto caducado cortan ya; 10 s sin respuesta (también con el script colgado); con la casilla a la vista, el aviso y 30 s      |
 
 Todavía no hay tests de las pantallas enteras (`hoy.tsx`, `plan.tsx`, `hogar.tsx`): llegan con
 el ticket 28, que las parte en piezas que se puedan montar solas.
