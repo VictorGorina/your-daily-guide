@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../../components/bottom-nav";
 import { DayDetailSheet } from "../../../components/day-detail-sheet";
 import { GoalWeightSummary } from "../../../components/goal-weight-summary";
+import { LoadingDots } from "../../../components/loading-dots";
 import { MonthIntakeChat } from "../../../components/month-intake-chat";
 import { MonthSpendSummary } from "../../../components/month-spend-summary";
 import { IngredientsTab } from "../../../components/plan/ingredients-tab";
@@ -546,12 +547,14 @@ export default function Plan() {
           {/* Fuera del flujo, como en la web: no mueve la pantalla al aparecer
               y desaparecer. Cabe en el hueco (mt-6) hasta las subpestañas. */}
           {warmProgress.running ? (
-            <Text
-              className="absolute right-0 mt-1 text-xs text-muted-foreground"
+            <View
+              className="absolute right-0 mt-1 flex-row items-center gap-1.5"
               style={{ top: "100%" }}
+              accessibilityLiveRegion="polite"
             >
-              {t("plan.warming")}
-            </Text>
+              <LoadingDots small />
+              <Text className="text-xs text-muted-foreground">{t("plan.warming")}</Text>
+            </View>
           ) : null}
         </View>
 
