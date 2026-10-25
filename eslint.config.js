@@ -120,5 +120,14 @@ export default tseslint.config(
       "no-restricted-syntax": ["error", supabaseAdminStaticImport, foodsDataDynamicImport],
     },
   },
+  {
+    // Un test de componentes no es un módulo de la app: Fast Refresh nunca lo
+    // recarga, y su componente de apoyo (un `Harness` que monta el hook) no
+    // tiene por qué ir en otro archivo.
+    files: ["src/**/*.vitest.tsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
   eslintPluginPrettier,
 );

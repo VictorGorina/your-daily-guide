@@ -13,7 +13,15 @@ import { useTranslation } from "react-i18next";
  * La espera tiene dos fases, y cualquier fallo de Cloudflare (error, navegador
  * no soportado, reto caducado) la corta en el momento: antes solo había un
  * tope de 60 s y la persona se quedaba ese rato en "Creando perfil…" sin saber
- * que tenía que marcar una casilla (navegador de la app de Claude, 2026-10-25).
+ * que tenía que marcar una casilla.
+ *
+ * En el navegador integrado de la app de Claude no hay token posible: Cloudflare
+ * pide la casilla, pero ese navegador no pinta los iframes de otro sitio, y el
+ * reto es uno (2026-10-25: en su panel, un iframe de control del mismo origen se
+ * pinta y uno de otro sitio no). Ahí el aviso sale sobre un hueco vacío y se
+ * sigue sin token a los 30 s. No es un fallo de este código ni se arregla aquí:
+ * bajar `INTERACTIVE_TIMEOUT_MS` solo quitaría tiempo a quien sí ve la casilla.
+ * En local, sin clave de sitio, no hay espera.
  */
 
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
