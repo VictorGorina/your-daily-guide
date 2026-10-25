@@ -123,6 +123,7 @@
     "errSamePassword": "Your new password needs to be different from your current one.",
     "demoOk": "Test profile created",
     "oneMoment": "One moment, almost there.",
+    "captchaHint": "Tick the box to confirm you're a person.",
     "enteringApp": "Entering Peppers…",
     "linkErrorTitle": "This link doesn't work anymore",
     "linkErrorBody": "It may have expired or already been used. Request a new one from the sign-in screen.",
