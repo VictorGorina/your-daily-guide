@@ -32,6 +32,7 @@ import {
   fitPlanOnce,
   planDishesToWarm,
   useRecipeWarmProgress,
+  warmingDates,
   warmPlanRecipes,
   type WarmResult,
 } from "../../../lib/recipe-warm";
@@ -340,6 +341,11 @@ export default function Plan() {
   // el día en su objetivo. Una vez por plan (la marca `plan.fit`); lo que
   // cambió se enseña en "Cómo enfocamos el mes".
   const warmProgress = useRecipeWarmProgress();
+  // Días del calendario que esperan a algún plato de la pasada en curso.
+  const warmingDays = useMemo(
+    () => warmingDates(plan, month, today, warmProgress.pending),
+    [plan, month, today, warmProgress.pending],
+  );
   const [fitting, setFitting] = useState(false);
   useEffect(() => {
     if (!plan || !actionable) return;
@@ -553,7 +559,9 @@ export default function Plan() {
               accessibilityLiveRegion="polite"
             >
               <LoadingDots small />
-              <Text className="text-xs text-muted-foreground">{t("plan.warming")}</Text>
+              <Text className="text-xs text-muted-foreground">
+                {t("plan.warming", { done: warmProgress.done, total: warmProgress.total })}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -696,6 +704,7 @@ export default function Plan() {
                   selectedMealSlots={effectiveMealSlots(profileQ.data ?? {})}
                   onOpenDay={setOpenDay}
                   homePlanner={homePlanner}
+                  warmingDays={warmingDays}
                 />
 
                 {!plan && !(monthLogsQ.data?.length ?? 0) ? (

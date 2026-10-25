@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Easing, Pressable, Text, View } from "react-native";
 
 import { todayISO, type DailyLog } from "../../lib/daily";
 import type { SharedSlots } from "../../lib/household-shared";
@@ -32,6 +32,44 @@ const SIGNAL_BG: Record<string, string> = {
 // Calendario del mes con detalle de día en modal, equivalente RN del
 // PlanMonthCalendar de la web. Los días pasados llevan el semáforo de
 // cumplimiento y abren el detalle reducido del día (`onOpenDay`).
+/**
+ * Un solo latido para todos los días que se están calculando (como
+ * `animate-warm-beat` de la web: 1,4 s). `null` con reducir movimiento: el
+ * puntito se queda quieto. `Animated` clásico: reanimated está sin configurar.
+ */
+function useWarmBeat(active: boolean): Animated.Value | null {
+  const [beat] = useState(() => new Animated.Value(0));
+  const [still, setStill] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((reduce) => alive && setStill(reduce))
+      .catch((error) => console.warn("calendario: leer reducir movimiento", error));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!active || still) return;
+    const ease = Easing.inOut(Easing.ease);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(beat, { toValue: 1, duration: 700, easing: ease, useNativeDriver: true }),
+        Animated.timing(beat, { toValue: 0, duration: 700, easing: ease, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      beat.setValue(0);
+    };
+  }, [active, still, beat]);
+
+  return still ? null : beat;
+}
+
 export function PlanMonthCalendar({
   plan,
   month,
@@ -42,6 +80,7 @@ export function PlanMonthCalendar({
   selectedMealSlots,
   onOpenDay,
   homePlanner,
+  warmingDays,
 }: {
   plan: MonthlyPlan | null;
   month: string;
@@ -57,10 +96,20 @@ export function PlanMonthCalendar({
   /** Para saber si un plato fijado lo cambió esta persona o el resto del hogar
    *  (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
+  /** Días con algún plato que aún se está calculando (`warmingDates`): se
+   *  atenúan con un puntito que late hasta que vuelven sus platos. */
+  warmingDays?: ReadonlySet<string>;
 }) {
   const { t, i18n } = useTranslation();
   const [selected, setSelected] = useState<string | null>(null);
   const today = todayISO();
+  const beat = useWarmBeat((warmingDays?.size ?? 0) > 0);
+  const beatStyle = beat
+    ? {
+        opacity: beat.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+        transform: [{ scale: beat.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.15] }) }],
+      }
+    : undefined;
 
   const [year, m] = month.split("-").map(Number);
   const monthIdx = (m ?? 1) - 1;
@@ -161,17 +210,35 @@ export function PlanMonthCalendar({
             );
           }
 
+          const warming = warmingDays?.has(date) ?? false;
           return (
             <View key={date} className="p-0.5" style={{ width: `${100 / 7}%` }}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel={
+                  warming
+                    ? t("planCalendar.dayCalculating", { day: Number(date.slice(8, 10)) })
+                    : undefined
+                }
                 onPress={() => setSelected(date)}
                 className={`aspect-square items-center justify-center rounded-xl active:opacity-80 ${
                   isWeekend ? "bg-accent/60" : "bg-secondary"
                 } ${isToday ? "border-2 border-primary" : ""}`}
                 style={isToday ? { borderWidth: 2 } : undefined}
               >
-                <Text className="text-sm text-foreground">{Number(date.slice(8, 10))}</Text>
+                <Text className={`text-sm text-foreground ${warming ? "opacity-40" : ""}`}>
+                  {Number(date.slice(8, 10))}
+                </Text>
+                {warming ? (
+                  <View
+                    pointerEvents="none"
+                    className="absolute bottom-1 left-0 right-0 items-center"
+                  >
+                    <Animated.View style={beatStyle}>
+                      <View className="h-1 w-1 rounded-full bg-primary" />
+                    </Animated.View>
+                  </View>
+                ) : null}
               </Pressable>
             </View>
           );
