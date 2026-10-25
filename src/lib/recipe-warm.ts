@@ -29,9 +29,26 @@ const MAX_REMEMBERED = 600;
 export type WarmResult = { results: { dish: string; status: string }[] };
 export type WarmFn = (dishes: string[]) => Promise<WarmResult>;
 
-export type WarmProgress = { running: boolean; done: number; total: number };
+/**
+ * `pending`: claves (`dishKey`) de los platos de esta pasada que aún no han
+ * vuelto del servidor. Con ellas el calendario sabe qué días se están
+ * calculando (`warmingDates`).
+ */
+export type WarmProgress = {
+  running: boolean;
+  done: number;
+  total: number;
+  pending: ReadonlySet<string>;
+};
 
-/** Platos únicos del plan de `today` a fin de mes, en todas las comidas. */
+const NOTHING_PENDING: ReadonlySet<string> = new Set();
+const IDLE: WarmProgress = { running: false, done: 0, total: 0, pending: NOTHING_PENDING };
+
+/**
+ * Platos únicos del plan de `today` a fin de mes, en todas las comidas, en
+ * orden de fecha (el de su primer día): las tandas salen en ese orden, así el
+ * calendario se completa de principio a fin.
+ */
 export function planDishesToWarm(
   plan: MonthlyPlan | null | undefined,
   month: string,
@@ -53,6 +70,28 @@ export function planDishesToWarm(
   return [...seen.values()];
 }
 
+/**
+ * Días (de `today` a fin de mes) con algún plato que la pasada en curso aún no
+ * ha calculado. Vacío si no hay pasada.
+ */
+export function warmingDates(
+  plan: MonthlyPlan | null | undefined,
+  month: string,
+  today: string,
+  pending: ReadonlySet<string>,
+): Set<string> {
+  const dates = new Set<string>();
+  if (!plan || !pending.size) return dates;
+  const last = daysInMonth(month);
+  for (let day = 1; day <= last; day++) {
+    const date = dateInMonth(month, day);
+    if (date < today) continue;
+    const meals = mealsForDate(plan, date, MEAL_SLOTS);
+    if (meals.some((meal) => pending.has(dishKey(meal.idea?.trim() ?? "")))) dates.add(date);
+  }
+  return dates;
+}
+
 function readDone(): Set<string> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -71,7 +110,7 @@ function writeDone(done: Set<string>) {
   }
 }
 
-let progress: WarmProgress = { running: false, done: 0, total: 0 };
+let progress: WarmProgress = IDLE;
 const listeners = new Set<() => void>();
 let inFlight: Promise<boolean> | null = null;
 
@@ -96,7 +135,8 @@ export function warmPlanRecipes(dishes: readonly string[], warm: WarmFn): Promis
   for (let i = 0; i < pending.length; i += WARM_CHUNK)
     chunks.push(pending.slice(i, i + WARM_CHUNK));
   let finished = 0;
-  setProgress({ running: true, done: 0, total: pending.length });
+  const waiting = new Set(pending.map(dishKey));
+  setProgress({ running: true, done: 0, total: pending.length, pending: new Set(waiting) });
 
   const worker = async () => {
     for (let chunk = chunks.shift(); chunk; chunk = chunks.shift()) {
@@ -110,8 +150,15 @@ export function warmPlanRecipes(dishes: readonly string[], warm: WarmFn): Promis
       } catch {
         // Cuota, tope de gasto o red: lo que falta se retoma al volver a Plan.
       }
+      // Calculado o no, en esta pasada ya no se está calculando.
+      for (const dish of chunk) waiting.delete(dishKey(dish));
       finished += chunk.length;
-      setProgress({ running: true, done: finished, total: pending.length });
+      setProgress({
+        running: true,
+        done: finished,
+        total: pending.length,
+        pending: new Set(waiting),
+      });
     }
   };
 
@@ -119,7 +166,7 @@ export function warmPlanRecipes(dishes: readonly string[], warm: WarmFn): Promis
     .then(() => pending.every((d) => done.has(dishKey(d))))
     .finally(() => {
       inFlight = null;
-      setProgress({ running: false, done: 0, total: 0 });
+      setProgress(IDLE);
     });
   return inFlight;
 }
@@ -150,20 +197,19 @@ const subscribe = (cb: () => void) => {
   };
 };
 
-/** Progreso para pintar "Calculando tus platos 24/48". */
+/** El progreso de ahora, sin suscribirse (tests y código fuera de React). */
+export const getRecipeWarmProgress = (): WarmProgress => progress;
+
+/** Progreso para pintar "Calculando macros · 24 de 48 platos" y los días del calendario. */
 export function useRecipeWarmProgress(): WarmProgress {
-  return useSyncExternalStore(
-    subscribe,
-    () => progress,
-    () => progress,
-  );
+  return useSyncExternalStore(subscribe, getRecipeWarmProgress, getRecipeWarmProgress);
 }
 
 /** Para los tests: olvida lo recordado y el estado. */
 export function _resetRecipeWarm() {
   inFlight = null;
   fitting.clear();
-  progress = { running: false, done: 0, total: 0 };
+  progress = IDLE;
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {

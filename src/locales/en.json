@@ -1023,7 +1023,7 @@
     "nextMonthLocked": "Next month (still locked)",
     "notYetTitle": "Not yet",
     "nextLockedInfo": "You can prepare {{next}} in the last week of {{current}}.",
-    "warming": "Working out macros",
+    "warming": "Working out macros · {{done}} of {{total}} dishes",
     "plannerFallback": "whoever runs the kitchen",
     "create": {
       "titleSolo": "Plan the meals you eat on your own",
@@ -1078,6 +1078,7 @@
     "legend": "Green: day on target. Yellow: you drifted. Red: well over. Grey: nothing logged.",
     "openDay": "See day {{day}}",
     "openDayWithSignal": "See day {{day}}: {{signal}}",
+    "dayCalculating": "Day {{day}}: working out its dishes",
     "forChild": "For {{name}}:",
     "noMenu": "This day doesn't have a menu in the plan yet."
   },

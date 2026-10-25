@@ -50,6 +50,7 @@ export function PlanMonthCalendar({
   selectedMealSlots,
   onOpenDay,
   homePlanner,
+  warmingDays,
 }: {
   plan: MonthlyPlan | null;
   month: string;
@@ -65,6 +66,9 @@ export function PlanMonthCalendar({
   /** Para saber si un plato compartido fijado lo cambió esta persona o el
    *  resto del hogar (ver `dishChangeIsMine`). */
   homePlanner: { isPlanner: boolean; sharedSlots: SharedSlots } | null;
+  /** Días con algún plato que aún se está calculando (`warmingDates`): se
+   *  atenúan con un puntito que late hasta que vuelven sus platos. */
+  warmingDays?: ReadonlySet<string>;
 }) {
   const { t, i18n } = useTranslation();
   const [selected, setSelected] = useState<string | null>(null);
@@ -164,15 +168,26 @@ export function PlanMonthCalendar({
             );
           }
 
+          const warming = warmingDays?.has(date) ?? false;
           return (
             <button
               key={date}
               onClick={() => setSelected(date)}
-              className={`aspect-square rounded-xl text-sm transition-all active:scale-95 ${
+              aria-label={
+                warming ? t("planCalendar.dayCalculating", { day: dayNum(date) }) : undefined
+              }
+              className={`relative aspect-square rounded-xl text-sm transition-all active:scale-95 ${
                 isWeekend ? "bg-accent/60 text-accent-foreground" : "bg-secondary text-foreground"
               } ${isToday ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : ""}`}
             >
-              {dayNum(date)}
+              <span className={`transition-opacity duration-300 ${warming ? "opacity-40" : ""}`}>
+                {dayNum(date)}
+              </span>
+              {warming ? (
+                <span aria-hidden className="absolute inset-x-0 bottom-1 flex justify-center">
+                  <span className="h-1 w-1 rounded-full bg-primary animate-warm-beat" />
+                </span>
+              ) : null}
             </button>
           );
         })}

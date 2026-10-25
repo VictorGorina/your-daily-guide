@@ -413,11 +413,30 @@
   animation: coach-dot 1.4s ease-in-out infinite;
 }
 
+/* Puntito que late bajo un día del calendario de Plan mientras se calculan sus
+   platos (precalentado de recetas). Mismo ritmo que los puntos del coach. */
+@keyframes warm-beat {
+  0%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+@utility animate-warm-beat {
+  animation: warm-beat 1.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fab-ring,
   .animate-breathe,
   .animate-coach-pulse,
-  .animate-coach-dot {
+  .animate-coach-dot,
+  .animate-warm-beat {
     animation: none;
   }
 }

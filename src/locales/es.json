@@ -1023,7 +1023,7 @@
     "nextMonthLocked": "Mes siguiente (aún bloqueado)",
     "notYetTitle": "Aún no toca",
     "nextLockedInfo": "Podrás preparar {{next}} la última semana de {{current}}.",
-    "warming": "Calculando macros",
+    "warming": "Calculando macros · {{done}} de {{total}} platos",
     "plannerFallback": "quien lleva la cocina",
     "create": {
       "titleSolo": "Planifica tus comidas en solitario",
@@ -1078,6 +1078,7 @@
     "legend": "Verde: día en tu objetivo. Amarillo: te desviaste. Rojo: bastante por encima. Gris: sin registro.",
     "openDay": "Ver el día {{day}}",
     "openDayWithSignal": "Ver el día {{day}}: {{signal}}",
+    "dayCalculating": "Día {{day}}: calculando sus platos",
     "forChild": "Para {{name}}:",
     "noMenu": "Este día todavía no tiene menú en el plan."
   },
