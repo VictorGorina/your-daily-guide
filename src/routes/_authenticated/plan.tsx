@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { BottomNav } from "@/components/bottom-nav";
 import { DayDetailSheet } from "@/components/day-detail-sheet";
 import { GoalWeightSummary } from "@/components/goal-weight-summary";
+import { LoadingDots } from "@/components/loading-dots";
 import { MonthIntakeChat } from "@/components/month-intake-chat";
 import { MonthSpendSummary } from "@/components/month-spend-summary";
 import { IngredientsTab } from "@/components/plan/ingredients-tab";
@@ -514,9 +515,10 @@ function PlanPage() {
             Cabe en el hueco (mt-6) hasta las subpestañas. */}
         {warmProgress.running ? (
           <p
-            className="absolute right-0 top-full mt-1 text-xs text-muted-foreground"
+            className="absolute right-0 top-full mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"
             aria-live="polite"
           >
+            <LoadingDots small />
             {t("plan.warming")}
           </p>
         ) : null}

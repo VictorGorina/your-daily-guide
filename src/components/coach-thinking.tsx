@@ -3,6 +3,7 @@
 import { useTranslation } from "react-i18next";
 
 import { Message, MessageContent } from "@/components/ai-elements/message";
+import { LoadingDots } from "@/components/loading-dots";
 
 export function CoachThinking() {
   const { t } = useTranslation();
@@ -15,11 +16,7 @@ export function CoachThinking() {
         </span>
 
         <span className="relative z-10 flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-primary animate-coach-dot" />
-            <span className="h-2 w-2 rounded-full bg-primary/70 animate-coach-dot [animation-delay:0.15s]" />
-            <span className="h-2 w-2 rounded-full bg-primary/50 animate-coach-dot [animation-delay:0.3s]" />
-          </span>
+          <LoadingDots />
           <span className="text-xs font-medium text-muted-foreground">{t("chat.thinking")}</span>
         </span>
       </MessageContent>

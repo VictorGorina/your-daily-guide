@@ -1022,7 +1022,7 @@
     "nextMonthLocked": "Mes siguiente (aún bloqueado)",
     "notYetTitle": "Aún no toca",
     "nextLockedInfo": "Podrás preparar {{next}} la última semana de {{current}}.",
-    "warming": "Calculando macros…",
+    "warming": "Calculando macros",
     "plannerFallback": "quien lleva la cocina",
     "create": {
       "titleSolo": "Planifica tus comidas en solitario",
