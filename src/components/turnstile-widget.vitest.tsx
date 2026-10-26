@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { INTERACTIVE_TIMEOUT_MS, INVISIBLE_TIMEOUT_MS } from "@/lib/captcha-bridge";
 import i18next from "@/lib/i18n";
 
 // La clave de sitio se lee al cargar el módulo: se fija antes de importarlo.
@@ -119,7 +120,7 @@ describe("useTurnstile: cuánto se espera al token (ticket 29)", () => {
   it("si Cloudflare no contesta, sigue sin token a los 20 s y retira el reto", async () => {
     const { api } = fakeTurnstile();
     const { onToken } = await askForToken();
-    await advance(widget.INVISIBLE_TIMEOUT_MS - 1);
+    await advance(INVISIBLE_TIMEOUT_MS - 1);
     expect(onToken).not.toHaveBeenCalled();
     await advance(1);
     expect(onToken).toHaveBeenCalledWith(undefined);
@@ -136,12 +137,12 @@ describe("useTurnstile: cuánto se espera al token (ticket 29)", () => {
     expect(hint()).toHaveTextContent(i18next.t("auth.captchaHint"));
 
     // Pasado el tope de la fase invisible, sigue esperando a la persona.
-    await advance(widget.INVISIBLE_TIMEOUT_MS);
+    await advance(INVISIBLE_TIMEOUT_MS);
     expect(onToken).not.toHaveBeenCalled();
 
     // Un reto que vuelve a salir no reinicia la cuenta.
     act(() => cloudflare()["before-interactive-callback"]());
-    await advance(widget.INTERACTIVE_TIMEOUT_MS - widget.INVISIBLE_TIMEOUT_MS - 1);
+    await advance(INTERACTIVE_TIMEOUT_MS - INVISIBLE_TIMEOUT_MS - 1);
     expect(onToken).not.toHaveBeenCalled();
     await advance(1);
     expect(onToken).toHaveBeenCalledWith(undefined);
@@ -182,7 +183,7 @@ describe("useTurnstile: cuánto se espera al token (ticket 29)", () => {
   it("un script que no llega a cargar tampoco pasa de 20 s", async () => {
     const { onToken } = await askForToken();
     expect(document.head.querySelector('script[src*="challenges.cloudflare.com"]')).not.toBeNull();
-    await advance(widget.INVISIBLE_TIMEOUT_MS);
+    await advance(INVISIBLE_TIMEOUT_MS);
     expect(onToken).toHaveBeenCalledWith(undefined);
   });
 });

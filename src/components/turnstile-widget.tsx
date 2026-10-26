@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { INTERACTIVE_TIMEOUT_MS, INVISIBLE_TIMEOUT_MS } from "@/lib/captcha-bridge";
+
 /**
  * CAPTCHA de Cloudflare Turnstile en la pantalla de acceso (ticket 29 de la
  * auditoría). Sin `VITE_TURNSTILE_SITE_KEY` no carga nada ni pinta nada, y
@@ -22,24 +24,13 @@ import { useTranslation } from "react-i18next";
  * sigue sin token a los 30 s. No es un fallo de este código ni se arregla aquí:
  * bajar `INTERACTIVE_TIMEOUT_MS` solo quitaría tiempo a quien sí ve la casilla.
  * En local, sin clave de sitio, no hay espera.
+ *
+ * Los dos topes (`INVISIBLE_TIMEOUT_MS`, `INTERACTIVE_TIMEOUT_MS`) viven en
+ * `captcha-bridge.ts`: el móvil espera lo mismo.
  */
 
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
 const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-/**
- * Hasta que Cloudflare da el token o pide la casilla, contando la carga del
- * script. Medido: pide la casilla a los 3,4 s. Holgado a propósito: al vencer
- * se retira el reto aunque estuviera a punto de acabar, y con el CAPTCHA
- * exigido (`TURNSTILE_ENFORCE`) una conexión lenta que no llega nunca a tiempo
- * no podría entrar. Con 10 s ese riesgo era real.
- */
-export const INVISIBLE_TIMEOUT_MS = 20_000;
-/**
- * Con la casilla a la vista: tiempo para verla y marcarla. Se cuenta una vez
- * por intento (un reto que vuelve a salir no lo alarga). Pasado, se sigue sin
- * token; si el servidor lo exige, la persona ve el error y vuelve a probar.
- */
-export const INTERACTIVE_TIMEOUT_MS = 30_000;
 
 type TurnstileApi = {
   render: (

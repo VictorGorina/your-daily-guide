@@ -21,7 +21,7 @@ fail=0
 
 # --- Archivos que deben ser 100 % idénticos ---
 for f in age.ts food-categories.ts dates.ts auth-cache.ts log-redact.ts effective-shared-slots.ts \
-  user-storage.ts job-wait.ts health-consent.ts; do
+  user-storage.ts job-wait.ts health-consent.ts captcha-bridge.ts; do
   if ! diff -q "src/lib/$f" "mobile/lib/$f" > /dev/null 2>&1; then
     echo "DRIFT (idéntico): $f"
     diff --unified=2 "src/lib/$f" "mobile/lib/$f" || true
