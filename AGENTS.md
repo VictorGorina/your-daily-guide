@@ -888,3 +888,35 @@ hace sin ellos (ticket 30 de la auditoría). Las piezas, y lo que suele romperse
 - **Después:** Ajustes › Privacidad lo enciende (con el mismo texto) o lo apaga (borra);
   «Mis respuestas» no enseña esos campos sin consentimiento, y `actualizar_perfil` tampoco los
   escribe (`healthGatedPatch`, que se lo dice al modelo). El perfil demo nace sin datos de salud.
+
+## Altas sin bots: una sola puerta, con CAPTCHA
+
+Las cuentas con correo se crean **solo** por nuestro servidor (`auth/confirm` → `generateLink`
+con la clave de servicio), y esa puerta la guardan el CAPTCHA de Cloudflare Turnstile
+(`assertHuman`, [src/lib/turnstile.server.ts](src/lib/turnstile.server.ts)), la cuota por buzón
+e IP y la confirmación del correo. Recuperar la contraseña (`auth/reset`) pasa por lo mismo
+(ticket 29). Lo que suele romperse:
+
+- **Un CAPTCHA solo protege la puerta en la que está.** Supabase tiene su propia alta pública
+  (`/auth/v1/signup`) y la demo anónima, y su clave publicable va en el bundle: un bot no
+  necesita nuestra pantalla. Antes de abrir al público se quita «Probar sin cuenta» y se apaga
+  **«Allow new users to sign up»** en Supabase, que cierra las dos (en el código de Supabase
+  Auth, `Signup` y `SignupAnonymously` miran `DisableSignup`; `adminGenerateLink` no, así que
+  nuestra alta sigue). La lista está en `.scratch/lanzamiento-publico/`. Con eso no hace falta
+  encender el CAPTCHA de Supabase (las dos apps ya le mandan token al entrar y en la demo, pero
+  hoy lo ignora).
+- **La app de iOS consigue el token con la web.** Turnstile solo existe en un navegador y solo da
+  token en los dominios del widget: la app abre la página `/api/v1/auth/captcha`
+  (`captcha-page.ts`) en un WebView (`useTurnstile`, `mobile/components/turnstile.tsx`), que se
+  lo pasa con `postMessage`. Los mensajes y los topes (20 s sin casilla, 30 s con ella) están en
+  `captcha-bridge.ts`, copia idéntica en las dos apps. `react-native-webview` es nativo: un
+  build anterior no lo trae y sigue sin token (ver `mobile/AGENTS.md`).
+- **Se enciende por pasos** (ver la cabecera de `turnstile.server.ts`): con la clave secreta, el
+  token que llega se comprueba y la falta de token se anota (`captcha_missing`);
+  `TURNSTILE_ENFORCE=1` la corta. No se activa mientras haya un build de iOS en uso sin la
+  WebView: el 2026-10-26 se activó antes de tiempo y las altas desde iOS dejaron de funcionar.
+- **El navegador integrado de Claude no consigue token** (no pinta iframes de otro sitio; ver la
+  cabecera de `turnstile-widget.tsx`): con el CAPTCHA exigido, el alta y la recuperación no se
+  pueden probar ahí contra producción. En local, sin clave de sitio, no hay CAPTCHA; para
+  probarlo, las claves de prueba de Cloudflare (`1x…AA` pasa, `2x…AB` falla, `3x…FF` pide la
+  casilla).

@@ -6,11 +6,13 @@ import { ValidationError } from "@/lib/validation-error";
  *
  * El alta y el restablecimiento de contraseña generan su enlace con la API de
  * administración de Supabase, que NO pasa por el CAPTCHA del panel: el token
- * que manda el cliente se comprueba aquí. Entrar y la demo van del navegador
- * directo a Supabase, que lo comprueba él.
+ * que manda el cliente se comprueba aquí. Es la única puerta de alta que se
+ * vigila: entrar y la demo van directos a Supabase, que hoy NO comprueba el
+ * CAPTCHA, y su alta pública y la demo se cierran antes de abrir al público
+ * («Altas sin bots» en AGENTS.md).
  *
- * Se enciende por pasos, para que una app que aún no manda token (la de iOS
- * hasta su build nativo) no se quede fuera:
+ * Se enciende por pasos, para que una app que aún no manda token (un build de
+ * iOS anterior a `react-native-webview`) no se quede fuera:
  *
  * - Sin `TURNSTILE_SECRET_KEY`: no hace nada.
  * - Con la clave: el token que llega se comprueba; el que no llega se deja
