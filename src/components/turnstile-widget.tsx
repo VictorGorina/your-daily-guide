@@ -28,9 +28,12 @@ const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
 const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 /**
  * Hasta que Cloudflare da el token o pide la casilla, contando la carga del
- * script. Medido: pide la casilla a los 3,4 s.
+ * script. Medido: pide la casilla a los 3,4 s. Holgado a propósito: al vencer
+ * se retira el reto aunque estuviera a punto de acabar, y con el CAPTCHA
+ * exigido (`TURNSTILE_ENFORCE`) una conexión lenta que no llega nunca a tiempo
+ * no podría entrar. Con 10 s ese riesgo era real.
  */
-export const INVISIBLE_TIMEOUT_MS = 10_000;
+export const INVISIBLE_TIMEOUT_MS = 20_000;
 /**
  * Con la casilla a la vista: tiempo para verla y marcarla. Se cuenta una vez
  * por intento (un reto que vuelve a salir no lo alarga). Pasado, se sigue sin

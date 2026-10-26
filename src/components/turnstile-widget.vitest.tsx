@@ -116,7 +116,7 @@ describe("useTurnstile: cuánto se espera al token (ticket 29)", () => {
     expect(onToken).toHaveBeenCalledWith(undefined);
   });
 
-  it("si Cloudflare no contesta, sigue sin token a los 10 s y retira el reto", async () => {
+  it("si Cloudflare no contesta, sigue sin token a los 20 s y retira el reto", async () => {
     const { api } = fakeTurnstile();
     const { onToken } = await askForToken();
     await advance(widget.INVISIBLE_TIMEOUT_MS - 1);
@@ -179,7 +179,7 @@ describe("useTurnstile: cuánto se espera al token (ticket 29)", () => {
   });
 
   // Va el último: deja la carga del script pendiente para el resto del archivo.
-  it("un script que no llega a cargar tampoco pasa de 10 s", async () => {
+  it("un script que no llega a cargar tampoco pasa de 20 s", async () => {
     const { onToken } = await askForToken();
     expect(document.head.querySelector('script[src*="challenges.cloudflare.com"]')).not.toBeNull();
     await advance(widget.INVISIBLE_TIMEOUT_MS);
