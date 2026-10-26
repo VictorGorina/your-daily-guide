@@ -45,3 +45,9 @@ supabase/.temp/
 # Playwright (smoke E2E): informe y trazas de la última pasada
 playwright-report
 test-results
+
+# Copias de trabajo de Claude Code (gigas). Git ya las ignora por .git/info/exclude, pero
+# EAS Build no lee ese archivo, solo los .gitignore: sin esta línea las subía con cada
+# build del móvil (837 MB comprimidos en vez de ~10 MB). Sin barra final para que EAS
+# salte la carpeta entera en vez de recorrerla.
+/.claude/worktrees
