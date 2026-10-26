@@ -26,7 +26,8 @@ defensa contra el bucle "arreglo un bug y salen dos".
 Cuando el cambio se ve o se ejecuta en la app web:
 
 1. `preview_start` con la config `your-daily-guide-dev` de [.claude/launch.json](../../.claude/launch.json)
-   (levanta `bun run dev` en el 8080).
+   (levanta `bun run dev` en el 8080; si está ocupado, la preview asigna otro puerto, lo pasa en
+   `PORT` y la config arranca Vite en ese con `--strictPort`).
 2. Recarga si no hay HMR.
 3. Revisa `read_console_messages`, `preview_logs` y `read_network_requests` en busca de
    errores — no solo la pantalla.
