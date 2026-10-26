@@ -65,7 +65,6 @@ import {
   warmingDates,
   warmPlanRecipes,
 } from "@/lib/recipe-warm";
-import { PlanFitNote } from "@/components/plan-fit-note";
 import { warmRecipes } from "@/lib/recipes.functions";
 import {
   flushPlanRecalc,
@@ -356,8 +355,10 @@ function PlanPage() {
   //
   // Con todos calculados, UNA comprobación del plan contra el objetivo (ticket
   // 10, `fitMonthlyPlan`): cambia los platos que ni ajustando la cantidad dejan
-  // el día en su objetivo. Una vez por plan (la marca `plan.fit`); lo que
-  // cambió se enseña en "Cómo enfocamos el mes".
+  // el día en su objetivo. Una vez por plan (la marca `plan.fit`). No se
+  // anuncia: corre justo al generar, así que es parte de hacer el plan y no un
+  // cambio sobre uno que la persona ya conocía ("He cambiado N platos" en un
+  // mes recién creado confundía; decisión del usuario, 2026-10-25).
   const warmFn = useServerFn(warmRecipes);
   const fitFn = useServerFn(fitMonthlyPlan);
   const warmProgress = useRecipeWarmProgress();
@@ -366,7 +367,6 @@ function PlanPage() {
     () => warmingDates(plan, month, today, warmProgress.pending),
     [plan, month, today, warmProgress.pending],
   );
-  const [fitting, setFitting] = useState(false);
   useEffect(() => {
     if (!plan || !actionable) return;
     let alive = true;
@@ -374,7 +374,6 @@ function PlanPage() {
       warmFn({ data: { dishes } }),
     ).then(async (complete) => {
       if (!alive || !complete || plan.fit || !plan.targetsVersion) return;
-      setFitting(true);
       // Por la cola si está encendida: al volver a abrir Plan, la misma
       // llamada devuelve el trabajo que siga activo y se espera a ese.
       const res = await fitPlanOnce(month, async () =>
@@ -383,7 +382,6 @@ function PlanPage() {
           readJob,
         ),
       );
-      if (alive) setFitting(false);
       if (res?.fit) qc.invalidateQueries({ queryKey: ["plan", month] });
     });
     return () => {
@@ -637,7 +635,6 @@ function PlanPage() {
                   <p className="hyphens-auto mt-3 text-justify text-xs leading-relaxed text-muted-foreground">
                     {t("plan.focusNote")}
                   </p>
-                  <PlanFitNote fit={plan.fit} fitting={fitting} />
                 </div>
               ) : null}
 

@@ -144,8 +144,10 @@ futuras. Una petición al modelo, y cada cambio entra solo si baja `dayScore` de
 generar (el plan tarda ~100 s y las recetas del mes no caben en 300 s): la lanza la pantalla Plan
 cuando el precalentado deja todo calculado (`fitPlanOnce` → `fitMonthlyPlan`). La marca
 `MonthlyPlan.fit` garantiza una ronda por plan (solo con `targetsVersion`), el guardado relee y
-aplica con `applyPlanFitChanges` (solo si la celda no cambió) y `PlanFitNote` enseña lo cambiado.
-Comidas propias primero (D4). La compra no cambia.
+aplica con `applyPlanFitChanges` (solo si la celda no cambió). **No se anuncia**: corre justo al
+generar, es parte de hacer el plan y no un cambio sobre uno que la persona conocía (decisión del
+usuario, 2026-10-25; `fit.changed` se guarda solo para depurar). Comidas propias primero (D4). La
+compra no cambia.
 
 **Objetivo energético — una sola cifra** (ticket 07, `src/lib/nutrition/energy.ts`, puro, copia
 en `mobile/lib/energy.ts`). `energyTargets(perfil)` calcula en código kcal, proteína, grasa,

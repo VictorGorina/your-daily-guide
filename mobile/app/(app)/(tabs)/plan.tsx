@@ -24,7 +24,6 @@ import { MonthSpendSummary } from "../../../components/month-spend-summary";
 import { IngredientsTab } from "../../../components/plan/ingredients-tab";
 import { PlanMonthCalendar } from "../../../components/plan/month-calendar";
 import { ShoppingMode } from "../../../components/plan/shopping-mode";
-import { PlanFitNote } from "../../../components/plan-fit-note";
 import { apiPost } from "../../../lib/api";
 import { type QueuedJob, settleJob } from "../../../lib/job-wait";
 import { fetchActiveJob, readJob } from "../../../lib/jobs-read";
@@ -338,15 +337,16 @@ export default function Plan() {
   //
   // Con todos calculados, UNA comprobación del plan contra el objetivo (ticket
   // 10, `fitMonthlyPlan`): cambia los platos que ni ajustando la cantidad dejan
-  // el día en su objetivo. Una vez por plan (la marca `plan.fit`); lo que
-  // cambió se enseña en "Cómo enfocamos el mes".
+  // el día en su objetivo. Una vez por plan (la marca `plan.fit`). No se
+  // anuncia: corre justo al generar, así que es parte de hacer el plan y no un
+  // cambio sobre uno que la persona ya conocía ("He cambiado N platos" en un
+  // mes recién creado confundía; decisión del usuario, 2026-10-25).
   const warmProgress = useRecipeWarmProgress();
   // Días del calendario que esperan a algún plato de la pasada en curso.
   const warmingDays = useMemo(
     () => warmingDates(plan, month, today, warmProgress.pending),
     [plan, month, today, warmProgress.pending],
   );
-  const [fitting, setFitting] = useState(false);
   useEffect(() => {
     if (!plan || !actionable) return;
     let alive = true;
@@ -354,7 +354,6 @@ export default function Plan() {
       apiPost<WarmResult>("recipes/warm", { dishes }),
     ).then(async (complete) => {
       if (!alive || !complete || plan.fit || !plan.targetsVersion) return;
-      setFitting(true);
       // Por la cola si está encendida: al volver a abrir Plan, la misma
       // llamada devuelve el trabajo que siga activo y se espera a ese.
       type Fit = { fit: PlanFitMark | null };
@@ -364,7 +363,6 @@ export default function Plan() {
           readJob,
         ),
       );
-      if (alive) setFitting(false);
       if (res?.fit) qc.invalidateQueries({ queryKey: ["plan", month] });
     });
     return () => {
@@ -690,7 +688,6 @@ export default function Plan() {
                     <Text className="mt-3 text-xs leading-relaxed text-muted-foreground">
                       {t("plan.focusNote")}
                     </Text>
-                    <PlanFitNote fit={plan.fit} fitting={fitting} />
                   </View>
                 ) : null}
 

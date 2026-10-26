@@ -1184,16 +1184,6 @@
     "text": "<b>La mesa ha cambiado.</b> Hemos actualizado tu plan y las cantidades de la compra.",
     "dismiss": "Descartar aviso"
   },
-  "planFit": {
-    "fitting": "Ajustando tus platos a tu objetivo…",
-    "title_one": "He cambiado {{count}} plato para que tus días lleguen a lo que necesitas",
-    "title_other": "He cambiado {{count}} platos para que tus días lleguen a lo que necesitas",
-    "why": "Ajustando solo la cantidad no llegaban.",
-    "weekIdea": "{{slot}} · {{days}} días desde {{day}}",
-    "single": "{{day}} · {{slot}}",
-    "less": "Ver menos",
-    "all": "Ver los {{n}}"
-  },
   "monthSpend": {
     "title": "Gasto en comida",
     "real": "real",
