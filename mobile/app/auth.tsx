@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { openPrivacyPolicy } from "../components/health-consent";
+import { useTurnstile } from "../components/turnstile";
 import { apiPostPublic } from "../lib/api";
 import { authErrorText, isEmailNotConfirmed, passwordProblem } from "../lib/auth-errors";
 import { useAuth } from "../lib/auth-context";
@@ -97,6 +98,8 @@ export default function Auth() {
   const { session } = useAuth();
   const { t } = useTranslation();
   const { locale, setLocale } = useLocale();
+  // CAPTCHA (ticket 29): un token nuevo antes de cada llamada de Auth.
+  const captcha = useTurnstile();
   const [stage, setStage] = useState<"intro" | "access">("intro");
   const [mode, setMode] = useState<"in" | "up" | "forgot">("in");
   const [email, setEmail] = useState("");
@@ -134,7 +137,9 @@ export default function Auth() {
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
-        const { error } = await supabase.auth.signInAnonymously();
+        const { error } = await supabase.auth.signInAnonymously({
+          options: { captchaToken: await captcha.getToken() },
+        });
         if (error) throw error;
       }
       await saveProfile(randomDemoProfile());
@@ -191,7 +196,11 @@ export default function Auth() {
 
     setLoading(true);
     try {
-      await apiPostPublic("auth/reset", { email: email.trim(), platform: "mobile" });
+      await apiPostPublic("auth/reset", {
+        email: email.trim(),
+        platform: "mobile",
+        captchaToken: await captcha.getToken(),
+      });
       setSent(true);
     } catch (error) {
       Alert.alert(
@@ -209,11 +218,12 @@ export default function Auth() {
    * SMTP de Supabase — que es por lo que el correo del alta acababa en spam.
    * Ver requestSignupConfirmation en src/lib/auth.functions.ts de la web.
    */
-  const sendConfirmation = () =>
+  const sendConfirmation = async () =>
     apiPostPublic("auth/confirm", {
       email: email.trim(),
       password,
       platform: "mobile",
+      captchaToken: await captcha.getToken(),
     });
 
   const resendConfirmation = async () => {
@@ -255,6 +265,7 @@ export default function Auth() {
       const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
+        options: { captchaToken: await captcha.getToken() },
       });
       if (error) throw error;
     } catch (error) {
@@ -526,6 +537,8 @@ export default function Auth() {
           <View className="flex-grow" />
 
           <PepperRow />
+
+          {captcha.slot}
 
           <Pressable
             accessibilityRole="button"

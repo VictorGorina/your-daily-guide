@@ -142,6 +142,15 @@ siguen el mismo patrón: cargados con `import()` y con aviso si el build nativo 
 el siguiente prebuild + build, dictar funciona sin vibrar y "Descargar historial" avisa. La onda
 del dictado (`components/dictation-field.tsx`) no necesita build: usa el `Animated` clásico.
 
+**`react-native-webview`** (CAPTCHA de Turnstile en la pantalla de acceso, ticket 29;
+[components/turnstile.tsx](components/turnstile.tsx)) tampoco está antes de su prebuild + build:
+`getToken` lo comprueba con `TurboModuleRegistry.get("RNCWebViewModule")`, devuelve `undefined` sin
+esperar y se entra sin token, como hasta ahora (el servidor decide si pasa). El reto lo pinta la
+página de la web `/api/v1/auth/captcha`, una por token, dentro de un WebView que solo se ve si
+Cloudflare pide la casilla: Cloudflare solo da token en los dominios del widget, así que no vale
+HTML metido en la app. Los topes de la espera (20 s, 30 s con la casilla) y el formato de los
+mensajes son los de la web: [lib/captcha-bridge.ts](lib/captcha-bridge.ts), copia idéntica.
+
 ## Desarrollo
 
 ```sh
