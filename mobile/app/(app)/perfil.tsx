@@ -289,7 +289,7 @@ export default function Perfil() {
                               onPress={() => commit(field)}
                               className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 active:opacity-90"
                             >
-                              <Check size={14} color="#3e3d39" />
+                              <Check size={14} color="#fbfaf7" />
                               <Text className="text-xs font-sans-semibold text-primary-foreground">
                                 {t("common.save")}
                               </Text>

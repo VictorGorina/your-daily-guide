@@ -386,9 +386,9 @@ export default function Chat() {
                 style={busy || !input.trim() ? { opacity: 0.4 } : undefined}
               >
                 {busy ? (
-                  <ActivityIndicator size="small" color="#3e3d39" />
+                  <ActivityIndicator size="small" color="#fbfaf7" />
                 ) : (
-                  <ArrowUp size={22} color="#3e3d39" />
+                  <ArrowUp size={22} color="#fbfaf7" />
                 )}
               </Pressable>
             </View>

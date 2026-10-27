@@ -125,12 +125,12 @@
   --input: #e2dcd0;
 
   /* Naranja Peppers — único acento de toda la app (FAB, CTA, viñetas). Como
-     RELLENO lleva texto oscuro encima (regla del sistema: los acentos llevan
-     texto oscuro; el claro daba 2,25:1). Como TEXTO o icono se usa
-     --primary-ink, un naranja tostado: el de relleno sobre el fondo da 2,08:1
-     (ticket 33, contraste AA). */
+     RELLENO lleva texto blanco hueso encima: da 2,25:1, por debajo de AA, y se
+     acepta a sabiendas (decisión del usuario, 2026-10-27; el grafito del ticket
+     33 daba 4,64:1 pero no gustaba). Como TEXTO o icono se usa --primary-ink, un
+     naranja tostado: el de relleno sobre el fondo da 2,08:1 (ticket 33). */
   --primary: #ff8a3d;
-  --primary-foreground: #3e3d39;
+  --primary-foreground: #fbfaf7;
   --primary-soft: #ffe7d3;
   --primary-ink: #a84a17;
   --ring: #ff8a3d;
@@ -196,7 +196,8 @@
   /* Naranja aclarado para mantener contraste sobre el fondo carbón — mismo
      acento, no un tema distinto. */
   --primary: #ff9d5c;
-  --primary-foreground: #2b1a0d;
+  /* Blanco hueso como en claro (2026-10-27), no el texto claro del tema. */
+  --primary-foreground: #fbfaf7;
   --primary-soft: #3a2c1c;
   /* En oscuro el naranja ya se lee como texto (7,73:1 sobre el fondo). */
   --primary-ink: #ff9d5c;
@@ -223,7 +224,7 @@
   --sidebar: #24221f;
   --sidebar-foreground: #f3f1ed;
   --sidebar-primary: #ff9d5c;
-  --sidebar-primary-foreground: #2b1a0d;
+  --sidebar-primary-foreground: #fbfaf7;
   --sidebar-accent: #34322d;
   --sidebar-accent-foreground: #f3f1ed;
   --sidebar-border: oklch(1 0 0 / 10%);

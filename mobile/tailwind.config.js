@@ -19,9 +19,11 @@ module.exports = {
         card: "#fbfaf7",
         "card-foreground": "#3e3d39",
         primary: "#ff8a3d",
-        // Contraste AA (ticket 33): texto oscuro sobre el naranja de relleno, y
-        // primary-ink (naranja tostado) cuando el naranja es texto o icono.
-        "primary-foreground": "#3e3d39",
+        // Blanco hueso sobre el naranja de relleno (2,25:1, por debajo de AA,
+        // aceptado por el usuario el 2026-10-27; los iconos y spinners de esos
+        // botones llevan el mismo #fbfaf7 a mano), y primary-ink (naranja
+        // tostado) cuando el naranja es texto o icono.
+        "primary-foreground": "#fbfaf7",
         "primary-soft": "#ffe7d3",
         "primary-ink": "#a84a17",
         secondary: "#eae6dd",

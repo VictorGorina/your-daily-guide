@@ -123,7 +123,7 @@ function HealthConsentPanel({
         style={canAccept ? undefined : { opacity: 0.5 }}
       >
         {busy ? (
-          <ActivityIndicator color="#3e3d39" />
+          <ActivityIndicator color="#fbfaf7" />
         ) : (
           <Text className="font-body-semibold text-[13.5px] text-primary-foreground">
             {t("healthConsent.accept")}

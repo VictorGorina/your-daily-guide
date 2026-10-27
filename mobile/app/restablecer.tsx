@@ -201,7 +201,7 @@ export default function Restablecer() {
                   className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
                 >
                   {saving ? (
-                    <ActivityIndicator color="#3e3d39" />
+                    <ActivityIndicator color="#fbfaf7" />
                   ) : (
                     <Text className="text-sm font-sans-semibold text-primary-foreground">
                       {t("auth.reset.save")}

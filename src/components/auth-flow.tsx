@@ -23,6 +23,27 @@ type Mode = "in" | "up" | "forgot";
 const GOOGLE_AUTH = import.meta.env.VITE_AUTH_GOOGLE === "1";
 
 /**
+ * Lo que hay que esperar para volver a pedir un correo. El servidor descarta
+ * otro envío al mismo correo antes de un minuto (`createSendThrottle` en
+ * src/lib/auth.server.ts) y responde `ok` igualmente, para no delatar qué
+ * correos tienen cuenta: sin esta espera, "Volver a enviar" diría que lo ha
+ * reenviado sin que saliera nada. Copia en mobile/app/auth.tsx.
+ */
+const RESEND_WAIT_SECONDS = 60;
+
+function useResendWait() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (seconds <= 0) return;
+    // Se cuenta desde la respuesta, que llega después de que el servidor
+    // apunte el envío: el botón nunca se desbloquea antes que su freno.
+    const id = setTimeout(() => setSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [seconds]);
+  return { seconds, start: () => setSeconds(RESEND_WAIT_SECONDS) };
+}
+
+/**
  * Fila de pimientos del artboard 3a ("Rediseño Peppers nutrición"): siete
  * círculos, uno por familia de alimento, con el icono Lucide de categoría — la
  * misma familia que `DishCategoryIcon` (food-category-bg.tsx) y los encabezados
@@ -114,6 +135,7 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
   // error de acceso con salida dentro de la app, así que se guarda aparte para
   // poder ofrecer el reenvío en vez de dejar a la persona en un callejón.
   const [needsConfirm, setNeedsConfirm] = useState(false);
+  const resendWait = useResendWait();
 
   const goNext = () => {
     if (next) {
@@ -164,6 +186,15 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
     setMode("in");
   };
 
+  // El correo lo manda nuestro backend, no el SMTP de Supabase Auth: así el
+  // motivo de un fallo de envío queda en nuestros logs y la plantilla es
+  // nuestra. La URL de destino la decide el servidor según `platform` — ver
+  // requestPasswordReset en src/lib/auth.functions.ts.
+  const sendResetLink = async () =>
+    requestPasswordReset({
+      data: { email: email.trim(), platform: "web", captchaToken: await captcha.getToken() },
+    });
+
   const forgotPassword = async () => {
     if (!email.trim().includes("@")) {
       toast.error(t("auth.errNeedEmail"));
@@ -171,14 +202,9 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
     }
     setLoading(true);
     try {
-      // El correo lo manda nuestro backend, no el SMTP de Supabase Auth: así el
-      // motivo de un fallo de envío queda en nuestros logs y la plantilla es
-      // nuestra. La URL de destino la decide el servidor según `platform` — ver
-      // requestPasswordReset en src/lib/auth.functions.ts.
-      await requestPasswordReset({
-        data: { email: email.trim(), platform: "web", captchaToken: await captcha.getToken() },
-      });
+      await sendResetLink();
       setSent(true);
+      resendWait.start();
     } catch (error) {
       toast.error(authErrorText(error, t, "auth.errSendLink"));
     } finally {
@@ -215,6 +241,21 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
     }
   };
 
+  /** "Volver a enviar" de la pantalla de "mira tu buzón": el mismo correo otra vez. */
+  const resendSentEmail = async () => {
+    if (resendWait.seconds > 0) return;
+    setLoading(true);
+    try {
+      await (mode === "forgot" ? sendResetLink() : sendConfirmation());
+      resendWait.start();
+      toast.success(t("auth.resendSent"));
+    } catch (error) {
+      toast.error(authErrorText(error, t, "auth.errSendLink"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
       toast.error(t("auth.errNeedCreds"));
@@ -235,6 +276,7 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
         // servidor responde igual en los dos casos a propósito, para no
         // convertir el alta en un buscador de quién está registrado.
         setSent(true);
+        resendWait.start();
         return;
       }
 
@@ -300,25 +342,31 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
   const field =
     "h-13 w-full rounded-full bg-muted px-5 text-sm text-foreground caret-primary outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring/40";
 
+  const resendLabel = mode === "forgot" ? t("auth.resendLink") : t("auth.resendEmail");
   const primaryLabel =
     stage === "intro"
       ? t("auth.intro.start")
       : loading
-        ? mode === "forgot"
+        ? mode === "forgot" || sent
           ? t("auth.sending")
           : t("auth.working")
-        : mode === "forgot"
-          ? t("auth.sendLink")
-          : mode === "up"
-            ? t("auth.signUp")
-            : t("auth.signIn");
+        : sent
+          ? resendWait.seconds > 0
+            ? t("auth.resendWait", { label: resendLabel, seconds: resendWait.seconds })
+            : resendLabel
+          : mode === "forgot"
+            ? t("auth.sendLink")
+            : mode === "up"
+              ? t("auth.signUp")
+              : t("auth.signIn");
 
   const onPrimary = () => {
     if (stage === "intro") {
       openAccess("up");
       return;
     }
-    if (mode === "forgot") void forgotPassword();
+    if (sent) void resendSentEmail();
+    else if (mode === "forgot") void forgotPassword();
     else void submit();
   };
 
@@ -508,21 +556,19 @@ export function AuthFlow({ initialStage, next }: { initialStage: Stage; next?: s
 
         <PepperRow />
 
-        {/* Tras enviar un correo (confirmación o recuperación) se oculta: antes
-          se quedaba activo con el mismo texto y volvía a mandar otro correo
-          al pulsarlo — el freno de 60s del servidor solo lo retrasaba, no lo
-          evitaba (auditoría de auth, 2026-09-13). El bloque de "sent" de
-          arriba ya da la única acción que hace falta ("Volver a entrar"). */}
+        {/* Tras enviar un correo (confirmación o recuperación) pasa a ser
+          "Volver a enviar …", bloqueado mientras corre la espera del servidor
+          (`useResendWait`). Antes se quedaba con el mismo texto y no decía
+          qué hacía, y luego se ocultó (auditoría de auth, 2026-09-13) y no
+          había forma de pedir otro correo si el primero no llegaba. */}
         {captcha.slot}
-        {!(stage === "access" && sent) && (
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-          >
-            {primaryLabel}
-          </button>
-        )}
+        <button
+          type="submit"
+          disabled={loading || (sent && resendWait.seconds > 0)}
+          className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+        >
+          {primaryLabel}
+        </button>
 
         {stage === "intro" && (
           <button

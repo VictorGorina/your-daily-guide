@@ -634,7 +634,7 @@ export function IngredientsTab({
           onPress={onEnterShopMode}
           className="mt-1 flex-row items-center justify-center gap-2 rounded-[20px] bg-primary py-4 active:opacity-90"
         >
-          <ShoppingCart size={17} color="#3e3d39" />
+          <ShoppingCart size={17} color="#fbfaf7" />
           <Text className="text-sm font-sans-bold text-primary-foreground">
             {t("shopping.goShop", { count: needCount })}
           </Text>

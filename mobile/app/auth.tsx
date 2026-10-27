@@ -547,7 +547,7 @@ export default function Auth() {
             className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
           >
             {loading ? (
-              <ActivityIndicator color="#3e3d39" />
+              <ActivityIndicator color="#fbfaf7" />
             ) : (
               <Text className="text-sm font-body-semibold text-primary-foreground">
                 {primaryLabel}

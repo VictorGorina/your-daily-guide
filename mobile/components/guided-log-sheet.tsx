@@ -206,7 +206,7 @@ export function GuidedLogSheet({
               disabled={disabled || saving}
               className="w-full flex-row items-center justify-center gap-2 rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
             >
-              {saving ? <ActivityIndicator size="small" color="#3e3d39" /> : null}
+              {saving ? <ActivityIndicator size="small" color="#fbfaf7" /> : null}
               <Text className="text-sm font-sans-semibold text-primary-foreground">
                 {saving ? t("common.saving") : t("exercise.save")}
               </Text>

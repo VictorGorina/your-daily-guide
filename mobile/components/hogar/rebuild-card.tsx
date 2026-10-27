@@ -42,9 +42,9 @@ export function HouseholdRebuildCard({
         style={rebuild.isPending || !hasPlan ? { opacity: 0.6 } : undefined}
       >
         {rebuild.isPending ? (
-          <ActivityIndicator size="small" color="#3e3d39" />
+          <ActivityIndicator size="small" color="#fbfaf7" />
         ) : (
-          <RefreshCw size={16} color="#3e3d39" />
+          <RefreshCw size={16} color="#fbfaf7" />
         )}
         <Text className="text-sm font-sans-semibold text-primary-foreground">
           {rebuild.isPending ? t("hogar.rebuild.running") : t("hogar.rebuild.submit")}

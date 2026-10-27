@@ -44,8 +44,11 @@ gestionan los diseños del proyecto).
 | Fin de semana    | `#F0C99A` | Sábado y domingo en la tira semanal. Texto `#7A4614`. |
 
 **Contraste AA (ticket 33 de la auditoría, 2026-09-28).** Naranja de relleno ≠ naranja de texto:
-`#FF8A3D` es para rellenos (botón, FAB, viñeta, barra) y lo que va encima es **grafito**, nunca
-papel (papel sobre naranja daba 2,25:1; grafito, 4,64:1). Cuando el naranja es texto o icono se usa
+`#FF8A3D` es para rellenos (botón, FAB, viñeta, barra) y lo que va encima es **papel** `#FBFAF7`,
+en los dos temas. Da 2,25:1, por debajo de AA: el ticket 33 lo había pasado a grafito (4,64:1) y el
+usuario lo revirtió a sabiendas el 2026-10-27 porque no le gustaba. No lo vuelvas a oscurecer sin
+preguntar. En el móvil, los iconos y spinners de esos botones llevan el `#fbfaf7` escrito a mano.
+Cuando el naranja es texto o icono se usa
 el tostado `#A84A17` (`text-primary-ink`): el de relleno sobre hueso daba 2,08:1, y este 5,09:1. El
 topo pasó de `#83796C` (3,79:1) a `#6B6256` (5,31:1) y el rojo de `#E2685F` a `#B8433B` (5,15:1
 con texto papel). El tema oscuro ya cumplía y no cambia. En el móvil son hex en
@@ -137,7 +140,7 @@ comida: mismo diseño, tinte al 22% en lugar del 13% — no hay tarjeta destacad
 
 ### Botones
 
-Primario: naranja, texto grafito, radio 99px, padding vertical 13px, Figtree 600 13.5px, ancho
+Primario: naranja, texto papel, radio 99px, padding vertical 13px, Figtree 600 13.5px, ancho
 completo. Secundario: papel sobre hueso, texto topo, hover a naranja tinta. Circular de acción: 34px
 primario, 30px secundario. Hover siempre `scale(1.08)` en 200ms.
 
