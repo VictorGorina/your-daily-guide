@@ -11,7 +11,7 @@ import { expect, test } from "@playwright/test";
 const es = JSON.parse(readFileSync(new URL("../src/locales/es.json", import.meta.url), "utf8")) as {
   auth: { emailLabel: string; passwordPlaceholder: string; signIn: string };
   hoy: { meals: { ateThisLabel: string; undoLabel: string; calculating: string } };
-  macros: { eatenToday: string };
+  macros: { eatenToday: string; kcalOfTarget: string };
   planCalendar: { title: string };
   moments: { Comida: string };
 };
