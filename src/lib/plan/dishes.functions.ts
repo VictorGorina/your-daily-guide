@@ -46,7 +46,9 @@ import { askForJson } from "./ai.server";
 import { guardSharedSlotWrite, ownPlanRow } from "./rows.server";
 
 /**
- * Corrige la ortografía de un plato escrito a mano y calcula, en la MISMA
+ * Corrige la ortografía de un plato escrito a mano (también erratas de
+ * teclado: "ñasta" → "Pasta", la palabra que no existe se cambia por el
+ * alimento más probable) y calcula, en la MISMA
  * llamada al modelo, qué ingredientes necesita que no están en la compra. Un
  * plato a mano se guarda tal cual en el plan y se ve así para siempre (sin
  * corrección posterior) en Hoy, el calendario y la compra — de ahí que haga
@@ -91,9 +93,15 @@ async function resolveDish(
       temperature: 0,
       prompt:
         `Plato: "${dish}"\n\n` +
-        "Corrige solo la ortografía de ese nombre de plato (acentos/tildes, mayúscula inicial, " +
-        "erratas), sin cambiar el plato en sí ni añadir nada. Si ya está bien escrito, devuélvelo " +
-        "igual.\n" +
+        // Erratas de teclado explícitas: con solo "erratas", el modelo tomaba
+        // "ñasta" por un plato y devolvía "Ñasta" (la ñ está bajo la p).
+        "Corrige la ortografía de ese nombre de plato: acentos/tildes, mayúscula inicial y " +
+        "erratas de teclado (una letra cambiada por la de una tecla vecina, como ñ por p; una " +
+        "letra que falta, sobra o va repetida). Si una palabra no existe, cámbiala por el " +
+        "alimento o plato real más probable según el resto del texto. No añadas nada ni " +
+        "cambies un plato bien escrito por otro: si ya está bien escrito, devuélvelo igual. " +
+        'Ejemplos: "ñasta con tomate" → "Pasta con tomate"; "aroz con pollo" → "Arroz con ' +
+        'pollo"; "ñoquis" → "Ñoquis".\n' +
         "Dime también si eso es comida de verdad: cualquier plato, alimento o bebida vale, por " +
         "raro, casero o poco saludable que sea. Solo NO es comida si es una broma, un insulto o " +
         "algo que no se come.\n" +
