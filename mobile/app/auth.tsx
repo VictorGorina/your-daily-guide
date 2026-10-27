@@ -4,7 +4,7 @@ import * as Linking from "expo-linking";
 import { Redirect } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { Bean, Beef, Carrot, Drumstick, Fish, Milk, Wheat } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
@@ -43,6 +43,28 @@ const GOOGLE_AUTH = process.env.EXPO_PUBLIC_AUTH_GOOGLE === "1";
 // del app.json, esto es dailyguide://. Debe estar dado de alta en el dashboard
 // de Supabase (Authentication → URL Configuration → Redirect URLs).
 const redirectTo = makeRedirectUri({ scheme: "dailyguide" });
+
+/**
+ * Lo que hay que esperar para volver a pedir un correo. El servidor descarta
+ * otro envío al mismo correo antes de un minuto (`createSendThrottle` en
+ * src/lib/auth.server.ts de la web) y responde `ok` igualmente, para no delatar
+ * qué correos tienen cuenta: sin esta espera, "Volver a enviar" diría que lo ha
+ * reenviado sin que saliera nada. Copia de src/components/auth-flow.tsx.
+ */
+const RESEND_WAIT_SECONDS = 60;
+
+function useResendWait() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (seconds <= 0) return;
+    // Se cuenta desde la respuesta, que llega después de que el servidor
+    // apunte el envío: el botón nunca se desbloquea antes que su freno. Con la
+    // app en segundo plano el contador se para, que solo alarga la espera.
+    const id = setTimeout(() => setSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [seconds]);
+  return { seconds, start: () => setSeconds(RESEND_WAIT_SECONDS) };
+}
 
 // ── Fila de pimientos ────────────────────────────────────────────────────────
 // El mismo motivo decorativo del artboard 3a del rediseño ("Rediseño Peppers
@@ -113,6 +135,7 @@ export default function Auth() {
   // error de acceso con salida dentro de la app, así que se guarda aparte para
   // poder ofrecer el reenvío en vez de dejar a la persona en un callejón.
   const [needsConfirm, setNeedsConfirm] = useState(false);
+  const resendWait = useResendWait();
 
   const openAccess = (m: "in" | "up") => {
     setMode(m);
@@ -125,6 +148,14 @@ export default function Auth() {
     setNeedsConfirm(false);
     setMode("in");
     setStage("intro");
+  };
+  // A diferencia de backToIntro: se queda en la pantalla de acceso, no salta a
+  // la portada. Es lo que usa "Volver a entrar" tras enviar un correo, igual
+  // que en la web; antes obligaba a pulsar otra vez "Ya tengo cuenta".
+  const backToSignInForm = () => {
+    setSent(false);
+    setNeedsConfirm(false);
+    setMode("in");
   };
 
   // Sesión anónima + perfil aleatorio con el onboarding ya dado por completado,
@@ -188,6 +219,13 @@ export default function Auth() {
   // responde igual exista o no una cuenta con ese correo (no filtra qué correos
   // están registrados), así que siempre mostramos la pantalla de "revisa tu
   // buzón".
+  const sendResetLink = async () =>
+    apiPostPublic("auth/reset", {
+      email: email.trim(),
+      platform: "mobile",
+      captchaToken: await captcha.getToken(),
+    });
+
   const forgotPassword = async () => {
     if (!email.trim().includes("@")) {
       Alert.alert(t("auth.errNeedEmail"));
@@ -196,12 +234,9 @@ export default function Auth() {
 
     setLoading(true);
     try {
-      await apiPostPublic("auth/reset", {
-        email: email.trim(),
-        platform: "mobile",
-        captchaToken: await captcha.getToken(),
-      });
+      await sendResetLink();
       setSent(true);
+      resendWait.start();
     } catch (error) {
       Alert.alert(
         t("auth.errSendLink"),
@@ -238,6 +273,21 @@ export default function Auth() {
     }
   };
 
+  /** "Volver a enviar" de la pantalla de "mira tu buzón": el mismo correo otra vez. */
+  const resendSentEmail = async () => {
+    if (resendWait.seconds > 0) return;
+    setLoading(true);
+    try {
+      await (mode === "forgot" ? sendResetLink() : sendConfirmation());
+      resendWait.start();
+      Alert.alert(t("auth.resendSent"));
+    } catch (error) {
+      Alert.alert(t("auth.errSendLink"), authErrorText(error, t, "common.retry"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
       Alert.alert(t("auth.errNeedCreds"));
@@ -259,6 +309,7 @@ export default function Auth() {
         // responde igual en los dos casos a propósito, para no convertir el
         // alta en un buscador de quién está registrado.
         setSent(true);
+        resendWait.start();
         return;
       }
 
@@ -286,21 +337,27 @@ export default function Auth() {
   // onboarding.
   if (session && !demoLoading) return <Redirect href="/hoy" />;
 
+  const resendLabel = mode === "forgot" ? t("auth.resendLink") : t("auth.resendEmail");
   const primaryLabel =
     stage === "intro"
       ? t("auth.intro.start")
-      : mode === "forgot"
-        ? t("auth.sendLink")
-        : mode === "up"
-          ? t("auth.signUp")
-          : t("auth.signIn");
+      : sent
+        ? resendWait.seconds > 0
+          ? t("auth.resendWait", { label: resendLabel, seconds: resendWait.seconds })
+          : resendLabel
+        : mode === "forgot"
+          ? t("auth.sendLink")
+          : mode === "up"
+            ? t("auth.signUp")
+            : t("auth.signIn");
 
   const onPrimary = () => {
     if (stage === "intro") {
       openAccess("up");
       return;
     }
-    if (mode === "forgot") void forgotPassword();
+    if (sent) void resendSentEmail();
+    else if (mode === "forgot") void forgotPassword();
     else void submit();
   };
 
@@ -419,7 +476,7 @@ export default function Auth() {
                   </View>
                   <Pressable
                     accessibilityRole="button"
-                    onPress={backToIntro}
+                    onPress={backToSignInForm}
                     className="w-full py-2"
                   >
                     <Text className="text-center text-xs font-body text-muted-foreground">
@@ -540,10 +597,13 @@ export default function Auth() {
 
           {captcha.slot}
 
+          {/* Tras enviar un correo pasa a ser "Volver a enviar …", bloqueado
+              mientras corre la espera del servidor (`useResendWait`): antes
+              seguía diciendo "Enviar enlace" bajo el "te hemos enviado". */}
           <Pressable
             accessibilityRole="button"
             onPress={onPrimary}
-            disabled={loading}
+            disabled={loading || (sent && resendWait.seconds > 0)}
             className="w-full flex-row items-center justify-center rounded-full bg-primary py-4 active:opacity-90 disabled:opacity-60"
           >
             {loading ? (
