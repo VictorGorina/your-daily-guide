@@ -17,8 +17,8 @@ export { freezesWell, shelfLifeDays };
  * compra tiene que cubrir (p. ej. pescado en una compra bisemanal). No cambia
  * la lista: alimenta el aviso "cómpralo más cerca de cuando lo cocines".
  *
- * Misma cuenta que `stockUpAmounts`: comprado el día `from`, dura hasta
- * `from + vida`. Un tomate de 7 días llega al último de una compra de 8.
+ * La cuenta: comprado el día `from`, dura hasta `from + vida`. Un tomate de 7 días
+ * llega al último de una compra de 8.
  */
 export const freshRisksForTrip = (
   groups: { category: string; items: ShoppingItem[] }[],

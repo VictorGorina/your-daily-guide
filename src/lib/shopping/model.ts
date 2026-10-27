@@ -50,7 +50,7 @@ export const CADENCES: {
     short: "Optimizada",
     trips: 4,
     periodDays: 7,
-    desc: "La primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.",
+    desc: "La primera lleva su semana y la despensa del mes (también patata, cebolla y ajo); las demás, solo lo fresco.",
   },
 ];
 

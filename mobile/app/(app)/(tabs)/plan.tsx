@@ -56,6 +56,7 @@ import {
   isMonthActionable,
   monthParts,
   monthTitle,
+  nextMonthLocked,
   planMonthStatus,
   planNavBounds,
   projectTrips,
@@ -168,6 +169,11 @@ export default function Plan() {
   const monthStatus = planMonthStatus(month, today);
   const actionable = isMonthActionable(month, today);
   const bounds = planNavBounds(today, appStartedOn);
+  // En el último mes que se puede abrir, candado y aviso de cuándo se abre el
+  // siguiente (también cuando ese es el de después del que viene). Va aquí, con
+  // los límites, y no junto a `canNext`: pasar `today` a una función después del
+  // `useMemo` de `warmingDays` le impide al React Compiler conservarlo.
+  const nextIsLocked = nextMonthLocked(month, today, bounds.latest);
   const [openDay, setOpenDay] = useState<string | null>(null);
 
   // Un mes se genera UNA vez, y siempre tras la conversación con el coach
@@ -377,7 +383,6 @@ export default function Plan() {
   };
   const canPrev = month > bounds.earliest;
   const canNext = month < bounds.latest;
-  const nextIsLocked = !canNext && planMonthStatus(addMonths(month, 1), today) === "next-locked";
   const showCreateTakeover = !plan && actionable;
 
   // Salir y volver (ticket 40): si este mes no tiene plan pero hay un trabajo

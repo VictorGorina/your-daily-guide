@@ -238,6 +238,24 @@ export function daySignal(
 }
 
 /**
+ * Tono del porcentaje de lo comido frente al objetivo en la barra de macros
+ * (decisión del usuario, 2026-10-27): los mismos cortes que el semáforo del
+ * calendario. En un día en curso solo se avisa del exceso, porque quedarse por
+ * debajo a media jornada es lo normal; uno cerrado (`finished`, el detalle de
+ * un día pasado) lleva el semáforo entero, como su casilla del calendario.
+ */
+export type IntakeTone = "neutral" | "success" | "warning" | "over";
+
+export function intakeTone(value: number, goal: number, finished: boolean): IntakeTone {
+  if (!(goal > 0)) return "neutral";
+  const ratio = value / goal;
+  if (ratio > 1 + OVER_TARGET_RATIO) return "over";
+  if (ratio > 1 + ON_TARGET_RATIO) return "warning";
+  if (!finished) return "neutral";
+  return ratio >= 1 - ON_TARGET_RATIO ? "success" : "warning";
+}
+
+/**
  * Lo que una persona comió de verdad en un día: las comidas que marcó (con las
  * macros por plato de la guía) más el picoteo apuntado. Es la misma cifra que
  * el detalle del día pone bajo "Macros del día" y la que alimenta el semáforo

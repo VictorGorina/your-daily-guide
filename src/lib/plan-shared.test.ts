@@ -58,6 +58,7 @@ import {
   normalizeUnit,
   parseJsonLoose,
   parseQtyLegacy,
+  nextMonthLocked,
   planMonthStatus,
   planNavBounds,
   boughtTotal,
@@ -76,6 +77,7 @@ import {
   recadencePlan,
   stockUpAmounts,
   stockUpStart,
+  stocksUp,
   withoutStoreMarks,
   shoppingTotal,
   type ShoppingList,
@@ -234,6 +236,25 @@ describe("planNavBounds", () => {
   it("el techo sube al mes que viene solo cuando está desbloqueado", () => {
     expect(planNavBounds("2026-08-10", null).latest).toBe("2026-08");
     expect(planNavBounds("2026-08-28", null).latest).toBe("2026-09");
+  });
+});
+
+describe("nextMonthLocked", () => {
+  const locked = (month: string, today: string) =>
+    nextMonthLocked(month, today, planNavBounds(today, "2026-09-06").latest);
+
+  it("candado en el mes en curso mientras el que viene sigue bloqueado", () => {
+    expect(locked("2026-10", "2026-10-24")).toBe(true);
+  });
+
+  it("con el que viene desbloqueado, flecha normal en el mes en curso y candado en el siguiente", () => {
+    expect(locked("2026-10", "2026-10-27")).toBe(false);
+    // Noviembre es el último que se puede abrir: diciembre lleva candado.
+    expect(locked("2026-11", "2026-10-27")).toBe(true);
+  });
+
+  it("los meses pasados no llevan candado", () => {
+    expect(locked("2026-09", "2026-10-27")).toBe(false);
   });
 });
 
@@ -1739,8 +1760,8 @@ describe("projectTrips", () => {
   });
 });
 
-// Cadencia optimizada: las mismas cantidades que la semanal, adelantadas a la
-// compra que puede llevárselas sin que se estropeen.
+// Cadencia optimizada: las mismas cantidades que la semanal; lo que se compra de
+// una vez (despensa, y patata, cebolla y ajo) se adelanta entero a la primera.
 describe("projectTrips · cadencia optimizada", () => {
   const withExtras = (): ShoppingList => [
     ...canonical(),
@@ -1814,10 +1835,37 @@ describe("projectTrips · cadencia optimizada", () => {
     }
   });
 
-  it("uno de vida media se compra cada dos semanas", () => {
-    const trips = projectTrips(withExtras(), "optimizada", septiembre);
-    expect(tripsOf(trips, "Huevos")).toEqual([0, 2]);
-    expect(qtyAt(trips, 0, "Huevos") + qtyAt(trips, 2, "Huevos")).toBeCloseTo(24, 1);
+  it("lo fresco que aguanta semanas también va en la compra de sus días", () => {
+    // Antes los huevos (o la manzana) se compraban cada dos semanas: se leía
+    // como comprar perecederos antes de tiempo (decisión del usuario, 2026-10-27).
+    const optimizada = projectTrips(withExtras(), "optimizada", septiembre);
+    const semanal = projectTrips(withExtras(), "semanal", septiembre);
+    expect(tripsOf(optimizada, "Huevos")).toEqual([0, 1, 2, 3]);
+    for (let t = 0; t < 4; t++) {
+      expect(qtyAt(optimizada, t, "Huevos")).toBe(qtyAt(semanal, t, "Huevos"));
+    }
+  });
+
+  it("el código decide qué es fresco, no la marca de la IA", () => {
+    const list = withExtras();
+    // La IA marcó la zanahoria como no perecedera (noviembre de 2026): iba la
+    // del mes entero en la primera compra.
+    list[0]!.items.push({
+      name: "Zanahoria",
+      qty: "2 kg",
+      price_eur: 4,
+      trip: 0,
+      perishable: false,
+      unit: "g",
+      weekQty: [500, 500, 500, 500],
+      weekPrice: [1, 1, 1, 1],
+    });
+    // Y una merluza congelada marcada como fresca: congelada no caduca.
+    list[2]!.items[1]!.name = "Merluza congelada";
+    const trips = projectTrips(list, "optimizada", septiembre);
+    expect(tripsOf(trips, "Zanahoria")).toEqual([0, 1, 2, 3]);
+    expect(tripsOf(trips, "Merluza congelada")).toEqual([0]);
+    expect(qtyAt(trips, 0, "Merluza congelada")).toBe(1200);
   });
 
   it("un fresco no se compra antes de la primera semana que lo usa", () => {
@@ -1968,24 +2016,40 @@ describe("cleanPlan · cadenceFrom", () => {
 });
 
 describe("stockUpAmounts", () => {
-  const ranges = [
-    { from: 1, to: 8 },
-    { from: 9, to: 16 },
-    { from: 17, to: 23 },
-    { from: 24, to: 30 },
-  ];
   const needs = [1, 2, 3, 4].map((qty) => ({ qty, price: qty * 10 }));
-  const qtys = (shelf: number) => stockUpAmounts(needs, ranges, shelf).map((a) => a.qty);
+  const qtys = (stocks: boolean) => stockUpAmounts(needs, stocks).map((a) => a.qty);
 
-  it("reparte según lo que aguanta el ingrediente", () => {
-    expect(qtys(Infinity)).toEqual([10, 0, 0, 0]);
-    expect(qtys(2)).toEqual([1, 2, 3, 4]);
-    // comprado el día 1 llega al 16; el día 17 se compra para lo que queda
-    expect(qtys(15)).toEqual([3, 0, 7, 0]);
+  it("lo que se compra de una vez va entero a la primera; lo fresco, a su compra", () => {
+    expect(qtys(true)).toEqual([10, 0, 0, 0]);
+    expect(qtys(false)).toEqual([1, 2, 3, 4]);
   });
 
   it("el precio viaja con la cantidad", () => {
-    expect(stockUpAmounts(needs, ranges, 15).map((a) => a.price)).toEqual([30, 0, 70, 0]);
+    expect(stockUpAmounts(needs, true).map((a) => a.price)).toEqual([100, 0, 0, 0]);
+  });
+});
+
+describe("stocksUp", () => {
+  it("despensa, conservas, congelados y secos se compran de una vez", () => {
+    expect(stocksUp("Arroz integral", "Despensa", false)).toBe(true);
+    expect(stocksUp("Espinacas congeladas", "Verdura y fruta", true)).toBe(true);
+    expect(stocksUp("Tomate triturado en conserva", "Despensa", true)).toBe(true);
+    expect(stocksUp("Leche UHT entera", "Lácteos", true)).toBe(true);
+    expect(stocksUp("Garbanzo seco", "Proteína", true)).toBe(true);
+  });
+
+  it("patata, cebolla y ajo también, aunque la IA los marque frescos", () => {
+    for (const name of ["Patatas", "Cebolla morada", "Ajo", "Cabeza de ajo"]) {
+      expect(stocksUp(name, "Verdura y fruta", true)).toBe(true);
+    }
+    // Solo si dan nombre al artículo, no si son un ingrediente más.
+    expect(stocksUp("Tortilla de patatas", "Proteína", true)).toBe(false);
+  });
+
+  it("lo fresco no, aunque la IA lo marque como no perecedero", () => {
+    for (const name of ["Zanahoria", "Manzanas", "Naranjas", "Huevos", "Yogur griego"]) {
+      expect(stocksUp(name, "Verdura y fruta", false)).toBe(false);
+    }
   });
 });
 

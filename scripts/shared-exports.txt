@@ -53,6 +53,7 @@ monthCoverage
 monthParts
 monthTitle
 nextMonthISO
+nextMonthLocked
 normDay
 normName
 normalizeForMatch

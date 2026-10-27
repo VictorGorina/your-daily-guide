@@ -597,7 +597,10 @@
     "eatenToday": "~{{kcal}} kcal from what you've eaten so far today",
     "pending_one": " ({{count}} meal still being calculated)",
     "pending_other": " ({{count}} meals still being calculated)",
-    "disclaimer": ": a rough estimate, not an exact nutritional count."
+    "disclaimer": ": a rough estimate, not an exact nutritional count.",
+    "kcalOfTarget": "~{{kcal}} of {{target}} kcal",
+    "leadToday": "What you've eaten so far today",
+    "leadThatDay": "What you ate that day"
   },
   "recipe": {
     "show": "See recipe",
@@ -1100,7 +1103,7 @@
     },
     "optimizada": {
       "short": "Optimised",
-      "desc": "The first trip takes its own week plus everything that lasts the month; the rest, only fresh food."
+      "desc": "The first trip takes its own week plus the month's pantry (potatoes, onions and garlic too); the rest, only fresh food."
     }
   },
   "shopping": {

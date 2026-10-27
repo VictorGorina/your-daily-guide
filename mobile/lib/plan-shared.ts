@@ -9,7 +9,7 @@
 
 import { isCleanFood } from "./content-guard";
 import { dateInMonth, weekdayIndex } from "./dates";
-import { shelfLifeDays } from "./shelf-life";
+import { stocksUp } from "./shelf-life";
 import type { Translate } from "./week-nav";
 import {
   isSharedSlot,
@@ -1006,7 +1006,7 @@ export const CADENCES: {
     short: "Optimizada",
     trips: 4,
     periodDays: 7,
-    desc: "La primera lleva su semana y todo lo que aguanta el mes; las demás, solo lo fresco.",
+    desc: "La primera lleva su semana y la despensa del mes (también patata, cebolla y ajo); las demás, solo lo fresco.",
   },
 ];
 
@@ -1462,6 +1462,20 @@ export const planMonthStatus = (month: string, today: string): PlanMonthStatus =
   return "far-future";
 };
 
+/**
+ * ¿Lleva candado la flecha de avanzar del navegador en `month`? Cuando no se
+ * puede pasar al mes siguiente porque aún no ha llegado su momento: el que
+ * viene hasta su última semana de desbloqueo, y el de después siempre. Así el
+ * último mes que se puede abrir enseña por qué no hay más; antes, con el mes
+ * que viene ya desbloqueado, la flecha hacia el siguiente salía apagada y sin
+ * candado (decisión del usuario, 2026-10-27). `latest` es `planNavBounds().latest`.
+ */
+export const nextMonthLocked = (month: string, today: string, latest: string): boolean => {
+  if (month < latest) return false;
+  const status = planMonthStatus(addMonths(month, 1), today);
+  return status === "next-locked" || status === "far-future";
+};
+
 /** Un mes donde se puede generar/editar el plan y accionar la compra: el actual o el siguiente ya desbloqueado. */
 export const isMonthActionable = (month: string, today: string): boolean => {
   const status = planMonthStatus(month, today);
@@ -1640,30 +1654,24 @@ type TripAmount = { qty: number; price: number };
 type DayRange = { from: number; to: number };
 
 /**
- * Cadencia optimizada: quién compra lo de cada tramo. Cada compra se lleva de
- * un ingrediente lo de los tramos siguientes mientras aguante (comprado el día
- * `from`, dura hasta `from + shelf`); cuando ya no llega, compra el tramo al
- * que le toca. Así lo que no caduca entra entero en la primera compra, un
- * fresco de pocos días se compra cada semana y uno de vida media (huevos,
- * zanahoria) cada dos. Solo mueve cantidades entre compras: Σ no cambia.
+ * Cadencia optimizada: quién compra lo de cada tramo. Lo que se compra de una
+ * vez (`stocks`, ver `stocksUp`: despensa, conservas, congelados, y patata,
+ * cebolla y ajo) entra entero en la primera compra, que es la de llenar la
+ * despensa; lo fresco se queda en la compra de los días en que se come. Solo
+ * mueve cantidades entre compras: Σ no cambia.
  *
- * Un fresco no se compra antes de la primera semana que lo usa; lo que no
- * caduca va siempre a la primera compra, que es la de llenar la despensa.
+ * Antes también adelantaba lo fresco que "aguantaba" (manzana, naranja o
+ * huevos, cada dos semanas), y se leía como comprar perecederos semanas antes
+ * de comerlos (decisión del usuario, 2026-10-27).
  */
-export const stockUpAmounts = (
-  amounts: TripAmount[],
-  ranges: DayRange[],
-  shelf: number,
-): TripAmount[] => {
-  const out = amounts.map(() => ({ qty: 0, price: 0 }));
-  let buyer = 0;
-  for (let t = 0; t < amounts.length; t++) {
-    const idle = Number.isFinite(shelf) && out[buyer]!.qty <= 0.0001;
-    if (idle || ranges[t]!.to - ranges[buyer]!.from > shelf) buyer = t;
-    out[buyer]!.qty += amounts[t]!.qty;
-    out[buyer]!.price += amounts[t]!.price;
+export const stockUpAmounts = (amounts: TripAmount[], stocks: boolean): TripAmount[] => {
+  if (!stocks) return amounts;
+  const total = { qty: 0, price: 0 };
+  for (const amount of amounts) {
+    total.qty += amount.qty;
+    total.price += amount.price;
   }
-  return out;
+  return amounts.map((_, t) => (t === 0 ? total : { qty: 0, price: 0 }));
 };
 
 /**
@@ -1673,8 +1681,8 @@ export const stockUpAmounts = (
  * forma que consume la UI — una fila por compra con `qty`/`price_eur` ya
  * recortados y `owned` resuelto para ese `trip`.
  *
- * Con la cadencia optimizada, esas mismas cantidades se adelantan a la compra
- * que puede llevárselas sin que se estropeen (`stockUpAmounts`). Si se eligió
+ * Con la cadencia optimizada, lo que se compra de una vez se adelanta entero a
+ * la primera compra (`stockUpAmounts`). Si se eligió
  * a mitad de mes, solo desde la compra `stockUpFrom` (`plan.cadenceFrom`): las
  * anteriores ya pasaron y se quedan con lo de su semana, o la despensa del
  * resto del mes caería en una compra que ya no se va a hacer.
@@ -1713,8 +1721,7 @@ export const projectTrips = (
               ...needs.slice(0, start),
               ...stockUpAmounts(
                 needs.slice(start),
-                ranges.slice(start),
-                shelfLifeDays(item.name, group.category, item.perishable),
+                stocksUp(item.name, group.category, item.perishable),
               ),
             ]
           : needs;

@@ -76,6 +76,20 @@ export const planMonthStatus = (month: string, today: string): PlanMonthStatus =
   return "far-future";
 };
 
+/**
+ * ¿Lleva candado la flecha de avanzar del navegador en `month`? Cuando no se
+ * puede pasar al mes siguiente porque aún no ha llegado su momento: el que
+ * viene hasta su última semana de desbloqueo, y el de después siempre. Así el
+ * último mes que se puede abrir enseña por qué no hay más; antes, con el mes
+ * que viene ya desbloqueado, la flecha hacia el siguiente salía apagada y sin
+ * candado (decisión del usuario, 2026-10-27). `latest` es `planNavBounds().latest`.
+ */
+export const nextMonthLocked = (month: string, today: string, latest: string): boolean => {
+  if (month < latest) return false;
+  const status = planMonthStatus(addMonths(month, 1), today);
+  return status === "next-locked" || status === "far-future";
+};
+
 /** Un mes donde se puede generar/editar el plan y accionar la compra: el actual o el siguiente ya desbloqueado. */
 export const isMonthActionable = (month: string, today: string): boolean => {
   const status = planMonthStatus(month, today);

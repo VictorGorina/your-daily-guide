@@ -39,6 +39,33 @@ describe("shelfLifeDays", () => {
     expect(shelfLifeDays("Fiambre casero", "Proteína", true)).toBe(3);
     expect(shelfLifeDays("Algo raro", "Otros", true)).toBe(10);
   });
+
+  it("un fresco conocido es fresco aunque la IA diga que no", () => {
+    // Noviembre de 2026: zanahoria y manzanas marcadas como no perecederas.
+    expect(shelfLifeDays("Zanahoria", "Verdura y fruta", false)).toBe(15);
+    expect(shelfLifeDays("Manzanas", "Verdura y fruta", false)).toBe(15);
+  });
+
+  it("la forma de compra de larga vida manda sobre el alimento", () => {
+    expect(shelfLifeDays("Merluza congelada", "Proteína", true)).toBe(Infinity);
+    expect(shelfLifeDays("Pechuga de pollo congelada", "Proteína", false)).toBe(Infinity);
+    expect(shelfLifeDays("Tomate triturado en conserva", "Despensa", false)).toBe(Infinity);
+    expect(shelfLifeDays("Leche UHT", "Lácteos", true)).toBe(Infinity);
+    expect(shelfLifeDays("Lenteja pardina seca", "Proteína", true)).toBe(Infinity);
+  });
+
+  it("un elaborado de un fresco lo decide la marca de la IA", () => {
+    expect(shelfLifeDays("Tomate frito", "Despensa", false)).toBe(Infinity);
+    expect(shelfLifeDays("Caldo de pollo", "Despensa", false)).toBe(Infinity);
+    expect(shelfLifeDays("Queso rallado", "Lácteos", true)).toBe(7);
+  });
+
+  it("casa palabras enteras, no trozos", () => {
+    // "col" no está en "chocolate", ni "lata" en "plátano".
+    expect(shelfLifeDays("Chocolate negro", "Despensa", false)).toBe(Infinity);
+    expect(shelfLifeDays("Plátano", "Verdura y fruta", true)).toBe(5);
+    expect(shelfLifeDays("Judías verdes", "Verdura y fruta", true)).toBe(7);
+  });
 });
 
 describe("freshRisksForTrip", () => {

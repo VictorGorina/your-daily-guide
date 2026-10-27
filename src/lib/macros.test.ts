@@ -10,6 +10,7 @@ import {
   daySignalKey,
   daySignalOf,
   hasDayRecord,
+  intakeTone,
   macroTargets,
   donePendingMeals,
   guideReuse,
@@ -473,6 +474,25 @@ describe("daySignal", () => {
   it("un día registrado sin objetivo no se juzga", () => {
     expect(daySignal(1800, null, true)).toBe("muted");
     expect(daySignal(1800, 0, true)).toBe("muted");
+  });
+});
+
+describe("intakeTone", () => {
+  it("hoy, en curso, solo avisa del exceso, con los cortes del semáforo", () => {
+    expect(intakeTone(1200, 2000, false)).toBe("neutral"); // a media jornada, normal
+    expect(intakeTone(2150, 2000, false)).toBe("neutral"); // +7,5 %: en su sitio
+    expect(intakeTone(2300, 2000, false)).toBe("warning"); // +15 %
+    expect(intakeTone(2600, 2000, false)).toBe("over"); // +30 %
+  });
+
+  it("un día cerrado lleva el semáforo entero, como su casilla del calendario", () => {
+    for (const kcal of [600, 1800, 2000, 2300, 2600]) {
+      expect<string>(intakeTone(kcal, 2000, true)).toBe(daySignal(kcal, 2000, true));
+    }
+  });
+
+  it("sin objetivo no hay tono", () => {
+    expect(intakeTone(1800, 0, true)).toBe("neutral");
   });
 });
 

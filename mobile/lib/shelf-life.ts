@@ -21,6 +21,15 @@ const norm = (s: string) =>
  * Los valores son deliberadamente conservadores (nevera doméstica normal, sin
  * congelar) y aproximados: el objetivo es decidir "esto no aguanta dos semanas",
  * no gestionar caducidades reales.
+ *
+ * Lo decide el código, no la IA (2026-10-27): la IA marcaba `perishable: false`
+ * frescos de verdad (la zanahoria de noviembre) y, como esa marca mandaba, la
+ * cadencia optimizada metía la del mes entero en la primera compra. La marca
+ * de la IA solo decide cuando el código no reconoce el ingrediente.
+ *
+ * No sale de la tabla de alimentos (`foods.data.ts`): esa tabla describe el
+ * alimento tal como se come (arroz cocido: 3 días; espinaca: 4 aunque se
+ * compre congelada), no como se compra.
  */
 
 /** Palabra clave del nombre → días que aguanta. El primer match gana. */
@@ -89,7 +98,7 @@ const SHELF_LIFE_BY_KEYWORD: { match: string[]; days: number }[] = [
     ],
     days: 15,
   },
-  { match: ["huevo", "huevos"], days: 21 },
+  { match: ["huevo"], days: 21 },
   // Larga vida en despensa fresca: no deberían saltar el aviso ni en una compra mensual.
   { match: ["patata", "cebolla", "ajo", "boniato", "calabaza", "nabo"], days: 32 },
 ];
@@ -104,18 +113,100 @@ const SHELF_LIFE_BY_CATEGORY: Record<string, number> = {
 };
 
 /**
- * Días que un ingrediente aguanta en casa. `perishable === false` (despensa,
- * congelado, conserva) nunca caduca a efectos del plan. Si el nombre encaja con
- * una palabra clave conocida se usa ese valor; si no, el de su categoría; y si
- * la categoría tampoco se reconoce, 10 días (fresco genérico prudente).
+ * Forma de compra que no caduca a efectos del plan aunque el alimento sea
+ * fresco: "Merluza congelada", "Tomate triturado en conserva", "Leche UHT",
+ * "Garbanzo seco". Manda sobre todo lo demás.
+ */
+const LONG_LIFE_WORDS = [
+  ...["conserva", "lata", "bote", "tarro", "brick", "uht", "seco", "seca", "polvo", "almibar"],
+];
+const LONG_LIFE_PREFIXES = ["congelad", "enlatad", "deshidratad", "esteriliz", "liofiliz"];
+
+/**
+ * Elaborado a partir de un fresco: "Tomate frito", "Pan rallado", "Caldo de
+ * pollo", "Mermelada de fresa". El fresco del nombre no dice cuánto dura, así
+ * que se salta la tabla de frescos y decide la marca de la IA.
+ */
+const PROCESSED_WORDS = [
+  ...["frito", "frita", "rallado", "rallada", "tostado", "tostada", "triturado", "triturada"],
+];
+const PROCESSED_HEADS = ["caldo", "salsa", "mermelada", "zumo", "sopa", "pure", "harina", "bebida"];
+
+/** Palabras del nombre, sin acentos ni signos ("Judías verdes" → judias, verdes). */
+const nameWords = (name: string): string[] =>
+  norm(name)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+/** La misma palabra o su plural ("huevo"/"huevos", "limon"/"limones"). */
+const sameWord = (word: string, key: string) =>
+  word === key || word === `${key}s` || word === `${key}es`;
+
+/**
+ * ¿Aparece la palabra clave en el nombre, como palabras enteras y seguidas?
+ * Por trozos de texto, "col" casaba con "chocolate" y "lata" con "plátano".
+ */
+const hasKeyword = (words: string[], keyword: string): boolean => {
+  const parts = keyword.split(" ");
+  for (let i = 0; i + parts.length <= words.length; i++) {
+    if (parts.every((part, j) => sameWord(words[i + j]!, part))) return true;
+  }
+  return false;
+};
+
+const isLongLifeWord = (word: string) =>
+  LONG_LIFE_WORDS.some((key) => sameWord(word, key)) ||
+  LONG_LIFE_PREFIXES.some((prefix) => word.startsWith(prefix));
+
+/**
+ * Días que un ingrediente aguanta en casa. En este orden:
+ *
+ * 1. Forma de compra de larga vida (congelado, conserva, UHT, seco…): nunca caduca.
+ * 2. Fresco conocido por su nombre: sus días, diga lo que diga la IA. Salvo si
+ *    es un elaborado ("tomate frito", "caldo de pollo"), que pasa al paso 3.
+ * 3. La marca de la IA: `perishable === false` es despensa.
+ * 4. La categoría, y si tampoco se reconoce, 10 días (fresco genérico prudente).
  */
 export const shelfLifeDays = (name: string, category: string, perishable: boolean): number => {
-  if (!perishable) return Infinity;
-  const n = norm(name);
-  for (const entry of SHELF_LIFE_BY_KEYWORD) {
-    if (entry.match.some((kw) => n.includes(kw))) return entry.days;
+  const words = nameWords(name);
+  if (words.some(isLongLifeWord)) return Infinity;
+  const processed =
+    words.some((word) => PROCESSED_WORDS.includes(word)) ||
+    PROCESSED_HEADS.some((head) => sameWord(words[0] ?? "", head));
+  if (!processed) {
+    for (const entry of SHELF_LIFE_BY_KEYWORD) {
+      if (entry.match.some((keyword) => hasKeyword(words, keyword))) return entry.days;
+    }
   }
+  if (!perishable) return Infinity;
   return SHELF_LIFE_BY_CATEGORY[category] ?? 10;
+};
+
+/**
+ * Frescos que la cadencia optimizada compra de una vez con la despensa: duran
+ * semanas en un sitio fresco y seco. Solo si dan nombre al artículo ("Patatas",
+ * "Cebolla morada", "Cabeza de ajo"), no si son un ingrediente más de otra cosa.
+ */
+const STOCK_UP_PRODUCE = ["patata", "cebolla", "ajo"];
+const GARLIC_UNITS = ["cabeza", "diente"];
+
+/**
+ * ¿Se compra de una vez para el mes en la cadencia optimizada? Lo que no caduca
+ * (despensa, conservas, congelados, legumbre seca, arroz, pasta…) y patata,
+ * cebolla y ajo. Todo lo demás fresco va en la compra de los días en que se
+ * come (decisión del usuario, 2026-10-27): adelantar la fruta o los huevos que
+ * "aguantan" dos semanas se leía como comprar perecederos antes de tiempo.
+ */
+export const stocksUp = (name: string, category: string, perishable: boolean): boolean => {
+  if (shelfLifeDays(name, category, perishable) === Infinity) return true;
+  const words = nameWords(name);
+  const head = words[0] ?? "";
+  if (STOCK_UP_PRODUCE.some((key) => sameWord(head, key))) return true;
+  return (
+    GARLIC_UNITS.some((unit) => sameWord(head, unit)) &&
+    words[1] === "de" &&
+    sameWord(words[2] ?? "", "ajo")
+  );
 };
 
 /**
@@ -132,6 +223,6 @@ const FREEZES_WELL = [
 ];
 
 export const freezesWell = (name: string): boolean => {
-  const n = norm(name);
-  return FREEZES_WELL.some((kw) => n.includes(kw));
+  const words = nameWords(name);
+  return FREEZES_WELL.some((keyword) => hasKeyword(words, keyword));
 };

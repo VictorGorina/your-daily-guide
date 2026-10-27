@@ -44,6 +44,7 @@ import {
   isMonthActionable,
   monthParts,
   monthTitle,
+  nextMonthLocked,
   planMonthStatus,
   planNavBounds,
   projectTrips,
@@ -405,9 +406,9 @@ function PlanPage() {
 
   const canPrev = month > bounds.earliest;
   const canNext = month < bounds.latest;
-  // El navegador se para en el mes en curso mientras el siguiente sigue
-  // bloqueado; el botón muestra un candado y explica cuándo se abrirá.
-  const nextIsLocked = !canNext && planMonthStatus(addMonths(month, 1), today) === "next-locked";
+  // En el último mes que se puede abrir, el botón muestra un candado y explica
+  // cuándo se abrirá el siguiente (también cuando ese es el de después del que viene).
+  const nextIsLocked = nextMonthLocked(month, today, bounds.latest);
   // Pantalla completa "crea tu plan": solo para meses donde se puede generar.
   const showCreateTakeover = !plan && actionable;
 

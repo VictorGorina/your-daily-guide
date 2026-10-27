@@ -614,7 +614,7 @@ export function DayDetailBody({
               estimate={consumed}
               target={log?.guide?.targets ?? log?.guide?.macroEstimate ?? null}
               weightKg={profile?.current_weight_kg ?? null}
-              note={t("dayDetail.eatenThatDay", { kcal: consumed.kcal })}
+              finished
               pending={donePendingMeals(log?.guide?.mealMacros, habits).length}
             />
           ) : (

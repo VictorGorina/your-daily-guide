@@ -229,9 +229,11 @@ caen en el reparto de siempre (`groupByTrip`/`repartitionTrips`); se corrigen al
 marcas "comprado" canónicas viven en `ShoppingItem.ownedTrips[trip]`.
 
 **Cadencia optimizada** (`"optimizada"`, detalle en AGENTS.md). Mismas salidas que la semanal, pero
-`stockUpAmounts` adelanta cada ingrediente a la compra que lo aguanta (`shelfLifeDays`, en
-`shopping/shelf-life.ts`): lo que no caduca entra entero en la primera, lo fresco cada semana y lo
-de vida media cada dos. Determinista, sin IA, y Σ no cambia. Elegida a mitad de mes rige desde la
+`stockUpAmounts` adelanta entero a la primera compra lo que se compra de una vez (`stocksUp`, en
+`shopping/shelf-life.ts`: despensa, conservas, congelados, y patata, cebolla y ajo); lo fresco va
+siempre en la compra de los días en que se come, también lo que "aguanta" dos semanas (decisión del
+usuario, 2026-10-27). Qué es fresco lo decide el código (`shelfLifeDays`: forma de compra, luego
+palabra clave), no la marca `perishable` de la IA. Determinista, sin IA, y Σ no cambia. Elegida a mitad de mes rige desde la
 compra en curso (`plan.cadenceFrom`, que `projectTrips` recibe como `stockUpFrom`); las anteriores
 se quedan como en la semanal. Al entrar o salir de ella `recadenceMonthlyPlan` (`recadencePlan`,
 puro) quita las marcas "comprado" (`withoutStoreMarks`), la única vez que recadenciar toca una

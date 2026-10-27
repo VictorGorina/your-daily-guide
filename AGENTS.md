@@ -140,22 +140,33 @@ mantén el test de invariante en `plan-shared.test.ts`.
 todo un mes. `shelfLifeDays` ([perishability.ts](src/lib/perishability.ts)) da la vida útil por
 palabra clave/categoría; `freshRisksForTrip` marca los frescos de una compra cuyo tramo de días la
 supera, y la UI lo pinta como aviso `bg-warning/20` ("cómpralos más cerca de cuando los cocines").
-La cuenta es la de `stockUpAmounts` (comprado el día `from`, dura hasta `from + vida`): un tomate
+La cuenta: comprado el día `from`, dura hasta `from + vida`, así que un tomate
 de 7 días llega al último de una compra de 8 y no avisa. El texto lo escribe `freshRiskText`, que
 en la optimizada propone congelar o comprar el día (lo que no llega ya se compra en cada salida).
 El prompt de cadencia mensual sesga hacia ingredientes de larga vida. Decisión deliberada: **no**
 se añade una compra extra de frescos a media de mes ni se cambia la lista — solo se avisa.
 
-**Cadencia optimizada — las mismas cantidades, adelantadas a la compra que las aguanta.** Cuarta
+**Cadencia optimizada — la despensa en la primera compra, lo fresco en la de sus días.** Cuarta
 cadencia (`"optimizada"`), con las mismas salidas que la semanal. `projectTrips` calcula lo que
-pide cada tramo igual que siempre y luego `stockUpAmounts` decide **quién lo compra**: cada compra
-se lleva de un ingrediente lo de los tramos siguientes mientras aguante (comprado el día `from`,
-dura hasta `from + shelfLifeDays`). Así lo que no caduca entra entero en la primera compra, un
-fresco de pocos días se compra cada semana y uno de vida media (huevos, zanahoria) cada dos. Es
-determinista y no llama a la IA; solo mueve cantidades entre compras, así que Σ no cambia (lo
-vigila el test de invariante). Un fresco no se compra antes de la primera semana que lo usa. La
-tabla de vida útil vive en `shopping/shelf-life.ts` (el barrel la reexporta) porque `trips.ts` la
-necesita y desde `perishability.ts` sería un ciclo. Elegida con el mes empezado, rige desde la
+pide cada tramo igual que siempre y luego `stockUpAmounts` decide **quién lo compra**: lo que se
+compra de una vez (`stocksUp`: lo que no caduca —despensa, conservas, congelados, legumbre seca—
+y patata, cebolla y ajo) entra entero en la primera compra; todo lo demás fresco se queda en la
+compra de los días en que se come. Hasta el 2026-10-27 también se adelantaba lo fresco que
+"aguantaba" (manzana, naranja o huevos cada dos semanas, según su vida útil) y la persona lo veía
+como comprar perecederos semanas antes de comerlos: lo decidió así el usuario. Es determinista y
+no llama a la IA; solo mueve cantidades entre compras, así que Σ no cambia (lo vigila el test de
+invariante).
+
+Qué es fresco lo decide el código, no la marca `perishable` de la IA (la IA marcaba la zanahoria
+como no perecedera y se compraba la del mes entero el día 1). `shelfLifeDays` mira, por este orden:
+la forma de compra de larga vida (congelado, conserva, UHT, seco…), un fresco conocido por su
+nombre (salvo elaborados como "tomate frito" o "caldo de pollo"), la marca de la IA y la
+categoría. Casa palabras enteras con su plural, no trozos de texto: por trozos, "col" casaba con
+"chocolate". No usa la vida útil de `foods.data.ts`: esa tabla describe el alimento tal como se
+come (arroz cocido: 3 días; espinaca: 4 aunque se compre congelada), no como se compra. La
+tabla vive en `shopping/shelf-life.ts` (el barrel la reexporta) porque `trips.ts` la necesita y
+desde `perishability.ts` sería un ciclo; el móvil tiene su copia y `mobile-parity.test.ts` las
+compara. Elegida con el mes empezado, rige desde la
 compra que toca ese día (`MonthlyPlan.cadenceFrom`, de `stockUpStart`): las anteriores se quedan
 con lo de su semana, o la despensa del resto del mes caería en una compra ya pasada. El ancla se
 guarda (no se deriva de hoy) para que el reparto no se mueva solo con los días; `projectTrips` la
