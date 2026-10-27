@@ -149,7 +149,9 @@ esperar y se entra sin token, como hasta ahora (el servidor decide si pasa). El 
 página de la web `/api/v1/auth/captcha`, una por token, dentro de un WebView que solo se ve si
 Cloudflare pide la casilla: Cloudflare solo da token en los dominios del widget, así que no vale
 HTML metido en la app. Los topes de la espera (20 s, 30 s con la casilla) y el formato de los
-mensajes son los de la web: [lib/captcha-bridge.ts](lib/captcha-bridge.ts), copia idéntica.
+mensajes son los de la web: [lib/captcha-bridge.ts](lib/captcha-bridge.ts), copia idéntica. El
+WebView deja cargar `about:srcdoc` (`ORIGIN_WHITELIST`): sin eso, con la clave real, el reto no
+acaba nunca. Las claves de prueba no lo detectan; se prueba contra producción.
 
 ## Desarrollo
 

@@ -29,6 +29,15 @@ import {
  */
 
 const PAGE_URL = `${API_BASE_URL}${CAPTCHA_PAGE_PATH}`;
+/**
+ * Lo que el WebView deja cargar, en cualquier marco. La lista por defecto
+ * (`http://*`, `https://*` y `about:blank`) bloquea el iframe `about:srcdoc`
+ * del reto de Cloudflare con la clave real: el reto se queda a medias, sin token
+ * ni error, y el WebView intenta abrir esa dirección fuera de la app. Con las
+ * claves de prueba no aparece. El marco principal lo sigue limitando
+ * `onShouldStartLoadWithRequest`.
+ */
+const ORIGIN_WHITELIST = ["http://*", "https://*", "about:srcdoc"];
 /** El widget «normal» de Turnstile mide 300 × 65. */
 const WIDGET_WIDTH = 300;
 const WIDGET_HEIGHT = 70;
@@ -201,11 +210,14 @@ export function useTurnstile() {
           <WebView
             key={attempt}
             source={{ uri: PAGE_URL }}
+            originWhitelist={ORIGIN_WHITELIST}
             onMessage={onMessage}
             onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
             onError={onLoadFailed}
             onHttpError={onLoadFailed}
             setSupportMultipleWindows={false}
+            // En desarrollo, inspeccionable desde Safari (Desarrollo → Simulador).
+            webviewDebuggingEnabled={__DEV__}
             scrollEnabled={false}
             bounces={false}
             style={{ backgroundColor: "transparent" }}

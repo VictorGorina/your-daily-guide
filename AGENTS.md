@@ -910,7 +910,9 @@ e IP y la confirmación del correo. Recuperar la contraseña (`auth/reset`) pasa
   (`captcha-page.ts`) en un WebView (`useTurnstile`, `mobile/components/turnstile.tsx`), que se
   lo pasa con `postMessage`. Los mensajes y los topes (20 s sin casilla, 30 s con ella) están en
   `captcha-bridge.ts`, copia idéntica en las dos apps. `react-native-webview` es nativo: un
-  build anterior no lo trae y sigue sin token (ver `mobile/AGENTS.md`).
+  build anterior no lo trae y sigue sin token (ver `mobile/AGENTS.md`). El WebView lleva
+  `about:srcdoc` en `originWhitelist`: el reto con la clave real monta un iframe así, la lista
+  por defecto lo bloquea y el reto se queda a medias, sin token ni error (build 9, 2026-10-27).
 - **Se enciende por pasos** (ver la cabecera de `turnstile.server.ts`): con la clave secreta, el
   token que llega se comprueba y la falta de token se anota (`captcha_missing`);
   `TURNSTILE_ENFORCE=1` la corta. No se activa mientras haya un build de iOS en uso sin la
@@ -919,4 +921,6 @@ e IP y la confirmación del correo. Recuperar la contraseña (`auth/reset`) pasa
   cabecera de `turnstile-widget.tsx`): con el CAPTCHA exigido, el alta y la recuperación no se
   pueden probar ahí contra producción. En local, sin clave de sitio, no hay CAPTCHA; para
   probarlo, las claves de prueba de Cloudflare (`1x…AA` pasa, `2x…AB` falla, `3x…FF` pide la
-  casilla).
+  casilla). **Las claves de prueba no ejercitan el reto de verdad**: un cambio en el WebView del
+  móvil se prueba en el simulador contra producción, con Metro arrancado así (sin `CI=1`, que
+  apaga la recarga): `EXPO_PUBLIC_API_URL=https://www.peppersfam.es npx expo start`.
