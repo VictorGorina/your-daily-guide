@@ -22,8 +22,16 @@ const SEED_LUNCH =
 
 const label = (template: string) => template.replace("{{meal}}", es.moments.Comida);
 
-/** «~N kcal de lo que llevas comido hoy» con N > 0: la comida marcada tiene su cifra. */
-const EATEN_KCAL = new RegExp(es.macros.eatenToday.replace("{{kcal}}", "[1-9]\\d*"));
+/**
+ * Lo comido con N > 0: la comida marcada tiene su cifra. Con objetivo del día,
+ * «~N de M kcal»; sin él, «~N kcal de lo que llevas comido hoy».
+ */
+const EATEN_KCAL = new RegExp(
+  [
+    es.macros.kcalOfTarget.replace("{{kcal}}", "[1-9]\\d*").replace("{{target}}", "\\d+"),
+    es.macros.eatenToday.replace("{{kcal}}", "[1-9]\\d*"),
+  ].join("|"),
+);
 
 test("Ana entra, marca la comida y ve su plan y su familia", async ({ page, request }) => {
   await page.goto("/auth");
