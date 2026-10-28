@@ -16,10 +16,13 @@ import { runFitMonthlyPlan } from "./fit-run.server";
  *   nada, y un plan regenerado nace sin ella. Solo planes con `targetsVersion`.
  * - Solo días posteriores a hoy; nunca un plato puesto a mano (`pinned`).
  * - Comidas propias primero (D4); una compartida solo la cambia quien planifica.
- * - La compra no cambia: los platos nuevos usan sus ingredientes.
  *
- * Devuelve lo que cambió para enseñarlo: un cambio automático del plan tiene
- * que verse. Ruta espejo: `POST /api/v1/plan/fit`.
+ * En el mismo trabajo, también una vez por plan (marca `plan.shoppingCheck`),
+ * la compra se comprueba contra los platos: lo que falte se añade a las compras
+ * que aún no se han hecho, y cada compra pasa a llevar lo de sus días
+ * (`coverage.server.ts`). Por eso la lanza también un plan ya ajustado.
+ *
+ * Devuelve las dos marcas. Ruta espejo: `POST /api/v1/plan/fit`.
  */
 export const fitMonthlyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

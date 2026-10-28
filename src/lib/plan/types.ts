@@ -46,6 +46,14 @@ export type PlanDay = {
    * en comidas propias (se compensa con `soloOnly`); en una compartida se ignora.
    */
   kcalAdjust?: Partial<Record<MealSlot, number>>;
+  /**
+   * Comidas de ese día que no se cocinan en casa: se piden o se compran hechas
+   * fuera (un tupper o un bocadillo de casa no cuentan). Sus ingredientes no van
+   * en la compra, y la comprobación de la compra (`checkShopping`) no los pide.
+   * Lo marca la IA al generar (`MonthlyPlan.outMarked`); en un plan anterior lo
+   * deduce una vez la comprobación de lo que la persona contó del mes.
+   */
+  out?: MealSlot[];
 };
 
 /** ¿Esta comida del día la eligió la persona a mano? */
@@ -128,4 +136,23 @@ export type MonthlyPlan = {
    * generado. Un plan nuevo nace sin ella.
    */
   fit?: PlanFitMark;
+  /**
+   * El plan ya sabe qué comidas no se cocinan en casa (`PlanDay.out`), aunque
+   * no haya ninguna. Sin ella, la comprobación de la compra lo deduce una vez.
+   */
+  outMarked?: boolean;
+  /**
+   * La compra ya se comprobó contra los platos (`checkShopping`): como mucho UNA
+   * vez por plan, igual que `fit`. Guarda lo que añadió o subió, para depurar.
+   */
+  shoppingCheck?: ShoppingCheckMark;
+};
+
+/** Lo que hizo la comprobación de la compra con un plan (ver `MonthlyPlan.shoppingCheck`). */
+export type ShoppingCheckMark = {
+  at: string;
+  /** Ingredientes que no estaban en la lista y se añadieron. */
+  added: string[];
+  /** Ingredientes que estaban, con alguna semana sin bastante cantidad. */
+  raised: string[];
 };

@@ -18,7 +18,6 @@ import {
   dateOfPlanCell,
   diffFutureMeals,
   effectiveMealSlots,
-  ingredientNames,
   type KcalAdjustCell,
   MEAL_SLOT_LABEL,
   MEAL_SLOTS,
@@ -216,6 +215,10 @@ export async function reflowMeals(opts: {
   const editableDates = current.weeks
     .flatMap((week, wi) => week.days.map((_, di) => dateOfPlanCell(month, wi, di)))
     .filter((d): d is string => !!d && d > today && (!opts.window || opts.window.includes(d)));
+  // Lo que habrá en casa en cada compra, no la lista del mes entero: con la del
+  // mes, una crema de calabacín podía caer en una semana con 0 g de calabacín.
+  const coverage = await import("@/lib/shopping/coverage.server");
+  const purchases = coverage.purchasesText({ plan: current, shopping, month, today });
 
   /**
    * Una pasada de recolocación. `insist` solo lleva texto en el reintento: ver
@@ -239,7 +242,7 @@ export async function reflowMeals(opts: {
         prompt:
           insist +
           `Plan actual del mes ${month} (cada día lleva su "fecha" real):\n${JSON.stringify(dated)}\n\n` +
-          `Ingredientes ya comprados (no pueden cambiar): ${ingredientNames(shopping)}\n\n` +
+          `Lo que hay en casa en cada compra (no cambia): un plato solo puede usar lo de la compra que cubre su fecha.\n${purchases}\n\n` +
           (pantryExtras.length
             ? `Además la persona dice tener ya en casa (fuera de la lista de la compra, puedes usarlos en los platos): ${pantryExtras.map((e) => asPromptData(e.name)).join(", ")}\n\n`
             : "") +
@@ -248,7 +251,7 @@ export async function reflowMeals(opts: {
           `Hoy es ${today} (${cursor.dayName}, semana ${cursor.weekIndex + 1} del plan).\n` +
           `Lo que ha pasado / lo que cuenta la persona: ${note}\n\n` +
           `REGLA 1: las ÚNICAS fechas que puedes cambiar son ${editableDates.join(", ") || "ninguna"}. Hoy y los días anteriores están cerrados. Guíate por la "fecha" de cada día, no por su posición en la semana. Si un día lleva "fijo", esas comidas las eligió la persona a mano: no las cambies (puedes cambiar la otra comida de ese día).\n` +
-          `REGLA 2: usa SOLO los ingredientes ya comprados y los que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos nuevos que no estén en ninguna de esas dos listas.\n` +
+          `REGLA 2: usa SOLO lo de la compra que cubre la fecha de cada plato y lo que la persona dice tener en casa (más sal, aceite, agua y especias). No cambies la lista de la compra ni añadas alimentos que no estén ahí: un plato que pida otra cosa no se guardará.\n` +
           `REGLA 3: ${kcalLine}\n` +
           "REGLA 4: mantén el rumbo del objetivo con ajustes realistas (más verdura y proteína, raciones algo menores o mayores, cenas más ligeras o más completas). Tono comprensivo, sin culpar ni compensar en exceso. " +
           `${PLAN_STRUCTURE_REMINDER} ` +
@@ -378,6 +381,52 @@ export async function reflowMeals(opts: {
     });
     movedCells = moved?.cells ?? [];
   }
+  // Cada plato nuevo, con su receta: solo entra si se cocina con lo que hay en
+  // casa ese día y no aleja el día de su objetivo (decisión del usuario,
+  // 2026-10-27). Si la comprobación misma falla, se deja pasar: no es motivo
+  // para quedarse sin ajuste.
+  if (reflow.changes.length) {
+    const { verifyPlanChanges } = await import("./verify-changes.server");
+    const shared = await (
+      await import("@/lib/household.server")
+    ).sharedMealPortionsByDate(supabase, userId, home);
+    const checked = await verifyPlanChanges({
+      plan: current,
+      changes: reflow.changes,
+      moved: movedCells,
+      month,
+      today,
+      shopping,
+      pantry: pantryExtras.map((e) => e.name),
+      profile,
+      shared,
+      apiKey: key,
+      userId,
+      deadline: opts.deadline,
+    }).catch((error) => {
+      logEvent("warn", "reflow_verify_failed", { error: String(error) });
+      return null;
+    });
+    if (checked?.dropped.length) {
+      logEvent("info", "reflow_changes_dropped", {
+        dropped: checked.dropped.length,
+        kept: checked.kept.length,
+        why: checked.dropped.map((d) => d.why),
+      });
+      const keptSlot = (date: string, slot: string) =>
+        checked.kept.some(
+          (k) => k.date === date && (slot === "comida" ? !!k.lunch : slot === "cena" && !!k.dinner),
+        );
+      reflow = { ...reflow, changes: checked.kept };
+      movedCells = movedCells.filter((c) => keptSlot(c.date, c.slot));
+      // Lo que compensa lo que queda, para el balance del día.
+      if (absorbed != null) {
+        absorbed = Math.round(movedCells.reduce((sum, c) => sum - c.kcal, 0));
+        partial = !!kcalDelta && absorbsTooLittle(absorbed, kcalDelta);
+      }
+    }
+  }
+
   // Se aplica sobre la versión más reciente de la fila (ticket 21): la IA
   // tarda y entretanto la persona puede fijar un plato a mano, que
   // `applyPlanChanges` respeta. `before` es esa misma versión, para que lo que

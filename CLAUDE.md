@@ -112,9 +112,11 @@ sin IA, y lo deja **fijado** (`PlanDay.pinned`): ninguna recolocación automáti
 nunca el plan entero, y nunca tocan hoy ni el pasado. **La rejilla no va en orden de calendario:**
 qué fecha ocupa cada celda lo dice `dateOfPlanCell`, nunca la posición en la fila. El plan tiene 5
 filas (`PLAN_ROWS`; la 5.ª, días 29-31) pero la compra sigue en 4: a `projectTrips` se le pasa
-`WEEK_COUNT`, nunca `plan.weeks.length`. Recolocar platos **nunca** cambia la lista de la compra
-(lo que falte va como aviso en `PlanDay.extras`); la única excepción es "Rehacer plan con la
-familia".
+`WEEK_COUNT`, nunca `plan.weeks.length`. Recolocar platos **nunca** cambia la lista de la compra;
+la única excepción es "Rehacer plan con la familia". Por eso un plato que recoloca la app solo entra
+si se cocina con lo que hay en casa ese día (su compra y la despensa extra) y no aleja el día de su
+objetivo, con su receta (`verifyPlanChanges`; decisión del usuario, 2026-10-27). Un plato cambiado
+a mano se guarda tal cual y lo que le falte va como aviso en `PlanDay.extras`.
 
 **Macros y kcal — receta canónica, no del modelo** (`src/lib/nutrition/`; detalle en «Receta
 canónica, caché y ración personal» de AGENTS.md). El modelo solo propone la COMPOSICIÓN de un
@@ -146,8 +148,18 @@ cuando el precalentado deja todo calculado (`fitPlanOnce` → `fitMonthlyPlan`).
 `MonthlyPlan.fit` garantiza una ronda por plan (solo con `targetsVersion`), el guardado relee y
 aplica con `applyPlanFitChanges` (solo si la celda no cambió). **No se anuncia**: corre justo al
 generar, es parte de hacer el plan y no un cambio sobre uno que la persona conocía (decisión del
-usuario, 2026-10-25; `fit.changed` se guarda solo para depurar). Comidas propias primero (D4). La
-compra no cambia.
+usuario, 2026-10-25; `fit.changed` se guarda solo para depurar). Comidas propias primero (D4).
+
+**La compra se comprueba contra los platos — UNA vez por plan** (`shopping/coverage.ts` puro +
+`coverage.server.ts`, marca `MonthlyPlan.shoppingCheck`). La IA escribe platos y lista en la misma
+respuesta y nada comprobaba que casaran (octubre de 2026: la pera en cinco comidas sin estar en la
+lista). En el mismo trabajo que el ajuste (`runFitMonthlyPlan`; un plan ya ajustado también la
+pasa), con las recetas del mes: añade lo que falte y sube la semana que se quede corta, solo en
+compras que no han empezado ni tienen marcas, y reparte cada semana entre los días que la usan
+(`ShoppingItem.dayQty`). No se anuncia. Lo básico (sal, aceite, agua, especias, caldo) no cuenta;
+tampoco las comidas que no se cocinan en casa (`PlanDay.out`: la IA las marca al generar, y en un
+plan anterior se deducen una vez de la conversación del mes). La lista no se recorta para caber en
+el presupuesto: si se pasa, Ingredientes lo avisa (decisión del usuario, 2026-10-27).
 
 **Objetivo energético — una sola cifra** (ticket 07, `src/lib/nutrition/energy.ts`, puro, copia
 en `mobile/lib/energy.ts`). `energyTargets(perfil)` calcula en código kcal, proteína, grasa,
@@ -222,8 +234,9 @@ en **forma canónica**: una fila por ingrediente con `unit` (`g`/`ml`/`ud`) + `w
 piden los platos de cada una de las 4 semanas del plan) + `weekPrice`. La IA ya no inventa un `qty`
 de texto ni asigna compras. `projectTrips` ([src/lib/shopping/trips.ts](src/lib/shopping/trips.ts))
 deriva la vista por compra: cada compra suma la parte de `weekQty`/`weekPrice` de los días que
-cubre (`tripDayRange` × `weekDayCounts`), así **Σ entre compras = lo que necesita el mes** y
-cambiar de cadencia solo re-trocea el mismo total. `recadenceMonthlyPlan` ya no llama a la IA: solo
+cubre (con `dayQty`, lo de cada día; sin él, cada semana a partes iguales entre sus días,
+`weekDayCounts`), así **Σ entre compras = lo que necesita el mes** y cambiar de cadencia solo
+re-trocea el mismo total. `dayQty` solo vale si cada semana suma su `weekQty`: si no, se descarta. `recadenceMonthlyPlan` ya no llama a la IA: solo
 guarda la nueva cadencia y la UI re-proyecta. Las listas antiguas (sin `weekQty`) siguen válidas y
 caen en el reparto de siempre (`groupByTrip`/`repartitionTrips`); se corrigen al regenerar. Las
 marcas "comprado" canónicas viven en `ShoppingItem.ownedTrips[trip]`.
@@ -476,8 +489,9 @@ siempre en español y el texto libre en el idioma de la persona.
   un `*.functions.ts` por tema en `src/lib/plan/` y `src/lib/shopping/` (generar, ajustar al
   objetivo, recolocar, platos, coach, estado de la compra), y los helpers que comparten en
   `*.server.ts` de las mismas carpetas (`rows.server.ts`: `ownPlanRow`, `resolveShoppingRow`,
-  `updateShoppingState`, `guardSharedSlotWrite`…; `ai.server.ts`: `askForJson`,
-  `enforceBudget`; `reflow.server.ts`: `reflowMeals`). El barrel solo reexporta los
+  `updateShoppingState`, `guardSharedSlotWrite`…; `ai.server.ts`: `askForJson`;
+  `reflow.server.ts`: `reflowMeals`; `coverage.server.ts`: la comprobación de la compra). El
+  barrel solo reexporta los
   `.functions.ts`; quien necesite un helper lo importa de su `.server.ts`.
 - Componentes de UI: shadcn/ui, estilo `new-york`, iconos de `lucide-react`, en
   `src/components/ui/`.

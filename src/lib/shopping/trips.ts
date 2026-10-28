@@ -292,7 +292,11 @@ export const projectTrips = (
   }));
 };
 
-/** Lo que piden de un ingrediente los días `from`-`to`, según su `weekQty`. */
+/**
+ * Lo que piden de un ingrediente los días `from`-`to`, según su `weekQty`. Con
+ * `dayQty` (de las recetas), lo de cada día; sin él, cada semana a partes
+ * iguales entre sus días. El precio va en la misma proporción que la cantidad.
+ */
 const tripAmount = (
   item: ShoppingItem,
   { from, to }: DayRange,
@@ -301,13 +305,15 @@ const tripAmount = (
 ): TripAmount => {
   const weekQty = item.weekQty ?? [];
   const weekPrice = item.weekPrice ?? [];
+  const dayQty = item.dayQty;
   let qty = 0;
   let price = 0;
   for (let d = from; d <= to; d++) {
     const w = weekOfDay(d, weekCount);
-    const share = weekDays[w] || 1;
-    qty += (weekQty[w] ?? 0) / share;
-    price += (weekPrice[w] ?? 0) / share;
+    const week = weekQty[w] ?? 0;
+    const part = dayQty ? (week > 0 ? (dayQty[d - 1] ?? 0) / week : 0) : 1 / (weekDays[w] || 1);
+    qty += week * part;
+    price += (weekPrice[w] ?? 0) * part;
   }
   return { qty, price };
 };

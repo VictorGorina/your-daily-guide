@@ -28,12 +28,13 @@ import {
   planCursor,
   planDayOf,
   planSlotIndex,
+  type MealSlot,
   type MonthlyPlan,
   type PlanChange,
   type PlanFitChange,
 } from "@/lib/plan-shared";
 
-import { energyTargets } from "./energy";
+import { energyTargets, type EnergyTargets } from "./energy";
 import {
   dayScore,
   planFit,
@@ -43,7 +44,7 @@ import {
   type WeeklyIdea,
 } from "./plan-fit";
 import { resolveServing, type ServingContext } from "./planned-serving.server";
-import { portionFactors } from "./portion";
+import { portionFactors, type PortionFactors } from "./portion";
 import { getRecipes, type RecipeLookup } from "./recipes.server";
 import { recipeSlotOfMoment } from "./validate-recipe";
 import { dateInMonth, daysInMonth } from "@/lib/dates";
@@ -117,7 +118,7 @@ export async function fitPlanMeals(opts: {
   const selected = effectiveMealSlots(profile ?? {});
   const fitOptions: FitOptions = {
     canTouchShared: opts.canTouchShared,
-    highProtein: energy.protein_g / Math.max(1, energy.basis.refWeightKg) >= 1.6,
+    highProtein: isHighProtein(energy),
   };
 
   const last = daysInMonth(month);
@@ -143,23 +144,8 @@ export async function fitPlanMeals(opts: {
     for (const [dish, lookup] of found) recipes.set(dish, lookup);
   };
 
-  const buildDay = (p: MonthlyPlan, date: string): FitDay => {
-    const ctx: ServingContext = {
-      own,
-      energy,
-      shared: opts.shared(date),
-      kcalAdjust: planDayOf(p, date)?.kcalAdjust,
-    };
-    return {
-      date,
-      meals: mealsForDate(p, date, selected).map((meal) => ({
-        ...resolveServing(meal.moment, ctx),
-        slot: meal.slot,
-        dish: meal.idea,
-        recipe: recipes.get(meal.idea.trim())?.recipe ?? null,
-      })),
-    };
-  };
+  const buildDay = (p: MonthlyPlan, date: string): FitDay =>
+    fitDayOf({ plan: p, date, energy, own, selected, shared: opts.shared(date), recipes });
   const measure = (p: MonthlyPlan) =>
     planFit(
       dates.map((date) => buildDay(p, date)),
@@ -335,6 +321,42 @@ export async function fitPlanMeals(opts: {
         newRecipes: Math.round(t3 - t2),
       },
     },
+  };
+}
+
+/** ¿Pide mucha proteína? `planFit` lo mide entonces más estricto. */
+export const isHighProtein = (energy: EnergyTargets): boolean =>
+  energy.protein_g / Math.max(1, energy.basis.refWeightKg) >= 1.6;
+
+/**
+ * Un día del plan como lo mide `planFit`: cada comida con la ración con que se
+ * sirve (la del hogar en una compartida, y el ajuste de la compensación en las
+ * propias) y su receta. Lo usan la ronda de ajuste y la comprobación de los
+ * cambios que hace la app por su cuenta (`verifyPlanChanges`).
+ */
+export function fitDayOf(opts: {
+  plan: MonthlyPlan;
+  date: string;
+  energy: EnergyTargets;
+  own: PortionFactors;
+  selected: readonly MealSlot[];
+  shared: Partial<Record<MealKey, SharedServing>>;
+  recipes: ReadonlyMap<string, RecipeLookup>;
+}): FitDay {
+  const ctx: ServingContext = {
+    own: opts.own,
+    energy: opts.energy,
+    shared: opts.shared,
+    kcalAdjust: planDayOf(opts.plan, opts.date)?.kcalAdjust,
+  };
+  return {
+    date: opts.date,
+    meals: mealsForDate(opts.plan, opts.date, opts.selected).map((meal) => ({
+      ...resolveServing(meal.moment, ctx),
+      slot: meal.slot,
+      dish: meal.idea,
+      recipe: opts.recipes.get(meal.idea.trim())?.recipe ?? null,
+    })),
   };
 }
 

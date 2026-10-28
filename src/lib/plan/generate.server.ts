@@ -32,7 +32,7 @@ import {
   tripsForCoverage,
 } from "@/lib/plan-shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { askForJson, enforceBudget } from "./ai.server";
+import { askForJson } from "./ai.server";
 import { blankSharedSlots, blankUnselectedSlots } from "./rows.server";
 
 /** Lee lo que la persona avisó para un mes antes de generar el plan (§`setMonthConstraints`). */
@@ -242,14 +242,14 @@ export async function generatePlanBody(opts: {
         '"perishable": boolean (true si es fresco y aguanta pocos días)}]}], ' +
         '"plan": {"intro": string (2 frases motivadoras y comprensivas), "focus": [3 focos del mes, cortos], ' +
         '"weeks": [4 objetos {"label": "Semana 1".."Semana 4", "focus": string corto, "breakfasts": [2 ideas de desayuno], "snacks": [2 ideas de snack], ' +
-        '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato, "kids": [opcional, solo si un niño necesita otro plato: {"childId", "slot": "desayuno"|"comida"|"cena", "dish"}]}]}]}}\n' +
+        '"days": [7 objetos {"day": "Lunes".."Domingo", "lunch": plato, "dinner": plato, "kids": [opcional, solo si un niño necesita otro plato: {"childId", "slot": "desayuno"|"comida"|"cena", "dish"}], "fuera": [opcional, las comidas de ese día que NO se cocinan en casa: "desayuno"|"comida"|"cena"|"merienda"]}]}]}}\n' +
         "REGLA CLAVE: todos los platos, desayunos y snacks del plan deben poder prepararse ÚNICAMENTE con los ingredientes de la lista de la compra (más sal, aceite, agua y especias básicas). No menciones ningún alimento que no esté en la lista. " +
         'CANTIDADES: cada número de "weekQty" es lo que de verdad piden los platos de esa semana, ni de más ni de menos. Si un plato se repite en varias semanas, refleja su parte en el "weekQty" de cada una. ' +
         `${coverageLine} ${coveredWeeksNote}` +
         `${budgetLine} ` +
         `${cadenceLine} ` +
         "FRESCURA: marca perishable=true en frescos (verdura de hoja, pescado, carne fresca, fruta blanda, lácteos frescos) y false en despensa, congelados y conservas. " +
-        `COMER FUERA: cada plato dice QUÉ se come, nunca DÓNDE. Aunque ese día coma fuera de casa, escribe un plato concreto y realista que pueda pedir, elegir o llevarse (p. ej. "Paella de marisco", "Ensalada de pasta con atún en tupper", "Pechuga con arroz"), sin "fuera de casa", "restaurante", "menú del día", "o similar" ni nada abierto. Única excepción: un cheat day puntual, como mucho uno a la semana, escrito exactamente "${CHEAT_DAY_DISH}". No cuentes en la compra los ingredientes de una comida que sabes que hace fuera de casa. ` +
+        `COMER FUERA: cada plato dice QUÉ se come, nunca DÓNDE. Aunque ese día coma fuera de casa, escribe un plato concreto y realista que pueda pedir, elegir o llevarse (p. ej. "Paella de marisco", "Ensalada de pasta con atún en tupper", "Pechuga con arroz"), sin "fuera de casa", "restaurante", "menú del día", "o similar" ni nada abierto. Única excepción: un cheat day puntual, como mucho uno a la semana, escrito exactamente "${CHEAT_DAY_DISH}". Una comida que sabes que pide o compra hecha fuera va en "fuera" de su día y sus ingredientes NO van en la compra; un tupper o un bocadillo preparado en casa SÍ se cocina en casa y sí va en la compra. ` +
         `${mealSlotsLine}` +
         `${servingsLine}` +
         `${kidsLine}` +
@@ -273,19 +273,11 @@ export async function generatePlanBody(opts: {
     },
   );
 
-  // Deja la lista dentro del presupuesto prorrateado y fija la cadencia/cobertura
-  // del plan como fuente de verdad para las etiquetas de días y compras.
-  const shopping = await enforceBudget(
-    key,
-    userId,
-    coachSystemPrompt(profile, home.text),
-    rawShopping,
-    proratedBudget,
-    sym,
-    PLAN_MODEL,
-    opts.deadline,
-    opts.capScope,
-  );
+  // La lista no se recorta para caber en el presupuesto: recortarla quitaba o
+  // rebajaba ingredientes sin tocar los platos que los usan. El presupuesto ya
+  // va en el prompt; si aun así se pasa, Ingredientes lo avisa (decisión del
+  // usuario, 2026-10-27: la lista entera, para poder cocinar todos los platos).
+  const shopping = rawShopping;
   // Cinturón para el modo "solo mis comidas": si la IA rellenó igualmente
   // una comida compartida, se vacía aquí — la fila de un no planificador
   // nunca guarda el plato de una comida de la casa (lo pone el espejo).
@@ -301,6 +293,8 @@ export async function generatePlanBody(opts: {
     coverage,
     cadence,
     targetsVersion: PLAN_TARGETS_VERSION,
+    // La IA ya marcó qué comidas no se cocinan en casa (`days[].fuera`).
+    outMarked: true,
   };
   return { plan, shopping };
 }

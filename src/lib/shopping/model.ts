@@ -113,6 +113,14 @@ export type ShoppingItem = {
   weekQty?: number[];
   /** € por semana, array paralelo a `weekQty` (forma canónica). */
   weekPrice?: number[];
+  /**
+   * Cuánto de `weekQty` piden los platos de cada día del mes (índice = día − 1),
+   * sacado de sus recetas (`checkShopping`). Cada semana suma su `weekQty`. Con
+   * él, una compra lleva lo de los días en que de verdad se come; sin él, cada
+   * semana se reparte a partes iguales entre sus días y un plato del día 27
+   * dejaba parte de lo suyo en la compra de los días 17-24.
+   */
+  dayQty?: number[];
   /** Por compra: de dónde salió lo de ese `trip` (forma canónica). */
   ownedTrips?: Record<number, "fridge" | "store">;
 };

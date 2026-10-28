@@ -22,7 +22,7 @@ export const COACH_MODEL = "google/gemini-2.5-flash";
 
 /**
  * Modelo para lo que decide QUÉ hay en el plan: `generatePlanBody`
- * (`generateMonthlyPlan` y el reflow "full"), `enforceBudget` y `reflowMeals`
+ * (`generateMonthlyPlan` y el reflow "full") y `reflowMeals`
  * (`adjustMonthlyPlan` y el reflow "meals"), más `fillChildMeals`. Volumen bajo
  * (unas pocas llamadas al mes por persona, nunca a diario) y es justo donde
  * más se nota variedad/coherencia — de ahí el salto a un tier "pro" real, no

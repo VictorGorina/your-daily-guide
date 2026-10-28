@@ -54,6 +54,7 @@ import {
   shoppingTotal,
   type PantryExtra,
   type PlanFitMark,
+  type ShoppingCheckMark,
   type ShoppingCadence,
   type TripReceipts,
 } from "@/lib/plan-shared";
@@ -374,16 +375,16 @@ function PlanPage() {
     void warmPlanRecipes(planDishesToWarm(plan, month, today), (dishes) =>
       warmFn({ data: { dishes } }),
     ).then(async (complete) => {
-      if (!alive || !complete || plan.fit || !plan.targetsVersion) return;
+      // El ajuste y la comprobación de la compra van juntos; un plan ya
+      // ajustado antes de que existiera la de la compra también la pasa.
+      if (!alive || !complete || (plan.fit && plan.shoppingCheck) || !plan.targetsVersion) return;
       // Por la cola si está encendida: al volver a abrir Plan, la misma
       // llamada devuelve el trabajo que siga activo y se espera a ese.
+      type Checked = { fit: PlanFitMark | null; shoppingCheck?: ShoppingCheckMark | null };
       const res = await fitPlanOnce(month, async () =>
-        settleJob<{ fit: PlanFitMark | null }, { fit: PlanFitMark | null }>(
-          await fitFn({ data: { month, today, async: true } }),
-          readJob,
-        ),
+        settleJob<Checked, Checked>(await fitFn({ data: { month, today, async: true } }), readJob),
       );
-      if (res?.fit) qc.invalidateQueries({ queryKey: ["plan", month] });
+      if (res?.fit || res?.shoppingCheck) qc.invalidateQueries({ queryKey: ["plan", month] });
     });
     return () => {
       alive = false;

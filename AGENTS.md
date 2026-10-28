@@ -76,6 +76,16 @@ Dos caminos distintos, deliberadamente separados:
   mover nada queda en el log y la pantalla lo dice con la cifra, en vez de afirmar que el plan
   estaba equilibrado.
 
+  La lista de la compra no cambia al recolocar, así que el plato nuevo tiene que poder cocinarse
+  con ella. El prompt lleva **lo que hay en casa en cada compra** (`purchasesText`: lo fresco, de
+  la compra que cubre la fecha; lo que no caduca, desde la compra en que entra), no la lista del
+  mes entero: con la del mes, una crema de calabacín podía caer en una semana con 0 g de
+  calabacín. Y antes de guardar, `verifyPlanChanges` comprueba cada plato nuevo con su receta:
+  entra solo si se cocina con lo que hay en casa ese día (y la despensa extra) y deja el día igual
+  o más cerca de su objetivo (`dayScore`, midiendo con el ajuste de la compensación ya puesto, o
+  aligerar una cena para compensar contaría como alejarse). Un plato sin receta tampoco entra
+  (D13). Si la comprobación misma falla, se deja pasar. Decisión del usuario, 2026-10-27.
+
 `generateMonthlyPlan` solo planifica de hoy en adelante: su `.validator` rechaza los meses
 pasados (no se pueden cumplir y gastan tokens) y el mes que viene hasta su última semana
 (`isNextMonthUnlocked`, umbral `NEXT_MONTH_UNLOCK_DAYS = 7` en `plan/month.ts`, compartido con el
@@ -130,7 +140,11 @@ inventaba fila a fila, sin que nadie lo sumara ni validara, así que la misma co
 asigna compras ni escribe `qty`. `projectTrips` ([shopping/trips.ts](src/lib/shopping/trips.ts)) deriva
 la vista por compra: para cada compra suma la parte de `weekQty`/`weekPrice` de los días que cubre
 (`tripDayRange`, repartiendo la cantidad de cada semana entre SUS días reales vía `weekDayCounts` —
-la última semana de un mes de 31 días arrastra 10 días, no 7). Invariante: **Σ de todas las compras
+la última semana de un mes de 31 días arrastra 10 días, no 7). Con `dayQty` (de las recetas, lo
+escribe la comprobación de la compra) cada compra suma lo de los días en que de verdad se come: a
+partes iguales, el calabacín de una crema del día 27 dejaba un 30 % en la compra de los días
+17-24. `cleanShopping` solo lo conserva si cada semana suma su `weekQty`; si algo cambió las
+semanas sin tocar los días, se descarta y se vuelve al reparto a partes iguales. Invariante: **Σ de todas las compras
 = lo que necesita el mes**, y cambiar de cadencia solo re-trocea ese total. La forma proyectada
 lleva además `qtyValue` (número, para sumar sin re-parsear `qty`). Reglas al tocar esto: no vuelvas
 a meter aritmética de cantidades en el prompt, no escales `price_eur` sin escalar la cantidad, y
@@ -172,6 +186,38 @@ con lo de su semana, o la despensa del resto del mes caería en una compra ya pa
 guarda (no se deriva de hoy) para que el reparto no se mueva solo con los días; `projectTrips` la
 recibe como `stockUpFrom`. Toda cadencia nueva se añade a `CADENCES` y se
 valida con `asCadence`: no hay literales sueltos en los validadores.
+
+**La compra se comprueba contra los platos — una vez por plan.** "No puedo cocinar un plato si no
+tengo los ingredientes" (el usuario, 2026-10-27). La IA escribe platos y lista en la misma
+respuesta y la "REGLA CLAVE" del prompt era lo único que pedía que casaran: en octubre de 2026 la
+pera salía en cinco comidas sin estar en la lista, el café en doce, y la semana 3 tenía dieciséis
+platos con algún ingrediente a 0 g. Ahora, en el mismo trabajo que el ajuste al objetivo
+(`runFitMonthlyPlan`, con las recetas del mes ya en la caché; marca `MonthlyPlan.shoppingCheck`,
+también para un plan que ya tenía `fit`):
+
+- `dishNeeds` ([coverage.server.ts](src/lib/shopping/coverage.server.ts)) saca de cada receta lo
+  que pide cada día futuro, en gramos tal como se compran, a las raciones de la casa (las mismas
+  que se le piden a la IA en `weekQty`). Los ingredientes se casan por **familia**
+  (`familyOfFood`): lo seco con su cocido y los sustitutos de un mismo plato (pechuga y muslo de
+  pollo, los yogures, queso curado y parmesano, tomate triturado y frito). Lo básico (sal,
+  aceite, agua, especias, vinagre, hierbas, caldo) no cuenta.
+- `checkShopping` ([coverage.ts](src/lib/shopping/coverage.ts), puro) añade lo que falta y sube
+  la semana que se queda por debajo del 60 % de lo que piden sus platos, **solo en días cuya
+  compra no ha empezado ni tiene marcas** (`editableDays`; en la optimizada, lo que se compra de
+  una vez cuenta en la primera compra). Lo que falta en una compra ya hecha queda sin arreglo y
+  va al log. Después reparte cada semana entre los días que la usan (`dayQty`); los días que ya no
+  se pueden tocar conservan lo que enseñaban.
+- Las comidas que **no se cocinan en casa** (`PlanDay.out`: se piden o se compran hechas fuera;
+  un tupper de casa sí cuenta) no piden nada. Desde el 2026-10-27 la IA las marca al generar
+  (`days[].fuera`, `outMarked`); en un plan anterior, `markMealsOut` las deduce UNA vez con una
+  petición barata a partir de la conversación del mes, y solo si en ella se habló de comer fuera
+  o de una ausencia.
+- La lista ya no se recorta para caber en el presupuesto (`enforceBudget` se quitó: quitaba o
+  rebajaba ingredientes sin tocar los platos). El presupuesto va en el prompt; si aun así se pasa,
+  Ingredientes lo avisa. Decisión del usuario, 2026-10-27.
+
+No se anuncia, igual que el ajuste: es parte de hacer el plan. Lo que añadió o subió queda en
+`shoppingCheck` para depurar.
 
 **Despensa extra (`monthly_plans.pantry_extras`).** Ingredientes que la persona ya tiene en casa y
 que la lista de la compra no incluye: los añade a mano en la pestaña Ingredientes (`setPantryExtra`)

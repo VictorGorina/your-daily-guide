@@ -225,7 +225,15 @@ export type MonthlyPlan = {
    * generado. Un plan nuevo nace sin ella.
    */
   fit?: PlanFitMark;
+  /**
+   * La compra ya se comprobó contra los platos (`checkShopping` en la web): como
+   * mucho UNA vez por plan, igual que `fit`.
+   */
+  shoppingCheck?: ShoppingCheckMark;
 };
+
+/** Lo que hizo la comprobación de la compra con un plan (`MonthlyPlan.shoppingCheck`). */
+export type ShoppingCheckMark = { at: string; added: string[]; raised: string[] };
 
 /**
  * Un plato que cambió la comprobación del plan para que su día encaje. Comida y
@@ -1056,6 +1064,12 @@ export type ShoppingItem = {
   weekQty?: number[];
   /** € por semana, array paralelo a `weekQty` (forma canónica). */
   weekPrice?: number[];
+  /**
+   * Cuánto de `weekQty` piden los platos de cada día del mes (índice = día − 1),
+   * sacado de sus recetas. Cada semana suma su `weekQty`; sin él, cada semana se
+   * reparte a partes iguales entre sus días.
+   */
+  dayQty?: number[];
   /** Por compra: de dónde salió lo de ese `trip` (forma canónica). */
   ownedTrips?: Record<number, "fridge" | "store">;
 };
@@ -1749,13 +1763,15 @@ const tripAmount = (
 ): TripAmount => {
   const weekQty = item.weekQty ?? [];
   const weekPrice = item.weekPrice ?? [];
+  const dayQty = item.dayQty;
   let qty = 0;
   let price = 0;
   for (let d = from; d <= to; d++) {
     const w = weekOfDay(d, weekCount);
-    const share = weekDays[w] || 1;
-    qty += (weekQty[w] ?? 0) / share;
-    price += (weekPrice[w] ?? 0) / share;
+    const week = weekQty[w] ?? 0;
+    const part = dayQty ? (week > 0 ? (dayQty[d - 1] ?? 0) / week : 0) : 1 / (weekDays[w] || 1);
+    qty += week * part;
+    price += (weekPrice[w] ?? 0) * part;
   }
   return { qty, price };
 };

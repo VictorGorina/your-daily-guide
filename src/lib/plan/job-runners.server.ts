@@ -72,7 +72,7 @@ export const planJobRunners: JobRunners = {
   },
 
   async plan_fit(userId, input) {
-    const { fit } = await runFitMonthlyPlan(await adminCtx(userId), input);
-    return { fit };
+    const { fit, shoppingCheck } = await runFitMonthlyPlan(await adminCtx(userId), input);
+    return { fit, ...(shoppingCheck ? { shoppingCheck } : {}) };
   },
 };

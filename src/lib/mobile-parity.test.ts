@@ -108,4 +108,36 @@ describe("paridad web ↔ móvil de plan-shared", () => {
       }
     }
   });
+
+  it("projectTrips reparte igual con el reparto por días (`dayQty`)", () => {
+    // 31 días: cada semana entera en un solo día suyo (el 3, el 10, el 17 y el 27).
+    const dayQty = Array.from({ length: 31 }, () => 0);
+    dayQty[2] = 100;
+    dayQty[9] = 200;
+    dayQty[16] = 150;
+    dayQty[26] = 90;
+    const list: ShoppingList = [
+      {
+        category: "Verdura y fruta",
+        items: [
+          {
+            name: "Calabacín",
+            qty: "",
+            price_eur: 3,
+            trip: 0,
+            perishable: true,
+            unit: "g",
+            weekQty: [100, 200, 150, 90],
+            weekPrice: [1, 1, 0.5, 0.5],
+            dayQty,
+          },
+        ],
+      },
+    ];
+    for (const { key } of CADENCES) {
+      expect(mobile.projectTrips(list as never, key, { fromDay: 1, toDay: 31 })).toEqual(
+        projectTrips(list, key, { fromDay: 1, toDay: 31 }) as never,
+      );
+    }
+  });
 });

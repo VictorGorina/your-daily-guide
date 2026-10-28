@@ -3,7 +3,7 @@ import type { PlanFitChange, PlanFitMark } from "./fit-mark";
 import { asCadence } from "../shopping/model";
 import { DAY_NAMES, PLAN_ROWS, withOverflowWeek } from "./grid";
 import { MEAL_SLOTS, type MealSlot } from "./slots";
-import type { ChildMeal, MonthlyPlan, PlanCoverage, PlanDay } from "./types";
+import type { ChildMeal, MonthlyPlan, PlanCoverage, PlanDay, ShoppingCheckMark } from "./types";
 
 const cleanExtras = (raw: unknown): PlanDay["extras"] => {
   const o = (raw ?? {}) as Record<string, unknown>;
@@ -50,6 +50,18 @@ const cleanKids = (raw: unknown): ChildMeal[] | undefined => {
   return out.length ? out.slice(0, 6) : undefined;
 };
 
+/**
+ * Comidas que no se cocinan en casa (`PlanDay.out`). Guardadas vienen en `out`;
+ * de la IA, en `fuera` y con "merienda" en vez de la clave interna "snack".
+ */
+const cleanOut = (d: Record<string, unknown>): MealSlot[] => {
+  const raw = [
+    ...(Array.isArray(d.out) ? d.out : []),
+    ...(Array.isArray(d.fuera) ? d.fuera : []),
+  ].map((s) => (s === "merienda" ? "snack" : s));
+  return MEAL_SLOTS.filter((s) => raw.includes(s));
+};
+
 const cleanDay = (raw: unknown): PlanDay => {
   const d = (raw ?? {}) as Record<string, unknown>;
   const day: PlanDay = {
@@ -64,12 +76,14 @@ const cleanDay = (raw: unknown): PlanDay => {
   const rawPinned: unknown[] = Array.isArray(d.pinned) ? d.pinned : [];
   const pinned = MEAL_SLOTS.filter((s) => rawPinned.includes(s));
   const kcalAdjust = cleanKcalAdjust(d.kcalAdjust);
+  const out = cleanOut(d);
   if (breakfast) day.breakfast = breakfast;
   if (snack) day.snack = snack;
   if (extras) day.extras = extras;
   if (kids) day.kids = kids;
   if (pinned.length) day.pinned = pinned;
   if (kcalAdjust) day.kcalAdjust = kcalAdjust;
+  if (out.length) day.out = out;
   return day;
 };
 
@@ -128,12 +142,26 @@ const cleanFitMark = (raw: unknown): PlanFitMark | undefined => {
   return { at, before: share(o.before), after: share(o.after), changed };
 };
 
+const cleanShoppingCheck = (raw: unknown): ShoppingCheckMark | undefined => {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const at = String(o.at ?? "");
+  if (!at) return undefined;
+  const names = (list: unknown) =>
+    (Array.isArray(list) ? list : [])
+      .map((n) => String(n ?? "").slice(0, 80))
+      .filter(Boolean)
+      .slice(0, 60);
+  return { at, added: names(o.added), raised: names(o.raised) };
+};
+
 export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
   const plan = (raw ?? {}) as Partial<MonthlyPlan>;
   if (!plan.weeks?.length) return null;
   const coverage = cleanCoverage(plan.coverage);
   const cadence = asCadence(plan.cadence);
   const fit = cleanFitMark(plan.fit);
+  const shoppingCheck = cleanShoppingCheck(plan.shoppingCheck);
   const cadenceFrom = cadence === "optimizada" ? Math.floor(Number(plan.cadenceFrom)) : 0;
   return withOverflowWeek({
     intro: String(plan.intro ?? ""),
@@ -150,6 +178,8 @@ export const cleanPlan = (raw: unknown): MonthlyPlan | null => {
     ...(cadenceFrom > 0 ? { cadenceFrom } : {}),
     ...(Number(plan.targetsVersion) > 0 ? { targetsVersion: Number(plan.targetsVersion) } : {}),
     ...(fit ? { fit } : {}),
+    ...(plan.outMarked === true ? { outMarked: true } : {}),
+    ...(shoppingCheck ? { shoppingCheck } : {}),
   });
 };
 

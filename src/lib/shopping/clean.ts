@@ -28,6 +28,24 @@ const asOwnedTrips = (raw: unknown): Record<number, "fridge" | "store"> | undefi
   return Object.keys(out).length ? out : undefined;
 };
 
+/**
+ * Reparto por días de `weekQty` (`ShoppingItem.dayQty`). Solo vale si cada
+ * semana suma lo mismo que su `weekQty`: si algo cambió las semanas sin tocar
+ * los días, se descarta y la compra vuelve al reparto a partes iguales.
+ */
+const asDayQty = (raw: unknown, weekQty: number[]): number[] | undefined => {
+  if (!Array.isArray(raw) || raw.length < 28 || raw.length > 31) return undefined;
+  const days = numArray(raw, raw.length);
+  const sums = weekQty.map(() => 0);
+  days.forEach((qty, i) => {
+    sums[Math.min(Math.floor(i / 7), weekQty.length - 1)]! += qty;
+  });
+  const fits = sums.every(
+    (sum, w) => Math.abs(sum - weekQty[w]!) <= Math.max(0.01, weekQty[w]! * 0.001),
+  );
+  return fits ? days : undefined;
+};
+
 const asItem = (raw: unknown): ShoppingItem | null => {
   const o = (raw ?? {}) as Record<string, unknown>;
   const name = String(o.name ?? "").trim();
@@ -49,6 +67,7 @@ const asItem = (raw: unknown): ShoppingItem | null => {
         ? rawPrice
         : weekQty.map((q) => (totalQty > 0 ? (monthPrice * q) / totalQty : 0));
     const ownedTrips = asOwnedTrips(o.ownedTrips);
+    const dayQty = asDayQty(o.dayQty, weekQty);
     return {
       name,
       qty: formatShoppingQty(name, totalQty, unit),
@@ -58,6 +77,7 @@ const asItem = (raw: unknown): ShoppingItem | null => {
       unit,
       weekQty,
       weekPrice,
+      ...(dayQty ? { dayQty } : {}),
       ...(ownedTrips ? { ownedTrips } : {}),
     };
   }
