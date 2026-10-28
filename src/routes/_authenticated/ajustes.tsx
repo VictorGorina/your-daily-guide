@@ -98,6 +98,7 @@ function Ajustes() {
   const navigate = useNavigate();
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
   const profile = profileQ.data;
+  const showNumbers = showsNutritionNumbers(profile);
   const { locale, setLocale } = useLocale();
 
   const save = useMutation({
@@ -367,6 +368,21 @@ function Ajustes() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 py-4">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">{t("ajustes.numbers.title")}</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {showNumbers ? t("ajustes.numbers.on") : t("ajustes.numbers.off")}
+            </p>
+          </div>
+          <Switch
+            aria-label={t("ajustes.numbers.title")}
+            checked={showNumbers}
+            disabled={!profile || save.isPending}
+            onCheckedChange={(on) => save.mutate({ nutrition_numbers: on ? "mostrar" : "ocultar" })}
+          />
         </div>
 
         <div className="pt-4">

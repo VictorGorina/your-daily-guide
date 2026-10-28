@@ -1509,6 +1509,11 @@
       "neutro": "neutro",
       "exigente": "exigente"
     },
+    "numbers": {
+      "title": "Ver kcal y macros",
+      "on": "Hoy enseña las calorías y macros de tus platos.",
+      "off": "Los platos se calculan igual, pero no ves cifras."
+    },
     "reminders": {
       "title": "Recordatorios",
       "morning": "Mañana",

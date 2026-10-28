@@ -163,6 +163,7 @@ export default function Ajustes() {
   // Privacidad (ticket 30): encender pide el consentimiento con su texto;
   // apagarlo borra los datos de salud.
   const healthConsent = hasHealthConsent(profile);
+  const showNumbers = showsNutritionNumbers(profile);
   const [consentOpen, setConsentOpen] = useState(false);
   const toggleHealth = (on: boolean) => {
     if (on) {
@@ -381,6 +382,26 @@ export default function Ajustes() {
                 );
               })}
             </View>
+          </View>
+
+          <View className="flex-row items-center gap-3">
+            <View className="min-w-0 flex-1">
+              <Text className="text-sm font-sans-semibold text-foreground">
+                {t("ajustes.numbers.title")}
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                {showNumbers ? t("ajustes.numbers.on") : t("ajustes.numbers.off")}
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel={t("ajustes.numbers.title")}
+              value={showNumbers}
+              disabled={!profile || save.isPending}
+              onValueChange={(on) => save.mutate({ nutrition_numbers: on ? "mostrar" : "ocultar" })}
+              trackColor={{ false: "#eae6dd", true: "#3e3d39" }}
+              ios_backgroundColor="#eae6dd"
+              thumbColor="#fbfaf7"
+            />
           </View>
 
           <View className="pt-4">

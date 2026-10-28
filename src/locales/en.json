@@ -1504,6 +1504,11 @@
       "neutro": "neutral",
       "exigente": "demanding"
     },
+    "numbers": {
+      "title": "Show kcal and macros",
+      "on": "Today shows the calories and macros of your dishes.",
+      "off": "Dishes are still calculated; you just don't see numbers."
+    },
     "reminders": {
       "title": "Reminders",
       "morning": "Morning",
